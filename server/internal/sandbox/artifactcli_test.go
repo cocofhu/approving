@@ -96,6 +96,13 @@ func TestMCPAdvertiseProfileBootstrapsArtifactUpload(t *testing.T) {
 	}
 }
 
+func TestEmbeddedArtifactUploadUsesUploadImageChannel(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(artifactUploadScript, "upload_image_artifact") {
+		t.Fatal("embedded artifact-upload must use upload_image_artifact channel")
+	}
+}
+
 func TestMCPSpaProxyPath(t *testing.T) {
 	t.Parallel()
 	if mcpSpaProxyPath != "/usr/local/bin/approving-mcp-spa-proxy" {

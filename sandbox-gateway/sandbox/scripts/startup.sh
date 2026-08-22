@@ -252,6 +252,35 @@ repo_name_from_url() {
     printf '%s' "${u%.git}"
 }
 
+# Refresh /usr/local/bin when control plane or image still ships write_artifact CLI.
+heal_stale_artifact_upload_cli() {
+    if [ -f /usr/local/bin/artifact-upload ] && grep -q upload_image_artifact /usr/local/bin/artifact-upload 2>/dev/null; then
+        return 0
+    fi
+    local _healed=0
+    for _inst in "$WORKSPACE_DIR"/*/server/scripts/install-artifact-upload.sh; do
+        if [ -x "$_inst" ]; then
+            echo "startup.sh: refreshing artifact-upload via $_inst"
+            "$_inst" && _healed=1 && break
+        fi
+    done
+    if [ "$_healed" = 0 ]; then
+        for _src in "$WORKSPACE_DIR"/*/server/scripts/artifact-upload; do
+            if [ -f "$_src" ] && grep -q upload_image_artifact "$_src" 2>/dev/null; then
+                echo "startup.sh: installing artifact-upload from $_src"
+                install -m 755 "$_src" /usr/local/bin/artifact-upload && _healed=1 && break
+            fi
+        done
+    fi
+    if [ "$_healed" = 0 ] && [ -f "$WORKSPACE_DIR/server/scripts/artifact-upload" ]; then
+        if grep -q upload_image_artifact "$WORKSPACE_DIR/server/scripts/artifact-upload" 2>/dev/null; then
+            echo "startup.sh: installing artifact-upload from $WORKSPACE_DIR/server/scripts/artifact-upload"
+            install -m 755 "$WORKSPACE_DIR/server/scripts/artifact-upload" /usr/local/bin/artifact-upload
+        fi
+    fi
+    unset _healed _inst _src
+}
+
 # --- 凭据配置（clone 前）----------------------------------------------------
 if [ -n "$GIT_REPOS" ]; then
     IFS=',' read -ra _entries <<< "$GIT_REPOS"
@@ -320,26 +349,7 @@ if [ -n "$GIT_REPOS" ]; then
     printf '[%s]' "$_manifest" > /root/.sandbox/repos.json
     echo "Recorded repo manifest: $(cat /root/.sandbox/repos.json)"
     unset _entries _entry _manifest _name _url _branch _dest _entry_json
-    # Control plane may seed an outdated artifact-upload that still calls write_artifact.
-    # After clone, prefer workspace server/scripts when the installed CLI is stale.
-    if [ -f /usr/local/bin/artifact-upload ] && ! grep -q upload_image_artifact /usr/local/bin/artifact-upload 2>/dev/null; then
-        _healed=0
-        for _inst in "$WORKSPACE_DIR"/*/server/scripts/install-artifact-upload.sh; do
-            if [ -x "$_inst" ]; then
-                echo "startup.sh: refreshing artifact-upload via $_inst"
-                "$_inst" && _healed=1 && break
-            fi
-        done
-        if [ "$_healed" = 0 ]; then
-            for _src in "$WORKSPACE_DIR"/*/server/scripts/artifact-upload; do
-                if [ -f "$_src" ] && grep -q upload_image_artifact "$_src" 2>/dev/null; then
-                    echo "startup.sh: installing artifact-upload from $_src"
-                    install -m 755 "$_src" /usr/local/bin/artifact-upload && _healed=1 && break
-                fi
-            done
-        fi
-        unset _healed _inst _src
-    fi
+    heal_stale_artifact_upload_cli
 elif [ -n "$GIT_CLONE_URL" ]; then
     # 单仓兼容：clone 到 $WORKSPACE_DIR 根（兼容 K8S PVC 空挂载点）
     if [ -d "$WORKSPACE_DIR/.git" ]; then
@@ -356,6 +366,7 @@ elif [ -n "$GIT_CLONE_URL" ]; then
             echo "Failed to clone repository, using default workspace directory" >&2
         fi
     fi
+    heal_stale_artifact_upload_cli
 else
     mkdir -p "$WORKSPACE_DIR"
     echo "Using workspace directory: ${WORKSPACE_DIR}"

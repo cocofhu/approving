@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # 统一通用沙箱镜像：多语言 + 容器内 DinD（docker / docker compose）+ SSH + code-server + backend 网关
 #
 # 镜像策略：共享 base + 每 agent 一层薄镜像。除 backend 网关与全套工具链外，构建期仅安装
@@ -317,6 +318,13 @@ RUN chmod +x /usr/local/bin/preview-inject.sh
 
 COPY scripts/startup.sh /startup.sh
 RUN chmod +x /startup.sh
+
+# Pre-install artifact-upload (upload_image_artifact channel). Sandboxes must not
+# depend on a lagging control-plane embed or git clone to get a working CLI.
+# Build with: docker build --build-context server=../../server ...
+COPY --from=server scripts/artifact-upload /usr/local/bin/artifact-upload
+RUN chmod +x /usr/local/bin/artifact-upload && \
+    grep -q upload_image_artifact /usr/local/bin/artifact-upload
 
 # ── Agent 安装层（每 agent 薄镜像的唯一差异层）───────────────────────────────
 # ARG 刻意放在最后：其上所有层（工具链 / code-server / backend 网关 / 脚本）在不同

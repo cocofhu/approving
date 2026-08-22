@@ -42,11 +42,10 @@ func (m *Manager) EnsureHelpers(ctx context.Context, sb *Sandbox) {
 }
 
 // seedHelpers installs approving's sandbox-side helper CLIs over SSH. The
-// universal-sandbox image ships no artifact-upload command, so approving writes
-// it in itself (rather than extending the image): test/UI nodes tell the agent
-// to run `artifact-upload <file>` to push screenshots into the run's artifact
-// store. Best-effort — a failure only means screenshot upload is unavailable,
-// it never blocks sandbox creation.
+// universal-sandbox image pre-installs artifact-upload; approving may refresh it
+// from the embedded copy when the control plane is current. A lagging control
+// plane must not downgrade an image-baked or workspace-healed CLI. Best-effort
+// — failure only means screenshot upload is unavailable, never blocks sandbox.
 func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 	if sb == nil {
 		return
@@ -60,12 +59,16 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 		log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: ssh not ready; artifact-upload unavailable")
 		return
 	}
-	if err := seedExecutable(ctx, creds, artifactUploadPath, artifactUploadScript); err != nil {
-		log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: install artifact-upload failed")
-		return
+	embeddedUploadChannel := strings.Contains(artifactUploadScript, "upload_image_artifact")
+	if embeddedUploadChannel {
+		if err := seedExecutable(ctx, creds, artifactUploadPath, artifactUploadScript); err != nil {
+			log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: install artifact-upload failed")
+			return
+		}
+	} else {
+		log.Debug().Str("id", sb.ID).Msg("seed helpers: skip legacy artifact-upload embed; use image or workspace heal")
 	}
-	// When the control plane still embeds a pre-#375 script, upgrade from the
-	// cloned workspace checkout (available after startup.sh finishes git clone).
+	// Upgrade from cloned workspace when image/seed is stale (startup.sh heal).
 	healArtifactUploadFromWorkspace(ctx, creds, sb.ID)
 	// Best-effort: profile.d hook for interactive shells (login/profile).
 	// Container create env is authoritative for ACP; this only helps SSH/login

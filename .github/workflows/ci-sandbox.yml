@@ -8,6 +8,7 @@ on:
     paths:
       - "sandbox-gateway/sandbox/**"
       - "sandbox-gateway/scripts/**"
+      - "server/scripts/artifact-upload"
       - ".github/workflows/ci-sandbox.yml"
       - ".github/scripts/coverage-badge-color.sh"
       - ".github/scripts/publish-coverage-badge.sh"
@@ -16,6 +17,7 @@ on:
     paths:
       - "sandbox-gateway/sandbox/**"
       - "sandbox-gateway/scripts/**"
+      - "server/scripts/artifact-upload"
       - ".github/workflows/ci-sandbox.yml"
       - ".github/scripts/coverage-badge-color.sh"
       - ".github/scripts/publish-coverage-badge.sh"
@@ -113,6 +115,8 @@ jobs:
           file: ./sandbox-gateway/sandbox/Dockerfile
           target: cli-tools
           load: true
+          build-contexts: |
+            server=./server
           tags: universal-sandbox-cli-tools:ci
           build-args: |
             BASE_IMAGE=ubuntu:22.04
@@ -143,6 +147,8 @@ jobs:
           context: ./sandbox-gateway/sandbox
           file: ./sandbox-gateway/sandbox/Dockerfile
           push: false
+          build-contexts: |
+            server=./server
           tags: universal-sandbox-${{ matrix.provider }}:ci
           build-args: |
             AGENT_PROVIDER=${{ matrix.provider }}
