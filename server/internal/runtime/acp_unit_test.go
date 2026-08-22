@@ -641,6 +641,23 @@ func TestAgentConfigAndMCP(t *testing.T) {
 	removeHome(sp.ConfigHome)
 }
 
+func TestSpecDoesNotDeriveGitLabURLFromGitHubRepo(t *testing.T) {
+	root := writeAgent(t, "dev", `{"env":{"GITHUB_TOKEN":"gh","GITLAB_TOKEN":"gl","APPROVING_CURSOR_API_KEY":"test-key"}}`)
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
+	req := NodeReq{RunID: "run-gh", NodeID: "n", Token: "tkn", NodeType: "agent",
+		Config: map[string]any{"skill_profile": "dev"}, Vars: map[string]any{"repos": `[{"name":"app","url":"https://github.com/acme/app.git"}]`}}
+
+	sp, err := p.spec(req)
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	if got := sp.Env["GITLAB_URL"]; got != "" {
+		t.Errorf("GITLAB_URL should not be derived from a GitHub repo, got %q", got)
+	}
+	removeHome(sp.ConfigHome)
+}
+
 func TestWorkspaceWorkDirSrc(t *testing.T) {
 	root := t.TempDir()
 	profile := "dev"

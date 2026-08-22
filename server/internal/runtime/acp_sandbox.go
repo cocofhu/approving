@@ -319,8 +319,15 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	}
 
 	if len(repos) > 0 && env["GITLAB_URL"] == "" {
-		if base := gitBaseURL(repos[0].URL); base != "" {
-			env["GITLAB_URL"] = base
+		url := repos[0].URL
+		host := gitRepoHost(url)
+		ghe := gitRepoHost(env["GITHUB_URL"])
+		// Do not treat a GitHub / GHE clone URL as GITLAB_URL (would inject
+		// oauth2:GITLAB_TOKEN@github.com when both tokens are configured).
+		if host != "" && host != "github.com" && (ghe == "" || host != ghe) {
+			if base := gitBaseURL(url); base != "" {
+				env["GITLAB_URL"] = base
+			}
 		}
 	}
 	layout := c.agentLayout(profile, agentCfg)

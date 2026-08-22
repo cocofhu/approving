@@ -106,14 +106,14 @@ docker run --privileged -d \
 
 ### 4. Git 凭据与用户信息
 
-按每个仓库 URL 的 host 精确匹配注入（HTTPS 与 SSH 互斥）：
+已配置的 `GITHUB_TOKEN` / `GITLAB_TOKEN` 都会注入（`~/.git-credentials` + `gh` / `glab` 登录），不依赖当前 clone 仓库属于哪个平台。HTTPS clone 与 SSH 仍按仓库 URL 的 scheme 互斥选择。
 
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | 空 | GitHub token（`github.com` 或由 `GITHUB_URL` 匹配的自建实例）；命中时自动 `gh auth login` |
+| `GITHUB_TOKEN` | 空 | GitHub token（`github.com` 或由 `GITHUB_URL` 匹配的自建实例）；已配置则自动 `gh auth login` |
 | `GITHUB_URL` | 空 | 自建 GitHub 的 `scheme+host`，用于匹配 repo host |
-| `GITLAB_TOKEN` | 空 | GitLab token；命中时自动 `glab auth login` |
-| `GITLAB_URL` | 空 | GitLab 实例地址（自建必填；仅设 token 无 URL 时跳过注入） |
+| `GITLAB_TOKEN` | 空 | GitLab token；已配置则自动 `glab auth login` |
+| `GITLAB_URL` | 空 | GitLab 实例地址（自建建议显式配置；空则默认 `gitlab.com`。不会把 GitHub / `GITHUB_URL` host 当成 GitLab） |
 | `GIT_SSH_PRIVATE_KEY` | 空 | SSH 私钥内容，写入 `~/.ssh/id_rsa`（SSH clone 用） |
 | `GIT_SSH_KNOWN_HOSTS` | 空 | SSH known_hosts 内容（SSH clone 时必填，禁用 accept-new 兜底） |
 | `GIT_USER_NAME` | `sandbox` | 全局 `git config user.name` |
