@@ -1,7 +1,10 @@
 package runtime
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -131,6 +134,86 @@ func MergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string,
 	return mergeAuthEnv(backend, env)
 }
 
+// PrepareAuthEnv merges auth keys from Agent workspace settings.json.env into env
+// (explicit env wins, including empty overrides), then normalizes via mergeAuthEnv.
+func PrepareAuthEnv(backend AcpBackend, env map[string]string, workDirSrc string) (map[string]string, error) {
+	settingsAuth := ReadSettingsAuthEnv(workDirSrc, backend)
+	merged := mergeSettingsAuthIntoEnv(env, settingsAuth)
+	return mergeAuthEnv(backend, merged)
+}
+
+// ReadSettingsAuthEnv reads backend-relevant auth keys from settings.json under
+// workDirSrc. Missing file, invalid JSON, or absent keys return nil (not an error).
+func ReadSettingsAuthEnv(workDirSrc string, backend AcpBackend) map[string]string {
+	if workDirSrc == "" {
+		return nil
+	}
+	path := filepath.Join(workDirSrc, "settings.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return nil
+	}
+	settingsEnv := settingsEnvFromDoc(doc)
+	if len(settingsEnv) == 0 {
+		return nil
+	}
+	spec := authSpecFor(backend)
+	keys := append([]string{}, spec.agentKeys...)
+	keys = append(keys, spec.cliKey)
+	out := map[string]string{}
+	for _, k := range keys {
+		if v, ok := settingsEnv[k]; ok && strings.TrimSpace(v) != "" {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func settingsEnvFromDoc(doc map[string]any) map[string]string {
+	raw, ok := doc["env"]
+	if !ok {
+		return nil
+	}
+	switch m := raw.(type) {
+	case map[string]any:
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			if s, ok := v.(string); ok {
+				out[k] = s
+			}
+		}
+		return out
+	case map[string]string:
+		return m
+	default:
+		return nil
+	}
+}
+
+// mergeSettingsAuthIntoEnv overlays settings auth keys only where env lacks the key.
+func mergeSettingsAuthIntoEnv(env, settingsAuth map[string]string) map[string]string {
+	if len(settingsAuth) == 0 {
+		return env
+	}
+	out := map[string]string{}
+	for k, v := range env {
+		out[k] = v
+	}
+	for k, v := range settingsAuth {
+		if _, exists := out[k]; !exists {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // by the sandbox bridge. Returns an error when no key is configured.
 func mergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string, error) {
 	spec := authSpecFor(backend)
@@ -151,7 +234,10 @@ func mergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string,
 		}
 	}
 	if val == "" {
-		return out, fmt.Errorf("鉴权未配置:请在项目沙箱 env 或 Agent 环境变量中设置 %s", strings.Join(spec.agentKeys, " 或 "))
+		return out, fmt.Errorf(
+			"鉴权未配置:请在项目沙箱 env、Agent 环境变量或 settings.json 的 env 中设置 %s",
+			strings.Join(spec.agentKeys, " 或 "),
+		)
 	}
 	out[spec.cliKey] = val
 	mergeRegionEnv(backend, out)

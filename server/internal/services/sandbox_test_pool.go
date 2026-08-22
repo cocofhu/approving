@@ -154,7 +154,8 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		env[k] = substTemplate(v, vars)
 	}
 	backend := runtime.NormalizeBackend(agent.AcpBackend)
-	merged, err := runtime.MergeAuthEnv(backend, env)
+	workDir := s.skills.WorkDir(profile)
+	merged, err := runtime.PrepareAuthEnv(backend, env, workDir)
 	if err != nil {
 		fail(err)
 		return

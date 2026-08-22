@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -412,5 +414,121 @@ func TestFirstNonEmpty(t *testing.T) {
 	}
 	if got := firstNonEmpty("", "  "); got != "" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func writeSettingsJSON(dir string, content string) {
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(content), 0o644); err != nil {
+		panic(err)
+	}
+}
+
+func TestPrepareAuthEnv_SettingsOnly(t *testing.T) {
+	workDir := t.TempDir()
+	writeSettingsJSON(workDir, `{"env":{"ANTHROPIC_API_KEY":"sk-ant-from-settings"}}`)
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, workDir)
+	if err != nil {
+		t.Fatalf("PrepareAuthEnv: %v", err)
+	}
+	if out["ANTHROPIC_API_KEY"] != "sk-ant-from-settings" {
+		t.Fatalf("ANTHROPIC_API_KEY=%q", out["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestPrepareAuthEnv_EnvOnly(t *testing.T) {
+	workDir := t.TempDir()
+	out, err := PrepareAuthEnv(BackendCursor, map[string]string{
+		"CURSOR_API_KEY": "crsr-env",
+	}, workDir)
+	if err != nil {
+		t.Fatalf("PrepareAuthEnv: %v", err)
+	}
+	if out["CURSOR_API_KEY"] != "crsr-env" {
+		t.Fatalf("CURSOR_API_KEY=%q", out["CURSOR_API_KEY"])
+	}
+}
+
+func TestPrepareAuthEnv_NeitherConfigured(t *testing.T) {
+	workDir := t.TempDir()
+	_, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, workDir)
+	if err == nil {
+		t.Fatal("expected error when no auth configured")
+	}
+	if !strings.Contains(err.Error(), "settings.json") {
+		t.Fatalf("error should mention settings.json: %v", err)
+	}
+}
+
+func TestPrepareAuthEnv_InvalidSettingsJSON(t *testing.T) {
+	workDir := t.TempDir()
+	writeSettingsJSON(workDir, `{bad json`)
+
+	_, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, workDir)
+	if err == nil {
+		t.Fatal("invalid settings.json must not falsely pass auth")
+	}
+}
+
+func TestPrepareAuthEnv_EnvOverridesSettings(t *testing.T) {
+	workDir := t.TempDir()
+	writeSettingsJSON(workDir, `{"env":{"ANTHROPIC_API_KEY":"from-settings"}}`)
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{
+		"ANTHROPIC_API_KEY": "from-env",
+	}, workDir)
+	if err != nil {
+		t.Fatalf("PrepareAuthEnv: %v", err)
+	}
+	if out["ANTHROPIC_API_KEY"] != "from-env" {
+		t.Fatalf("env should win: got %q", out["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestPrepareAuthEnv_EmptyEnvOverridesSettings(t *testing.T) {
+	workDir := t.TempDir()
+	writeSettingsJSON(workDir, `{"env":{"CURSOR_API_KEY":"from-settings"}}`)
+
+	_, err := PrepareAuthEnv(BackendCursor, map[string]string{
+		"CURSOR_API_KEY": "",
+	}, workDir)
+	if err == nil {
+		t.Fatal("empty explicit env must block settings fallback")
+	}
+}
+
+func TestPrepareAuthEnv_AllBackendsFromSettings(t *testing.T) {
+	cases := []struct {
+		backend AcpBackend
+		content string
+		cliKey  string
+	}{
+		{BackendClaudeCode, `{"env":{"ANTHROPIC_API_KEY":"claude-key"}}`, "ANTHROPIC_API_KEY"},
+		{BackendCursor, `{"env":{"CURSOR_API_KEY":"cursor-key"}}`, "CURSOR_API_KEY"},
+		{BackendCodeBuddy, `{"env":{"CODEBUDDY_API_KEY":"cb-key"}}`, "CODEBUDDY_API_KEY"},
+		{BackendTrae, `{"env":{"TRAECLI_PERSONAL_ACCESS_TOKEN":"trae-token"}}`, EnvTraeCLIToken},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.backend), func(t *testing.T) {
+			workDir := t.TempDir()
+			writeSettingsJSON(workDir, tc.content)
+			out, err := PrepareAuthEnv(tc.backend, map[string]string{}, workDir)
+			if err != nil {
+				t.Fatalf("PrepareAuthEnv: %v", err)
+			}
+			if out[tc.cliKey] == "" {
+				t.Fatalf("%s unset", tc.cliKey)
+			}
+		})
+	}
+}
+
+func TestReadSettingsAuthEnv_EmptyKeyIgnored(t *testing.T) {
+	workDir := t.TempDir()
+	writeSettingsJSON(workDir, `{"env":{"ANTHROPIC_API_KEY":""}}`)
+
+	got := ReadSettingsAuthEnv(workDir, BackendClaudeCode)
+	if got != nil {
+		t.Fatalf("empty key should be ignored: %v", got)
 	}
 }
