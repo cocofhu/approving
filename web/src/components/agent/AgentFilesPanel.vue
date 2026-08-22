@@ -57,6 +57,7 @@ const {
   rows,
   openFile,
   openPath,
+  openPathOrCreate,
   selectDefaultFile,
   resetForSelect,
   snapshot,

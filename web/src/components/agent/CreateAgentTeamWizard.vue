@@ -20,11 +20,10 @@ import {
   type TeamWizardDraft,
   type WizardBackendId,
 } from '@/lib/agent/agentTeamWizard'
-import { authGuideFor } from '@/lib/agent/backendAuthGuide'
+import { authGuideFor, defaultSettingsPlaceholder } from '@/lib/agent/backendAuthGuide'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
 import {
-  defaultSettingsPlaceholder,
   parseCustomConfigJson,
   stripAuthKeysFromEnv,
   type WizardAuthMode,
@@ -608,7 +607,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                   >
                     {{ t('pages.agentStudio.teamWizard.review.noArtifactWarn') }}
                   </p>
-                  <p v-if="!hasAuthKeyConfigured(draft.env, draft.acpBackend)" class="mt-3 text-[12px] text-txt3">
+                  <p v-if="!teamHasAuth(draft)" class="mt-3 text-[12px] text-txt3">
                     {{ t('pages.agentStudio.wizard.review.authReminderDetail') }}
                   </p>
                   <p v-if="submitError" class="mt-3 text-[12px] text-err">{{ submitError }}</p>
