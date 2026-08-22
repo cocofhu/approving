@@ -140,6 +140,7 @@
       "format.ts",
       "frontmatter.ts",
       "highlightJson.ts",
+      "homeParticleMesh.ts",
       "htmlPreviewSandbox.ts",
       "i18n.ts",
       "idleScrollbar.ts",
@@ -172,6 +173,6 @@
     "pm": 6,
     "project": 4,
     "run": 50,
-    "shared": 35
+    "shared": 36
   }
 }
