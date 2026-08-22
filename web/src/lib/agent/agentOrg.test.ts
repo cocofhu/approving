@@ -4,16 +4,21 @@ import {
   applyMoveAgent,
   applyRemoveAgentFromGroup,
   assignNeedsDraftConfirm,
+  allGroupCollapseIds,
+  ancestorGroupIdsForAgent,
+  buildDefaultCollapsedSet,
   buildOrgTreeRows,
   classifyAssignTargets,
   groupPath,
   groupProjectLabel,
+  mergeCollapsedWithOrgChange,
   recursiveMemberNames,
   shouldSyncDraftAfterAssign,
   unifiedProjectId,
   wouldCreateGroupCycle,
   wouldCreateReportingCycle,
   setAgentMembership,
+  UNGROUPED_ID,
 } from './agentOrg'
 import type { AgentOrg } from '../api/api'
 
@@ -78,6 +83,40 @@ describe('agentOrg helpers', () => {
     expect(rows.some((r) => r.kind === 'agent' && r.name === 'alice' && r.multi)).toBe(true)
     expect(rows.some((r) => r.kind === 'ungrouped-header')).toBe(true)
     expect(rows.some((r) => r.kind === 'agent' && r.name === 'carol' && r.groupId === '__ungrouped__')).toBe(true)
+  })
+
+  it('default collapsed set folds all groups; selected agent expands ancestor path', () => {
+    const all = allGroupCollapseIds(sample)
+    expect(all.has('eng')).toBe(true)
+    expect(all.has(UNGROUPED_ID)).toBe(true)
+
+    const ancestors = ancestorGroupIdsForAgent(sample, 'bob')
+    expect(ancestors.has('des')).toBe(true)
+    expect(ancestors.has('eng')).toBe(true)
+
+    const collapsed = buildDefaultCollapsedSet(sample, ['bob'])
+    expect(collapsed.has('eng')).toBe(false)
+    expect(collapsed.has('des')).toBe(false)
+    expect(collapsed.has('prod')).toBe(true)
+
+    const rows = buildOrgTreeRows(sample, ['alice', 'bob', 'carol'], collapsed)
+    expect(rows.some((r) => r.kind === 'agent' && r.name === 'bob')).toBe(true)
+    expect(rows.some((r) => r.kind === 'agent' && r.name === 'carol')).toBe(false)
+    expect(rows.some((r) => r.kind === 'group' && r.id === 'prod' && r.collapsed)).toBe(true)
+  })
+
+  it('mergeCollapsedWithOrgChange keeps expanded known ids and folds new groups', () => {
+    const known = new Set(['eng', 'des', 'prod', UNGROUPED_ID])
+    const prevCollapsed = new Set(['eng', 'prod', UNGROUPED_ID])
+    const expandedOrg: AgentOrg = {
+      ...sample,
+      groups: [...sample.groups!, { id: 'new_root', name: '新组' }],
+    }
+    const merged = mergeCollapsedWithOrgChange(expandedOrg, prevCollapsed, known)
+    expect(merged.has('eng')).toBe(true)
+    expect(merged.has('des')).toBe(false)
+    expect(merged.has('new_root')).toBe(true)
+    expect(merged.has(UNGROUPED_ID)).toBe(true)
   })
 })
 

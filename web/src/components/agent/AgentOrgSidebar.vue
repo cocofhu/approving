@@ -5,7 +5,11 @@ import Icon from '@/components/ui/Icon.vue'
 import type { AgentOrg } from '@/lib/api/api'
 import {
   UNGROUPED_ID,
+  allGroupCollapseIds,
+  ancestorGroupIdsForAgent,
+  buildDefaultCollapsedSet,
   buildOrgTreeRows,
+  mergeCollapsedWithOrgChange,
   type AgentProjectRef,
   type OrgTreeRow,
   type ProjectNameRef,
@@ -40,7 +44,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const collapsedNodes = ref<Set<string>>(new Set())
+const collapsedNodes = ref<Set<string>>(
+  buildDefaultCollapsedSet(props.org, props.activeName ? [props.activeName] : []),
+)
+const knownGroupIds = ref<Set<string>>(new Set([...allGroupCollapseIds(props.org)]))
 const dragOverKey = ref('')
 const dragging = ref<{ kind: 'group' | 'agent'; id: string; sourceGroupId?: string } | null>(null)
 
@@ -69,9 +76,25 @@ const rows = computed(() =>
 )
 
 watch(
-  () => props.org.groups?.map((g) => g.id).join(','),
+  () => (props.org.groups || []).map((g) => g.id).join(','),
   () => {
-    // Expand new roots by default; keep prior collapse state for known ids.
+    collapsedNodes.value = mergeCollapsedWithOrgChange(
+      props.org,
+      collapsedNodes.value,
+      knownGroupIds.value,
+      props.activeName ? [props.activeName] : [],
+    )
+    knownGroupIds.value = new Set([...allGroupCollapseIds(props.org)])
+  },
+)
+
+watch(
+  () => props.activeName,
+  (name) => {
+    if (!name) return
+    const next = new Set(collapsedNodes.value)
+    for (const id of ancestorGroupIdsForAgent(props.org, name)) next.delete(id)
+    collapsedNodes.value = next
   },
 )
 
