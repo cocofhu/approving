@@ -5,10 +5,14 @@ import { useI18n } from 'vue-i18n'
 import HomeParticleMeshBackground from '@/components/dashboard/HomeParticleMeshBackground.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
+import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import RunLaunchModal from '@/components/workflow/RunLaunchModal.vue'
+import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useHomeApproveChat } from '@/lib/run/useHomeApproveChat'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
 import { imgSrc } from '@/lib/shared/compositeText'
+
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
 const BRAND_TEXT = 'Approving'
 
@@ -264,13 +268,14 @@ onBeforeUnmount(() => {
           <div v-for="(im, ii) in attachments" :key="ii" class="relative">
             <ChatImageThumb
               v-if="isImageAttachment(im)"
-              mode="locked"
+              mode="previewable"
               size="sm"
               thumb-class="rounded-none"
               :src="imgSrc(im)"
               :label="attachmentDisplayName(im, ii)"
               :alt="attachmentDisplayName(im, ii)"
               test-id="home-draft-image-thumb"
+              @preview="openChatImagePreview(imgSrc(im), attachmentDisplayName(im, ii))"
             />
             <div
               v-else
@@ -455,6 +460,14 @@ onBeforeUnmount(() => {
       @close="closeLaunch()"
       @stayed="closeLaunch()"
       @started="onLaunchStarted($event)"
+    />
+
+    <ChatImagePreviewModal
+      :open="!!imagePreview"
+      :src="imagePreview?.src || ''"
+      :label="imagePreview?.label || ''"
+      test-id-prefix="home-image-preview"
+      @close="closeChatImagePreview"
     />
   </div>
 </template>
