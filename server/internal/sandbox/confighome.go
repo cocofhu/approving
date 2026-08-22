@@ -178,7 +178,7 @@ func writeMergedSettingsJSON(dir string, platform map[string]any) error {
 }
 
 func mergeSettingsMaps(platform, user map[string]any) map[string]any {
-	out := make(map[string]any, len(platform)+len(user))
+	out := make(map[string]any)
 	for k, v := range platform {
 		out[k] = v
 	}
