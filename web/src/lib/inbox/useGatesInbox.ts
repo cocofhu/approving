@@ -213,6 +213,11 @@ function isProcessingIntent(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'
   return processingIntentKeys.value.has(inboxTripleKey(it))
 }
 
+/** Per-item card/select gate — not the global processingLock (plan g1.2). */
+function isItemCardDisabled(it: InboxItem) {
+  return isProcessingIntent(it) || isProcessedTriple(it)
+}
+
 function markProcessed(it: Pick<InboxItem, 'runId' | 'nodeId' | 'iteration'>) {
   processedTriples.add(inboxTripleKey(it))
 }
@@ -1610,14 +1615,14 @@ function openSharePanel(it: InboxItem, alsoOpenDetail = false) {
 }
 
 function selectItem(it: InboxItem) {
-  if (processingLock.value) return
+  if (isItemCardDisabled(it)) return
   showProcessedBanner.value = false
   clarifyConfirmError.value = null
   active.value = it
 }
 
 function openDetail(it: InboxItem) {
-  if (processingLock.value) return
+  if (isItemCardDisabled(it)) return
   if (listEl.value) listScrollTop.value = listEl.value.scrollTop
   selectItem(it)
   mobileView.value = 'detail'
@@ -1792,6 +1797,7 @@ function itemSecondary(it: InboxItem) {
     addProcessingIntent,
     removeProcessingIntent,
     isProcessingIntent,
+    isItemCardDisabled,
     markProcessed,
     unmarkProcessed,
     isProcessedTriple,
