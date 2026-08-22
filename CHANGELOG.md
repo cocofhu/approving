@@ -4,6 +4,13 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.2.2-beta — 2026-08-21
+
+- Public beta follow-up on [`v0.2.2-beta`](https://github.com/cocofhu/approving/releases/tag/v0.2.2-beta)
+  (relative to `v0.2.1-beta`: PRs #327–#384). Full notes on the GitHub Release.
+- Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
+  `*:0.2.2-beta` (tag publish does not rewrite these files).
+
 ## 0.2.1-beta — 2026-08-14
 
 - Public beta follow-up on [`v0.2.1-beta`](https://github.com/cocofhu/approving/releases/tag/v0.2.1-beta)
