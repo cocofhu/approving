@@ -160,7 +160,7 @@ function setMode(mode: WizardAuthMode) {
         <span class="mb-1.5 block text-[12px] font-medium text-txt2">
           {{ AGENT_SETTINGS_PATH }}
         </span>
-        <div class="min-h-[220px] border border-line">
+        <div class="h-[220px] border border-line" data-test="custom-config-editor-host">
           <CodeEditor
             :model-value="customConfigContent"
             language="json"
