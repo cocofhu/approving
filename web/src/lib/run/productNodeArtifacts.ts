@@ -70,6 +70,39 @@ export function productArtifactsForType(nodeType: string): ProductArtifactSpec[]
   return name ? [{ name, required: true }] : []
 }
 
+/** Run-scoped reserved names: one copy per run; later status writes must not hide it. */
+export const RUN_SCOPED_PRODUCT_NAMES = new Set(['plan.json'])
+
+const FINISHED_NODE_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+
+/** Pick the store row a structured product panel should bind. */
+export function resolveStructuredProductArtifact<T extends { name: string; nodeId?: string }>(opts: {
+  name: string
+  nodeId: string
+  nodeType: string
+  nodeStatus?: string
+  hasSnapshot?: boolean
+  artifacts: T[]
+}): T | null {
+  const { name, nodeId, nodeType, artifacts } = opts
+  if (!name) return null
+  const owned = artifacts.find((a) => a.name === name && a.nodeId === nodeId)
+  if (owned) return owned
+  const listed = productArtifactsForType(nodeType)
+  if (listed.length <= 1) {
+    return artifacts.find((a) => a.name === name) || null
+  }
+  // plan.json is run-global. implement update_plan_status used to rewrite
+  // nodeId to the implement node; after this node has finished (or already
+  // snapshotted the plan), still bind the current run copy. In-flight
+  // Approve without a snapshot must not pick up an upstream leftover.
+  const finished = FINISHED_NODE_STATUSES.has(String(opts.nodeStatus || ''))
+  if (RUN_SCOPED_PRODUCT_NAMES.has(name) && (opts.hasSnapshot || finished)) {
+    return artifacts.find((a) => a.name === name) || null
+  }
+  return null
+}
+
 /** Inspector / editor output rows derived from the nodereg manifest contract. */
 export function productOutputDefs(
   nodeType: string,

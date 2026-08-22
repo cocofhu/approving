@@ -454,6 +454,20 @@ func (h *Host) WriteArtifact(runID, token, nodeID, name, content, kind string) (
 	return id, nil
 }
 
+// artifactWriterNode returns the last recorded writer for name, or "".
+func (h *Host) artifactWriterNode(runID, token, name string) string {
+	infos, err := h.ListArtifacts(runID, token)
+	if err != nil {
+		return ""
+	}
+	for _, info := range infos {
+		if info.Name == name && strings.TrimSpace(info.Node) != "" {
+			return info.Node
+		}
+	}
+	return ""
+}
+
 // ReadArtifact returns a previously-written artifact within the same run.
 func (h *Host) ReadArtifact(runID, token, name string) (string, error) {
 	if !h.authorize(runID, token) {

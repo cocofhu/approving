@@ -116,7 +116,14 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 			return "update_plan_status failed: 未找到计划项 id=" + id, true
 		}
 		b, _ := json.MarshalIndent(doc, "", "  ")
-		if _, err := h.WriteArtifact(runID, token, h.ActiveNode(runID), PlanArtifactName, string(b), "json"); err != nil {
+		// Status backfill must not steal authorship: Approve/plan product
+		// panels bind plan.json by writer nodeId. implement is only marking
+		// progress on the existing run-scoped plan.
+		writer := h.artifactWriterNode(runID, token, PlanArtifactName)
+		if writer == "" {
+			writer = h.ActiveNode(runID)
+		}
+		if _, err := h.WriteArtifact(runID, token, writer, PlanArtifactName, string(b), "json"); err != nil {
 			return "update_plan_status failed: " + err.Error(), true
 		}
 		return fmt.Sprintf("ok: 已更新 %s=%s;剩余未完成 %d 项", id, status, len(planIncomplete(doc))), false
