@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest'
 
 const viewsDir = dirname(fileURLToPath(import.meta.url))
 const detailSrc = readFileSync(join(viewsDir, 'ProjectDetailView.vue'), 'utf8')
+const detailLogicSrc = readFileSync(join(viewsDir, '../lib/project/useProjectDetail.ts'), 'utf8')
+const detailFullSrc = `${detailSrc}\n${detailLogicSrc}`
 const shellSrc = readFileSync(join(viewsDir, '../components/shell/AppShell.vue'), 'utf8')
 
 function metaTabBlock(): string {
@@ -63,8 +65,8 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
     const meta = metaTabBlock()
     expect(meta).toMatch(/:disabled="savingMeta"/)
     expect(meta).not.toMatch(/!dirty/)
-    expect(detailSrc).toMatch(/savingMeta\.value = true/)
-    expect(detailSrc).toMatch(/async function saveMeta\(/)
+    expect(detailFullSrc).toMatch(/savingMeta\.value = true/)
+    expect(detailFullSrc).toMatch(/async function saveMeta\(/)
   })
 
   it('does not change AppShell height chain or other short tabs (g2.2)', () => {

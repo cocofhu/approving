@@ -21,17 +21,23 @@ const clarifyPanelSrc = read('components/run/RunClarifyPanel.vue')
 const liveLogSrc = read('lib/run/useRunDetailLiveLog.ts')
 const wsSrc = read('lib/run/useRunDetailWs.ts')
 const selectionSrc = read('lib/run/useRunDetailSelection.ts')
+const detailOrchestrationSrc = read('lib/run/useRunDetail.ts')
 
 const src = [
   viewSrc,
+  detailOrchestrationSrc,
   gatePanelSrc,
   logPanelSrc,
   sandboxPanelSrc,
   reviewPanelSrc,
+  clarifyPanelSrc,
   liveLogSrc,
   wsSrc,
   selectionSrc,
 ].join('\n')
+
+/** View shell + extracted orchestration (post structure-sink). */
+const viewOrchestrationSrc = viewSrc + '\n' + detailOrchestrationSrc
 
 describe('RunDetailView delete run', () => {
   it('exposes delete button, disabled hint, and confirm modal wiring', () => {
@@ -292,7 +298,7 @@ describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
     // Non-sash tabs keep md:w-[520px]; clarify|review use bound width instead.
     expect(src).toMatch(/desktopOuterSashLayout \? '' : 'md:w-\[520px\]'/)
     expect(src).toMatch(/md:w-\[520px\]/)
-    expect(viewSrc).toMatch(/v-if="desktopOuterSashLayout"/)
+    expect(viewOrchestrationSrc).toMatch(/v-if="desktopOuterSashLayout"/)
   })
 
   it('passes sidebar-width=REVIEW_SIDEBAR only on Run Detail review ReviewShell', () => {
@@ -304,26 +310,26 @@ describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
   })
 
   it('does not bind REVIEW_CANVAS_MIN as drag canvas minWidth; canvas may go to 0', () => {
-    expect(viewSrc).not.toMatch(/minWidth: `\$\{REVIEW_CANVAS_MIN\}px`/)
-    expect(viewSrc).not.toMatch(/canvasPaneStyle/)
-    expect(viewSrc).toMatch(/minWidth: '0px'/)
-    expect(viewSrc).toMatch(/width: '0px'/)
-    expect(viewSrc).toMatch(/flexBasis: '0px'/)
-    expect(viewSrc).toMatch(/overflow: 'hidden'/)
+    expect(viewOrchestrationSrc).not.toMatch(/minWidth: `\$\{REVIEW_CANVAS_MIN\}px`/)
+    expect(viewOrchestrationSrc).not.toMatch(/canvasPaneStyle/)
+    expect(viewOrchestrationSrc).toMatch(/minWidth: '0px'/)
+    expect(viewOrchestrationSrc).toMatch(/width: '0px'/)
+    expect(viewOrchestrationSrc).toMatch(/flexBasis: '0px'/)
+    expect(viewOrchestrationSrc).toMatch(/overflow: 'hidden'/)
   })
 
   it('outer sash uses pointer capture, isolated dragging class, clamp, snap, dblclick reset', () => {
-    expect(viewSrc).toMatch(/setPointerCapture/)
-    expect(viewSrc).toMatch(/e\.stopPropagation\(\)/)
-    expect(viewSrc).toMatch(/run-detail-outer-sash-dragging/)
-    expect(viewSrc).not.toMatch(/review-shell-sash-dragging/)
-    expect(viewSrc).toMatch(/clampOuterRight/)
-    expect(viewSrc).toMatch(/reviewDefaultRightPx/)
-    expect(viewSrc).toMatch(/onOuterSashDblClick/)
-    expect(viewSrc).toMatch(/role="separator"/)
-    expect(viewSrc).toMatch(/aria-orientation="vertical"/)
-    expect(viewSrc).toMatch(/outerSashStorageKey/)
-    expect(viewSrc).toMatch(/fullOpen/)
+    expect(viewOrchestrationSrc).toMatch(/setPointerCapture/)
+    expect(viewOrchestrationSrc).toMatch(/e\.stopPropagation\(\)/)
+    expect(viewOrchestrationSrc).toMatch(/run-detail-outer-sash-dragging/)
+    expect(viewOrchestrationSrc).not.toMatch(/review-shell-sash-dragging/)
+    expect(viewOrchestrationSrc).toMatch(/clampOuterRight/)
+    expect(viewOrchestrationSrc).toMatch(/reviewDefaultRightPx/)
+    expect(viewOrchestrationSrc).toMatch(/onOuterSashDblClick/)
+    expect(viewOrchestrationSrc).toMatch(/role="separator"/)
+    expect(viewOrchestrationSrc).toMatch(/aria-orientation="vertical"/)
+    expect(viewOrchestrationSrc).toMatch(/outerSashStorageKey/)
+    expect(viewOrchestrationSrc).toMatch(/fullOpen/)
   })
 
   it('moves view-mode switcher off the outer sash hit target when full-open', () => {
@@ -466,9 +472,9 @@ describe('RunDetailView entry assembly (g4)', () => {
     expect(viewSrc).toMatch(/RunOutputPanel/)
     expect(viewSrc).toMatch(/RunLogPanel/)
     expect(viewSrc).toMatch(/RunSandboxPanel/)
-    expect(viewSrc).toMatch(/useRunDetailLiveLog/)
-    expect(viewSrc).toMatch(/useRunDetailWs/)
-    expect(viewSrc).toMatch(/useRunDetailSelection/)
+    expect(viewOrchestrationSrc).toMatch(/useRunDetailLiveLog/)
+    expect(viewOrchestrationSrc).toMatch(/useRunDetailWs/)
+    expect(viewOrchestrationSrc).toMatch(/useRunDetailSelection/)
     expect(viewSrc).toMatch(/<AppTabs :tabs="nodeTabs" v-model="nodeTab"/)
   })
 

@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest'
 const dir = dirname(fileURLToPath(import.meta.url))
 const badge = readFileSync(join(dir, 'ServiceCommitBadge.vue'), 'utf8')
 const shell = readFileSync(join(dir, 'AppShell.vue'), 'utf8')
-const api = readFileSync(join(dir, '../../lib/api/api.ts'), 'utf8')
 const shutdown = readFileSync(join(dir, '../../lib/composables/useShutdownState.ts'), 'utf8')
 const toast = readFileSync(join(dir, '../ui/ToastHost.vue'), 'utf8')
 
@@ -33,9 +32,11 @@ describe('service commit badge f1–f5 checklist (g3.3)', () => {
   })
 
   it('f3: data source is GET /api/health commit, not VITE_GIT_COMMIT or dashboard stats', () => {
-    expect(api).toMatch(/export type HealthResponse/)
-    expect(api).toMatch(/commit\?: string/)
-    expect(api).toMatch(/health: \(\) => req<HealthResponse>\(`\/health`\)/)
+    const apiTypes = readFileSync(join(dir, '../../lib/api/apiTypes.ts'), 'utf8')
+    const settingsClient = readFileSync(join(dir, '../../lib/api/clients/settingsClient.ts'), 'utf8')
+    expect(apiTypes).toMatch(/export type HealthResponse/)
+    expect(apiTypes).toMatch(/commit\?: string/)
+    expect(settingsClient).toMatch(/health: \(\) => req<HealthResponse>\(`\/health`\)/)
     expect(shutdown).toMatch(/applyHealthCommit\(body\.commit\)/)
     expect(badge).not.toMatch(/VITE_GIT_COMMIT/)
     expect(shell).not.toMatch(/VITE_GIT_COMMIT/)

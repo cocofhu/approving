@@ -1,0 +1,1461 @@
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { relTime } from '@/lib/shared/format'
+import { renderMarkdown } from '@/lib/shared/markdown'
+import { createStreamMarkdownPreview } from '@/lib/shared/streamMarkdownPreview'
+import { api } from '@/lib/api/api'
+import { imgSrc } from '@/lib/shared/compositeText'
+import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
+import { useImageAttachments } from '@/lib/composables/useImageAttachments'
+import {
+  attachmentDisplayName,
+  isImageAttachment,
+} from '@/lib/shared/attachments'
+import { useToast } from '@/lib/composables/useToast'
+import {
+  classifyPmTurnError,
+  findConvergableOrphanIds,
+  isPmFailKind,
+  pmActiveThreadStorageKey,
+  shouldApplyEventSeq,
+  type PmFailKind,
+} from '@/lib/pm/pmTurnState'
+import { extractAgentMessageDelta } from '@/lib/run/acpUnpack'
+import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import {
+  channelPeerId,
+  isChannelThreadUserId,
+  parseChannelUserId,
+} from '@/lib/pm/cronDeliverTargets'
+import type { ChatMessage, ChatThread, ClarifyImage, PmLeaderBinding } from '@/lib/shared/types'
+
+export interface UsePmLeaderChatProps {
+  projectId: string
+  binding: PmLeaderBinding | null
+  restoreMobileChat?: boolean
+  unknownModelDisplayName?: string | null
+}
+
+export type UsePmLeaderChatEmit = {
+  (event: 'openSettings'): void
+  (event: 'restoredMobileChat'): void
+}
+
+export function usePmLeaderChat(props: UsePmLeaderChatProps, emit: UsePmLeaderChatEmit) {
+type FailKind = PmFailKind
+
+const { t } = useI18n()
+const toast = useToast()
+const { isMobile } = useBreakpoint()
+const mobileView = ref<'threads' | 'chat'>('threads')
+
+const threads = ref<ChatThread[]>([])
+const activeId = ref('')
+const messages = ref<ChatMessage[]>([])
+const input = ref('')
+const loading = ref(true)
+const messagesLoading = ref(false)
+const messagesLoadFailed = ref(false)
+const finalizingRefetchFailed = ref(false)
+const finalizing = ref(false)
+const sending = ref(false)
+const streaming = ref(false)
+const streamText = ref('')
+/** HTML for the live bubble — updated at most once per animation frame. */
+const streamHtml = ref('')
+const streamPreview = createStreamMarkdownPreview({ render: renderMarkdown })
+const unsubStreamHtml = streamPreview.subscribe((html) => {
+  streamHtml.value = html
+})
+function syncStreamText(next: string) {
+  streamText.value = next
+  streamPreview.setText(next)
+  // Absolute snapshots (resume / seed) paint immediately; deltas stay rAF-batched.
+  streamPreview.flush()
+}
+function appendStreamText(delta: string) {
+  streamText.value += delta
+  streamPreview.append(delta)
+}
+function clearStreamText() {
+  streamText.value = ''
+  streamPreview.reset()
+  streamHtml.value = ''
+}
+const resuming = ref(false)
+const lastEventSeq = ref(-1)
+const scroller = ref<HTMLElement | null>(null)
+
+const STICK_THRESHOLD = 48
+/** Align with approved Demo: near-top auto lazyload threshold (px). */
+const TOP_THRESHOLD = 56
+/** Fixed page size for non-Channel PM sessions (message rows). */
+const PAGE_SIZE = 20
+const stickToBottom = ref(true)
+/** True when older messages remain beyond the loaded window (non-Channel only). */
+const hasMoreEarlier = ref(false)
+const historyLoading = ref(false)
+const historyLoadFailed = ref(false)
+
+function isNearBottom(el: HTMLElement) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_THRESHOLD
+}
+
+function onScrollerScroll() {
+  const el = scroller.value
+  if (!el) return
+  stickToBottom.value = isNearBottom(el)
+  if (el.scrollTop <= TOP_THRESHOLD) {
+    void loadEarlier()
+  }
+}
+
+function scrollBottom(force = false) {
+  const el = scroller.value
+  if (el && (force || stickToBottom.value)) {
+    el.scrollTop = el.scrollHeight
+  }
+}
+
+/** Keep already-loaded prefix; update/append by message id (never shrink to latest PAGE). */
+function mergeMessagesKeepPrefix(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  if (!incoming.length) return existing
+  if (!existing.length) return incoming.slice()
+  const byId = new Map(existing.map((m) => [m.id, m]))
+  for (const m of incoming) {
+    byId.set(m.id, m)
+  }
+  const seen = new Set(existing.map((m) => m.id))
+  const out = existing.map((m) => byId.get(m.id)!)
+  for (const m of incoming) {
+    if (!seen.has(m.id)) {
+      out.push(m)
+      seen.add(m.id)
+    }
+  }
+  return out
+}
+
+function resetHistoryWindowState() {
+  hasMoreEarlier.value = false
+  historyLoading.value = false
+  historyLoadFailed.value = false
+}
+
+/** Session-only failed partial bubbles (S2); not persisted as assistant rows. */
+const failedPartialByUserMsgId = ref<Record<string, string>>({})
+
+/** Current turn's user message id (for fail/retry persistence). */
+const activeUserMessageId = ref('')
+
+const {
+  attachments,
+  fileInput,
+  notice: attachNotice,
+  onPickFiles,
+  onPaste,
+  removeAttachment,
+  takeAttachments,
+  blockSendIfOversized,
+} = useImageAttachments()
+
+const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
+
+watch(attachNotice, (n) => {
+  if (n?.kind === 'error') toast.error(n.text)
+})
+
+let ws: WebSocket | null = null
+let sandboxId = 0
+/** When true, ignore a late turn_done after user cancelled / failTurn. */
+let streamCancelled = false
+/** Generation token so late async work from a previous turn is ignored. */
+let turnGen = 0
+/** Prevents duplicate failTurn / late WS handlers after a turn already finished. */
+let turnClosed = false
+let turnDeadlineTimer: ReturnType<typeof setTimeout> | null = null
+let readyAbort: AbortController | null = null
+/** Discard stale listPmMessages responses after thread switch or re-load. */
+let threadLoadGen = 0
+
+const TURN_DEADLINE_MS = 90_000
+const WS_OPEN_TIMEOUT_MS = 10_000
+
+const enabled = computed(() => !!props.binding?.enabled && props.binding.agentAvailable)
+const turnBusy = computed(
+  () => sending.value || streaming.value || finalizing.value || resuming.value,
+)
+const busy = computed(() => turnBusy.value || messagesLoading.value)
+const canSend = computed(
+  () => !busy.value && (!!input.value.trim() || attachments.value.length > 0),
+)
+const showStreamBubble = computed(
+  () => sending.value || streaming.value || finalizing.value || resuming.value,
+)
+/** Main pane priority: finalizing > resuming > messagesLoading > errorEmpty > content */
+const mainViewState = computed(() => {
+  if (finalizing.value) return 'finalizing'
+  if (resuming.value) return 'resuming'
+  if (messagesLoading.value) return 'messagesLoading'
+  if (messagesLoadFailed.value) return 'errorEmpty'
+  return 'content'
+})
+const busyHint = computed(() => {
+  if (finalizing.value) return t('pages.projectDetail.pm.busyFinalizing')
+  if (resuming.value) return t('pages.projectDetail.pm.busyResuming')
+  if (streaming.value && streamText.value) return t('pages.projectDetail.pm.busyStreaming')
+  return t('pages.projectDetail.pm.busyWaiting')
+})
+const suggestions = computed(() => [
+  t('pages.projectDetail.pm.suggestProgress'),
+  t('pages.projectDetail.pm.suggestBlockers'),
+  t('pages.projectDetail.pm.suggestRisk'),
+])
+const showStreamTypingDots = computed(
+  () => showStreamBubble.value && !streamText.value && !finalizing.value && !resuming.value,
+)
+
+async function copyAssistantText(ev: Event) {
+  const root = (ev.currentTarget as HTMLElement | null)?.closest('[data-assistant-bubble]')
+  const md = root?.querySelector('.md') as HTMLElement | null
+  if (!md) return
+  const text = md.innerText.trim()
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success(t('pages.projectDetail.pm.copySuccess'))
+  } catch {
+    toast.error(t('pages.projectDetail.pm.copyFailed'))
+  }
+}
+const showThreadsAside = computed(() => !isMobile.value || mobileView.value === 'threads')
+const showChatSection = computed(() => !isMobile.value || mobileView.value === 'chat')
+
+/** Channel synthetic user id, e.g. qq:guild:… / wecom:c2c:… / feishu:c2c:… / dingtalk:c2c:… */
+function channelTypeOf(th: ChatThread | undefined | null): string {
+  return parseChannelUserId(th?.userId || '')?.type || ''
+}
+
+function isChannelThread(th: ChatThread | undefined | null): boolean {
+  return isChannelThreadUserId(th?.userId)
+}
+
+function channelBadgeLabel(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channelBadgeWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channelBadgeFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channelBadgeDingTalk')
+    default:
+      return t('pages.projectDetail.pm.channelBadgeQQ')
+  }
+}
+
+function channelBadgeClass(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return 'border-accent/55 bg-accent-dim text-accent-2'
+    case 'feishu':
+      return 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
+    case 'dingtalk':
+      return 'border-blue-400/40 bg-blue-400/10 text-blue-300'
+    default:
+      return 'border-accent-2/35 bg-accent/15 text-accent-2'
+  }
+}
+
+function channelReadonlyTitle(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channelReadonlyTitleWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channelReadonlyTitleFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channelReadonlyTitleDingTalk')
+    default:
+      return t('pages.projectDetail.pm.channelReadonlyTitle')
+  }
+}
+
+function channelReadonlyHint(th: ChatThread | undefined | null): string {
+  switch (channelTypeOf(th)) {
+    case 'wecom':
+      return t('pages.projectDetail.pm.channelReadonlyHintWecom')
+    case 'feishu':
+      return t('pages.projectDetail.pm.channelReadonlyHintFeishu')
+    case 'dingtalk':
+      return t('pages.projectDetail.pm.channelReadonlyHintDingTalk')
+    default:
+      return t('pages.projectDetail.pm.channelReadonlyHint')
+  }
+}
+
+function threadDisplayTitle(th: ChatThread | undefined | null): string {
+  if (isChannelThread(th) && th?.userId) {
+    // g3.2: channel thread primary title is the synthetic identity.
+    return th.userId
+  }
+  const title = (th?.title || '').trim()
+  if (title) return title
+  return t('pages.projectDetail.pm.untitled')
+}
+
+function channelSourceLine(th: ChatThread | undefined | null): string {
+  const kind = channelTypeOf(th)
+  const src =
+    kind === 'wecom'
+      ? t('pages.projectDetail.pm.channelSourceWecom')
+      : kind === 'feishu'
+        ? t('pages.projectDetail.pm.channelSourceFeishu')
+        : kind === 'dingtalk'
+          ? t('pages.projectDetail.pm.channelSourceDingTalk')
+          : t('pages.projectDetail.pm.channelSourceQq')
+  const peer = channelPeerId(th?.userId || '')
+  if (th?.unspoken) {
+    return `${src} · ${t('pages.projectDetail.pm.unspoken')}${peer ? ` · ${peer}` : ''}`
+  }
+  return peer ? `${src} · ${peer}` : src
+}
+
+const activeThread = computed(() => threads.value.find((x) => x.id === activeId.value))
+const activeIsChannel = computed(() => isChannelThread(activeThread.value))
+const activeThreadTitle = computed(() => threadDisplayTitle(activeThread.value))
+const showEmptyHint = computed(
+  () =>
+    mainViewState.value === 'content' &&
+    !activeIsChannel.value &&
+    !messages.value.length &&
+    !showStreamBubble.value,
+)
+/** Top non-button history tip (Demo four-state); Channel never shows it. */
+const showHistoryTip = computed(
+  () =>
+    !activeIsChannel.value &&
+    mainViewState.value === 'content' &&
+    !showEmptyHint.value &&
+    (messages.value.length > 0 || historyLoading.value || historyLoadFailed.value),
+)
+const historyTipText = computed(() => {
+  if (historyLoading.value) return t('pages.projectDetail.pm.historyLoading')
+  if (historyLoadFailed.value) return t('pages.projectDetail.pm.historyLoadFailed')
+  if (!hasMoreEarlier.value) return t('pages.projectDetail.pm.historyReachedStart')
+  return t('pages.projectDetail.pm.historyScrollUp')
+})
+const historyTipClass = computed(() => {
+  if (historyLoading.value) return 'text-accent'
+  if (historyLoadFailed.value) return 'text-err'
+  return 'text-txt3'
+})
+const showIdleSuggestions = computed(() => {
+  if (activeIsChannel.value) return false
+  const msgs = messages.value
+  if (!msgs.length || busy.value || showStreamBubble.value) return false
+  return msgs[msgs.length - 1]?.role === 'assistant'
+})
+
+type ChannelCtx = { open: true; x: number; y: number; threadId: string }
+const channelCtx = ref<ChannelCtx | null>(null)
+const channelDetailOpen = ref(false)
+const channelDetailTitle = ref('')
+const channelDetailSource = ref('')
+
+function closeChannelCtx() {
+  channelCtx.value = null
+}
+
+function openChannelCtx(e: MouseEvent, th: ChatThread) {
+  if (!isChannelThread(th)) return
+  e.preventDefault()
+  e.stopPropagation()
+  channelCtx.value = { open: true, x: e.clientX, y: e.clientY, threadId: th.id }
+}
+
+function openChannelDetail() {
+  if (!channelCtx.value) return
+  const th = threads.value.find((x) => x.id === channelCtx.value!.threadId)
+  channelDetailTitle.value = threadDisplayTitle(th)
+  channelDetailSource.value = channelSourceLine(th)
+  channelDetailOpen.value = true
+  closeChannelCtx()
+}
+
+function closeChannelDetail() {
+  channelDetailOpen.value = false
+}
+
+function onChannelCtxAction() {
+  openChannelDetail()
+}
+
+const FAIL_KIND_KEYS: Record<FailKind, { title: string; desc: string }> = {
+  connection: { title: 'failConnectionTitle', desc: 'failConnectionDesc' },
+  sandbox: { title: 'failSandboxTitle', desc: 'failSandboxDesc' },
+  empty: { title: 'failEmptyTitle', desc: 'failEmptyDesc' },
+  unknown: { title: 'failUnknownTitle', desc: 'failUnknownDesc' },
+  stopped: { title: 'failStoppedTitle', desc: 'failStoppedDesc' },
+}
+
+function failMeta(kind: string) {
+  const k = (isPmFailKind(kind) ? kind : 'unknown') as FailKind
+  const keys = FAIL_KIND_KEYS[k]
+  return {
+    kind: k,
+    title: t(`pages.projectDetail.pm.${keys.title}`),
+    desc: t(`pages.projectDetail.pm.${keys.desc}`),
+  }
+}
+
+function applyRestoreMobileChat() {
+  if (props.restoreMobileChat && isMobile.value && activeId.value) {
+    mobileView.value = 'chat'
+    emit('restoredMobileChat')
+  }
+}
+
+function isFailedUser(m: ChatMessage) {
+  return m.role === 'user' && m.status === 'failed'
+}
+
+/** QQ inbound download-failure notice only; other system rows stay hidden. */
+function isChannelHint(m: ChatMessage) {
+  return m.role === 'system' && m.source === 'channel'
+}
+
+async function loadThreads() {
+  loading.value = true
+  try {
+    const res = await api.listPmThreads(props.projectId)
+    threads.value = res.items || []
+    const stored =
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(pmActiveThreadStorageKey(props.projectId)) || ''
+        : ''
+    const preferred =
+      (stored && threads.value.some((t) => t.id === stored) && stored) ||
+      activeId.value ||
+      (threads.value[0]?.id ?? '')
+    if (!activeId.value && preferred) {
+      await activateThread(preferred)
+    } else if (activeId.value) {
+      await loadMessages(activeId.value)
+    }
+  } catch (e: any) {
+    toast.error(String(e?.message || e))
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * Bind UI to a thread. When preserveTurn is true (send-path ensure), do NOT bump
+ * turnGen / turnClosed — otherwise a mid-send newThread would silently abort the turn.
+ */
+async function activateThread(id: string, opts?: { preserveTurn?: boolean }) {
+  threadLoadGen += 1
+  if (!opts?.preserveTurn) {
+    resetTurnLocal()
+  }
+  activeId.value = id
+  messages.value = []
+  messagesLoadFailed.value = false
+  resetHistoryWindowState()
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(pmActiveThreadStorageKey(props.projectId), id)
+    }
+  } catch {
+    /* ignore quota */
+  }
+  closeWs()
+  sandboxId = 0
+  await loadMessages(id)
+}
+
+async function selectThread(id: string) {
+  if (turnBusy.value) return
+  if (id === activeId.value) {
+    if (isMobile.value) mobileView.value = 'chat'
+    return
+  }
+  await activateThread(id)
+  if (isMobile.value) mobileView.value = 'chat'
+}
+
+function backToThreads() {
+  if (turnBusy.value) return
+  mobileView.value = 'threads'
+}
+
+/** Create + activate a thread without resetting an in-flight send/retry generation. */
+async function ensureActiveThread() {
+  if (activeId.value) return
+  const thr = await api.createPmThread(props.projectId)
+  threads.value = [thr, ...threads.value]
+  await activateThread(thr.id, { preserveTurn: true })
+}
+
+async function loadMessages(tid: string) {
+  const gen = ++threadLoadGen
+  messagesLoadFailed.value = false
+  messagesLoading.value = true
+  historyLoadFailed.value = false
+  historyLoading.value = false
+  try {
+    const th = threads.value.find((x) => x.id === tid)
+    const channel = isChannelThread(th)
+    // Channel: keep full-list strategy. Non-Channel: newest-tail window of PAGE_SIZE.
+    const res = channel
+      ? await api.listPmMessages(props.projectId, tid)
+      : await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE })
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    messages.value = res.items || []
+    hasMoreEarlier.value = channel ? false : !!res.hasMore
+    await hydrateDraftAndMaybeResume(tid)
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+  } catch (e: any) {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    messagesLoadFailed.value = true
+    toast.error(t('pages.projectDetail.pm.loadFailed'))
+  } finally {
+    if (gen === threadLoadGen && tid === activeId.value) {
+      // Clear loading before scrollBottom: while messagesLoading, template shows
+      // ArtifactLoadingPane and scrollHeight is not the message list.
+      messagesLoading.value = false
+    }
+  }
+  // Force stick-to-bottom only after content replaces the loading pane.
+  if (gen !== threadLoadGen || tid !== activeId.value || messagesLoadFailed.value) return
+  stickToBottom.value = true
+  await nextTick()
+  if (gen !== threadLoadGen || tid !== activeId.value) return
+  scrollBottom(true)
+  // Browser layout can lag one frame behind the v-if swap; re-pin after paint.
+  requestAnimationFrame(() => {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    scrollBottom(true)
+  })
+}
+
+/**
+ * Near-top lazyload: prepend up to PAGE_SIZE older messages.
+ * Uses threadLoadGen so a late response cannot write into another session.
+ */
+async function loadEarlier() {
+  if (
+    historyLoading.value ||
+    !hasMoreEarlier.value ||
+    activeIsChannel.value ||
+    !activeId.value ||
+    messagesLoading.value ||
+    !messages.value.length
+  ) {
+    return
+  }
+  const gen = threadLoadGen
+  const tid = activeId.value
+  const before = messages.value[0]?.id
+  if (!before) return
+
+  historyLoading.value = true
+  historyLoadFailed.value = false
+  const el = scroller.value
+  const prevTop = el?.scrollTop ?? 0
+  const prevHeight = el?.scrollHeight ?? 0
+
+  try {
+    const res = await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE, before })
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    const older = res.items || []
+    if (older.length) {
+      const existing = new Set(messages.value.map((m) => m.id))
+      const prepend = older.filter((m) => !existing.has(m.id))
+      messages.value = [...prepend, ...messages.value]
+    }
+    hasMoreEarlier.value = !!res.hasMore
+    stickToBottom.value = false
+    await nextTick()
+    if (el) {
+      el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+    }
+  } catch {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    historyLoadFailed.value = true
+  } finally {
+    if (gen === threadLoadGen && tid === activeId.value) {
+      historyLoading.value = false
+    }
+  }
+}
+
+async function retryLoadMessages() {
+  if (!activeId.value || messagesLoading.value) return
+  await loadMessages(activeId.value)
+}
+
+/**
+ * Hydrate priority: hasFinal > streaming+live resume > streaming+!live|failed converge > orphan.
+ * Never call beginResume when live=false.
+ */
+async function hydrateDraftAndMaybeResume(tid: string) {
+  if (tid !== activeId.value) return
+  // Channel threads are Web-readonly: never resume turns or persist fail metadata.
+  const th = threads.value.find((x) => x.id === tid)
+  if (isChannelThread(th)) return
+  let draftUserMsgId = ''
+  let skipOrphans = false
+  try {
+    const info = await api.getPmDraft(props.projectId, tid)
+    const draft = info.draft
+    // hasFinal alone skips resume/orphan for this hydrate (draft may already be cleared).
+    if (info.hasFinal) {
+      skipOrphans = true
+      return
+    }
+    if (draft && draft.status === 'streaming' && draft.userMsgId) {
+      draftUserMsgId = draft.userMsgId
+      if (info.live) {
+        skipOrphans = true
+        // Already busy with a live send in this session — don't double-resume.
+        if (busy.value && activeUserMessageId.value === draft.userMsgId) return
+        await beginResume(tid, draft.partialText || '', draft.eventSeq ?? -1, draft.userMsgId)
+        return
+      }
+      // Dead streaming draft (older server without reconcile): connection + optional partial.
+      await convergeFailedDraft(draft.userMsgId, 'connection', draft.partialText || '')
+      return
+    }
+    if (draft && draft.status === 'failed' && draft.userMsgId) {
+      // Exclude this turn from orphan converge; still ensure fail card + Retry.
+      draftUserMsgId = draft.userMsgId
+      const raw = draft.failKind || ''
+      const kind = (isPmFailKind(raw) ? raw : 'connection') as FailKind
+      // Refresh/interrupt path must not stay on unknown when draft is already failed.
+      const resolved: FailKind = kind === 'unknown' ? 'connection' : kind
+      await convergeFailedDraft(draft.userMsgId, resolved, draft.partialText || '')
+    }
+  } catch {
+    /* draft fetch failed → orphan path uses connection (not unknown) */
+  } finally {
+    await convergeOrphanTurns(tid, { draftUserMsgId, skipAll: skipOrphans })
+  }
+}
+
+function setFailedPartial(userMsgId: string, partial: string) {
+  const text = partial.trim()
+  if (!userMsgId || !text) return
+  failedPartialByUserMsgId.value = { ...failedPartialByUserMsgId.value, [userMsgId]: partial }
+}
+
+function clearFailedPartial(userMsgId: string) {
+  if (!(userMsgId in failedPartialByUserMsgId.value)) return
+  const next = { ...failedPartialByUserMsgId.value }
+  delete next[userMsgId]
+  failedPartialByUserMsgId.value = next
+}
+
+async function convergeFailedDraft(userMsgId: string, kind: FailKind, partial: string) {
+  if (partial.trim()) setFailedPartial(userMsgId, partial)
+  else clearFailedPartial(userMsgId)
+  const existing = messages.value.find((m) => m.id === userMsgId)
+  if (existing && existing.status !== 'failed') {
+    await persistFailure(userMsgId, kind)
+  } else if (existing && existing.status === 'failed' && existing.failKind !== kind) {
+    await persistFailure(userMsgId, kind)
+  }
+}
+
+async function beginResume(tid: string, partial: string, afterSeq: number, userMsgId: string) {
+  if (tid !== activeId.value) return
+  const gen = ++turnGen
+  streamCancelled = false
+  turnClosed = false
+  activeUserMessageId.value = userMsgId
+  sending.value = true
+  streaming.value = true
+  resuming.value = true
+  syncStreamText(partial)
+  lastEventSeq.value = afterSeq
+  startTurnDeadline(gen)
+  readyAbort = new AbortController()
+  const signal = readyAbort.signal
+  try {
+    await ensureSandbox(false, signal)
+    if (gen !== turnGen || streamCancelled || turnClosed) return
+    startTurnDeadline(gen)
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      throw Object.assign(new Error('ws not open'), { failKind: 'connection' as FailKind })
+    }
+    ws.send(JSON.stringify({ type: 'resume', afterSeq }))
+  } catch (e: any) {
+    resuming.value = false
+    if (gen !== turnGen || turnClosed) return
+    if (e?.name === 'AbortError' || streamCancelled) {
+      if (!turnClosed) await failTurn('stopped')
+      return
+    }
+    await failTurn(classifyPmTurnError(e))
+    const detail = String(e?.message || e)
+    if (detail) toast.error(detail)
+  } finally {
+    if (readyAbort?.signal === signal) readyAbort = null
+  }
+}
+
+/**
+ * Only converge truly unrecoverable orphans (no draft / no live turn).
+ * Default failKind is connection (refresh/interrupt), never unknown.
+ */
+async function convergeOrphanTurns(
+  tid: string,
+  opts?: { draftUserMsgId?: string; skipAll?: boolean },
+) {
+  if (tid !== activeId.value) return
+  const orphans = findConvergableOrphanIds(messages.value, opts).filter((id) => {
+    if (busy.value && id === activeUserMessageId.value) return false
+    return true
+  })
+  for (const mid of orphans) {
+    if (tid !== activeId.value) return
+    try {
+      const msg = await api.patchPmMessage(props.projectId, tid, mid, {
+        status: 'failed',
+        failKind: 'connection',
+      })
+      patchLocalMessage(mid, {
+        status: msg.status || 'failed',
+        failKind: msg.failKind || 'connection',
+      })
+    } catch (e: any) {
+      patchLocalMessage(mid, { status: 'failed', failKind: 'connection' })
+      toast.error(String(e?.message || e))
+    }
+  }
+}
+
+async function newThread() {
+  if (!enabled.value) {
+    emit('openSettings')
+    return
+  }
+  if (turnBusy.value) return
+  try {
+    const thr = await api.createPmThread(props.projectId)
+    threads.value = [thr, ...threads.value]
+    await activateThread(thr.id)
+    if (isMobile.value) mobileView.value = 'chat'
+  } catch (e: any) {
+    toast.error(String(e?.message || e))
+  }
+}
+
+async function removeThread(id: string) {
+  if (turnBusy.value) return
+  const th = threads.value.find((x) => x.id === id)
+  if (isChannelThread(th)) return
+  try {
+    await api.deletePmThread(props.projectId, id)
+    threads.value = threads.value.filter((x) => x.id !== id)
+    if (activeId.value === id) {
+      activeId.value = ''
+      messages.value = []
+      resetTurnLocal()
+      closeWs()
+      if (threads.value[0]) await activateThread(threads.value[0].id)
+    }
+  } catch (e: any) {
+    toast.error(String(e?.message || e))
+  }
+}
+
+function closeWs() {
+  if (ws) {
+    try {
+      ws.close()
+    } catch {
+      /* ignore */
+    }
+    ws = null
+  }
+}
+
+function clearTurnDeadline() {
+  if (turnDeadlineTimer) {
+    clearTimeout(turnDeadlineTimer)
+    turnDeadlineTimer = null
+  }
+}
+
+function startTurnDeadline(gen: number) {
+  clearTurnDeadline()
+  turnDeadlineTimer = setTimeout(() => {
+    if (gen !== turnGen) return
+    if (!busy.value) return
+    void failTurn('sandbox')
+  }, TURN_DEADLINE_MS)
+}
+
+function resetTurnLocal() {
+  turnGen += 1
+  streamCancelled = true
+  turnClosed = true
+  clearTurnDeadline()
+  if (readyAbort) {
+    readyAbort.abort()
+    readyAbort = null
+  }
+  clearStreamText()
+  streaming.value = false
+  sending.value = false
+  resuming.value = false
+  finalizing.value = false
+  lastEventSeq.value = -1
+  activeUserMessageId.value = ''
+  failedPartialByUserMsgId.value = {}
+}
+
+function patchLocalMessage(mid: string, patch: Partial<ChatMessage>) {
+  messages.value = messages.value.map((m) => (m.id === mid ? { ...m, ...patch } : m))
+}
+
+async function persistFailure(mid: string, kind: FailKind) {
+  if (!activeId.value || !mid) return
+  try {
+    const msg = await api.patchPmMessage(props.projectId, activeId.value, mid, {
+      status: 'failed',
+      failKind: kind,
+    })
+    patchLocalMessage(mid, { status: msg.status || 'failed', failKind: msg.failKind || kind })
+  } catch (e: any) {
+    // Still show session-local failure even if persistence fails.
+    patchLocalMessage(mid, { status: 'failed', failKind: kind })
+    toast.error(String(e?.message || e))
+  }
+}
+
+async function clearFailure(mid: string) {
+  if (!activeId.value || !mid) return
+  try {
+    const msg = await api.patchPmMessage(props.projectId, activeId.value, mid, { status: 'ok' })
+    patchLocalMessage(mid, { status: msg.status || 'ok', failKind: '' })
+  } catch (e: any) {
+    patchLocalMessage(mid, { status: 'ok', failKind: '' })
+    toast.error(String(e?.message || e))
+  }
+}
+
+/**
+ * Unified turn failure finish: discard stream half-product, persist failKind on user turn.
+ */
+async function failTurn(kind: FailKind) {
+  if (turnClosed) return
+  turnClosed = true
+  const mid = activeUserMessageId.value
+  streamCancelled = true
+  clearTurnDeadline()
+  if (readyAbort) {
+    readyAbort.abort()
+    readyAbort = null
+  }
+  clearStreamText()
+  streaming.value = false
+  sending.value = false
+  resuming.value = false
+  finalizing.value = false
+  if (mid) {
+    await persistFailure(mid, kind)
+  }
+  await nextTick()
+  scrollBottom()
+}
+
+async function ensureSandbox(injectHistory: boolean, signal?: AbortSignal) {
+  if (!activeId.value) {
+    // Must not reset turnGen — caller (runTurn) already owns the busy lock.
+    await ensureActiveThread()
+  }
+  if (!activeId.value) throw new Error('no thread')
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  const res = await api.ensurePmSandbox(props.projectId, activeId.value, {
+    injectHistory,
+  })
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  sandboxId = res.sandbox.id
+  await waitReady(sandboxId, signal)
+  await openWs(sandboxId)
+  return res.preamble || ''
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+async function waitReady(id: number, signal?: AbortSignal) {
+  for (let i = 0; i < 90; i++) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const s = await api.getSandbox(id)
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    if (s.status === 'running') return
+    if (s.status === 'error') throw Object.assign(new Error(s.error || 'sandbox error'), { failKind: 'unknown' as FailKind })
+    await sleep(1000)
+  }
+  throw Object.assign(new Error('sandbox timeout'), { failKind: 'sandbox' as FailKind })
+}
+
+function waitWsOpen(socket: WebSocket, timeoutMs: number): Promise<void> {
+  if (socket.readyState === WebSocket.OPEN) return Promise.resolve()
+  if (socket.readyState === WebSocket.CLOSING || socket.readyState === WebSocket.CLOSED) {
+    return Promise.reject(Object.assign(new Error('ws closed'), { failKind: 'connection' as FailKind }))
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(Object.assign(new Error('ws open timeout'), { failKind: 'connection' as FailKind }))
+    }, timeoutMs)
+    const onOpen = () => {
+      cleanup()
+      resolve()
+    }
+    const onErr = () => {
+      cleanup()
+      reject(Object.assign(new Error('ws error'), { failKind: 'connection' as FailKind }))
+    }
+    const onClose = () => {
+      cleanup()
+      reject(Object.assign(new Error('ws closed'), { failKind: 'connection' as FailKind }))
+    }
+    const cleanup = () => {
+      clearTimeout(timer)
+      socket.removeEventListener('open', onOpen)
+      socket.removeEventListener('error', onErr)
+      socket.removeEventListener('close', onClose)
+    }
+    socket.addEventListener('open', onOpen)
+    socket.addEventListener('error', onErr)
+    socket.addEventListener('close', onClose)
+  })
+}
+
+async function openWs(_id: number) {
+  closeWs()
+  if (!activeId.value) throw new Error('no thread')
+  const socket = new WebSocket(api.pmThreadChatWsUrl(props.projectId, activeId.value))
+  ws = socket
+  socket.onmessage = (ev) => {
+    let msg: any
+    try {
+      msg = JSON.parse(ev.data)
+    } catch {
+      return
+    }
+    // Dedup overlapping fan-out / resume catch-up by seq (exclusive watermark).
+    if (typeof msg.seq === 'number') {
+      if (!shouldApplyEventSeq(msg.seq, lastEventSeq.value)) return
+      lastEventSeq.value = msg.seq
+    }
+    if (msg.type === 'acp' && msg.data) {
+      handleAcp(msg.data)
+    } else if (msg.type === 'resume_hint') {
+      // Absolute snapshot from server draft — never append onto stale streamText.
+      if (typeof msg.partialText === 'string') {
+        syncStreamText(msg.partialText)
+      }
+      if (typeof msg.eventSeq === 'number') {
+        lastEventSeq.value = msg.eventSeq
+      }
+      if (msg.userMsgId) activeUserMessageId.value = msg.userMsgId
+      resuming.value = true
+    } else if (msg.type === 'turn_done') {
+      void onTurnDone()
+    } else if (msg.type === 'error') {
+      const kind = (isPmFailKind(msg.failKind) ? msg.failKind : 'unknown') as FailKind
+      void onTurnError(kind, String(msg.error || msg.message || 'error'))
+    }
+  }
+  socket.onerror = () => {
+    if (!turnClosed && busy.value && !streamCancelled) {
+      void failTurn('connection')
+    }
+  }
+  socket.onclose = () => {
+    if (ws === socket) ws = null
+    // WS disconnect must NOT fail the turn — server turn runner continues.
+  }
+  await waitWsOpen(socket, WS_OPEN_TIMEOUT_MS)
+}
+
+function handleAcp(raw: any) {
+  if (streamCancelled) return
+  const delta = extractAgentMessageDelta(raw)
+  if (!delta?.text) return
+  appendStreamText(delta.text)
+  void nextTick().then(() => scrollBottom())
+}
+
+function clearFinalizingStream() {
+  finalizing.value = false
+  finalizingRefetchFailed.value = false
+  clearStreamText()
+  activeUserMessageId.value = ''
+  resuming.value = false
+}
+
+async function refetchAfterTurnDone() {
+  if (!activeId.value) return
+  finalizingRefetchFailed.value = false
+  const tid = activeId.value
+  const gen = threadLoadGen
+  try {
+    const channel = isChannelThread(threads.value.find((x) => x.id === tid))
+    // Channel: full list replace. Non-Channel: tail refetch + merge keep prefix.
+    const res = channel
+      ? await api.listPmMessages(props.projectId, tid)
+      : await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE })
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    const incoming = res.items || []
+    messages.value = channel
+      ? incoming
+      : mergeMessagesKeepPrefix(messages.value, incoming)
+    if (!channel && typeof res.hasMore === 'boolean' && messages.value.length <= PAGE_SIZE) {
+      // Only trust hasMore when we have not prepended beyond the tail window.
+      hasMoreEarlier.value = res.hasMore
+    }
+    const thr = await api.listPmThreads(props.projectId)
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    threads.value = thr.items || []
+    await nextTick()
+    scrollBottom()
+    clearFinalizingStream()
+  } catch {
+    if (gen !== threadLoadGen || tid !== activeId.value) return
+    finalizingRefetchFailed.value = true
+    toast.error(t('pages.projectDetail.pm.loadFailed'))
+  }
+}
+
+/**
+ * Server already finalized (assistant appended or failure persisted). Refresh messages.
+ */
+async function onTurnDone() {
+  if (streamCancelled || turnClosed) {
+    clearStreamText()
+    streaming.value = false
+    sending.value = false
+    resuming.value = false
+    finalizingRefetchFailed.value = false
+    finalizing.value = false
+    return
+  }
+  turnClosed = true
+  streamCancelled = true
+  clearTurnDeadline()
+  streaming.value = false
+  sending.value = false
+  resuming.value = false
+      streamPreview.flush()
+  finalizing.value = true
+  if (!activeId.value) {
+    clearFinalizingStream()
+    return
+  }
+  await refetchAfterTurnDone()
+}
+
+async function onTurnError(kind: FailKind, detail: string) {
+  if (turnClosed) return
+  // Server already persisted failure on user message + draft; refresh then show card.
+  turnClosed = true
+  streamCancelled = true
+  clearTurnDeadline()
+  clearStreamText()
+  streaming.value = false
+  sending.value = false
+  resuming.value = false
+  finalizing.value = false
+  const mid = activeUserMessageId.value
+  if (activeId.value) {
+    const tid = activeId.value
+    const gen = threadLoadGen
+    try {
+      const channel = isChannelThread(threads.value.find((x) => x.id === tid))
+      const res = channel
+        ? await api.listPmMessages(props.projectId, tid)
+        : await api.listPmMessages(props.projectId, tid, { limit: PAGE_SIZE })
+      if (gen === threadLoadGen && tid === activeId.value) {
+        const incoming = res.items || []
+        messages.value = channel
+          ? incoming
+          : mergeMessagesKeepPrefix(messages.value, incoming)
+        if (!channel && typeof res.hasMore === 'boolean' && messages.value.length <= PAGE_SIZE) {
+          hasMoreEarlier.value = res.hasMore
+        }
+      }
+      // If server did not mark failure (edge), persist locally.
+      if (mid) {
+        const user = messages.value.find((m) => m.id === mid)
+        if (user && user.status !== 'failed') {
+          await persistFailure(mid, kind)
+        }
+      }
+    } catch {
+      if (mid) await persistFailure(mid, kind)
+    }
+  } else if (mid) {
+    await persistFailure(mid, kind)
+  }
+  activeUserMessageId.value = ''
+  if (detail && kind === 'unknown') toast.error(detail)
+  await nextTick()
+  scrollBottom()
+}
+
+/**
+ * Run one consult turn against an already-persisted user message (send or retry).
+ * @param existingGen - when send() already claimed a generation for the busy lock, reuse it.
+ */
+async function runTurn(
+  userMsg: ChatMessage,
+  content: string,
+  imgs: ClarifyImage[],
+  existingGen?: number,
+) {
+  const gen = existingGen ?? ++turnGen
+  streamCancelled = false
+  turnClosed = false
+  activeUserMessageId.value = userMsg.id
+  sending.value = true
+  streaming.value = true
+  clearStreamText()
+  // Ready-phase deadline (~90s); refreshed after sandbox is ready for stream phase.
+  startTurnDeadline(gen)
+  readyAbort = new AbortController()
+  const signal = readyAbort.signal
+
+  try {
+    const preamble = await ensureSandbox(true, signal)
+    if (gen !== turnGen || streamCancelled || turnClosed) return
+    // Fresh generation window after ready so slow sandbox does not starve streaming.
+    startTurnDeadline(gen)
+    const prompt = preamble
+      ? `${preamble}\n\n用户问题：${content || t('pages.projectDetail.pm.imagesOnly')}`
+      : content || t('pages.projectDetail.pm.imagesOnly')
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      throw Object.assign(new Error('ws not open'), { failKind: 'connection' as FailKind })
+    }
+    ws.send(
+      JSON.stringify({
+        type: 'chat',
+        content: prompt,
+        images: imgs.map((a) => ({ data: a.data, mimeType: a.mimeType })),
+        userMsgId: userMsg.id,
+        sandboxId,
+      }),
+    )
+  } catch (e: any) {
+    if (gen !== turnGen || turnClosed) return
+    if (e?.name === 'AbortError' || streamCancelled) {
+      if (!turnClosed) await failTurn('stopped')
+      return
+    }
+    await failTurn(classifyPmTurnError(e))
+    const detail = String(e?.message || e)
+    if (detail && detail !== 'sandbox timeout') toast.error(detail)
+  } finally {
+    if (readyAbort?.signal === signal) readyAbort = null
+  }
+}
+
+/**
+ * @param text - when set, use as message body (suggestions) instead of input
+ * @param explicitImages - when provided, use these images and do not take pending
+ */
+async function send(text?: string, explicitImages?: ClarifyImage[]) {
+  const fromInput = text == null
+  const content = (text ?? input.value).trim()
+  const imgs =
+    explicitImages !== undefined
+      ? explicitImages.slice()
+      : attachments.value.slice()
+  if ((!content && imgs.length === 0) || busy.value) return
+  if (activeIsChannel.value) return
+  if (!enabled.value) {
+    emit('openSettings')
+    return
+  }
+  if (blockSendIfOversized(imgs)) return
+  if (explicitImages === undefined) takeAttachments()
+  else attachments.value = []
+  // f7: lock busy BEFORE any await so double-click / suggestion cannot append another user turn.
+  const gen = ++turnGen
+  streamCancelled = false
+  turnClosed = false
+  sending.value = true
+  streaming.value = true
+  clearStreamText()
+  startTurnDeadline(gen)
+  if (fromInput) input.value = ''
+  try {
+    // Create thread without resetTurnLocal so this generation stays valid (review v1).
+    if (!activeId.value) await ensureActiveThread()
+    if (gen !== turnGen || streamCancelled || turnClosed) {
+      // Stopped while creating thread / before append.
+      sending.value = false
+      streaming.value = false
+      clearTurnDeadline()
+      return
+    }
+    if (!activeId.value) throw new Error('no thread')
+    const userMsg = await api.appendPmMessage(props.projectId, activeId.value, {
+      role: 'user',
+      content,
+      images: imgs.length ? imgs : undefined,
+    })
+    messages.value = [...messages.value, userMsg]
+    await nextTick()
+    stickToBottom.value = true
+    scrollBottom(true)
+    if (gen !== turnGen || streamCancelled || turnClosed) {
+      // Stopped during append: persist stopped on the message we just created.
+      activeUserMessageId.value = userMsg.id
+      if (turnClosed) {
+        await persistFailure(userMsg.id, 'stopped')
+        sending.value = false
+        streaming.value = false
+      } else {
+        await failTurn('stopped')
+      }
+      return
+    }
+    await runTurn(userMsg, content, imgs, gen)
+  } catch (e: any) {
+    sending.value = false
+    streaming.value = false
+    clearTurnDeadline()
+    if (fromInput) input.value = content
+    if (imgs.length) attachments.value = [...imgs, ...attachments.value]
+    toast.error(String(e?.message || e))
+  }
+}
+
+function stop() {
+  if (!busy.value) return
+  streamCancelled = true
+  clearTurnDeadline()
+  if (readyAbort) {
+    readyAbort.abort()
+    readyAbort = null
+  }
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify({ type: 'cancel' }))
+    } catch {
+      /* ignore */
+    }
+  }
+  clearStreamText()
+  resuming.value = false
+  void failTurn('stopped')
+}
+
+/** Cover-this-turn retry: reuse userMessageId, do not append a new user bubble. */
+async function retryTurn(userMessageId: string) {
+  if (busy.value) return
+  const userMsg = messages.value.find((m) => m.id === userMessageId && m.role === 'user')
+  if (!userMsg) return
+  // Lock busy before clearFailure await (same f7 race as send).
+  const gen = ++turnGen
+  streamCancelled = false
+  turnClosed = false
+  sending.value = true
+  streaming.value = true
+  clearStreamText()
+  clearFailedPartial(userMessageId)
+  startTurnDeadline(gen)
+  try {
+    await clearFailure(userMessageId)
+    if (gen !== turnGen || streamCancelled || turnClosed) {
+      sending.value = false
+      streaming.value = false
+      clearTurnDeadline()
+      return
+    }
+    const content = (userMsg.content || '').trim()
+    const imgs = userMsg.images?.slice() ?? []
+    await runTurn(userMsg, content, imgs, gen)
+  } catch (e: any) {
+    sending.value = false
+    streaming.value = false
+    clearTurnDeadline()
+    toast.error(String(e?.message || e))
+  }
+}
+
+watch(isMobile, () => {
+  mobileView.value = 'threads'
+})
+
+watch(
+  () => props.projectId,
+  () => {
+    activeId.value = ''
+    messages.value = []
+    messagesLoadFailed.value = false
+    messagesLoading.value = false
+    mobileView.value = 'threads'
+    resetTurnLocal()
+    void loadThreads()
+  },
+)
+
+onMounted(() => {
+  void loadThreads().then(() => applyRestoreMobileChat())
+})
+onBeforeUnmount(() => {
+  unsubStreamHtml()
+  streamPreview.reset()
+  resetTurnLocal()
+  closeWs()
+})
+
+  return {
+  t,
+  toast,
+  isMobile,
+  mobileView,
+  threads,
+  activeId,
+  messages,
+  input,
+  loading,
+  messagesLoading,
+  messagesLoadFailed,
+  finalizingRefetchFailed,
+  finalizing,
+  sending,
+  streaming,
+  streamText,
+  streamHtml,
+  streamPreview,
+  unsubStreamHtml,
+  syncStreamText,
+  appendStreamText,
+  clearStreamText,
+  resuming,
+  lastEventSeq,
+  scroller,
+  STICK_THRESHOLD,
+  TOP_THRESHOLD,
+  PAGE_SIZE,
+  stickToBottom,
+  hasMoreEarlier,
+  historyLoading,
+  historyLoadFailed,
+  isNearBottom,
+  onScrollerScroll,
+  scrollBottom,
+  mergeMessagesKeepPrefix,
+  resetHistoryWindowState,
+  failedPartialByUserMsgId,
+  activeUserMessageId,
+  attachments,
+  fileInput,
+  attachNotice,
+  onPickFiles,
+  onPaste,
+  removeAttachment,
+  imagePreview,
+  openChatImagePreview,
+  closeChatImagePreview,
+  sandboxId,
+  streamCancelled,
+  turnGen,
+  turnClosed,
+  threadLoadGen,
+  TURN_DEADLINE_MS,
+  WS_OPEN_TIMEOUT_MS,
+  enabled,
+  turnBusy,
+  busy,
+  canSend,
+  showStreamBubble,
+  mainViewState,
+  busyHint,
+  suggestions,
+  showStreamTypingDots,
+  copyAssistantText,
+  showThreadsAside,
+  showChatSection,
+  channelTypeOf,
+  isChannelThread,
+  channelBadgeLabel,
+  channelBadgeClass,
+  channelReadonlyTitle,
+  channelReadonlyHint,
+  threadDisplayTitle,
+  channelSourceLine,
+  activeThread,
+  activeIsChannel,
+  activeThreadTitle,
+  showEmptyHint,
+  showHistoryTip,
+  historyTipText,
+  historyTipClass,
+  showIdleSuggestions,
+  channelCtx,
+  channelDetailOpen,
+  channelDetailTitle,
+  channelDetailSource,
+  closeChannelCtx,
+  openChannelCtx,
+  openChannelDetail,
+  closeChannelDetail,
+  onChannelCtxAction,
+  FAIL_KIND_KEYS,
+  failMeta,
+  applyRestoreMobileChat,
+  isFailedUser,
+  isChannelHint,
+  loadThreads,
+  activateThread,
+  selectThread,
+  backToThreads,
+  ensureActiveThread,
+  loadMessages,
+  loadEarlier,
+  retryLoadMessages,
+  hydrateDraftAndMaybeResume,
+  setFailedPartial,
+  clearFailedPartial,
+  convergeFailedDraft,
+  beginResume,
+  convergeOrphanTurns,
+  newThread,
+  removeThread,
+  closeWs,
+  clearTurnDeadline,
+  startTurnDeadline,
+  resetTurnLocal,
+  patchLocalMessage,
+  persistFailure,
+  clearFailure,
+  failTurn,
+  ensureSandbox,
+  sleep,
+  waitReady,
+  waitWsOpen,
+  openWs,
+  handleAcp,
+  clearFinalizingStream,
+  refetchAfterTurnDone,
+  onTurnDone,
+  onTurnError,
+  runTurn,
+  send,
+  stop,
+  retryTurn,
+  attachmentDisplayName,
+  relTime,
+  imgSrc,
+  renderMarkdown,
+  isImageAttachment
+  }
+}
