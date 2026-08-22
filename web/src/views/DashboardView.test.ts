@@ -129,13 +129,23 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.1 — no full-bleed purple stage layer
+  // plan g1.1 — no full-bleed purple stage layer; particle mesh bg instead
   it('does not render full-screen purple stage atmosphere', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.find('[data-testid="home-stage-bg"]').exists()).toBe(false)
     expect(wrapper.find('.home-stage__wash').exists()).toBe(false)
     expect(wrapper.find('.home-stage__glow').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('renders particle mesh background layer behind content', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const bg = wrapper.find('[data-testid="home-particle-mesh-bg"]')
+    expect(bg.exists()).toBe(true)
+    expect(bg.classes()).toContain('home-particle-mesh')
+    expect(wrapper.find('[data-testid="home-composer"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
