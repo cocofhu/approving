@@ -9,6 +9,8 @@ import {
   hasPathDeps,
   envConfiguredCount,
   validateBasics,
+  AGENT_SETTINGS_PATH,
+  parseCustomConfigJson,
 } from './agentCreateWizard'
 
 describe('configRootFor', () => {
@@ -191,6 +193,27 @@ describe('hasPathDeps / buildReviewSummary', () => {
     const items = buildReviewSummary(d)
     expect(items.find((i) => i.key === 'apiKey')?.kind).toBe('ok')
     expect(items.find((i) => i.key === 'authReminder')).toBeUndefined()
+  })
+
+  it('writes settings.json and omits auth env in custom config mode', () => {
+    const d = freshDraft()
+    d.name = 'cfg-agent'
+    d.acpBackend = 'claude_code'
+    d.authMode = 'customConfig'
+    d.customConfigContent = JSON.stringify({ env: { ANTHROPIC_API_KEY: 'sk-ant-x' } })
+    d.env = [{ k: 'APPROVING_CLAUDE_API_KEY', v: 'should-strip' }]
+    const payload = assembleCreatePayload(d)
+    expect(payload.files?.some((f) => f.path === AGENT_SETTINGS_PATH)).toBe(true)
+    expect(payload.env?.APPROVING_CLAUDE_API_KEY).toBeUndefined()
+    const items = buildReviewSummary(d)
+    expect(items.find((i) => i.key === 'apiKey')?.labelKey).toBe(
+      'pages.agentStudio.wizard.review.customConfigWritten',
+    )
+  })
+
+  it('rejects invalid custom config json', () => {
+    expect(parseCustomConfigJson('{bad').ok).toBe(false)
+    expect(parseCustomConfigJson('{"ok":true}').ok).toBe(true)
   })
 
   it('resets regions on backend switches and excludes the managed key from ENV count', () => {

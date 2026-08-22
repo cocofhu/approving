@@ -17,9 +17,14 @@ import {
   type WizardDraft,
   type WizardStepId,
 } from '@/lib/agent/agentCreateWizard'
-import { authGuideFor, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
+import { authGuideFor, defaultSettingsPlaceholder, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
+import {
+  parseCustomConfigJson,
+  stripAuthKeysFromEnv,
+  type WizardAuthMode,
+} from '@/lib/agent/agentCreateWizard'
 
 export interface AgentCreateWizardProps {
   open: boolean
@@ -44,6 +49,8 @@ const showAcpConfirm = ref(false)
 const envHelpOpen = ref(false)
 const stepAnimKey = ref(0)
 const apiKeyInput = ref('')
+const customConfigError = ref(false)
+const customConfigDraft = ref('')
 
 const currentStep = computed(() => WIZARD_STEPS[draft.value.step])
 const progressPct = computed(() => ((draft.value.step + 1) / WIZARD_STEPS.length) * 100)
@@ -55,9 +62,13 @@ const currentRegion = computed(() => {
   return draft.value.env.find((item) => item.k.trim() === policy.regionEnvKey)?.v || ''
 })
 const authGuide = computed(() => authGuideFor(draft.value.acpBackend, currentRegion.value))
-const authConfigured = computed(() =>
-  hasAuthKeyConfigured(draft.value.env, draft.value.acpBackend),
-)
+const authConfigured = computed(() => {
+  if (draft.value.authMode === 'customConfig') {
+    const parsed = parseCustomConfigJson(draft.value.customConfigContent)
+    return parsed.ok && parsed.normalized !== ''
+  }
+  return hasAuthKeyConfigured(draft.value.env, draft.value.acpBackend)
+})
 const showAuthReminder = computed(() => !authConfigured.value)
 
 const primaryAuthKey = computed(() => authGuide.value.keys[0]?.key || '')
@@ -82,6 +93,8 @@ watch(
       showAcpConfirm.value = false
       envHelpOpen.value = false
       apiKeyInput.value = ''
+      customConfigError.value = false
+      customConfigDraft.value = ''
       stepAnimKey.value++
       nextTick(() => {
         document.getElementById('wiz-name-input')?.focus()
@@ -157,6 +170,34 @@ function syncApiKeyInput() {
   apiKeyInput.value = row?.v ?? ''
 }
 
+function clearAuthKeys() {
+  draft.value.env = stripAuthKeysFromEnv(draft.value.env, draft.value.acpBackend)
+  apiKeyInput.value = ''
+}
+
+function setAuthMode(mode: WizardAuthMode) {
+  if (mode === draft.value.authMode) return
+  customConfigError.value = false
+  if (mode === 'apiKey') {
+    customConfigDraft.value = draft.value.customConfigContent
+    draft.value.customConfigContent = ''
+    draft.value.authMode = mode
+    syncApiKeyInput()
+    return
+  }
+  clearAuthKeys()
+  draft.value.authMode = mode
+  draft.value.customConfigContent =
+    customConfigDraft.value || defaultSettingsPlaceholder(draft.value.acpBackend)
+  markConfigured('apiKey')
+}
+
+function onCustomConfigInput(value: string) {
+  draft.value.customConfigContent = value
+  customConfigError.value = false
+  if (value.trim()) markConfigured('apiKey')
+}
+
 function onApiKeyInput(value: string) {
   apiKeyInput.value = value
   const key = primaryAuthKey.value
@@ -187,14 +228,25 @@ function goSkip() {
   if (!step.skip || creating.value) return
   draft.value.skipped[step.id] = true
   if (step.id === 'apiKey') {
-    const key = primaryAuthKey.value
-    const idx = draft.value.env.findIndex((e) => e.k === key)
-    if (idx >= 0) draft.value.env.splice(idx, 1)
-    apiKeyInput.value = ''
+    clearAuthKeys()
+    draft.value.customConfigContent = ''
+    customConfigDraft.value = ''
+    customConfigError.value = false
   }
   draft.value.step++
   stepAnimKey.value++
   if (currentStep.value.id === 'apiKey') syncApiKeyInput()
+}
+
+function validateApiKeyStep(): boolean {
+  if (draft.value.authMode !== 'customConfig') return true
+  const parsed = parseCustomConfigJson(draft.value.customConfigContent)
+  if (!parsed.ok) {
+    customConfigError.value = true
+    return false
+  }
+  customConfigError.value = false
+  return true
 }
 
 function goNext() {
@@ -213,6 +265,7 @@ function goNext() {
     }
     nameError.value = ''
   }
+  if (step.id === 'apiKey' && !validateApiKeyStep()) return
   if (step.id === 'review') {
     void submitCreate()
     return
@@ -267,6 +320,7 @@ function chipClass(kind: string) {
   envHelpOpen,
   stepAnimKey,
   apiKeyInput,
+  customConfigError,
   currentStep,
   progressPct,
   reviewItems,
@@ -286,6 +340,8 @@ function chipClass(kind: string) {
   confirmAcpSwitch,
   cancelAcpSwitch,
   syncApiKeyInput,
+  setAuthMode,
+  onCustomConfigInput,
   onApiKeyInput,
   onGitCredentialType,
   goPrev,

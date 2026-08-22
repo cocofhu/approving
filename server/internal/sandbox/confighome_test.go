@@ -168,6 +168,53 @@ func TestBuildConfigHomeSettings(t *testing.T) {
 	}
 }
 
+func TestBuildConfigHomeSettingsMergeUserWins(t *testing.T) {
+	HomeBaseDir = ""
+	src := t.TempDir()
+	userSettings := `{"env":{"ANTHROPIC_API_KEY":"user-key"},"custom":true}`
+	if err := os.WriteFile(filepath.Join(src, "settings.json"), []byte(userSettings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		WorkDirSrc: src,
+		Settings: map[string]any{
+			"envRouteMode": "staging",
+			"endpoint":     "https://staging-codebuddy.tencent.com",
+			"env": map[string]string{
+				"CODEBUDDY_INTERNET_ENVIRONMENT": "public",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildConfigHome: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	env, ok := got["env"].(map[string]any)
+	if !ok {
+		t.Fatalf("env=%v", got["env"])
+	}
+	if env["ANTHROPIC_API_KEY"] != "user-key" {
+		t.Fatalf("user env key lost: %v", env)
+	}
+	if env["CODEBUDDY_INTERNET_ENVIRONMENT"] != "public" {
+		t.Fatalf("platform env not merged: %v", env)
+	}
+	if got["envRouteMode"] != "staging" {
+		t.Fatalf("platform field missing: %v", got)
+	}
+	if got["custom"] != true {
+		t.Fatalf("user custom field lost: %v", got)
+	}
+}
+
 func TestBuildConfigHomeNoSettingsWhenEmpty(t *testing.T) {
 	HomeBaseDir = ""
 	dir, err := BuildConfigHome(ConfigHomeSpec{

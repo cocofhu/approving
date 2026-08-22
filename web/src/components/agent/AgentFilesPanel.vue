@@ -92,6 +92,7 @@ const {
 
 defineExpose({
   filesStep, resetForSelect, snapshot, restoreAfterDiscard, closeExplorerMore, selectDefaultFile,
+  openPath, openPathOrCreate,
 })
 </script>
 

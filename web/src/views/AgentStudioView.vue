@@ -161,6 +161,7 @@ const {
   studioTabs,
   studioTabLabel,
   showToast,
+  openSettingsInFiles,
   discardUnsavedChanges,
   requestStudioTab,
   onDataSubTab,
@@ -554,6 +555,7 @@ const {
           v-if="tab === 'env' && draft && !isMobile"
           :draft="draft"
           @toast="showToast"
+          @open-settings-file="openSettingsInFiles"
         />
 
         <AgentPromptsPanel

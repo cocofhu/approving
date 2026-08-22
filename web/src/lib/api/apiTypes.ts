@@ -161,6 +161,7 @@ export interface TeamBootstrapRequest {
   background: string
   acpBackend: string
   apiKey?: string
+  customConfig?: string
   region?: string
   gitUrl?: string
   gitCredentialType?: string
