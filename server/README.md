@@ -338,5 +338,6 @@ Gitea/Bitbucket/Codeberg 等 **HTTPS 不支持 Token 注入**,请改用 SSH。`s
 
 例如在 `go-backend` Agent 元信息里配置 `{"GIT_REPOS":"${vars.repos}","GITLAB_TOKEN":"glpat_xxx","GITLAB_URL":"https://git.example.com"}`。
 run 执行时这些环境变量按 run 注入(kind-agnostic)沙箱用于 clone/push;`GITLAB_URL` 未显式配置
-且 `GITLAB_TOKEN` 已配时由 `repos[0].url` 自动推导(scheme+host,见 `gitBaseURL`)。平台进程本身不持有任何
+且首仓确为 GitLab(非 github.com / 非 `GITHUB_URL` host)时由 `repos[0].url` 自动推导(scheme+host,见 `gitBaseURL`)。
+沙箱启动时只要配置了 `GITHUB_TOKEN` / `GITLAB_TOKEN` 就会两边都注入凭据并登录 `gh` / `glab`。平台进程本身不持有任何
 全局 Git 凭证。`detect_push` + `create_mr` 仅对 GitLab 仓库(含 `GITLAB_URL` 匹配的自建实例)调用 glab;非 GitLab 输出 `pushed`/`branch`/`pushed_sha`,`mr_url` 为空。

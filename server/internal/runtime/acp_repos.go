@@ -12,8 +12,9 @@ import (
 )
 
 // gitBaseURL returns the scheme://host origin of an http(s) repo URL, used to
-// derive GITLAB_URL (the git credential host) from repo_url. Returns "" for
-// non-http URLs (e.g. ssh git@host:…) or unparseable input.
+// derive GITLAB_URL (the git credential host) from a GitLab repo_url. Returns ""
+// for non-http URLs (e.g. ssh git@host:…) or unparseable input. GitHub hosts are
+// skipped by spec() so a GitHub first-repo cannot become GITLAB_URL.
 func gitBaseURL(repo string) string {
 	u, err := url.Parse(strings.TrimSpace(repo))
 	if err != nil || u.Host == "" {

@@ -5,9 +5,11 @@ set -e
 #   - 运行环境（DinD + SSH + code-server）来自 ~/sandbox
 #   - 多托管商 git 凭据路由 + 多仓库 PULL（GIT_REPOS）+ 多后端 backend（ACP 桥接）来自 code-flow
 #
-# Git 凭据路由（按每个仓库 URL 的 scheme 互斥选择，须在 clone 前完成）:
-#   HTTPS — github.com→GITHUB_TOKEN; gitlab.com→GITLAB_TOKEN;
-#           自建实例通过 GITHUB_URL / GITLAB_URL (scheme+host) 与 repo host 精确匹配。
+# Git 凭据（须在 clone 前完成）:
+#   已配置的 GITHUB_TOKEN / GITLAB_TOKEN 都会注入 ~/.git-credentials 并登录 gh / glab，
+#   不依赖当前 clone 仓库属于哪个平台。
+#   HTTPS clone 仍按仓库 URL 的 host 匹配（github.com→GITHUB_TOKEN; gitlab.com→GITLAB_TOKEN;
+#           自建实例通过 GITHUB_URL / GITLAB_URL 与 repo host 精确匹配）。
 #   SSH   — GIT_SSH_PRIVATE_KEY 写入 ~/.ssh/id_rsa (600); GIT_SSH_KNOWN_HOSTS 必填。
 # 主要环境变量：WORKSPACE_DIR, ROOT_PASSWORD, CODE_SERVER_PORT, SSH_KEY, SKIP_INNER_DOCKER,
 #   GIT_REPOS(多仓 name|url|branch) / GIT_CLONE_URL(单仓兼容),
@@ -212,20 +214,26 @@ EOF
     return 0
 }
 
-# 仅设置了 GITLAB_TOKEN（无 GIT_REPOS / GIT_CLONE_URL）时，按 GITLAB_URL 注入凭据。
-# 通用镜像不预设任何具体 GitLab 域名：未提供 GITLAB_URL 则跳过。
+# 按 GITLAB_URL 注入 GitLab 凭据并 glab auth login。
+# 未提供 GITLAB_URL 时默认 gitlab.com（与 GitHub 默认 github.com 对称）。
+# 若 GITLAB_URL 误指向 GitHub / GITHUB_URL host（例如服务端从 GitHub 仓推导），回退 gitlab.com。
 setup_bare_gitlab_credentials() {
-    if [ -z "$GITLAB_URL" ]; then
-        echo "startup.sh: 仅设置了 GITLAB_TOKEN 但未提供 GITLAB_URL，跳过凭据注入" >&2
-        return 0
+    local gitlab_url="${GITLAB_URL:-https://gitlab.com}"
+    local gitlab_host; gitlab_host=$(url_host "$gitlab_url")
+    local github_host="github.com"
+    if [ -n "$GITHUB_URL" ]; then
+        github_host=$(url_host "$GITHUB_URL")
     fi
-    local gitlab_host; gitlab_host=$(url_host "$GITLAB_URL")
+    if [ "$gitlab_host" = "github.com" ] || [ "$gitlab_host" = "$github_host" ]; then
+        gitlab_url="https://gitlab.com"
+        gitlab_host="gitlab.com"
+    fi
     prepare_git_credentials_file "https://oauth2:${GITLAB_TOKEN}@${gitlab_host}"
-    echo "GitLab token configured successfully for ${GITLAB_URL}"
+    echo "GitLab token configured successfully for ${gitlab_url}"
     glab_auth_login "$gitlab_host" "$GITLAB_TOKEN"
 }
 
-# 仅设置了 GITHUB_TOKEN（无 GIT_REPOS / GIT_CLONE_URL）时注入凭据并 gh auth login。
+# 按 GITHUB_URL 注入 GitHub 凭据并 gh auth login。
 # 未提供 GITHUB_URL 时默认 github.com（与公开 GitHub 场景对齐）。
 setup_bare_github_credentials() {
     local github_host="github.com"
@@ -246,6 +254,23 @@ setup_repo_credentials() {
     esac
 }
 
+# 先按仓库 URL 配置 clone 所需凭据，再为所有已配置 token 补齐对端平台。
+configure_git_credentials() {
+    if [ -n "$GIT_REPOS" ]; then
+        IFS=',' read -ra _entries <<< "$GIT_REPOS"
+        for _entry in "${_entries[@]}"; do
+            [ -n "$_entry" ] || continue
+            IFS='|' read -r _name _url _branch <<< "$_entry"
+            [ -n "$_url" ] && setup_repo_credentials "$_url"
+        done
+        unset _entries _entry _name _url _branch
+    elif [ -n "$GIT_CLONE_URL" ]; then
+        setup_repo_credentials "$GIT_CLONE_URL"
+    fi
+    [ -n "$GITLAB_TOKEN" ] && setup_bare_gitlab_credentials
+    [ -n "$GITHUB_TOKEN" ] && setup_bare_github_credentials
+}
+
 repo_name_from_url() {
     local u="${1%/}"
     u="${u##*[:/]}"
@@ -253,20 +278,7 @@ repo_name_from_url() {
 }
 
 # --- 凭据配置（clone 前）----------------------------------------------------
-if [ -n "$GIT_REPOS" ]; then
-    IFS=',' read -ra _entries <<< "$GIT_REPOS"
-    for _entry in "${_entries[@]}"; do
-        [ -n "$_entry" ] || continue
-        IFS='|' read -r _name _url _branch <<< "$_entry"
-        [ -n "$_url" ] && setup_repo_credentials "$_url"
-    done
-    unset _entries _entry _name _url _branch
-elif [ -n "$GIT_CLONE_URL" ]; then
-    setup_repo_credentials "$GIT_CLONE_URL"
-else
-    [ -n "$GITLAB_TOKEN" ] && setup_bare_gitlab_credentials
-    [ -n "$GITHUB_TOKEN" ] && setup_bare_github_credentials
-fi
+configure_git_credentials
 
 # 配置 Git 用户信息（通用中性默认，可由环境变量覆盖）
 GIT_USER_EMAIL=${GIT_USER_EMAIL:-sandbox@localhost}

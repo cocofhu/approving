@@ -6,9 +6,9 @@ STARTUP="$ROOT/sandbox/scripts/startup.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# Extract helpers from repo_host through setup_bare_github_credentials (inclusive).
-START=$(grep -n '^repo_host()' "$STARTUP" | head -1 | cut -d: -f1)
-END=$(awk -v s="$START" 'NR>s && /^setup_repo_credentials\(\)/ {print NR-1; exit}' "$STARTUP")
+# Extract helpers from repo_scheme through configure_git_credentials (inclusive).
+START=$(grep -n '^repo_scheme()' "$STARTUP" | head -1 | cut -d: -f1)
+END=$(awk -v s="$START" 'NR>s && /^repo_name_from_url\(\)/ {print NR-1; exit}' "$STARTUP")
 sed -n "${START},${END}p" "$STARTUP" >"$TMP/git-auth.sh"
 
 # HOME-scoped mocks so we never touch the real ~/.config/gh or git creds.
@@ -104,5 +104,55 @@ grep -q 'x-access-token:still_ok@github.com' "$TMP/root/.git-credentials"
 grep -q 'argv:auth login --hostname github.com --with-token' "$HOME/gh.last"
 unset FAIL_GH
 echo "OK: gh auth failure is non-fatal for HTTPS creds"
+
+# Dual tokens: cloning GitLab still configures GitHub.
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN="gh_dual"
+GITLAB_TOKEN="gl_dual"
+GITHUB_URL=""
+GITLAB_URL="https://gitlab.com"
+GIT_REPOS="proj|https://gitlab.com/group/project.git|main"
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+grep -q 'oauth2:gl_dual@gitlab.com' "$TMP/root/.git-credentials"
+grep -q 'x-access-token:gh_dual@github.com' "$TMP/root/.git-credentials"
+grep -q 'argv:auth login --hostname gitlab.com --token gl_dual' "$HOME/glab.last"
+grep -q 'argv:auth login --hostname github.com --with-token' "$HOME/gh.last"
+echo "OK: dual tokens + GitLab clone configures both platforms"
+
+# Dual tokens: cloning GitHub still configures GitLab.
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN="gh_dual"
+GITLAB_TOKEN="gl_dual"
+GITHUB_URL=""
+GITLAB_URL=""
+GIT_REPOS="app|https://github.com/acme/app.git|main"
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+grep -q 'x-access-token:gh_dual@github.com' "$TMP/root/.git-credentials"
+grep -q 'oauth2:gl_dual@gitlab.com' "$TMP/root/.git-credentials"
+grep -q 'argv:auth login --hostname github.com --with-token' "$HOME/gh.last"
+grep -q 'argv:auth login --hostname gitlab.com --token gl_dual' "$HOME/glab.last"
+echo "OK: dual tokens + GitHub clone configures both platforms"
+
+# Mis-derived GITLAB_URL=https://github.com must not write GitLab token onto github.com.
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN="gh_dual"
+GITLAB_TOKEN="gl_dual"
+GITHUB_URL=""
+GITLAB_URL="https://github.com"
+GIT_REPOS="app|https://github.com/acme/app.git|main"
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+grep -q 'x-access-token:gh_dual@github.com' "$TMP/root/.git-credentials"
+grep -q 'oauth2:gl_dual@gitlab.com' "$TMP/root/.git-credentials"
+if grep -q 'oauth2:.*@github.com' "$TMP/root/.git-credentials"; then
+  echo "FAIL: GitLab token must not be written onto github.com" >&2
+  exit 1
+fi
+echo "OK: mis-derived GITLAB_URL=https://github.com falls back to gitlab.com"
 
 echo "OK: git auth unit smoke passed"
