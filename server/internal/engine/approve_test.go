@@ -265,6 +265,105 @@ func TestApproveRejectsUpstreamPlanArtifact(t *testing.T) {
 	waitRunStatus(t, db, run.ID, "failed")
 }
 
+func markApproveDoneAndReenter(t *testing.T, eng *Engine, db *gorm.DB, runID string) nodeOutcome {
+	t.Helper()
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", runID, "predev").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	conv.Done = true
+	if err := db.Save(&conv).Error; err != nil {
+		t.Fatalf("mark done: %v", err)
+	}
+	c, err := eng.loadCtx(runID)
+	if err != nil {
+		t.Fatalf("loadCtx: %v", err)
+	}
+	node := c.graph.FindNode("predev")
+	if node == nil {
+		t.Fatal("missing predev")
+	}
+	c.iter["predev"] = conv.Iteration
+	return eng.execReactEnter(c, node)
+}
+
+const doneShortCircuitClarified = `{
+		"title":"需求","summary":"Done 再进入",
+		"background":"测试背景",
+		"goals":["完成需求"],"in_scope":["本功能"],"out_of_scope":["其它"],
+		"functional_requirements":[{"id":"f1","title":"需求","detail":"实现所述需求","priority":"must","acceptance_criteria":["可验收"]}],
+		"assumptions":["无额外假设(已与用户确认)"],"dependencies":["无额外依赖(已与用户确认)"],"constraints":["无额外约束(已与用户确认)"]
+	}`
+
+// Done=true without this node's plan must not complete (g2.1).
+func TestApproveDoneShortCircuitFailsWithoutPlan(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+	if _, err := eng.store.Save(run.ID, "predev", mcp.ClarifiedRequirementArtifactName, "json", doneShortCircuitClarified); err != nil {
+		t.Fatalf("seed clarified: %v", err)
+	}
+	oc := markApproveDoneAndReenter(t, eng, db, run.ID)
+	if oc.status == "completed" {
+		t.Fatalf("Done without plan must not complete: %+v", oc)
+	}
+	if oc.status != "failed" {
+		t.Fatalf("status=%s want failed (%s)", oc.status, oc.err)
+	}
+}
+
+func TestApproveDoneShortCircuitCompletesWithOwnedProducts(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+	if _, err := eng.store.Save(run.ID, "predev", mcp.ClarifiedRequirementArtifactName, "json", doneShortCircuitClarified); err != nil {
+		t.Fatalf("seed clarified: %v", err)
+	}
+	_, planBody := fakeStructured("plan")
+	if _, err := eng.store.Save(run.ID, "predev", mcp.PlanArtifactName, "json", planBody); err != nil {
+		t.Fatalf("seed plan: %v", err)
+	}
+	oc := markApproveDoneAndReenter(t, eng, db, run.ID)
+	if oc.status != "completed" {
+		t.Fatalf("owned products must complete, got %s %s", oc.status, oc.err)
+	}
+	if _, ok := oc.outputs["clarified_requirement"]; !ok {
+		t.Error("missing outputs.clarified_requirement")
+	}
+	if _, ok := oc.outputs["plan"]; !ok {
+		t.Error("missing outputs.plan")
+	}
+}
+
+func TestApproveDoneShortCircuitRejectsUpstreamPlan(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "predev")
+	if _, err := eng.store.Save(run.ID, "predev", mcp.ClarifiedRequirementArtifactName, "json", doneShortCircuitClarified); err != nil {
+		t.Fatalf("seed clarified: %v", err)
+	}
+	_, planBody := fakeStructured("plan")
+	if _, err := eng.store.Save(run.ID, "upstream_plan", mcp.PlanArtifactName, "json", planBody); err != nil {
+		t.Fatalf("seed upstream plan: %v", err)
+	}
+	oc := markApproveDoneAndReenter(t, eng, db, run.ID)
+	if oc.status == "completed" {
+		t.Fatalf("upstream plan must not satisfy Done re-entry: %+v", oc)
+	}
+	if oc.status != "failed" {
+		t.Fatalf("status=%s want failed (%s)", oc.status, oc.err)
+	}
+}
+
 // Optional research written by another node must not be lifted into Approve outputs.
 func TestApproveDoesNotLiftUpstreamOptionalResearch(t *testing.T) {
 	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())

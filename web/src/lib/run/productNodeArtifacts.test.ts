@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PRODUCT_ARTIFACT_BY_TYPE, PRODUCT_NODE_TYPES, productArtifactName, productArtifactsForType, productOutputDefs } from './productNodeArtifacts'
+import { PRODUCT_ARTIFACT_BY_TYPE, PRODUCT_NODE_TYPES, productArtifactName, productArtifactsForType, productOutputDefs, resolveStructuredProductArtifact } from './productNodeArtifacts'
 
 describe('productNodeArtifacts', () => {
   it('covers StructuredProductPanel node types including proposal_select', () => {
@@ -43,5 +43,36 @@ describe('productNodeArtifacts', () => {
       { key: 'page', desc: 'nodes.visual.outputs.page.desc' },
       { key: 'artifact_id', desc: 'nodes.visual.outputs.artifact_id.desc' },
     ])
+  })
+
+  it('keeps Approve plan.json visible after implement steals the store nodeId', () => {
+    const plan = { name: 'plan.json', nodeId: 'implement' }
+    expect(
+      resolveStructuredProductArtifact({
+        name: 'plan.json',
+        nodeId: 'approve',
+        nodeType: 'approve',
+        nodeStatus: 'completed',
+        artifacts: [plan],
+      }),
+    ).toEqual(plan)
+    expect(
+      resolveStructuredProductArtifact({
+        name: 'plan.json',
+        nodeId: 'approve',
+        nodeType: 'approve',
+        nodeStatus: 'waiting_human',
+        artifacts: [plan],
+      }),
+    ).toBeNull()
+    expect(
+      resolveStructuredProductArtifact({
+        name: 'research.json',
+        nodeId: 'approve',
+        nodeType: 'approve',
+        nodeStatus: 'completed',
+        artifacts: [{ name: 'research.json', nodeId: 'research' }],
+      }),
+    ).toBeNull()
   })
 })

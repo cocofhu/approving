@@ -108,6 +108,23 @@ func TestCallToolErrorBranches(t *testing.T) {
 	if _, isErr := toolText(t, call(t, h, runID, tok, tc(14, "update_plan_status", `{"id":"g1.1","status":"done"}`))); isErr {
 		t.Fatal("valid update_plan_status should succeed")
 	}
+	infos, err := h.ListArtifacts(runID, tok)
+	if err != nil {
+		t.Fatalf("list after update_plan_status: %v", err)
+	}
+	keptWriter := false
+	for _, info := range infos {
+		if info.Name != PlanArtifactName {
+			continue
+		}
+		keptWriter = true
+		if info.Node != "p" {
+			t.Fatalf("update_plan_status must keep plan.json writer %q, got %q", "p", info.Node)
+		}
+	}
+	if !keptWriter {
+		t.Fatal("plan.json missing after update_plan_status")
+	}
 	// Any node may backfill plan status once a plan exists.
 	h.SetActiveNode(runID, "n", "agent")
 	if _, isErr := toolText(t, call(t, h, runID, tok, tc(16, "update_plan_status", `{"id":"g1.1","status":"done"}`))); isErr {

@@ -17,7 +17,9 @@ func (e *Engine) execReactEnter(c *execCtx, node *models.Node) nodeOutcome {
 	var conv models.ReactConversation
 	err := e.db.Where("run_id = ? AND node_id = ? AND iteration = ?", c.run.ID, node.ID, iter).First(&conv).Error
 	if err == nil && conv.Done {
-		return nodeOutcome{status: "completed", outputMd: "澄清已完成"}
+		// Same-iteration re-entry must not skip the product gate: Done only
+		// means the dialogue closed, not that required artifacts exist.
+		return e.finalizeAgentProducts(c, node, runtime.NodeResult{OutputMd: "澄清已完成"})
 	}
 	if err != nil {
 

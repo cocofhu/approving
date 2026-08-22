@@ -772,4 +772,38 @@ describe('StructuredProductPanel', () => {
     expect(wrapper.find('[data-testid="structured-product-tab-plan.json"]').exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('approve plan tab still loads after implement rewrites plan.json nodeId', async () => {
+    const node: WFNode = {
+      id: 'approve',
+      type: 'approve',
+      label: 'Approve',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'approve',
+      iteration: 1,
+      status: 'completed',
+      outputs: {},
+    }
+    const planDoc = { goals: [{ title: 'G1', subgoals: [{ title: 'S1' }] }] }
+    apiMocks.artifactContent.mockResolvedValue({ content: JSON.stringify(planDoc) })
+    const run = runWithArtifacts([
+      artifact({
+        id: 'a-plan',
+        name: 'plan.json',
+        kind: 'json',
+        nodeId: 'implement',
+      }),
+    ])
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    await wrapper.get('[data-testid="structured-product-tab-plan.json"]').trigger('click')
+    await flushPromises()
+    expect(apiMocks.artifactContent).toHaveBeenCalledWith('a-plan')
+    expect(wrapper.find('[data-testid="structured-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="structured-product-name"]').text()).toBe('plan.json')
+    wrapper.unmount()
+  })
 })

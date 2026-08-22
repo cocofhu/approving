@@ -10,7 +10,7 @@ import HtmlPreview from '../ui/HtmlPreview.vue'
 import SelectionAddToChat from './SelectionAddToChat.vue'
 import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import { ARTIFACT_TO_OUTPUT_JSON } from '@/lib/run/structuredArtifacts'
-import { productArtifactName, productArtifactsForType } from '@/lib/run/productNodeArtifacts'
+import { productArtifactName, productArtifactsForType, resolveStructuredProductArtifact } from '@/lib/run/productNodeArtifacts'
 import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { addClarifyAnnotation } from '@/lib/inbox/useClarifyDraft'
 import { useToast } from '@/lib/composables/useToast'
@@ -102,15 +102,16 @@ const def = computed(() => NODE_DEFS.value[props.node.type])
 const artifact = computed(() => {
   if (!spec.value) return null
   const name = spec.value.name
-  return (
-    props.run.artifacts.find((a) => a.name === name && a.nodeId === props.node.id) ||
-    // Single-product panels historically matched by name only; keep that
-    // fallback when this node has no owned copy yet (e.g. snapshot-only load).
-    (productArtifactsForType(props.node.type).length <= 1
-      ? props.run.artifacts.find((a) => a.name === name)
-      : undefined) ||
-    null
-  )
+  const jsonKey = ARTIFACT_TO_OUTPUT_JSON[name]
+  const snap = jsonKey ? props.nodeRun.outputs?.[jsonKey] : undefined
+  return resolveStructuredProductArtifact({
+    name,
+    nodeId: props.node.id,
+    nodeType: props.node.type,
+    nodeStatus: props.nodeRun.status,
+    hasSnapshot: typeof snap === 'string' && snap.trim().length > 0,
+    artifacts: props.run.artifacts || [],
+  })
 })
 
 const doc = ref<any>(null)
