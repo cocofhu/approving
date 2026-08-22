@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import HomeParticleMeshBackground from '@/components/dashboard/HomeParticleMeshBackground.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
@@ -230,6 +231,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div data-testid="dashboard-view" class="home-shell relative flex flex-col md:h-full md:min-h-0">
+    <HomeParticleMeshBackground />
     <div
       class="home-shell__content relative z-[1] mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-10"
     >
