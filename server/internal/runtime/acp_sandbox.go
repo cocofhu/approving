@@ -247,6 +247,10 @@ func (c *acpProvider) openSandbox(ctx context.Context, req NodeReq) (*sandbox.Sa
 		removeHome(home)
 		return nil, nil, "", fmt.Errorf("%w: acp not ready: %v", errSandboxSetup, err)
 	}
+	// Second EnsureHelpers pass: git clone from GIT_REPOS usually finishes
+	// during startup.sh before ACP is ready, so workspace install can refresh
+	// an outdated /usr/local/bin seeded by an older control plane.
+	c.mgr.EnsureHelpers(ctx, sb)
 	acp := sb.ACP().
 		WithSession(sb.WorkspaceDir, c.mcpServers(req)).
 		WithIdleTimeout(c.opts.ChatIdleTimeout).

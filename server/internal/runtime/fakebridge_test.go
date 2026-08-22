@@ -231,6 +231,8 @@ func (m *fakeManager) Create(ctx context.Context, spec sandbox.Spec) (*sandbox.S
 	return &sandbox.Sandbox{Name: fmt.Sprintf("fake-sb-%d", attempt), Host: host, Port: port, WorkspaceDir: "/root/workspace"}, nil
 }
 
+func (m *fakeManager) EnsureHelpers(context.Context, *sandbox.Sandbox) {}
+
 func (m *fakeManager) createCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()

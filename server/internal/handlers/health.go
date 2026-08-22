@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -51,6 +52,41 @@ func (h *Handlers) MCPRPC(c *gin.Context) {
 		return
 	}
 	c.Data(status, "application/json", resp)
+}
+
+// MCPUploadImage is a run-scoped HTTP entry for sandbox artifact-upload when
+// tools/call upload_image_artifact is unavailable (older control planes). Same
+// Bearer token as MCPRPC; hidden from tools/list like the MCP tool.
+func (h *Handlers) MCPUploadImage(c *gin.Context) {
+	runID := c.Param("runId")
+	token := bearer(c.GetHeader("Authorization"))
+	if h.MCP == nil || !h.MCP.AuthorizeRun(runID, token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	if c.Request.Method != http.MethodPost {
+		c.Status(http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "read body"})
+		return
+	}
+	var req struct {
+		Name    string `json:"name"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
+		return
+	}
+	id, err := h.MCP.UploadImageArtifact(runID, token, h.MCP.ActiveNode(runID), req.Name, req.Content)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "name": strings.TrimSpace(req.Name), "id": id})
 }
 
 func bearer(h string) string {

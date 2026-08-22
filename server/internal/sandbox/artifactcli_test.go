@@ -71,12 +71,25 @@ func TestArtifactUploadScriptDoesNotCallWriteArtifactImage(t *testing.T) {
 	if strings.Contains(artifactUploadScript, `"name": "write_artifact"`) {
 		t.Fatal("artifact-upload must not call write_artifact")
 	}
-	if strings.Contains(artifactUploadScript, "kind\": \"image\"") ||
-		strings.Contains(artifactUploadScript, "kind=image") {
+	if strings.Contains(artifactUploadScript, `"arguments": {"name":`) &&
+		strings.Contains(artifactUploadScript, `"kind": "image"`) {
 		t.Fatal("artifact-upload must not pass kind=image to write_artifact")
 	}
 	if !strings.Contains(artifactUploadScript, "upload_image_artifact") {
 		t.Fatal("artifact-upload must call upload_image_artifact")
+	}
+	if !strings.Contains(artifactUploadScript, "_maybe_bootstrap_installed_cli") {
+		t.Fatal("artifact-upload must bootstrap outdated /usr/local/bin from workspace")
+	}
+	if !strings.Contains(artifactUploadScript, "/upload-image") {
+		t.Fatal("artifact-upload must fall back to HTTP /upload-image")
+	}
+}
+
+func TestMCPAdvertiseProfileBootstrapsArtifactUpload(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(mcpAdvertiseProfileScript, "install-artifact-upload.sh") {
+		t.Fatal("profile.d must bootstrap artifact-upload from workspace when outdated")
 	}
 }
 

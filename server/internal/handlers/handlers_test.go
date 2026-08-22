@@ -1178,6 +1178,32 @@ func TestMCPRPCEndpoint(t *testing.T) {
 	}
 }
 
+func TestMCPUploadImageEndpoint(t *testing.T) {
+	h := newHarness(t)
+	tok := h.host.RegisterRun("run-upload")
+	h.host.SetActiveNode("run-upload", "tst", "test")
+	pngB64 := "aVZCT1J3MEtHZ0FB"
+	if w := h.do("POST", "/mcp/runs/run-upload/upload-image", map[string]any{}); w.Code != 401 {
+		t.Fatalf("upload-image unauthorized: %d", w.Code)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/runs/run-upload/upload-image",
+		strings.NewReader(`{"name":"shot-http.png","content":"`+pngB64+`"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("upload-image POST: %d %s", w.Code, w.Body)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["ok"] != true || out["name"] != "shot-http.png" {
+		t.Fatalf("upload-image body: %v", out)
+	}
+}
+
 func TestSPAFallback(t *testing.T) {
 	h := newHarness(t)
 	// Unknown API path -> 404.

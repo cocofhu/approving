@@ -76,7 +76,56 @@ def rewrite_spa_mcp_url(raw: str) -> str:
     return out
 
 
+def _maybe_bootstrap_installed_cli() -> None:
+    """Refresh /usr/local/bin when it still calls write_artifact(kind=image)."""
+    dest = "/usr/local/bin/artifact-upload"
+    try:
+        with open(dest, "rb") as f:
+            head = f.read(8192)
+    except OSError:
+        return
+    if b"upload_image_artifact" in head:
+        return
+    if b"write_artifact" not in head or b"kind=image" not in head:
+        return
+    import glob
+    import subprocess
+
+    for installer in sorted(glob.glob("/root/workspace/*/server/scripts/install-artifact-upload.sh")):
+        try:
+            subprocess.run([installer], check=True, timeout=30)
+            os.execv(dest, [dest, *sys.argv[1:]])
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+
+def _upload_image_http(url: str, token: str, name: str, b64: str) -> tuple[int, str]:
+    """POST /mcp/runs/:id/upload-image when tools/call lacks upload_image_artifact."""
+    base = url.rstrip("/")
+    if base.endswith("/upload-image"):
+        upload_url = base
+    else:
+        upload_url = base + "/upload-image"
+    payload = json.dumps({"name": name, "content": b64}).encode("utf-8")
+    req = urllib.request.Request(
+        upload_url,
+        data=payload,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.getcode(), resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace") if e.fp else ""
+        return e.code, detail or str(e.reason)
+
+
 def main() -> int:
+    _maybe_bootstrap_installed_cli()
     ap = argparse.ArgumentParser(
         prog="artifact-upload",
         description="上传文件到本次运行的产物存储,打印产物名。",
@@ -150,8 +199,23 @@ def main() -> int:
     result = msg.get("result") or {}
     if result.get("isError"):
         texts = [c.get("text", "") for c in result.get("content", []) if isinstance(c, dict)]
-        eprint(f"artifact-upload: 写入产物失败: {' '.join(texts) or data[:300]}")
-        return 1
+        err_text = " ".join(texts) or data[:300]
+        if "unknown tool" in err_text and "upload_image_artifact" in err_text:
+            status, http_data = _upload_image_http(url, token, name, b64)
+            if status < 200 or status >= 300:
+                eprint(f"artifact-upload: HTTP 上传失败 ({status}): {http_data[:300]}")
+                return 1
+            try:
+                http_msg = json.loads(http_data)
+            except json.JSONDecodeError:
+                eprint(f"artifact-upload: 无法解析 HTTP 响应: {http_data[:300]}")
+                return 1
+            if not http_msg.get("ok"):
+                eprint(f"artifact-upload: HTTP 上传失败: {http_data[:300]}")
+                return 1
+        else:
+            eprint(f"artifact-upload: 写入产物失败: {err_text}")
+            return 1
 
     print(name)
     if args.caption:

@@ -64,6 +64,9 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 		log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: install artifact-upload failed")
 		return
 	}
+	// When the control plane still embeds a pre-#375 script, upgrade from the
+	// cloned workspace checkout (available after startup.sh finishes git clone).
+	healArtifactUploadFromWorkspace(ctx, creds, sb.ID)
 	// Best-effort: profile.d hook for interactive shells (login/profile).
 	// Container create env is authoritative for ACP; this only helps SSH/login
 	// and any tool that sources profile.d after seed. Public script is a no-op.
@@ -89,6 +92,23 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 
 func seedExecutable(ctx context.Context, creds sshCreds, path, content string) error {
 	return seedFileMode(ctx, creds, path, content, "+x")
+}
+
+// healArtifactUploadFromWorkspace runs install-artifact-upload.sh from a cloned
+// repo when present. Best-effort; never fatal. Idempotent when CLI is current.
+func healArtifactUploadFromWorkspace(ctx context.Context, creds sshCreds, sandboxID string) {
+	script := `for inst in /root/workspace/*/server/scripts/install-artifact-upload.sh; do
+  [ -x "$inst" ] && "$inst" && exit 0
+done
+exit 0`
+	cmd, err := newSafeCmd("sh", "-c", script)
+	if err != nil {
+		return
+	}
+	if out, err := creds.run(ctx, 20*time.Second, cmd); err != nil {
+		log.Debug().Str("id", sandboxID).Err(err).Str("out", strings.TrimSpace(string(out))).
+			Msg("seed helpers: workspace artifact-upload heal skipped")
+	}
 }
 
 func seedFileMode(ctx context.Context, creds sshCreds, path, content, mode string) error {

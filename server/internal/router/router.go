@@ -233,6 +233,7 @@ func New(h *handlers.Handlers) *gin.Engine {
 	r.POST("/mcp/runs/:runId", h.MCPRPC)
 	r.GET("/mcp/runs/:runId", h.MCPRPC)
 	r.DELETE("/mcp/runs/:runId", h.MCPRPC)
+	r.POST("/mcp/runs/:runId/upload-image", h.MCPUploadImage)
 
 	// Project-scoped PM MCP hosts (outside /api).
 	r.POST("/mcp/pm/:projectId", h.PMMCPRPC)

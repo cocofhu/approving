@@ -22,6 +22,7 @@ import (
 // idle / react-rehydrate / harvest logic is exercised without Docker.
 type sandboxManager interface {
 	Create(ctx context.Context, spec sandbox.Spec) (*sandbox.Sandbox, error)
+	EnsureHelpers(ctx context.Context, sb *sandbox.Sandbox)
 }
 
 // errSandboxSetup wraps a failure to acquire a working sandbox + ACP session
