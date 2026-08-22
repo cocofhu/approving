@@ -77,7 +77,7 @@ def rewrite_spa_mcp_url(raw: str) -> str:
 
 
 def _maybe_bootstrap_installed_cli() -> None:
-    """Refresh /usr/local/bin when it still calls write_artifact(kind=image)."""
+    """Refresh /usr/local/bin when it still calls write_artifact instead of upload_image_artifact."""
     dest = "/usr/local/bin/artifact-upload"
     try:
         with open(dest, "rb") as f:
@@ -86,7 +86,8 @@ def _maybe_bootstrap_installed_cli() -> None:
         return
     if b"upload_image_artifact" in head:
         return
-    if b"write_artifact" not in head or b"kind=image" not in head:
+    # Legacy CLI used tools/call write_artifact with JSON kind field set to image.
+    if b"write_artifact" not in head:
         return
     import glob
     import subprocess

@@ -100,6 +100,11 @@ func healArtifactUploadFromWorkspace(ctx context.Context, creds sshCreds, sandbo
 	script := `for inst in /root/workspace/*/server/scripts/install-artifact-upload.sh; do
   [ -x "$inst" ] && "$inst" && exit 0
 done
+for src in /root/workspace/*/server/scripts/artifact-upload; do
+  if [ -f "$src" ] && grep -q upload_image_artifact "$src" 2>/dev/null; then
+    install -m 755 "$src" /usr/local/bin/artifact-upload && exit 0
+  fi
+done
 exit 0`
 	cmd, err := newSafeCmd("sh", "-c", script)
 	if err != nil {

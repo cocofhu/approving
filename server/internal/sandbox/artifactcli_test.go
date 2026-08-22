@@ -81,6 +81,9 @@ func TestArtifactUploadScriptDoesNotCallWriteArtifactImage(t *testing.T) {
 	if !strings.Contains(artifactUploadScript, "_maybe_bootstrap_installed_cli") {
 		t.Fatal("artifact-upload must bootstrap outdated /usr/local/bin from workspace")
 	}
+	if strings.Contains(artifactUploadScript, `b"kind=image"`) {
+		t.Fatal("bootstrap must detect legacy write_artifact JSON, not only kind=image literal")
+	}
 	if !strings.Contains(artifactUploadScript, "/upload-image") {
 		t.Fatal("artifact-upload must fall back to HTTP /upload-image")
 	}
