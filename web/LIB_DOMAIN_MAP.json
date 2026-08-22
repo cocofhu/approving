@@ -1,5 +1,5 @@
 {
-  "principle": "Align with components/{run,agent,inbox,pm,project}; api/ whole-file clients; composables/ cross-domain use*; shared/ types/regionPolicy/loading*/i18n/format/theme and other cross-cutting utils",
+  "principle": "Align with components/{run,agent,inbox,pm,project}; api/ root=httpCore+apiTypes+api aggregate, clients/ under api/clients/; composables/ cross-domain use*; shared/ types/regionPolicy/loading*/i18n/format/theme and other cross-cutting utils",
   "domains": {
     "agent": [
       "agentCreateWizard.ts",
@@ -16,17 +16,9 @@
       "useAgentStudio.ts"
     ],
     "api": [
-      "agentsClient.ts",
       "api.ts",
       "apiTypes.ts",
-      "artifactsClient.ts",
-      "httpCore.ts",
-      "pmClient.ts",
-      "projectsClient.ts",
-      "runsClient.ts",
-      "sandboxesClient.ts",
-      "settingsClient.ts",
-      "workflowsClient.ts"
+      "httpCore.ts"
     ],
     "composables": [
       "useAuth.ts",
@@ -173,7 +165,7 @@
   },
   "totals": {
     "agent": 12,
-    "api": 11,
+    "api": 3,
     "composables": 15,
     "inbox": 20,
     "pm": 6,
