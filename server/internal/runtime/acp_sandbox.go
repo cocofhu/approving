@@ -303,7 +303,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 			env[k] = e.Value
 		}
 	}
-	merged, err := mergeAuthEnv(c.backend, env)
+	merged, err := PrepareAuthEnv(c.backend, env, c.workDir(profile))
 	if err != nil {
 		return sandbox.Spec{}, err
 	}
