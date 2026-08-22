@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
+import {
+  placeFixedOverlayAbove,
+  useFixedOverlayAboveListeners,
+  type FixedOverlayAboveStyle,
+} from '@/lib/composables/useFixedOverlayAbove'
 import { usePlatformStatusMetrics } from '@/lib/composables/usePlatformStatusMetrics'
 import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
 
@@ -23,8 +28,44 @@ const useCompact = computed(() => {
   return isMobile.value
 })
 
+/** Sidebar/drawer compact tips Teleport above the trigger to escape overflow-hidden. */
+const usePortaledCompactTip = computed(() => props.variant === 'compact')
+
 /** Which tip is pinned via click/touch (Demo tip-open). */
 const tipOpen = ref<string | null>(null)
+const compactTrigger = ref<HTMLElement | null>(null)
+const compactTip = ref<HTMLElement | null>(null)
+const compactTipHovered = ref(false)
+const compactTipFocused = ref(false)
+const compactTipStyle = ref<FixedOverlayAboveStyle | null>(null)
+
+const compactTipVisible = computed(
+  () =>
+  usePortaledCompactTip.value &&
+    (tipOpen.value === 'compact' || compactTipHovered.value || compactTipFocused.value),
+)
+
+async function repositionCompactTip() {
+  if (!compactTipVisible.value) return
+  await nextTick()
+  compactTipStyle.value = await placeFixedOverlayAbove(compactTrigger.value, compactTip.value, {
+    align: 'center',
+    gap: 8,
+  })
+}
+
+const { start: startCompactTipListeners, stop: stopCompactTipListeners } =
+  useFixedOverlayAboveListeners(compactTipVisible, repositionCompactTip)
+
+watch(compactTipVisible, async (visible) => {
+  if (visible) {
+    startCompactTipListeners()
+    await repositionCompactTip()
+  } else {
+    stopCompactTipListeners()
+    compactTipStyle.value = null
+  }
+})
 
 function fmtFull(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
@@ -181,13 +222,17 @@ function onBlurTip(id: string) {
     <!-- Narrow &lt;md: Token · RUN/Q; rate/peak only in tip -->
     <button
       v-else
+      ref="compactTrigger"
       type="button"
       class="sm-item sm-compact relative inline-flex w-full items-center gap-2 border-0 bg-elevated px-2 py-1.5 text-[11px] text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
       :class="tipOpen === 'compact' ? 'text-txt tip-open' : ''"
       data-testid="status-metrics-compact"
       :aria-label="t('shell.statusMetrics.compactAria')"
       @click="toggleTip('compact', $event)"
-      @blur="onBlurTip('compact')"
+      @blur="onBlurTip('compact'); compactTipFocused = false"
+      @focus="compactTipFocused = true"
+      @mouseenter="compactTipHovered = true"
+      @mouseleave="compactTipHovered = false"
     >
       <span class="inline-flex items-center gap-1.5">
         <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
@@ -210,6 +255,7 @@ function onBlurTip(id: string) {
         <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ queued }}</span>
       </span>
       <span
+        v-if="!usePortaledCompactTip"
         class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[180px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
         role="tooltip"
       >
@@ -220,6 +266,24 @@ function onBlurTip(id: string) {
         <div>{{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span></div>
       </span>
     </button>
+
+    <Teleport v-if="usePortaledCompactTip" to="body">
+      <div
+        v-show="compactTipVisible"
+        ref="compactTip"
+        class="sm-tip pointer-events-none z-[60] min-w-[180px] border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+        role="tooltip"
+        data-testid="status-metrics-compact-tip"
+        data-placement="above"
+        :style="compactTipStyle ?? undefined"
+      >
+        <div>{{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span></div>
+        <div>{{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span></div>
+        <div>{{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span></div>
+        <div>{{ t('shell.statusMetrics.running') }}: <span class="font-mono">{{ running }}</span></div>
+        <div>{{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span></div>
+      </div>
+    </Teleport>
   </div>
 </template>
 

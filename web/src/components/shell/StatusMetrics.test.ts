@@ -184,6 +184,56 @@ describe('StatusMetrics', () => {
     w.unmount()
   })
 
+  it('sidebar compact variant teleports tip above trigger (g1.1)', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...shell } },
+    })
+    const clip = document.createElement('div')
+    clip.style.overflow = 'hidden'
+    clip.style.height = '120px'
+    document.body.appendChild(clip)
+
+    const w = mount(StatusMetrics, {
+      props: { variant: 'compact' },
+      global: { plugins: [i18n] },
+      attachTo: clip,
+    })
+    await flushPromises()
+
+    const trigger = w.find('[data-testid="status-metrics-compact"]')
+    expect(trigger.find('.sm-tip').exists()).toBe(false)
+
+    vi.spyOn(trigger.element as HTMLElement, 'getBoundingClientRect').mockReturnValue({
+      top: 320,
+      left: 24,
+      right: 200,
+      bottom: 352,
+      width: 176,
+      height: 32,
+      x: 24,
+      y: 320,
+      toJSON: () => ({}),
+    } as DOMRect)
+
+    await trigger.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    const tip = document.body.querySelector('[data-testid="status-metrics-compact-tip"]') as HTMLElement
+    expect(tip).toBeTruthy()
+    expect(tip.getAttribute('data-placement')).toBe('above')
+    expect(tip.style.position).toBe('fixed')
+    expect(tip.textContent).toMatch(/累计 Token:\s*1,240,582/)
+    expect(tip.textContent).toMatch(/排队:\s*5/)
+    expect(Number.parseInt(tip.style.top, 10)).toBeLessThan(320)
+
+    w.unmount()
+    clip.remove()
+    document.body.innerHTML = ''
+  })
+
   it('zero counts still show label: 0 in tip', async () => {
     platformStatus.mockResolvedValue({
       cumulativeTokens: 0,
