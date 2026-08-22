@@ -28,6 +28,7 @@ func TestSeedHelperScriptsHaveNoHardcodedSPAHosts(t *testing.T) {
 			want: []string{
 				"rewrite_spa_mcp_url",
 				"_SPA_MCP_HOSTS = {}",
+				"upload_image_artifact",
 			},
 		},
 		{
@@ -62,6 +63,20 @@ func TestSeedHelperScriptsHaveNoHardcodedSPAHosts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestArtifactUploadScriptDoesNotCallWriteArtifactImage(t *testing.T) {
+	t.Parallel()
+	if strings.Contains(artifactUploadScript, `"name": "write_artifact"`) {
+		t.Fatal("artifact-upload must not call write_artifact")
+	}
+	if strings.Contains(artifactUploadScript, "kind\": \"image\"") ||
+		strings.Contains(artifactUploadScript, "kind=image") {
+		t.Fatal("artifact-upload must not pass kind=image to write_artifact")
+	}
+	if !strings.Contains(artifactUploadScript, "upload_image_artifact") {
+		t.Fatal("artifact-upload must call upload_image_artifact")
 	}
 }
 

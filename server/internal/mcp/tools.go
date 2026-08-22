@@ -19,6 +19,17 @@ import (
 // in/out observable in one place.
 func (h *Host) runTool(runID, token, name string, args map[string]any) (string, bool) {
 	switch name {
+	case "upload_image_artifact":
+		aname := asString(args["name"])
+		content := asString(args["content"])
+		if aname == "" {
+			return "error: 'name' is required", true
+		}
+		id, err := h.UploadImageArtifact(runID, token, h.ActiveNode(runID), aname, content)
+		if err != nil {
+			return "upload_image_artifact failed: " + err.Error(), true
+		}
+		return fmt.Sprintf("ok: uploaded image artifact %q (id=%s)", aname, id), false
 	case "write_artifact":
 		aname := asString(args["name"])
 		content := asString(args["content"])
