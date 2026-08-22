@@ -23,6 +23,7 @@ const {
   addProcessingIntent,
   removeProcessingIntent,
   isProcessingIntent,
+  isItemCardDisabled,
   markProcessed,
   unmarkProcessed,
   isProcessedTriple,
@@ -366,7 +367,7 @@ const {
           :key="itemKey(it)"
           :item="it"
           :active="isActive(it)"
-          :disabled="processingLock"
+          :disabled="isItemCardDisabled(it)"
           show-chevron
           @select="openDetail(it)"
           @open-share="openSharePanel(it, true)"
@@ -503,7 +504,7 @@ const {
             :key="itemKey(it)"
             :item="it"
             :active="isActive(it)"
-            :disabled="processingLock"
+            :disabled="isItemCardDisabled(it)"
             @select="selectItem(it)"
             @open-share="openSharePanel(it)"
           />

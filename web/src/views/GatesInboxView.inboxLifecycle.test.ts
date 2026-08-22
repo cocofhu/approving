@@ -710,7 +710,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('processing lock: confirm leaves immediately; list reselection ignored until unlock', async () => {
+  it('processing lock: confirm leaves immediately; other pending selectable while in-flight', async () => {
     const a = gateItem('a')
     const b = gateItem('b')
     const c = gateItem('c')
@@ -739,13 +739,14 @@ describe('GatesInboxView inbox-context lifecycle', () => {
 
     const buttonsC = wrapper.findAll('button').filter((btn) => btn.text().includes('Gate c'))
     expect(buttonsC.length).toBeGreaterThan(0)
+    expect(buttonsC[0].attributes('disabled')).toBeUndefined()
     const bCallsBefore = inboxCallsFor('run-b', 'gate-b', 1).length
     await buttonsC[0].trigger('click')
     await flushPromises()
 
-    // Still locked — must not switch to c yet.
-    expect(inboxCallsFor('run-c', 'gate-c', 1).length).toBe(0)
-    expect(wrapper.text()).toContain('Gate b')
+    // Per-triple gate: c is not in-flight — user may switch while a's resume pending.
+    expect(inboxCallsFor('run-c', 'gate-c', 1).length).toBeGreaterThan(0)
+    expect(wrapper.text()).toContain('Gate c')
     expect(inboxCallsFor('run-b', 'gate-b', 1).length).toBe(bCallsBefore)
 
     list = [b, c]
@@ -755,7 +756,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await nextTick()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Gate b')
+    expect(wrapper.text()).toContain('Gate c')
     expect(wrapper.text()).not.toContain('Gate a')
     wrapper.unmount()
   })
@@ -798,6 +799,86 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.text()).toContain('Clarify b')
     expect(wrapper.text()).not.toContain('Clarify a')
     expect(mocks.toastSuccess).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('plan g2.1/s1: same-run second Approve arriving during lock window is selectable', async () => {
+    const runId = 'run-same'
+    const approve1: InboxItem = {
+      type: 'clarify',
+      runId,
+      nodeId: 'clarify-approve-1',
+      iteration: 1,
+      workflowName: 'wf',
+      label: 'Approve 1',
+      done: false,
+      requestedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    const approve2: InboxItem = {
+      type: 'clarify',
+      runId,
+      nodeId: 'clarify-approve-2',
+      iteration: 1,
+      workflowName: 'wf',
+      label: 'Approve 2',
+      done: false,
+      requestedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    let list: InboxItem[] = [approve1]
+    let listLoads = 0
+    mocks.listGates.mockImplementation(async () => {
+      listLoads += 1
+      return paged(list)
+    })
+
+    let releaseReply!: (v: unknown) => void
+    mocks.reactReply.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          releaseReply = resolve
+        }),
+    )
+
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+
+    const finishClick = wrapper.get('[data-testid="clarify-send"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    // First Approve left pending while reactReply(force) is still in flight.
+    expect(wrapper.text()).not.toContain('Approve 1')
+
+    // Engine advances: second Approve enters the list during the lock window.
+    list = [approve2]
+    const vm = wrapper.vm as { listPage?: number }
+    vm.listPage = 2
+    await flushPromises()
+    await nextTick()
+    expect(listLoads).toBeGreaterThan(1)
+
+    const buttons2 = wrapper.findAll('button').filter((btn) => btn.text().includes('Approve 2'))
+    expect(buttons2.length).toBeGreaterThan(0)
+    expect(buttons2[0].attributes('disabled')).toBeUndefined()
+
+    await buttons2[0].trigger('click')
+    await flushPromises()
+
+    expect(inboxCallsFor(runId, 'clarify-approve-2', 1).length).toBeGreaterThan(0)
+    expect(wrapper.text()).toContain('Approve 2')
+    expect(wrapper.text()).toContain('Run #same')
+
+    releaseReply({ status: 'ok' })
+    await finishClick
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Approve 2')
+    expect(wrapper.text()).not.toContain('Approve 1')
     wrapper.unmount()
   })
 
