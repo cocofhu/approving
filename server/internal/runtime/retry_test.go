@@ -75,9 +75,16 @@ func TestNodeChatTimeout(t *testing.T) {
 	if d := c.nodeChatTimeout(both); d != 300*time.Second {
 		t.Errorf("chat_timeout should win = %v, want 300s", d)
 	}
-	approve := NodeReq{NodeType: "approve", Config: map[string]any{"timeout": 20, "chat_timeout": 300}}
-	if d := c.nodeChatTimeout(approve); d != 90*time.Second {
-		t.Errorf("approve leftover timeout must fall back to global = %v, want 90s", d)
+	approve := NodeReq{NodeType: "approve", Config: map[string]any{"timeout": 20}}
+	if d := c.nodeChatTimeout(approve); d != 20*time.Minute {
+		t.Errorf("approve timeout(min) = %v, want 20m", d)
+	}
+	approveChat := NodeReq{NodeType: "approve", Config: map[string]any{"chat_timeout": 300}}
+	if d := c.nodeChatTimeout(approveChat); d != 300*time.Second {
+		t.Errorf("approve chat_timeout = %v, want 300s", d)
+	}
+	if d := c.nodeChatTimeout(NodeReq{NodeType: "approve"}); d != 30*time.Minute {
+		t.Errorf("approve empty config = %v, want 30m", d)
 	}
 }
 
