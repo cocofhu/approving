@@ -43,6 +43,19 @@ vi.mock('@/lib/composables/useToast', () => ({
 
 import DashboardView from './DashboardView.vue'
 
+const HomePreviewAppModalStub = {
+  props: ['open', 'title', 'width'],
+  emits: ['close'],
+  template: `
+    <div v-if="open" data-testid="home-image-preview-modal">
+      <div data-testid="home-image-preview-title">{{ title }}</div>
+      <button type="button" data-testid="home-image-preview-close" @click="$emit('close')">×</button>
+      <button type="button" data-testid="home-image-preview-backdrop" @click="$emit('close')">backdrop</button>
+      <slot />
+    </div>
+  `,
+}
+
 const approveWf: Workflow = {
   id: 'wf-ap',
   name: '自我迭代PRO',
@@ -68,7 +81,7 @@ function mountDashboard() {
   return mount(DashboardView, {
     global: {
       plugins: [i18n],
-      stubs: { Icon: true, RunLaunchModal: true },
+      stubs: { Icon: true, RunLaunchModal: true, AppModal: HomePreviewAppModalStub },
     },
   })
 }
@@ -335,6 +348,49 @@ describe('DashboardView home composer', () => {
     Object.defineProperty(pasteEv, 'clipboardData', { value: pasteDt })
     wrapper.get('[data-testid="home-composer-input"]').element.dispatchEvent(pasteEv)
     await flushPromises()
+    expect(wrapper.find('[data-testid="home-draft-image-thumb"]').exists()).toBe(true)
+
+    wrapper.unmount()
+    vi.unstubAllGlobals()
+  })
+
+  it('opens draft image preview, close keeps attachment, no unavailable overlay (g1.3)', async () => {
+    class FakeReader {
+      result: string | ArrayBuffer | null = null
+      onload: null | (() => void) = null
+      readAsDataURL(file: File) {
+        this.result = `data:${file.type || 'application/octet-stream'};base64,QUJD`
+        queueMicrotask(() => this.onload?.())
+      }
+    }
+    vi.stubGlobal('FileReader', FakeReader as unknown as typeof FileReader)
+
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const img = new File(['ABC'], '首页截图.png', { type: 'image/png' })
+    const pasteDt = new DataTransfer()
+    pasteDt.items.add(img)
+    const pasteEv = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(pasteEv, 'clipboardData', { value: pasteDt })
+    wrapper.get('[data-testid="home-composer-input"]').element.dispatchEvent(pasteEv)
+    await flushPromises()
+
+    const thumb = wrapper.find('[data-testid="home-draft-image-thumb"]')
+    expect(thumb.exists()).toBe(true)
+    expect(thumb.text()).toContain('点击放大')
+    expect(thumb.text()).not.toContain('不可预览')
+
+    await thumb.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-image-preview-title"]').text()).toBe('图片预览 · 首页截图.png')
+    expect(wrapper.find('[data-testid="home-image-preview-img"]').attributes('src')).toContain('base64')
+
+    await wrapper.find('[data-testid="home-image-preview-img"]').trigger('error')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-image-preview-failed"]').text()).toContain('图片加载失败')
+    await wrapper.find('[data-testid="home-image-preview-close"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-image-preview-modal"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-draft-image-thumb"]').exists()).toBe(true)
 
     wrapper.unmount()
