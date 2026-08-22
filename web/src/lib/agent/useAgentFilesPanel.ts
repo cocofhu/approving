@@ -3,6 +3,8 @@
  */
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
+import { defaultSettingsPlaceholder } from '@/lib/agent/backendAuthGuide'
 import type { AgentStudioDraft, DraftFile } from '@/lib/agent/agentStudioDraft'
 import type { CtxTarget } from '@/components/agent/ExplorerContextMenu.vue'
 
@@ -251,6 +253,23 @@ function openFile(f: DraftFile) {
 function openPath(path: string) {
   const f = props.draft.files.find((x) => x.path === path)
   if (f) openFile(f)
+}
+
+function openPathOrCreate(path: string, placeholder?: string) {
+  let f = props.draft.files.find((x) => x.path === path)
+  if (!f) {
+    f = {
+      path,
+      content:
+        placeholder ??
+        (path === AGENT_SETTINGS_PATH
+          ? defaultSettingsPlaceholder(props.draft.acpBackend || 'cursor')
+          : ''),
+    }
+    props.draft.files.push(f)
+    props.draft.files.sort((a, b) => a.path.localeCompare(b.path))
+  }
+  openFile(f)
 }
 
 function selectDefaultFile() {
@@ -662,6 +681,7 @@ onBeforeUnmount(() => {
   rows,
   openFile,
   openPath,
+  openPathOrCreate,
   selectDefaultFile,
   resetForSelect,
   snapshot,

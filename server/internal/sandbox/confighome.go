@@ -149,15 +149,66 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 		}
 	}
 	if len(spec.Settings) > 0 {
-		b, err := json.MarshalIndent(spec.Settings, "", "  ")
-		if err != nil {
-			return "", fmt.Errorf("marshal settings.json: %w", err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "settings.json"), b, 0o644); err != nil {
+		if err := writeMergedSettingsJSON(dir, spec.Settings); err != nil {
 			return "", err
 		}
 	}
 	return dir, nil
+}
+
+// writeMergedSettingsJSON writes settings.json, merging platform Settings into an
+// existing user-authored file (user keys win; nested maps merge recursively).
+func writeMergedSettingsJSON(dir string, platform map[string]any) error {
+	if len(platform) == 0 {
+		return nil
+	}
+	path := filepath.Join(dir, "settings.json")
+	merged := platform
+	if b, err := os.ReadFile(path); err == nil {
+		var user map[string]any
+		if err := json.Unmarshal(b, &user); err == nil {
+			merged = mergeSettingsMaps(platform, user)
+		}
+	}
+	b, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal settings.json: %w", err)
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
+func mergeSettingsMaps(platform, user map[string]any) map[string]any {
+	out := make(map[string]any)
+	for k, v := range platform {
+		out[k] = v
+	}
+	for k, uv := range user {
+		if pv, ok := out[k]; ok {
+			pm := asStringAnyMap(pv)
+			um := asStringAnyMap(uv)
+			if pm != nil && um != nil {
+				out[k] = mergeSettingsMaps(pm, um)
+				continue
+			}
+		}
+		out[k] = uv
+	}
+	return out
+}
+
+func asStringAnyMap(v any) map[string]any {
+	switch m := v.(type) {
+	case map[string]any:
+		return m
+	case map[string]string:
+		out := make(map[string]any, len(m))
+		for k, val := range m {
+			out[k] = val
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // EmbeddedRuleBasenames returns sorted basenames of all embedded platform rules

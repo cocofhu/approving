@@ -3,6 +3,7 @@ import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import EnvCredentialHelpModal from '@/components/agent/EnvCredentialHelpModal.vue'
+import WizardApiKeyStepPanel from '@/components/agent/WizardApiKeyStepPanel.vue'
 
 import { useAgentCreateWizard } from '@/lib/agent/useAgentCreateWizard'
 import type { AgentCreateWizardProps, AgentCreateWizardEmit } from '@/lib/agent/useAgentCreateWizard'
@@ -21,6 +22,7 @@ const {
   envHelpOpen,
   stepAnimKey,
   apiKeyInput,
+  customConfigError,
   currentStep,
   progressPct,
   reviewItems,
@@ -40,6 +42,8 @@ const {
   confirmAcpSwitch,
   cancelAcpSwitch,
   syncApiKeyInput,
+  setAuthMode,
+  onCustomConfigInput,
   onApiKeyInput,
   onGitCredentialType,
   goPrev,
@@ -206,59 +210,20 @@ const {
                 </template>
 
                 <template v-else-if="currentStep.id === 'apiKey'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.apiKey.meta') }}</p>
-                  <div class="mb-3 border border-accent/30 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-5 text-txt2">
-                    {{
-                      t('pages.agentStudio.wizard.apiKey.backendBanner', {
-                        backend: draft.acpBackend,
-                      })
-                    }}
-                  </div>
-                  <div class="mb-4 border border-line bg-base p-3.5">
-                    <div class="text-[13px] font-semibold text-txt">
-                      <code class="text-accent-2">{{ primaryAuthKey }}</code>
-                    </div>
-                    <p v-if="primaryAuthAlt" class="mt-1 text-[11px] text-txt3">
-                      {{ t('pages.agentStudio.wizard.apiKey.alias') }}
-                      <code>{{ primaryAuthAlt }}</code>
-                    </p>
-                    <p v-if="authGuide.noteKey" class="mt-2 text-[11px] leading-5 text-txt2">
-                      {{ t(authGuide.noteKey) }}
-                    </p>
-                    <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-[12px] leading-5 text-txt2">
-                      <li v-for="stepKey in authGuide.pathStepKeys" :key="stepKey">
-                        {{ t(stepKey) }}
-                      </li>
-                    </ol>
-                    <div class="mt-3 flex flex-wrap gap-2">
-                      <a
-                        v-for="link in authGuide.links"
-                        :key="link.url"
-                        :href="link.url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim"
-                      >
-                        {{ t(link.labelKey) }}
-                      </a>
-                    </div>
-                  </div>
-                  <label class="block">
-                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">
-                      {{ t('pages.agentStudio.wizard.apiKey.inputLabel') }}
-                    </span>
-                    <input
-                      :value="apiKeyInput"
-                      type="password"
-                      autocomplete="off"
-                      class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
-                      :placeholder="t('pages.agentStudio.wizard.apiKey.inputPlaceholder')"
-                      @input="onApiKeyInput(($event.target as HTMLInputElement).value)"
-                    />
-                    <p class="mt-1.5 text-[11px] text-txt3">
-                      {{ t('pages.agentStudio.wizard.apiKey.skipHint') }}
-                    </p>
-                  </label>
+                  <WizardApiKeyStepPanel
+                    :acp-backend="draft.acpBackend"
+                    :config-root="draft.configRoot"
+                    :auth-mode="draft.authMode"
+                    :api-key-input="apiKeyInput"
+                    :custom-config-content="draft.customConfigContent"
+                    :custom-config-error="customConfigError"
+                    :auth-guide="authGuide"
+                    :primary-auth-key="primaryAuthKey"
+                    :primary-auth-alt="primaryAuthAlt"
+                    @update:auth-mode="setAuthMode"
+                    @update:api-key-input="onApiKeyInput"
+                    @update:custom-config-content="onCustomConfigInput"
+                  />
                 </template>
 
                 <template v-else-if="currentStep.id === 'git'">

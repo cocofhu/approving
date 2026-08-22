@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
+import WizardApiKeyStepPanel from '@/components/agent/WizardApiKeyStepPanel.vue'
 import { api, type TeamBootstrapSession } from '@/lib/api/api'
 import {
   ACP_BACKENDS,
@@ -19,9 +20,14 @@ import {
   type TeamWizardDraft,
   type WizardBackendId,
 } from '@/lib/agent/agentTeamWizard'
-import { authGuideFor, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
+import { authGuideFor, defaultSettingsPlaceholder } from '@/lib/agent/backendAuthGuide'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
+import {
+  parseCustomConfigJson,
+  stripAuthKeysFromEnv,
+  type WizardAuthMode,
+} from '@/lib/agent/agentCreateWizard'
 
 const props = defineProps<{
   open: boolean
@@ -39,6 +45,8 @@ const fieldError = ref('')
 const submitError = ref('')
 const submitting = ref(false)
 const apiKeyInput = ref('')
+const customConfigError = ref(false)
+const customConfigDraft = ref('')
 const stepAnimKey = ref(0)
 const bgExpanded = ref(true)
 
@@ -52,6 +60,7 @@ const currentRegion = computed(() => {
 })
 const authGuide = computed(() => authGuideFor(draft.value.acpBackend, currentRegion.value))
 const primaryAuthKey = computed(() => authGuide.value.keys[0]?.key || '')
+const primaryAuthAlt = computed(() => authGuide.value.keys[0]?.alt || '')
 const previewLine = computed(() => {
   const root = draft.value.rootGroupName || '—'
   const pipe = draft.value.pipelineGroupName || 'Pipeline(GitHub)'
@@ -73,6 +82,8 @@ watch(
     submitError.value = ''
     submitting.value = false
     apiKeyInput.value = ''
+    customConfigError.value = false
+    customConfigDraft.value = ''
     stepAnimKey.value++
     nextTick(() => document.getElementById('team-wiz-project')?.focus())
   },
@@ -114,6 +125,32 @@ function syncApiKeyInput() {
   apiKeyInput.value = draft.value.env.find((e) => e.k === key)?.v ?? ''
 }
 
+function clearAuthKeys() {
+  draft.value.env = stripAuthKeysFromEnv(draft.value.env, draft.value.acpBackend)
+  apiKeyInput.value = ''
+}
+
+function setAuthMode(mode: WizardAuthMode) {
+  if (mode === draft.value.authMode) return
+  customConfigError.value = false
+  if (mode === 'apiKey') {
+    customConfigDraft.value = draft.value.customConfigContent
+    draft.value.customConfigContent = ''
+    draft.value.authMode = mode
+    syncApiKeyInput()
+    return
+  }
+  clearAuthKeys()
+  draft.value.authMode = mode
+  draft.value.customConfigContent =
+    customConfigDraft.value || defaultSettingsPlaceholder(draft.value.acpBackend)
+}
+
+function onCustomConfigInput(value: string) {
+  draft.value.customConfigContent = value
+  customConfigError.value = false
+}
+
 function onApiKeyInput(value: string) {
   apiKeyInput.value = value
   const key = primaryAuthKey.value
@@ -141,14 +178,25 @@ function goSkip() {
   if (!step.skip || submitting.value) return
   draft.value.skipped[step.id] = true
   if (step.id === 'apiKey') {
-    const key = primaryAuthKey.value
-    const idx = draft.value.env.findIndex((e) => e.k === key)
-    if (idx >= 0) draft.value.env.splice(idx, 1)
-    apiKeyInput.value = ''
+    clearAuthKeys()
+    draft.value.customConfigContent = ''
+    customConfigDraft.value = ''
+    customConfigError.value = false
   }
   draft.value.step++
   stepAnimKey.value++
   if (currentStep.value.id === 'apiKey') syncApiKeyInput()
+}
+
+function validateApiKeyStep(): boolean {
+  if (draft.value.authMode !== 'customConfig') return true
+  const parsed = parseCustomConfigJson(draft.value.customConfigContent)
+  if (!parsed.ok) {
+    customConfigError.value = true
+    return false
+  }
+  customConfigError.value = false
+  return true
 }
 
 function goNext() {
@@ -161,6 +209,7 @@ function goNext() {
     }
     fieldError.value = ''
   }
+  if (currentStep.value.id === 'apiKey' && !validateApiKeyStep()) return
   if (currentStep.value.id === 'review') {
     void submit()
     return
@@ -418,20 +467,20 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                 </template>
 
                 <template v-else-if="currentStep.id === 'apiKey'">
-                  <p class="sec-meta">{{ t('pages.agentStudio.wizard.apiKey.meta') }}</p>
-                  <label class="block">
-                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">
-                      {{ t('pages.agentStudio.wizard.apiKey.inputLabel') }}
-                    </span>
-                    <input
-                      :value="apiKeyInput"
-                      type="password"
-                      autocomplete="off"
-                      class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
-                      @input="onApiKeyInput(($event.target as HTMLInputElement).value)"
-                    />
-                    <p class="mt-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.wizard.apiKey.skipHint') }}</p>
-                  </label>
+                  <WizardApiKeyStepPanel
+                    :acp-backend="draft.acpBackend"
+                    :config-root="draft.configRoot"
+                    :auth-mode="draft.authMode"
+                    :api-key-input="apiKeyInput"
+                    :custom-config-content="draft.customConfigContent"
+                    :custom-config-error="customConfigError"
+                    :auth-guide="authGuide"
+                    :primary-auth-key="primaryAuthKey"
+                    :primary-auth-alt="primaryAuthAlt"
+                    @update:auth-mode="setAuthMode"
+                    @update:api-key-input="onApiKeyInput"
+                    @update:custom-config-content="onCustomConfigInput"
+                  />
                 </template>
 
                 <template v-else-if="currentStep.id === 'git'">
@@ -535,7 +584,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     <div>{{ t('pages.agentStudio.teamWizard.review.pipeline') }}：<strong class="text-txt">{{ draft.pipelineGroupName }}</strong></div>
                     <div>PM：<strong class="text-txt">{{ draft.pmName }}</strong></div>
                     <div>ACP：<strong class="text-txt">{{ draft.acpBackend }}</strong></div>
-                    <div>API Key：<strong class="text-txt">{{ teamHasAuth(draft) ? t('pages.agentStudio.teamWizard.review.set') : t('pages.agentStudio.teamWizard.review.skip') }}</strong></div>
+                    <div>API Key：<strong class="text-txt">{{ teamHasAuth(draft) ? (draft.authMode === 'customConfig' ? t('pages.agentStudio.wizard.review.customConfigWritten') : t('pages.agentStudio.teamWizard.review.set')) : t('pages.agentStudio.teamWizard.review.skip') }}</strong></div>
                     <div>Git：<strong class="text-txt">{{ draft.gitUrl || t('pages.agentStudio.teamWizard.review.none') }}</strong></div>
                     <div>MCP：<strong class="text-txt">{{ mcpNames }}</strong></div>
                     <div>Env：<strong class="text-txt">{{ envSummary }}</strong></div>
@@ -558,7 +607,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                   >
                     {{ t('pages.agentStudio.teamWizard.review.noArtifactWarn') }}
                   </p>
-                  <p v-if="!hasAuthKeyConfigured(draft.env, draft.acpBackend)" class="mt-3 text-[12px] text-txt3">
+                  <p v-if="!teamHasAuth(draft)" class="mt-3 text-[12px] text-txt3">
                     {{ t('pages.agentStudio.wizard.review.authReminderDetail') }}
                   </p>
                   <p v-if="submitError" class="mt-3 text-[12px] text-err">{{ submitError }}</p>

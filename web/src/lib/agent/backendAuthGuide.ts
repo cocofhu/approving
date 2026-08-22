@@ -148,6 +148,43 @@ export function authGuideFor(backend: BackendId, region = ''): BackendAuthGuide 
   }
 }
 
+/** Relative path for backend config file written into Agent workspace/files. */
+export const AGENT_SETTINGS_REL_PATH = 'settings.json'
+
+/** Absolute configRoot path for settings.json (UI display). */
+export function settingsFileAbsPath(configRoot: string): string {
+  const root = configRoot.trim() || '/root/.cursor'
+  return `${root}/${AGENT_SETTINGS_REL_PATH}`
+}
+
+/** Default JSON placeholder when user switches to custom config mode. */
+export function defaultSettingsPlaceholder(backend: BackendId): string {
+  switch (backend) {
+    case 'claude_code':
+      return JSON.stringify({ env: { ANTHROPIC_API_KEY: 'sk-ant-...' } }, null, 2)
+    case 'codebuddy':
+      return JSON.stringify({ env: { CODEBUDDY_API_KEY: 'your-key' } }, null, 2)
+    case 'cursor':
+      return JSON.stringify({ env: { CURSOR_API_KEY: 'your-key' } }, null, 2)
+    case 'trae':
+      return JSON.stringify({ env: { TRAECLI_PERSONAL_ACCESS_TOKEN: 'trae-lt-...' } }, null, 2)
+    default:
+      return '{\n  \n}'
+  }
+}
+
+/** i18n key for backend-specific custom-config guidance (optional). */
+export function customConfigNoteKey(backend: BackendId): string {
+  switch (backend) {
+    case 'claude_code':
+      return 'pages.agentStudio.wizard.apiKey.customConfig.notes.claude'
+    case 'codebuddy':
+      return 'pages.agentStudio.wizard.apiKey.customConfig.notes.codebuddy'
+    default:
+      return 'pages.agentStudio.wizard.apiKey.customConfig.notes.generic'
+  }
+}
+
 /** True when any primary/alias auth key for the backend has a non-empty value. */
 export function hasAuthKeyConfigured(
   env: Record<string, string> | { k: string; v: string }[],

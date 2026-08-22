@@ -36,6 +36,7 @@ type TeamBootstrapRequest struct {
 	Background    string            `json:"background"`
 	AcpBackend    string            `json:"acpBackend"`
 	APIKey        string            `json:"apiKey,omitempty"`
+	CustomConfig  string            `json:"customConfig,omitempty"`
 	Region        string            `json:"region,omitempty"`
 	GitURL        string            `json:"gitUrl,omitempty"`
 	GitCredType   string            `json:"gitCredentialType,omitempty"`
@@ -194,6 +195,7 @@ type normalizedTeamReq struct {
 	Background    string
 	AcpBackend    string
 	APIKey        string
+	CustomConfig  string
 	Region        string
 	GitURL        string
 	GitCredType   string
@@ -257,6 +259,7 @@ func (s *TeamService) normalizeRequest(req TeamBootstrapRequest) (normalizedTeam
 		Background:    background,
 		AcpBackend:    NormalizeAcpBackend(req.AcpBackend),
 		APIKey:        strings.TrimSpace(req.APIKey),
+		CustomConfig:  strings.TrimSpace(req.CustomConfig),
 		Region:        strings.TrimSpace(req.Region),
 		GitURL:        strings.TrimSpace(req.GitURL),
 		GitCredType:   strings.TrimSpace(req.GitCredType),
@@ -273,7 +276,7 @@ func (s *TeamService) runBootstrap(ctx context.Context, sessionID string, req no
 
 	s.appendEvent(sessionID, "sys", "creating project "+req.ProjectName)
 	var envEntries []models.EnvEntry
-	if req.APIKey != "" {
+	if req.APIKey != "" && req.CustomConfig == "" {
 		envEntries = append(envEntries, models.EnvEntry{
 			Key: primaryAuthEnvKey(req.AcpBackend), Value: req.APIKey, Secret: true,
 		})
@@ -367,15 +370,16 @@ func (s *TeamService) runBootstrap(ctx context.Context, sessionID string, req no
 		name := EngineerDisplayName(req.Prefix, role.RoleLabelZH)
 		s.appendEvent(sessionID, "mcp", "pm_create_agent_from_template\ntemplate="+role.ID+"\nname="+name+"\nproject="+proj.ID)
 		created, err := s.CreateAgentFromTemplate(CreateFromTemplateArgs{
-			SessionID:   sessionID,
-			TemplateID:  role.ID,
-			Name:        name,
-			ProjectID:   proj.ID,
-			AcpBackend:  req.AcpBackend,
-			GitCredType: req.GitCredType,
-			MCP:         req.MCP,
-			Env:         req.Env,
-			Region:      req.Region,
+			SessionID:    sessionID,
+			TemplateID:   role.ID,
+			Name:         name,
+			ProjectID:    proj.ID,
+			AcpBackend:   req.AcpBackend,
+			GitCredType:  req.GitCredType,
+			MCP:          req.MCP,
+			Env:          req.Env,
+			Region:       req.Region,
+			CustomConfig: req.CustomConfig,
 		})
 		if err != nil {
 			fail(err)
@@ -445,6 +449,7 @@ func (s *TeamService) runRetry(ctx context.Context, sessionID string, req normal
 			MCP:          req.MCP,
 			Env:          req.Env,
 			Region:       req.Region,
+			CustomConfig: req.CustomConfig,
 			SkipIfExists: true,
 		})
 		if err != nil {
@@ -533,6 +538,7 @@ type CreateFromTemplateArgs struct {
 	MCP          []MCPServer
 	Env          map[string]string
 	Region       string
+	CustomConfig string
 	SkipIfExists bool
 	// When SessionID is set, scope checks apply.
 }
@@ -601,6 +607,9 @@ func (s *TeamService) CreateAgentFromTemplate(args CreateFromTemplateArgs) (Agen
 		tmpl.MCP = args.MCP
 	} else if len(tmpl.MCP) == 0 {
 		tmpl.MCP = DefaultPlatformMCP()
+	}
+	if strings.TrimSpace(args.CustomConfig) != "" {
+		tmpl.Files = upsertAgentFile(tmpl.Files, "settings.json", strings.TrimSpace(args.CustomConfig))
 	}
 
 	if err := s.Skills.Save(tmpl); err != nil {
@@ -708,6 +717,9 @@ func (s *TeamService) buildPMAgent(req normalizedTeamReq, projectID string) (Age
 	}
 
 	tmpl.Files = upsertAgentFile(tmpl.Files, "rules/project-context.md", teamPMProjectContextMarkdown(req))
+	if strings.TrimSpace(req.CustomConfig) != "" {
+		tmpl.Files = upsertAgentFile(tmpl.Files, "settings.json", strings.TrimSpace(req.CustomConfig))
+	}
 	return tmpl, nil
 }
 

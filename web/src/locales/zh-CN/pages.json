@@ -1750,7 +1750,9 @@
         "regionCn": "国内站 (trae.cn)",
         "regionIntl": "国际站 (trae.ai)",
         "add": "添加环境变量",
-        "parseError": "环境变量 JSON 无法解析:"
+        "parseError": "环境变量 JSON 无法解析:",
+        "customConfigCallout": "除 Env Key 外，可通过 Backend 配置文件完成鉴权 / 参数：{path}。",
+        "openSettingsFile": "在 Files 中打开"
       },
       "mcpHelp": {
         "link": "帮助",
@@ -2155,8 +2157,13 @@
           "remapBody": "已配置的 MCP / Skills / Commands / Rules 可能依赖当前路径。更换 Backend 将按新的 configRoot 重映射；取消则保持原 Backend。"
         },
         "apiKey": {
-          "meta": "按当前 Backend 配置鉴权 Key；可跳过，稍后在 Studio Env 补全。",
-          "backendBanner": "当前 Backend：{backend}。仅展示该后端所需 Key。",
+          "meta": "按当前 Backend 配置鉴权；可跳过，稍后在 Studio Env 或配置文件中补全。",
+          "modeGroup": "鉴权方式",
+          "modeApiKey": "粘贴 API Key",
+          "modeApiKeyHint": "写入 Env，与现网一致",
+          "modeCustomConfig": "自定义配置",
+          "modeCustomConfigHint": "编辑 settings.json，创建时写入 Agent 文件树",
+          "backendBanner": "当前 Backend：{backend}。",
           "alias": "别名（任选其一）",
           "inputLabel": "粘贴 API Key",
           "inputPlaceholder": "sk-… / token…（可留空并跳过）",
@@ -2198,6 +2205,18 @@
             "codebuddyIoa": "iOA 申请 Key",
             "codebuddyStaging": "Staging 申请 Key",
             "traeTokenDocs": "Trae CLI 登录令牌文档"
+          },
+          "customConfig": {
+            "cardTitle": "后端配置文件",
+            "targetPath": "目标路径 ·",
+            "agentFiles": "相对 Agent files:",
+            "editorHint": "创建时写入 Agent 文件树；运行时落入 configRoot。内容为空可跳过。",
+            "invalidJson": "JSON 无效，请修正后再继续。",
+            "notes": {
+              "claude": "可通过 settings.json 的 env 等字段完成鉴权，无需在本步骤粘贴 Key。",
+              "codebuddy": "CodeBuddy 支持通过 settings.json 配置 env 等字段；staging 等平台字段可与用户内容合并。",
+              "generic": "文件仍写入 configRoot；是否被 CLI 消费取决于后端。推荐优先使用 Env Key，自定义配置为高级/兼容路径。"
+            }
           }
         },
         "git": {
@@ -2232,6 +2251,7 @@
           "acp": "Agent",
           "apiKeyConfigured": "API Key · 已配置",
           "apiKeySkipped": "API Key · 未配置",
+          "customConfigWritten": "自定义配置 · 已写入",
           "authReminder": "鉴权提醒",
           "authReminderDetail": "运行前需配置鉴权，可在 Studio Env 补全。此提醒不阻止创建。",
           "git": "Git",
