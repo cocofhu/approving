@@ -430,8 +430,9 @@ func (h *Host) authorize(runID, token string) bool {
 // which state produced it. Returns the artifact id.
 //
 // Before Save: empty kind is inferred (reserved name → expected kind, else
-// extension); kind=image is always rejected (use artifact-upload); an explicit
-// kind that disagrees with a reserved/contract name fails without writing.
+// extension); kind=image is always rejected (use artifact-upload →
+// upload_image_artifact); an explicit kind that disagrees with a
+// reserved/contract name fails without writing.
 func (h *Host) WriteArtifact(runID, token, nodeID, name, content, kind string) (string, error) {
 	if !h.authorize(runID, token) {
 		return "", ErrUnauthorized
@@ -450,6 +451,37 @@ func (h *Host) WriteArtifact(runID, token, nodeID, name, content, kind string) (
 	h.mu.RUnlock()
 	if hook != nil {
 		hook(runID, nodeID, name, content, kind)
+	}
+	return id, nil
+}
+
+// UploadImageArtifact persists a base64-encoded image under the run namespace.
+// It bypasses write_artifact's kind=image rejection and is intended for the
+// sandbox artifact-upload CLI (tools/call upload_image_artifact), not agents.
+func (h *Host) UploadImageArtifact(runID, token, nodeID, name, content string) (string, error) {
+	if !h.authorize(runID, token) {
+		return "", ErrUnauthorized
+	}
+	name = strings.TrimSpace(name)
+	content = strings.TrimSpace(content)
+	if err := ValidateImageArtifactUpload(name); err != nil {
+		return "", err
+	}
+	if content == "" {
+		return "", fmt.Errorf("upload_image_artifact: content 不能为空")
+	}
+	if strings.TrimSpace(nodeID) == "" {
+		nodeID = "artifact-upload"
+	}
+	id, err := h.store.Save(runID, nodeID, name, "image", content)
+	if err != nil {
+		return "", err
+	}
+	h.mu.RLock()
+	hook := h.afterWrite
+	h.mu.RUnlock()
+	if hook != nil {
+		hook(runID, nodeID, name, content, "image")
 	}
 	return id, nil
 }

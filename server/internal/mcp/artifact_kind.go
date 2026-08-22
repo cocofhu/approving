@@ -99,3 +99,19 @@ func ResolveWriteArtifactKind(name, kind string) (string, error) {
 
 	return kind, nil
 }
+
+// ValidateImageArtifactUpload rejects names that must never be stored as
+// kind=image via the CLI-only upload channel (reserved contract names).
+func ValidateImageArtifactUpload(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("产物名不能为空")
+	}
+	if exp, ok := ExpectedKindForReservedName(name); ok {
+		return fmt.Errorf(
+			"产物 %q 为平台保留名(期望 kind=%q),不能作为截图上传;请使用自动生成的截图文件名",
+			name, exp,
+		)
+	}
+	return nil
+}
