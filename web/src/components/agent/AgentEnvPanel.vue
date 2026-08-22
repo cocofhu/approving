@@ -8,7 +8,7 @@ import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import EnvCredentialHelpModal, {
   type EnvCredentialHelpSection,
 } from '@/components/agent/EnvCredentialHelpModal.vue'
-import { BACKEND_AUTH_HINTS } from '@/lib/agent/backendAuthGuide'
+import { BACKEND_AUTH_HINTS, settingsFileAbsPath } from '@/lib/agent/backendAuthGuide'
 import {
   getRegionPolicy,
   isManagedRegionKey,
@@ -21,7 +21,7 @@ import {
 } from '@/lib/agent/agentStudioDraft'
 
 const props = defineProps<{ draft: AgentStudioDraft }>()
-const emit = defineEmits<{ toast: [msg: string] }>()
+const emit = defineEmits<{ toast: [msg: string]; 'open-settings-file': [] }>()
 
 const { t } = useI18n()
 
@@ -32,6 +32,7 @@ const envHelpOpen = ref(false)
 const envHelpSection = ref<EnvCredentialHelpSection>('inject')
 
 const currentAuthHint = computed(() => BACKEND_AUTH_HINTS[props.draft.acpBackend || 'cursor'])
+const settingsPath = computed(() => settingsFileAbsPath(props.draft.layout?.configRoot || ''))
 const currentRegionPolicy = computed(() => getRegionPolicy(props.draft.acpBackend))
 
 function openEnvHelp(section: EnvCredentialHelpSection) {
@@ -112,6 +113,20 @@ watch(
       <div class="min-h-0 flex-1"><CodeEditor :model-value="envRawText" language="json" @update:model-value="onEnvRaw" /></div>
     </div>
     <div v-else class="scroll-area flex-1 space-y-2 overflow-y-auto p-4">
+      <div
+        class="callout mb-3 border border-dashed border-accent/45 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-6 text-txt2"
+        data-test="env-custom-config-callout"
+      >
+        {{ t('pages.agentStudio.env.customConfigCallout', { path: settingsPath }) }}
+        <button
+          type="button"
+          class="ml-1 bg-transparent p-0 text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd]"
+          data-test="env-open-settings-file"
+          @click="emit('open-settings-file')"
+        >
+          {{ t('pages.agentStudio.env.openSettingsFile') }}
+        </button>
+      </div>
       <AgentGitGuide
         :env="draft.env"
         :upsert-env="upsertEnv"

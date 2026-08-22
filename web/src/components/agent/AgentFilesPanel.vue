@@ -57,6 +57,7 @@ const {
   rows,
   openFile,
   openPath,
+  openPathOrCreate,
   selectDefaultFile,
   resetForSelect,
   snapshot,
@@ -92,6 +93,7 @@ const {
 
 defineExpose({
   filesStep, resetForSelect, snapshot, restoreAfterDiscard, closeExplorerMore, selectDefaultFile,
+  openPath, openPathOrCreate,
 })
 </script>
 

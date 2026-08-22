@@ -1,7 +1,12 @@
 import type { Agent, AgentFile, AgentPrompts, MCPServer } from '@/lib/api/api'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { validateAgentName, normalizeAgentName } from '@/lib/agent/agentIO'
-import { hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
+import {
+  AGENT_SETTINGS_REL_PATH,
+  authGuideFor,
+  BACKEND_AUTH_HINTS,
+  hasAuthKeyConfigured,
+} from '@/lib/agent/backendAuthGuide'
 import {
   ACP_BACKENDS,
   isManagedRegionKey,
@@ -47,11 +52,17 @@ export type WizardPrompts = Record<WizardPromptKey, string>
 
 export type WizardSkipped = Partial<Record<WizardStepId, boolean>>
 
+export type WizardAuthMode = 'apiKey' | 'customConfig'
+
+export const AGENT_SETTINGS_PATH = AGENT_SETTINGS_REL_PATH
+
 export type WizardDraft = {
   step: number
   name: string
   description: string
   acpBackend: WizardBackendId
+  authMode: WizardAuthMode
+  customConfigContent: string
   gitCredentialType?: GitCredentialType
   configRoot: string
   env: WizardKV[]
@@ -114,6 +125,8 @@ export function freshDraft(): WizardDraft {
     name: '',
     description: '',
     acpBackend: 'cursor',
+    authMode: 'apiKey',
+    customConfigContent: '',
     gitCredentialType: undefined,
     configRoot: DEFAULT_CONFIG_ROOT,
     env: [],
@@ -214,6 +227,39 @@ function draftPromptsToApi(p: WizardPrompts, skipped: boolean): AgentPrompts | u
   return any ? out : undefined
 }
 
+export function parseCustomConfigJson(
+  raw: string,
+): { ok: true; normalized: string } | { ok: false } {
+  const trimmed = raw.trim()
+  if (!trimmed) return { ok: true, normalized: '' }
+  try {
+    JSON.parse(trimmed)
+    return { ok: true, normalized: trimmed }
+  } catch {
+    return { ok: false }
+  }
+}
+
+export function hasCustomConfigWritten(draft: WizardDraft): boolean {
+  if (draft.authMode !== 'customConfig') return false
+  const parsed = parseCustomConfigJson(draft.customConfigContent)
+  return parsed.ok && parsed.normalized !== ''
+}
+
+export function stripAuthKeysFromEnv(env: WizardKV[], backend: WizardBackendId): WizardKV[] {
+  const guide = authGuideFor(backend)
+  const keys = new Set<string>()
+  for (const spec of guide.keys) {
+    keys.add(spec.key)
+    if (spec.alt) keys.add(spec.alt)
+  }
+  const hint = BACKEND_AUTH_HINTS[backend]
+  keys.add(hint.key)
+  if (hint.alt) keys.add(hint.alt)
+  if (backend === 'trae') keys.add('TRAE_API_KEY')
+  return env.filter((e) => !keys.has(e.k.trim()))
+}
+
 function collectFiles(draft: WizardDraft): AgentFile[] {
   const files: AgentFile[] = []
   const name = draft.name.trim() || 'agent'
@@ -239,6 +285,12 @@ function collectFiles(draft: WizardDraft): AgentFile[] {
       content: c.content || defaultCommandTemplate(slug),
     })
   }
+  if (draft.authMode === 'customConfig') {
+    const parsed = parseCustomConfigJson(draft.customConfigContent)
+    if (parsed.ok && parsed.normalized) {
+      files.push({ path: AGENT_SETTINGS_PATH, content: parsed.normalized })
+    }
+  }
   return files
 }
 
@@ -246,7 +298,14 @@ function collectFiles(draft: WizardDraft): AgentFile[] {
 export function assembleCreatePayload(draft: WizardDraft): Agent {
   const name = normalizeAgentName(draft.name)
   const prompts = draftPromptsToApi(draft.prompts, !!draft.skipped.prompts)
-  const env = normalizeWizardRegions(draft)
+  const envDraft: WizardDraft = {
+    ...draft,
+    env:
+      draft.authMode === 'customConfig'
+        ? stripAuthKeysFromEnv(draft.env, draft.acpBackend)
+        : draft.env,
+  }
+  const env = normalizeWizardRegions(envDraft)
   return {
     name,
     acpBackend: draft.acpBackend || 'cursor',
@@ -298,7 +357,10 @@ export function buildReviewSummary(draft: WizardDraft): ReviewSummaryItem[] {
   const region = regionSummary(normalizedEnv, draft.acpBackend, 'strict')
   const name = draft.name.trim() || '—'
   const gitN = envConfiguredCount(draft, true)
-  const authConfigured = hasAuthKeyConfigured(draft.env, draft.acpBackend)
+  const authViaKey =
+    draft.authMode === 'apiKey' && hasAuthKeyConfigured(draft.env, draft.acpBackend)
+  const authViaConfig = hasCustomConfigWritten(draft)
+  const authConfigured = authViaKey || authViaConfig
   const apiKeySkipped = !!draft.skipped.apiKey || !authConfigured
 
   const items: ReviewSummaryItem[] = [
@@ -322,9 +384,11 @@ export function buildReviewSummary(draft: WizardDraft): ReviewSummaryItem[] {
     {
       key: 'apiKey',
       kind: authConfigured ? 'ok' : 'empty',
-      labelKey: authConfigured
-        ? 'pages.agentStudio.wizard.review.apiKeyConfigured'
-        : 'pages.agentStudio.wizard.review.apiKeySkipped',
+      labelKey: authViaConfig
+        ? 'pages.agentStudio.wizard.review.customConfigWritten'
+        : authViaKey
+          ? 'pages.agentStudio.wizard.review.apiKeyConfigured'
+          : 'pages.agentStudio.wizard.review.apiKeySkipped',
     },
     {
       key: 'git',

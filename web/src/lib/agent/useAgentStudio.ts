@@ -16,6 +16,7 @@ import {
   shouldSyncDraftAfterAssign, isAgentInGroupSubtree, UNGROUPED_ID,
 } from '@/lib/agent/agentOrg'
 import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agent/agentIO'
+import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
 import { useAgentImport } from '@/lib/agent/useAgentImport'
 import { isManagedRegionKey } from '@/lib/shared/regionPolicy'
 import {
@@ -690,6 +691,15 @@ function showToast(msg: string) {
   toastTimer = setTimeout(() => {
     toastMsg.value = ''
   }, 2800)
+}
+
+function openSettingsInFiles() {
+  if (!draft.value) return
+  tab.value = 'files'
+  syncStudioQuery()
+  nextTick(() => {
+    filesPanelRef.value?.openPathOrCreate?.(AGENT_SETTINGS_PATH)
+  })
 }
 
 function discardUnsavedChanges() {
@@ -1437,6 +1447,7 @@ onBeforeUnmount(() => {
   studioTabs,
   studioTabLabel,
   showToast,
+  openSettingsInFiles,
   discardUnsavedChanges,
   requestStudioTab,
   onDataSubTab,

@@ -10,7 +10,10 @@ import {
   type WizardDraft,
   type WizardKV,
   type WizardMCP,
+  type WizardAuthMode,
   freshDraft,
+  parseCustomConfigJson,
+  stripAuthKeysFromEnv,
 } from '@/lib/agent/agentCreateWizard'
 import { normalizeAgentName, validateAgentName } from '@/lib/agent/agentIO'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
@@ -50,6 +53,8 @@ export type TeamWizardDraft = {
   pipelineTouched: boolean
   pmTouched: boolean
   acpBackend: WizardBackendId
+  authMode: WizardAuthMode
+  customConfigContent: string
   gitCredentialType?: GitCredentialType
   gitUrl: string
   configRoot: string
@@ -84,6 +89,8 @@ export function freshTeamDraft(): TeamWizardDraft {
     pipelineTouched: false,
     pmTouched: false,
     acpBackend: 'cursor',
+    authMode: 'apiKey',
+    customConfigContent: '',
     gitCredentialType: undefined,
     gitUrl: '',
     configRoot: configRootFor('cursor'),
@@ -116,6 +123,8 @@ function teamDraftAsWizardDraft(d: TeamWizardDraft): WizardDraft {
   const base = freshDraft()
   base.acpBackend = d.acpBackend
   base.configRoot = d.configRoot
+  base.authMode = d.authMode
+  base.customConfigContent = d.customConfigContent
   base.env = d.env.map((e) => ({ ...e }))
   base.gitCredentialType = d.gitCredentialType
   base.mcp = d.mcp.map((m) => ({
@@ -162,6 +171,7 @@ export type TeamBootstrapPayload = {
   background: string
   acpBackend: string
   apiKey?: string
+  customConfig?: string
   region?: string
   gitUrl?: string
   gitCredentialType?: string
@@ -171,6 +181,9 @@ export type TeamBootstrapPayload = {
 
 export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapPayload {
   const w = teamDraftAsWizardDraft(d)
+  if (w.authMode === 'customConfig') {
+    w.env = stripAuthKeysFromEnv(w.env, w.acpBackend)
+  }
   const env = normalizeWizardRegions(w)
   d.env = w.env
   const policy = getRegionPolicy(d.acpBackend)
@@ -179,7 +192,13 @@ export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapP
     : undefined
   const guide = authGuideFor(d.acpBackend, region || '')
   const primaryKey = guide.keys[0]?.key || ''
-  const apiKey = primaryKey ? env[primaryKey]?.trim() || undefined : undefined
+  const customParsed = parseCustomConfigJson(d.customConfigContent)
+  const customConfig =
+    d.authMode === 'customConfig' && customParsed.ok && customParsed.normalized
+      ? customParsed.normalized
+      : undefined
+  const apiKey =
+    !customConfig && primaryKey ? env[primaryKey]?.trim() || undefined : undefined
   return {
     projectName: d.projectName.trim(),
     prefix: d.prefix.trim(),
@@ -189,6 +208,7 @@ export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapP
     background: d.background.trim(),
     acpBackend: d.acpBackend || 'cursor',
     ...(apiKey ? { apiKey } : {}),
+    ...(customConfig ? { customConfig } : {}),
     ...(region ? { region } : {}),
     ...(d.gitUrl.trim() ? { gitUrl: d.gitUrl.trim() } : {}),
     ...(d.gitCredentialType ? { gitCredentialType: d.gitCredentialType } : {}),
@@ -198,6 +218,10 @@ export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapP
 }
 
 export function teamHasAuth(d: TeamWizardDraft): boolean {
+  if (d.authMode === 'customConfig') {
+    const parsed = parseCustomConfigJson(d.customConfigContent)
+    return parsed.ok && parsed.normalized !== ''
+  }
   return hasAuthKeyConfigured(d.env, d.acpBackend)
 }
 

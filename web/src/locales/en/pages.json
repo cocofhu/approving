@@ -1750,7 +1750,9 @@
         "regionCn": "China (trae.cn)",
         "regionIntl": "International (trae.ai)",
         "add": "Add env var",
-        "parseError": "Invalid env JSON:"
+        "parseError": "Invalid env JSON:",
+        "customConfigCallout": "Besides Env keys, auth / params can go in the backend config file: {path}.",
+        "openSettingsFile": "Open in Files"
       },
       "mcpHelp": {
         "link": "Help",
@@ -2155,8 +2157,13 @@
           "remapBody": "MCP / Skills / Commands / Rules may depend on the current paths. Switching remaps to the new configRoot; cancel keeps the current Backend."
         },
         "apiKey": {
-          "meta": "Configure the auth key for the current Backend. Skip and finish later in Studio Env.",
-          "backendBanner": "Current Backend: {backend}. Only keys for this backend are shown.",
+          "meta": "Configure auth for the current Backend; skip and finish later in Studio Env or config files.",
+          "modeGroup": "Auth method",
+          "modeApiKey": "Paste API Key",
+          "modeApiKeyHint": "Written to Env — same as production",
+          "modeCustomConfig": "Custom config",
+          "modeCustomConfigHint": "Edit settings.json; written to Agent files on create",
+          "backendBanner": "Current Backend: {backend}.",
           "alias": "Alias (either works)",
           "inputLabel": "Paste API Key",
           "inputPlaceholder": "sk-… / token… (optional; you can skip)",
@@ -2198,6 +2205,18 @@
             "codebuddyIoa": "Apply key (iOA)",
             "codebuddyStaging": "Apply key (Staging)",
             "traeTokenDocs": "Trae CLI login-token docs"
+          },
+          "customConfig": {
+            "cardTitle": "Backend config file",
+            "targetPath": "Target path ·",
+            "agentFiles": "relative Agent files:",
+            "editorHint": "Written to Agent files on create; copied to configRoot at runtime. Empty content can be skipped.",
+            "invalidJson": "Invalid JSON — fix before continuing.",
+            "notes": {
+              "claude": "Use settings.json env fields for auth instead of pasting a key here.",
+              "codebuddy": "CodeBuddy can use settings.json for env; platform staging fields merge with your content.",
+              "generic": "File is still written under configRoot; whether the CLI consumes it depends on the backend. Prefer Env keys; custom config is an advanced path."
+            }
           }
         },
         "git": {
@@ -2232,6 +2251,7 @@
           "acp": "Agent",
           "apiKeyConfigured": "API Key · configured",
           "apiKeySkipped": "API Key · not set",
+          "customConfigWritten": "Custom config · written",
           "authReminder": "Auth reminder",
           "authReminderDetail": "Auth is required before runs; you can complete it in Studio Env. This reminder does not block create.",
           "git": "Git",
