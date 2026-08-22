@@ -131,15 +131,29 @@ func authSpecFor(b AcpBackend) authSpec {
 // MergeAuthEnv maps agent-configured API keys into CLI env names and applies
 // CodeBuddy / Trae region (intl vs CN) normalization.
 func MergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string, error) {
-	return mergeAuthEnv(backend, env)
+	return mergeAuthEnv(backend, env, true)
+}
+
+// SettingsFileExists reports whether settings.json is present at the root of the
+// Agent workspace. Dialog-test auth gate treats file presence as sufficient; content
+// is not validated or rewritten by the gate.
+func SettingsFileExists(workDirSrc string) bool {
+	if workDirSrc == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(workDirSrc, "settings.json"))
+	return err == nil
 }
 
 // PrepareAuthEnv merges auth keys from Agent workspace settings.json.env into env
 // (explicit env wins, including empty overrides), then normalizes via mergeAuthEnv.
+// When settings.json exists in the workspace, the auth gate passes without requiring
+// Env keys; content is left to the backend/CLI.
 func PrepareAuthEnv(backend AcpBackend, env map[string]string, workDirSrc string) (map[string]string, error) {
 	settingsAuth := ReadSettingsAuthEnv(workDirSrc, backend)
 	merged := mergeSettingsAuthIntoEnv(env, settingsAuth)
-	return mergeAuthEnv(backend, merged)
+	requireAuth := !SettingsFileExists(workDirSrc)
+	return mergeAuthEnv(backend, merged, requireAuth)
 }
 
 // ReadSettingsAuthEnv reads backend-relevant auth keys from settings.json under
@@ -214,8 +228,9 @@ func mergeSettingsAuthIntoEnv(env, settingsAuth map[string]string) map[string]st
 	return out
 }
 
-// by the sandbox bridge. Returns an error when no key is configured.
-func mergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string, error) {
+// by the sandbox bridge. When requireAuth is false (workspace settings.json
+// exists), missing keys do not error; region normalization still applies.
+func mergeAuthEnv(backend AcpBackend, env map[string]string, requireAuth bool) (map[string]string, error) {
 	spec := authSpecFor(backend)
 	out := map[string]string{}
 	for k, v := range env {
@@ -234,10 +249,14 @@ func mergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string,
 		}
 	}
 	if val == "" {
-		return out, fmt.Errorf(
-			"鉴权未配置:请在项目沙箱 env、Agent 环境变量或 settings.json 的 env 中设置 %s",
-			strings.Join(spec.agentKeys, " 或 "),
-		)
+		if requireAuth {
+			return out, fmt.Errorf(
+				"鉴权未配置:请在 Agent 工作目录添加 settings.json，或在项目沙箱 env、Agent 环境变量中设置 %s",
+				strings.Join(spec.agentKeys, " 或 "),
+			)
+		}
+		mergeRegionEnv(backend, out)
+		return out, nil
 	}
 	out[spec.cliKey] = val
 	mergeRegionEnv(backend, out)

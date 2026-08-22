@@ -458,15 +458,21 @@ func TestPrepareAuthEnv_NeitherConfigured(t *testing.T) {
 	if !strings.Contains(err.Error(), "settings.json") {
 		t.Fatalf("error should mention settings.json: %v", err)
 	}
+	if !strings.Contains(err.Error(), "APPROVING_CLAUDE_API_KEY") {
+		t.Fatalf("error should mention env keys: %v", err)
+	}
 }
 
 func TestPrepareAuthEnv_InvalidSettingsJSON(t *testing.T) {
 	workDir := t.TempDir()
 	writeSettingsJSON(workDir, `{bad json`)
 
-	_, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, workDir)
-	if err == nil {
-		t.Fatal("invalid settings.json must not falsely pass auth")
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, workDir)
+	if err != nil {
+		t.Fatalf("invalid settings.json must pass gate when file exists: %v", err)
+	}
+	if out == nil {
+		t.Fatal("expected env map")
 	}
 }
 
@@ -489,11 +495,14 @@ func TestPrepareAuthEnv_EmptyEnvOverridesSettings(t *testing.T) {
 	workDir := t.TempDir()
 	writeSettingsJSON(workDir, `{"env":{"CURSOR_API_KEY":"from-settings"}}`)
 
-	_, err := PrepareAuthEnv(BackendCursor, map[string]string{
+	out, err := PrepareAuthEnv(BackendCursor, map[string]string{
 		"CURSOR_API_KEY": "",
 	}, workDir)
-	if err == nil {
-		t.Fatal("empty explicit env must block settings fallback")
+	if err != nil {
+		t.Fatalf("settings.json present must skip env gate: %v", err)
+	}
+	if out["CURSOR_API_KEY"] != "" {
+		t.Fatalf("empty explicit env should remain: got %q", out["CURSOR_API_KEY"])
 	}
 }
 
@@ -530,5 +539,58 @@ func TestReadSettingsAuthEnv_EmptyKeyIgnored(t *testing.T) {
 	got := ReadSettingsAuthEnv(workDir, BackendClaudeCode)
 	if got != nil {
 		t.Fatalf("empty key should be ignored: %v", got)
+	}
+}
+
+func TestSettingsFileExists(t *testing.T) {
+	workDir := t.TempDir()
+	if SettingsFileExists(workDir) {
+		t.Fatal("missing file")
+	}
+	if SettingsFileExists("") {
+		t.Fatal("empty dir")
+	}
+	writeSettingsJSON(workDir, `{}`)
+	if !SettingsFileExists(workDir) {
+		t.Fatal("file should exist")
+	}
+}
+
+func TestPrepareAuthEnv_SettingsFileExistsNoEnvNoKeys(t *testing.T) {
+	workDir := t.TempDir()
+	writeSettingsJSON(workDir, `{"model":"claude-sonnet"}`)
+
+	before, err := os.ReadFile(filepath.Join(workDir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, workDir)
+	if err != nil {
+		t.Fatalf("file exists gate must pass: %v", err)
+	}
+	if out == nil {
+		t.Fatal("expected env map")
+	}
+
+	after, err := os.ReadFile(filepath.Join(workDir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("settings.json must not be modified:\nbefore=%s\nafter=%s", before, after)
+	}
+}
+
+func TestPrepareAuthEnv_NoSettingsEnvConfigured(t *testing.T) {
+	workDir := t.TempDir()
+	out, err := PrepareAuthEnv(BackendCursor, map[string]string{
+		"CURSOR_API_KEY": "crsr-env",
+	}, workDir)
+	if err != nil {
+		t.Fatalf("PrepareAuthEnv: %v", err)
+	}
+	if out["CURSOR_API_KEY"] != "crsr-env" {
+		t.Fatalf("CURSOR_API_KEY=%q", out["CURSOR_API_KEY"])
 	}
 }
