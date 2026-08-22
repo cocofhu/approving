@@ -85,6 +85,15 @@ body {
   border-radius: 0 !important;
 }
 
+/*
+ * Explicit circular exceptions for confirmed sidebar After preview
+ * (avatar + unread badge). Must beat the universal 0 !important reset
+ * via higher specificity (.force-radius-full > *).
+ */
+.force-radius-full {
+  border-radius: 9999px !important;
+}
+
 /* ghost scrollbar — idle-invisible (align AppModal / approved page.html) */
 * {
   scrollbar-width: thin;
