@@ -25,6 +25,7 @@
       "useBreakpoint.ts",
       "useChatImagePreview.ts",
       "useDelayedBusy.ts",
+      "useFixedOverlayAbove.ts",
       "useImageAttachments.ts",
       "useNotificationsPageEntry.ts",
       "usePipelineFilter.ts",
@@ -166,7 +167,7 @@
   "totals": {
     "agent": 12,
     "api": 3,
-    "composables": 15,
+    "composables": 16,
     "inbox": 20,
     "pm": 6,
     "project": 4,
