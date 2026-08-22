@@ -26,7 +26,7 @@ function mountChat(opts: {
   confirmError?: string | null
   annotateEnabled?: boolean
   annotations?: ReactAnnotation[]
-  attachments?: { data: string; mimeType: string }[]
+  attachments?: { data: string; mimeType: string; name?: string }[]
   seedHumanText?: string
   seedHumanImages?: { data: string; mimeType: string; name?: string }[]
   hideFinish?: boolean
