@@ -57,7 +57,8 @@ describe('WizardApiKeyStepPanel custom config editor', () => {
     expect((editor.element as HTMLTextAreaElement).value).toContain('"env"')
 
     await editor.setValue('{\n  "ok": true\n}')
-    expect(wrapper.emitted('update:customConfigContent')?.at(-1)).toEqual(['{\n  "ok": true\n}'])
+    const emitted = wrapper.emitted('update:customConfigContent')
+    expect(emitted?.[emitted.length - 1]).toEqual(['{\n  "ok": true\n}'])
     wrapper.unmount()
   })
 
