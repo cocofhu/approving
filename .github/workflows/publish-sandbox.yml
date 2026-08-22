@@ -48,3 +48,9 @@ jobs:
             USE_CN_MIRROR=false
           cache-from: type=gha,scope=sandbox-image-${{ matrix.provider }}
           cache-to: type=gha,mode=max,scope=sandbox-image-${{ matrix.provider }}
+      - name: Verify artifact-upload in sandbox image
+        run: |
+          docker run --rm --entrypoint bash universal-sandbox-${{ matrix.provider }}:ci -lc \
+            'grep -q upload_image_artifact /usr/local/bin/artifact-upload && \
+             grep -q upload_image_artifact /usr/local/share/approving/artifact-upload && \
+             ! grep -q "\"name\": \"write_artifact\"" /usr/local/bin/artifact-upload'

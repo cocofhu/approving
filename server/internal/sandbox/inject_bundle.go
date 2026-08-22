@@ -132,6 +132,42 @@ func randomHex(nBytes int) string {
 	return hex.EncodeToString(b)
 }
 
+// PackNamedFileTarGz builds a .tar.gz containing a single named file at the tar
+// root (used to bootstrap artifact-upload into sandboxes before git clone).
+func PackNamedFileTarGz(name string, content []byte) ([]byte, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("tar entry name required")
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	hdr := &tar.Header{
+		Name:    filepath.ToSlash(name),
+		Mode:    0755,
+		Size:    int64(len(content)),
+		ModTime: time.Now(),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		_ = tw.Close()
+		_ = gz.Close()
+		return nil, err
+	}
+	if _, err := tw.Write(content); err != nil {
+		_ = tw.Close()
+		_ = gz.Close()
+		return nil, err
+	}
+	if err := tw.Close(); err != nil {
+		_ = gz.Close()
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 // PackConfigHomeTarGz builds a .tar.gz of hostDir for SANDBOX_INJECT / bundleUrl.
 func PackConfigHomeTarGz(hostDir string) ([]byte, error) {
 	info, err := os.Stat(hostDir)

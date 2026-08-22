@@ -48,6 +48,37 @@ func TestPackConfigHomeTarGz(t *testing.T) {
 	}
 }
 
+func TestPackNamedFileTarGz(t *testing.T) {
+	t.Parallel()
+	data, err := PackNamedFileTarGz("artifact-upload", []byte("upload_image_artifact\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	hdr, err := tr.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hdr.Name != "artifact-upload" {
+		t.Fatalf("tar name = %q", hdr.Name)
+	}
+	raw, err := io.ReadAll(tr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "upload_image_artifact\n" {
+		t.Fatalf("content = %q", string(raw))
+	}
+	if _, err := tr.Next(); err != io.EOF {
+		t.Fatalf("expected single tar entry, got %v", err)
+	}
+}
+
 func TestBundleStoreAuth(t *testing.T) {
 	s := NewBundleStore()
 	id, token := s.Put([]byte("hello-tgz"), DefaultInjectBundleTTL)
@@ -131,6 +162,61 @@ func TestManagerCreateUsesBundleURLInject(t *testing.T) {
 		t.Fatalf("hostPath must be empty for remote inject, got %v", cfg["hostPath"])
 	}
 	hdr, _ := cfg["headers"].(string)
+	if !strings.HasPrefix(hdr, "Authorization: Bearer ") {
+		t.Fatalf("headers=%q", hdr)
+	}
+}
+
+func TestBootstrapArtifactUploadEnv(t *testing.T) {
+	t.Parallel()
+	store := NewBundleStore()
+	m := NewManager(nil, ManagerOptions{
+		InstallHelpers:  true,
+		InjectStore:     store,
+		InjectAdvertise: "https://api.example.com",
+	})
+	env := map[string]string{}
+	m.bootstrapArtifactUploadEnv(env)
+	url := env["APPROVING_ARTIFACT_UPLOAD_URL"]
+	if url == "" {
+		t.Fatal("missing APPROVING_ARTIFACT_UPLOAD_URL")
+	}
+	if env["APPROVING_ARTIFACT_UPLOAD_HEADERS"] == "" {
+		t.Fatal("missing APPROVING_ARTIFACT_UPLOAD_HEADERS")
+	}
+	if !strings.Contains(url, "/sandbox-inject/") {
+		t.Fatalf("url = %q", url)
+	}
+}
+
+func TestManagerCreateSetsArtifactUploadBootstrapEnv(t *testing.T) {
+	prev := config.GetConfig()
+	t.Cleanup(func() { config.StoreConfig(prev) })
+	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: "http://api.example.com"}})
+
+	gw, fg := newInlineGW(t)
+	store := NewBundleStore()
+	m := NewManager(gw, ManagerOptions{
+		Image:           "img:test",
+		WorkspaceDir:    "/root/workspace",
+		InstallHelpers:  true,
+		InjectStore:     store,
+		InjectAdvertise: "http://api.example.com",
+	})
+
+	_, err := m.Create(context.Background(), Spec{Name: "approving-sb-bootstrap"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	env, _ := fg.lastCreate["env"].(map[string]any)
+	if env == nil {
+		t.Fatalf("create missing env: %+v", fg.lastCreate)
+	}
+	url, _ := env["APPROVING_ARTIFACT_UPLOAD_URL"].(string)
+	if !strings.HasPrefix(url, "http://api.example.com/sandbox-inject/") {
+		t.Fatalf("APPROVING_ARTIFACT_UPLOAD_URL=%q", url)
+	}
+	hdr, _ := env["APPROVING_ARTIFACT_UPLOAD_HEADERS"].(string)
 	if !strings.HasPrefix(hdr, "Authorization: Bearer ") {
 		t.Fatalf("headers=%q", hdr)
 	}

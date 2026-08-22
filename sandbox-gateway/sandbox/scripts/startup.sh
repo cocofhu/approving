@@ -88,11 +88,51 @@ heal_stale_artifact_upload_cli() {
     unset _healed _inst _src
 }
 
+# Pre-start bootstrap from control plane (before git clone). Old sandbox images
+# may ship write_artifact CLI; current server publishes a short-lived bundle URL.
+bootstrap_artifact_upload_from_control_plane() {
+    if [ -z "${APPROVING_ARTIFACT_UPLOAD_URL:-}" ]; then
+        return 0
+    fi
+    if [ -f /usr/local/bin/artifact-upload ] && grep -q upload_image_artifact /usr/local/bin/artifact-upload 2>/dev/null; then
+        return 0
+    fi
+    local _tmp _cfg="" _extract=""
+    _tmp="$(mktemp)"
+    echo "startup.sh: fetching artifact-upload from control plane bootstrap"
+    if [ -n "${APPROVING_ARTIFACT_UPLOAD_HEADERS:-}" ]; then
+        _cfg="$(mktemp)"; chmod 600 "$_cfg"
+        while IFS= read -r _h; do
+            [ -n "$_h" ] || continue
+            printf 'header = "%s"\n' "$_h" >> "$_cfg"
+        done <<< "${APPROVING_ARTIFACT_UPLOAD_HEADERS}"
+    fi
+    if ! curl -fsSL ${_cfg:+-K "$_cfg"} "${APPROVING_ARTIFACT_UPLOAD_URL}" -o "$_tmp"; then
+        echo "startup.sh: artifact-upload bootstrap download failed" >&2
+        [ -n "$_cfg" ] && rm -f "$_cfg"
+        rm -f "$_tmp"
+        return 0
+    fi
+    [ -n "$_cfg" ] && rm -f "$_cfg"
+    _extract="$(mktemp -d)"
+    if tar -xzf "$_tmp" -C "$_extract" 2>/dev/null && [ -f "$_extract/artifact-upload" ]; then
+        mkdir -p /usr/local/share/approving
+        install -m 755 "$_extract/artifact-upload" /usr/local/share/approving/artifact-upload
+        install -m 755 "$_extract/artifact-upload" /usr/local/bin/artifact-upload
+        echo "startup.sh: installed artifact-upload from control plane bootstrap"
+    else
+        echo "startup.sh: artifact-upload bootstrap extract failed" >&2
+    fi
+    rm -rf "$_extract" "$_tmp"
+    unset _tmp _cfg _extract _h
+}
+
 # 默认工作目录 / code-server 端口
 WORKSPACE_DIR=${WORKSPACE_DIR:-/root/workspace}
 CODE_SERVER_PORT=${CODE_SERVER_PORT:-8744}
 
-# 在 git clone 前自愈 artifact-upload（镜像内置副本或已持久化的 workspace）。
+# 在 git clone 前自愈 artifact-upload（控制面 bootstrap、镜像内置副本或 workspace）。
+bootstrap_artifact_upload_from_control_plane
 heal_stale_artifact_upload_cli
 
 # 提前解析 agent provider 与配置根：契约注入（默认落到 CONFIG_ROOT）与 backend 都要用。

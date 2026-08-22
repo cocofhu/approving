@@ -7,11 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cocofhu/approving/internal/config"
 	"github.com/rs/zerolog/log"
 )
 
 // artifactUploadPath is where the helper CLI is seeded inside each sandbox.
 const artifactUploadPath = "/usr/local/bin/artifact-upload"
+
+// artifactUploadSharePath is the image/canonical copy used by startup.sh heal.
+const artifactUploadSharePath = "/usr/local/share/approving/artifact-upload"
 
 // mcpSpaProxyPath is an optional local reverse-proxy helper retained for
 // deployments that map a front-door host to the API ingress. The public map is
@@ -61,6 +65,9 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 	}
 	embeddedUploadChannel := strings.Contains(artifactUploadScript, "upload_image_artifact")
 	if embeddedUploadChannel {
+		if err := seedExecutable(ctx, creds, artifactUploadSharePath, artifactUploadScript); err != nil {
+			log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: install artifact-upload share copy failed")
+		}
 		if err := seedExecutable(ctx, creds, artifactUploadPath, artifactUploadScript); err != nil {
 			log.Warn().Str("id", sb.ID).Err(err).Msg("seed helpers: install artifact-upload failed")
 			return
@@ -92,6 +99,32 @@ func (m *Manager) seedHelpers(ctx context.Context, sb *Sandbox) {
 		}
 	}
 	log.Debug().Str("id", sb.ID).Msg("seeded artifact-upload CLI")
+}
+
+// bootstrapArtifactUploadEnv registers a short-lived download URL so startup.sh
+// can install the current artifact-upload before git clone (old sandbox images).
+func (m *Manager) bootstrapArtifactUploadEnv(env map[string]string) {
+	if m == nil || !m.installHelpers || m.bundles == nil || env == nil {
+		return
+	}
+	if !strings.Contains(artifactUploadScript, "upload_image_artifact") {
+		return
+	}
+	data, err := PackNamedFileTarGz("artifact-upload", []byte(artifactUploadScript))
+	if err != nil {
+		log.Warn().Err(err).Msg("pack artifact-upload bootstrap bundle failed")
+		return
+	}
+	id, token := m.bundles.Put(data, DefaultInjectBundleTTL)
+	if id == "" || token == "" {
+		return
+	}
+	base := strings.TrimRight(config.ResolveMCPAdvertise(m.injectAdvertiseFallback), "/")
+	if base == "" {
+		return
+	}
+	env["APPROVING_ARTIFACT_UPLOAD_URL"] = base + "/sandbox-inject/" + id + ".tgz"
+	env["APPROVING_ARTIFACT_UPLOAD_HEADERS"] = "Authorization: Bearer " + token
 }
 
 func seedExecutable(ctx context.Context, creds sshCreds, path, content string) error {

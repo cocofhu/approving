@@ -342,6 +342,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	if _, ok := env["SKIP_INNER_DOCKER"]; !ok {
 		env["SKIP_INNER_DOCKER"] = "0"
 	}
+	m.bootstrapArtifactUploadEnv(env)
 	// Inject the shared public key so we can reach the sandbox over SSH.
 	if _, authKey, err := sharedSSHKey(); err == nil && authKey != "" {
 		if existing := strings.TrimSpace(env["SSH_KEY"]); existing == "" {
