@@ -67,13 +67,16 @@ var registry = map[Name]provider.Provider{
 	// claude: `-p --output-format stream-json --input-format stream-json`,
 	// prompt fed as a stream-json user envelope on stdin. Autonomous headless
 	// run => bypass permissions; the interactive question tool is disabled.
+	// --strict-mcp-config + streamjson auto --mcp-config: headless -p does not
+	// load ConfigRoot/mcp.json by default (verified claude 2.1.241); without this
+	// pair artifact-store from SANDBOX_INJECT never reaches the tool list.
 	provider.ClaudeCode: streamjson.New(streamjson.Config{
 		AgentName:  provider.ClaudeCode,
 		Bin:        "claude",
 		Runtime:    "claude-stream-json",
 		ConfigRoot: "/root/.claude",
 		PromptMode: streamjson.PromptStdinJSON,
-		BaseArgs:   []string{"--verbose", "--permission-mode", "bypassPermissions", "--disallowedTools", "AskUserQuestion"},
+		BaseArgs:   []string{"--verbose", "--strict-mcp-config", "--permission-mode", "bypassPermissions", "--disallowedTools", "AskUserQuestion"},
 		ResumeFlag: "--resume",
 		ModelFlag:  "--model",
 		AuthEnvFn:  streamjson.ClaudeAuthEnv,
@@ -112,7 +115,7 @@ var registry = map[Name]provider.Provider{
 		Runtime:    "claude-stream-json",
 		ConfigRoot: "/root/.claude",
 		PromptMode: streamjson.PromptStdinJSON,
-		BaseArgs:   []string{"--verbose", "--permission-mode", "bypassPermissions", "--disallowedTools", "AskUserQuestion"},
+		BaseArgs:   []string{"--verbose", "--strict-mcp-config", "--permission-mode", "bypassPermissions", "--disallowedTools", "AskUserQuestion"},
 		ResumeFlag: "--resume",
 		ModelFlag:  "--model",
 		AuthEnvFn:  streamjson.ClaudeAuthEnv,
