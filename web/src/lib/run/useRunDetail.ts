@@ -9,15 +9,12 @@ import { useToast } from '@/lib/composables/useToast'
 import {
   applyOuterSashMem,
   clampOuterRight,
-  isOuterSashTab,
   outerRightMax,
   outerRightMin,
-  outerSashStorageKey,
-  parseOuterSashMem,
+  readSharedOuterSashMem,
   reviewDefaultRightPx,
   reviewRightPanelCssWidth,
-  type OuterSashMem,
-  type OuterSashTab,
+  writeSharedOuterSashMem,
 } from '@/lib/inbox/reviewLayoutBudget'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
@@ -947,13 +944,11 @@ const activePath = computed(() => {
 })
 
 /**
- * Desktop Agent交互 + 复审: outer sash (canvas/timeline vs whole right panel).
- * Other tabs stay locked md:w-[520px] and do not render the outer sash.
+ * Desktop Run Detail: outer sash (canvas/timeline vs whole right panel).
+ * All node content tabs share the same width — no per-tab md:w-[520px] fallback.
  * REVIEW_CANVAS_MIN is default reserve only — drag canvas min is 0.
  */
-const desktopOuterSashLayout = computed(
-  () => !isMobile.value && isOuterSashTab(nodeTab.value),
-)
+const desktopOuterSashLayout = computed(() => !isMobile.value)
 const splitRootRef = ref<HTMLElement | null>(null)
 const workspacePx = ref(0)
 const outerRightPx = ref(0)
@@ -969,36 +964,19 @@ function measureWorkspace(): number {
   return w && w > 0 ? w : 0
 }
 
-function readOuterMem(tab: OuterSashTab): OuterSashMem | null {
-  try {
-    return parseOuterSashMem(localStorage.getItem(outerSashStorageKey(tab)))
-  } catch {
-    return null
-  }
-}
-
-function writeOuterMem(tab: OuterSashTab, mem: OuterSashMem) {
-  try {
-    localStorage.setItem(outerSashStorageKey(tab), JSON.stringify(mem))
-  } catch {
-    /* quota / private mode */
-  }
-}
-
 function applyOuterLayout() {
   if (!desktopOuterSashLayout.value) return
   const ws = measureWorkspace()
   if (ws <= 0) return
   workspacePx.value = ws
-  const tab = nodeTab.value as OuterSashTab
-  const next = applyOuterSashMem(readOuterMem(tab), ws)
+  const next = applyOuterSashMem(readSharedOuterSashMem(), ws)
   outerRightPx.value = next.width
   outerFullOpen.value = next.fullOpen
 }
 
 function persistOuterLayout() {
-  if (!desktopOuterSashLayout.value || !isOuterSashTab(nodeTab.value)) return
-  writeOuterMem(nodeTab.value, {
+  if (!desktopOuterSashLayout.value) return
+  writeSharedOuterSashMem({
     width: outerRightPx.value,
     fullOpen: outerFullOpen.value,
   })
@@ -1090,10 +1068,11 @@ const leftPaneStyle = computed(() => {
   return { minWidth: '0px', overflow: 'hidden' }
 })
 
+// Re-init only when entering/leaving desktop sash — tab switches keep in-memory width.
 watch(
-  () => [desktopOuterSashLayout.value, nodeTab.value] as const,
-  () => {
-    nextTick(() => applyOuterLayout())
+  () => desktopOuterSashLayout.value,
+  (on) => {
+    if (on) nextTick(() => applyOuterLayout())
   },
 )
 
@@ -1297,8 +1276,6 @@ function selectExecution(nodeId: string, idx: number) {
   outerSashDidDrag,
   OUTER_SASH_DRAG_THRESHOLD_PX,
   measureWorkspace,
-  readOuterMem,
-  writeOuterMem,
   applyOuterLayout,
   persistOuterLayout,
   setOuterSashDraggingUi,

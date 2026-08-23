@@ -6,6 +6,7 @@ import {
   OUTER_SASH_WIDTH,
   OUTER_SASH_WIDTH_KEY_CLARIFY,
   OUTER_SASH_WIDTH_KEY_REVIEW,
+  OUTER_SASH_WIDTH_KEY_SHARED,
   OUTER_STAGE_MIN,
   REVIEW_CANVAS_MIN,
   REVIEW_GAP,
@@ -21,8 +22,10 @@ import {
   isOuterSashTab,
   outerRightMax,
   parseOuterSashMem,
+  readSharedOuterSashMem,
   reviewDefaultRightPx,
   reviewRightPanelCssWidth,
+  writeSharedOuterSashMem,
 } from './reviewLayoutBudget'
 
 describe('reviewLayoutBudget constants', () => {
@@ -45,12 +48,40 @@ describe('reviewLayoutBudget constants', () => {
   it('isolates outer sash storage from inner ReviewShell keys', () => {
     expect(OUTER_SASH_WIDTH_KEY_CLARIFY).toBe('run-detail-outer-sash:clarify')
     expect(OUTER_SASH_WIDTH_KEY_REVIEW).toBe('run-detail-outer-sash:review')
+    expect(OUTER_SASH_WIDTH_KEY_SHARED).toBe('run-detail-outer-sash:shared')
     expect(OUTER_SASH_WIDTH_KEY_CLARIFY).not.toBe(REVIEW_SHELL_WIDTH_KEY_CLARIFY)
     expect(OUTER_SASH_WIDTH_KEY_REVIEW).not.toBe(REVIEW_SHELL_WIDTH_KEY_REVIEW)
     expect(isOuterSashTab('clarify')).toBe(true)
     expect(isOuterSashTab('review')).toBe(true)
     expect(isOuterSashTab('log')).toBe(false)
     expect(isOuterSashTab('product')).toBe(false)
+  })
+
+  it('readSharedOuterSashMem prefers shared key and migrates legacy clarify|review', () => {
+    const store = new Map<string, string>()
+    const ls = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v)
+      },
+    }
+    const orig = globalThis.localStorage
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true })
+    try {
+      expect(readSharedOuterSashMem()).toBeNull()
+      store.set(OUTER_SASH_WIDTH_KEY_CLARIFY, '{"width":820,"fullOpen":false}')
+      expect(readSharedOuterSashMem()).toEqual({ width: 820, fullOpen: false })
+      store.set(OUTER_SASH_WIDTH_KEY_SHARED, '{"width":900,"fullOpen":true}')
+      expect(readSharedOuterSashMem()).toEqual({ width: 900, fullOpen: true })
+      store.delete(OUTER_SASH_WIDTH_KEY_SHARED)
+      store.delete(OUTER_SASH_WIDTH_KEY_CLARIFY)
+      store.set(OUTER_SASH_WIDTH_KEY_REVIEW, '{"width":750,"fullOpen":false}')
+      expect(readSharedOuterSashMem()).toEqual({ width: 750, fullOpen: false })
+      writeSharedOuterSashMem({ width: 880, fullOpen: false })
+      expect(store.get(OUTER_SASH_WIDTH_KEY_SHARED)).toBe('{"width":880,"fullOpen":false}')
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: orig, configurable: true })
+    }
   })
 })
 

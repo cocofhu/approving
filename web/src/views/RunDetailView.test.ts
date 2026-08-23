@@ -284,21 +284,30 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
 })
 
 
-describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
-  it('enables outer sash only for desktop clarify|review and restores ~520 otherwise', () => {
+describe('RunDetailView desktop outer sash layout (all node tabs)', () => {
+  it('enables outer sash on desktop for every node tab with bound width', () => {
     expect(src).toMatch(/from '@\/lib\/inbox\/reviewLayoutBudget'/)
     expect(src).toMatch(/reviewRightPanelCssWidth/)
-    expect(src).toMatch(/isOuterSashTab/)
     expect(src).toMatch(
-      /desktopOuterSashLayout = computed\(\s*\(\) => !isMobile\.value && isOuterSashTab\(nodeTab\.value\),/,
+      /desktopOuterSashLayout = computed\(\(\) => !isMobile\.value\)/,
     )
     expect(src).toMatch(/:style="reviewRightPanelStyle"/)
     expect(src).toMatch(/:style="leftPaneStyle"/)
     expect(src).toMatch(/data-testid="run-detail-outer-sash"/)
-    // Non-sash tabs keep md:w-[520px]; clarify|review use bound width instead.
-    expect(src).toMatch(/desktopOuterSashLayout \? '' : 'md:w-\[520px\]'/)
-    expect(src).toMatch(/md:w-\[520px\]/)
+    // Desktop right panel uses bound width — no fixed md:w-[520px] fallback.
+    expect(viewSrc).not.toMatch(/md:w-\[520px\]/)
     expect(viewOrchestrationSrc).toMatch(/v-if="desktopOuterSashLayout"/)
+    expect(viewOrchestrationSrc).toMatch(/readSharedOuterSashMem/)
+    expect(viewOrchestrationSrc).toMatch(/writeSharedOuterSashMem/)
+  })
+
+  it('keeps in-memory outer width across tab switches (no per-tab re-read)', () => {
+    expect(viewOrchestrationSrc).toMatch(
+      /watch\(\s*\(\) => desktopOuterSashLayout\.value,/,
+    )
+    expect(viewOrchestrationSrc).not.toMatch(
+      /watch\(\s*\(\) => \[desktopOuterSashLayout\.value, nodeTab\.value\]/,
+    )
   })
 
   it('passes sidebar-width=REVIEW_SIDEBAR only on Run Detail review ReviewShell', () => {
@@ -328,7 +337,7 @@ describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
     expect(viewOrchestrationSrc).toMatch(/onOuterSashDblClick/)
     expect(viewOrchestrationSrc).toMatch(/role="separator"/)
     expect(viewOrchestrationSrc).toMatch(/aria-orientation="vertical"/)
-    expect(viewOrchestrationSrc).toMatch(/outerSashStorageKey/)
+    expect(viewOrchestrationSrc).toMatch(/readSharedOuterSashMem/)
     expect(viewOrchestrationSrc).toMatch(/fullOpen/)
   })
 
@@ -337,6 +346,11 @@ describe('RunDetailView desktop outer sash layout (clarify|review)', () => {
     expect(viewSrc).toMatch(/outerFullOpen/)
     expect(viewSrc).toMatch(/md:left-5 md:z-\[1\]/)
     expect(viewSrc).toMatch(/md:left-3 md:z-10/)
+  })
+
+  it('hides outer sash on mobile (no horizontal drag)', () => {
+    expect(viewSrc).toMatch(/v-if="desktopOuterSashLayout"/)
+    expect(viewSrc).toMatch(/hidden shrink-0 cursor-col-resize bg-line md:block/)
   })
 })
 

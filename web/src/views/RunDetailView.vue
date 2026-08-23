@@ -151,8 +151,6 @@ const {
   outerSashDidDrag,
   OUTER_SASH_DRAG_THRESHOLD_PX,
   measureWorkspace,
-  readOuterMem,
-  writeOuterMem,
   applyOuterLayout,
   persistOuterLayout,
   setOuterSashDraggingUi,
@@ -599,7 +597,7 @@ const {
         />
       </div>
 
-      <!-- Outer sash: Agent交互 + 复审 desktop only. Hidden on narrow (no horizontal drag). -->
+      <!-- Outer sash: desktop only. Hidden on narrow (no horizontal drag). -->
       <div
         v-if="desktopOuterSashLayout"
         class="run-detail-outer-sash relative hidden shrink-0 cursor-col-resize bg-line md:block"
@@ -628,7 +626,6 @@ const {
         data-testid="run-detail-right-panel"
         class="flex min-h-0 min-w-0 w-full max-w-full flex-col bg-surface"
         :class="[
-          desktopOuterSashLayout ? '' : 'md:w-[520px]',
           isMobile && viewMode === 'timeline' ? 'flex-1' : 'shrink-0 md:shrink-0',
         ]"
         :style="reviewRightPanelStyle"
