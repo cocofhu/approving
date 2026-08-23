@@ -45,13 +45,25 @@ func (s *PreviewService) EnsurePreviewVNC(ctx context.Context, sandboxName strin
 }
 
 func (s *PreviewService) UpsertPreviewPort(rec mcp.PreviewPort) error {
+	itemKey := strings.TrimSpace(rec.ItemKey)
+	if itemKey == "" {
+		itemKey = mcp.PreviewItemKeyFor(rec)
+	}
 	row := models.RunPreviewPort{
-		RunID: rec.RunID, NodeID: rec.NodeID, Port: rec.Port, Label: rec.Label,
+		RunID: rec.RunID, NodeID: rec.NodeID, ItemKey: itemKey,
+		Kind: rec.Kind, Port: rec.Port, ExternalURL: rec.URL, Label: rec.Label,
 		ProxyURL: rec.ProxyURL, SandboxName: rec.SandboxName, Host: rec.Host, Healthy: rec.Healthy,
 		KeepalivePID: rec.KeepalivePID, RegisteredAt: rec.RegisteredAt,
 	}
+	if strings.TrimSpace(row.Kind) == "" {
+		if strings.TrimSpace(row.ExternalURL) != "" {
+			row.Kind = mcp.PreviewKindURL
+		} else {
+			row.Kind = mcp.PreviewKindPort
+		}
+	}
 	var existing models.RunPreviewPort
-	err := s.db.Where("run_id = ? AND node_id = ? AND port = ?", rec.RunID, rec.NodeID, rec.Port).First(&existing).Error
+	err := s.db.Where("run_id = ? AND node_id = ? AND item_key = ?", rec.RunID, rec.NodeID, itemKey).First(&existing).Error
 	if err == nil {
 		row.ID = existing.ID
 		return s.db.Save(&row).Error
@@ -69,8 +81,21 @@ func (s *PreviewService) ListPreviewPorts(runID, nodeID string) ([]mcp.PreviewPo
 	}
 	out := make([]mcp.PreviewPort, 0, len(rows))
 	for _, r := range rows {
+		kind := strings.TrimSpace(r.Kind)
+		if kind == "" {
+			if strings.TrimSpace(r.ExternalURL) != "" {
+				kind = mcp.PreviewKindURL
+			} else {
+				kind = mcp.PreviewKindPort
+			}
+		}
+		itemKey := strings.TrimSpace(r.ItemKey)
+		if itemKey == "" {
+			itemKey = mcp.PreviewItemKeyFor(mcp.PreviewPort{Kind: kind, Port: r.Port, URL: r.ExternalURL})
+		}
 		out = append(out, mcp.PreviewPort{
-			RunID: r.RunID, NodeID: r.NodeID, Port: r.Port, Label: r.Label,
+			RunID: r.RunID, NodeID: r.NodeID, Kind: kind, ItemKey: itemKey,
+			Port: r.Port, URL: r.ExternalURL, Label: r.Label,
 			ProxyURL: r.ProxyURL, SandboxName: r.SandboxName, Host: r.Host, Healthy: r.Healthy,
 			KeepalivePID: r.KeepalivePID, RegisteredAt: r.RegisteredAt,
 		})
@@ -84,7 +109,8 @@ func (s *PreviewService) GetPreviewPort(runID, nodeID string, port int) (*mcp.Pr
 		return nil, false
 	}
 	rec := mcp.PreviewPort{
-		RunID: row.RunID, NodeID: row.NodeID, Port: row.Port, Label: row.Label,
+		RunID: row.RunID, NodeID: row.NodeID, Kind: row.Kind, ItemKey: row.ItemKey,
+		Port: row.Port, URL: row.ExternalURL, Label: row.Label,
 		ProxyURL: row.ProxyURL, SandboxName: row.SandboxName, Host: row.Host, Healthy: row.Healthy,
 		KeepalivePID: row.KeepalivePID, RegisteredAt: row.RegisteredAt,
 	}

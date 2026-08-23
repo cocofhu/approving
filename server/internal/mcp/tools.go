@@ -223,17 +223,30 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 		if h.ActiveNodeType(runID) != "app_preview" {
 			return "set_preview 仅在 app_preview 节点可用,当前节点不支持。", true
 		}
-		port, err := parsePreviewPort(args["port"])
-		if err != nil {
-			return "set_preview failed: " + err.Error(), true
+		portRaw, hasPort := args["port"]
+		urlRaw := strings.TrimSpace(asString(args["url"]))
+		hasURL := urlRaw != ""
+		if hasPort == hasURL {
+			return "set_preview failed: 必须恰好提供 port 或 url 之一", true
 		}
 		label := asString(args["label"])
 		nodeID := h.ActiveNode(runID)
-		url, err := h.setPreviewPort(runID, nodeID, port, label)
+		if hasURL {
+			display, err := h.setPreviewURL(runID, nodeID, urlRaw, label)
+			if err != nil {
+				return "set_preview failed: " + err.Error(), true
+			}
+			return fmt.Sprintf("ok: 外部 URL 预览已注册: %s", display), false
+		}
+		port, err := parsePreviewPort(portRaw)
 		if err != nil {
 			return "set_preview failed: " + err.Error(), true
 		}
-		return fmt.Sprintf("ok: 预览已注册,代理 URL: %s", url), false
+		proxyURL, err := h.setPreviewPort(runID, nodeID, port, label)
+		if err != nil {
+			return "set_preview failed: " + err.Error(), true
+		}
+		return fmt.Sprintf("ok: 预览已注册,代理 URL: %s", proxyURL), false
 	case "set_artifact_preview":
 		if !h.authorize(runID, token) {
 			return "set_artifact_preview failed: " + ErrUnauthorized.Error(), true
@@ -969,15 +982,15 @@ func artifactTools() []map[string]any {
 		getTool("get_implementation_result", "读取本次运行的实现结果(implementation_result.json)。"),
 		{
 			"name": "set_preview",
-			"description": "仅 app_preview 节点可用:注册沙箱内应用预览端口。" +
-				"参数 port(必填)为沙箱内服务监听端口,label(可选)用于 UI 标签。可多次调用注册多端口;同 port 再次调用可更新 label。",
+			"description": "仅 app_preview 节点可用:注册沙箱内应用预览端口或外部 http(s) URL。" +
+				"参数 port? 与 url? 二选一(恰好其一);label(可选)用于 UI 标签。可多次调用注册多项;同 port 或同规范化 url 再次调用可更新 label。外部 URL 由浏览器 iframe 直连,不做服务端探测,取点可能降级。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"port":  map[string]any{"type": "integer", "description": "沙箱内服务监听端口(必填)"},
-					"label": strProp("可选:UI 标签,如「前端」「API」"),
+					"port":  map[string]any{"type": "integer", "description": "沙箱内服务监听端口(port 与 url 二选一)"},
+					"url":   strProp("外部绝对 http/https URL,可含端口(如 https://host:8443/path);port 与 url 二选一"),
+					"label": strProp("可选:UI 标签,如「前端」「Staging」"),
 				},
-				"required": []string{"port"},
 			},
 		},
 		{

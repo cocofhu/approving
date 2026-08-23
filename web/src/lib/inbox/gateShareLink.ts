@@ -302,8 +302,10 @@ export type PublicGateLiveEvent = {
 export type PublicPreviewPort = {
   port: number
   label?: string
+  kind?: 'port' | 'url' | string
+  url?: string
   /** vnc = remote+pick; api = same-origin iframe (no pick). */
-  mode?: 'vnc' | 'api' | string
+  mode?: 'vnc' | 'api' | 'url' | string
   /** IP-direct iframe target when the node switch is on. */
   directUrl?: string
 }

@@ -75,6 +75,10 @@ type PreviewLiveEvent struct {
 type PublicPreviewPort struct {
 	Port  int    `json:"port"`
 	Label string `json:"label,omitempty"`
+	// Kind is "port" or "url".
+	Kind string `json:"kind,omitempty"`
+	// URL is the external iframe target when kind=url.
+	URL string `json:"url,omitempty"`
 	// Mode is "vnc" (remote + pick) or "api" (same-origin iframe, no pick).
 	Mode string `json:"mode"`
 	// DirectURL is set when the node uses IP-direct preview (browser iframe target).

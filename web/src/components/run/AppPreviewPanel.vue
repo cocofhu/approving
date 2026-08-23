@@ -3,8 +3,10 @@ import { ref, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api, type PreviewPort } from '@/lib/api/api'
 import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
+import { isUrlPreview, previewTabKey, previewTabLabel } from '@/lib/shared/previewTabKey'
 import NovncPreviewPanel from './NovncPreviewPanel.vue'
 import DirectPreviewFrame from './DirectPreviewFrame.vue'
+import ExternalUrlPreviewFrame from './ExternalUrlPreviewFrame.vue'
 import PreviewFeedbackChat from './PreviewFeedbackChat.vue'
 import RefreshStrip from './RefreshStrip.vue'
 import HardLoadLayer from './HardLoadLayer.vue'
@@ -35,7 +37,7 @@ const { t } = useI18n()
 const ports = ref<PreviewPort[]>([])
 const loading = ref(false)
 const loadError = ref<string | null>(null)
-const activePort = ref<number | null>(null)
+const activeKey = ref<string | null>(null)
 const pickedSelector = ref('')
 let portsGen = 0
 let portsAbort: AbortController | null = null
@@ -48,6 +50,13 @@ function isApiPort(p: PreviewPort): boolean {
 
 function isDirectPort(p: PreviewPort): boolean {
   return p.mode === 'direct' && !!(p.directUrl || '').trim()
+}
+
+const activePort = ref<number | null>(null)
+
+function syncActivePort() {
+  const current = ports.value.find((p) => previewTabKey(p) === activeKey.value)
+  activePort.value = current && !isUrlPreview(current) ? current.port : null
 }
 
 function onPick(payload: AppPreviewPickPayload) {
@@ -70,11 +79,15 @@ async function loadPorts() {
     const r = await api.nodePreviews(props.runId, props.nodeId, { signal: portsAbort.signal })
     if (gen !== portsGen) return
     ports.value = r.ports || []
-    if (ports.value.length && activePort.value == null) {
-      activePort.value = ports.value[0].port
-    } else if (activePort.value != null && !ports.value.some((p) => p.port === activePort.value)) {
-      activePort.value = ports.value[0]?.port ?? null
+    if (ports.value.length && activeKey.value == null) {
+      activeKey.value = previewTabKey(ports.value[0])
+    } else if (
+      activeKey.value != null &&
+      !ports.value.some((p) => previewTabKey(p) === activeKey.value)
+    ) {
+      activeKey.value = ports.value[0] ? previewTabKey(ports.value[0]) : null
     }
+    syncActivePort()
   } catch (e: any) {
     if (gen !== portsGen || isAbortError(e) || portsAbort.signal.aborted) return
     loadError.value = t('pages.appPreview.loadFailed')
@@ -92,12 +105,9 @@ onUnmounted(() => {
   portsGen++
 })
 
-function tabLabel(p: PreviewPort): string {
-  return (p.label || '').trim() || String(p.port)
-}
-
-function selectPort(port: number) {
-  activePort.value = port
+function selectPreview(key: string) {
+  activeKey.value = key
+  syncActivePort()
 }
 </script>
 
@@ -142,37 +152,44 @@ function selectPort(port: number) {
       <div v-if="ports.length > 1" class="mb-2 flex flex-wrap gap-1">
         <button
           v-for="p in ports"
-          :key="p.port"
+          :key="previewTabKey(p)"
           type="button"
           class="rounded-md px-2.5 py-1 text-xs font-medium transition"
           :class="
-            p.port === activePort
+            previewTabKey(p) === activeKey
               ? 'bg-accent/15 text-accent'
               : 'border border-line text-txt2 hover:bg-elevated hover:text-txt'
           "
-          @click="selectPort(p.port)"
+          @click="selectPreview(previewTabKey(p))"
         >
-          {{ tabLabel(p) }}
+          {{ previewTabLabel(p) }}
         </button>
       </div>
       <div
         class="flex min-h-0 flex-col overflow-hidden rounded-md border border-line bg-surface"
         :class="fill ? 'flex-1' : compact ? 'h-[280px]' : 'h-[420px]'"
       >
+        <ExternalUrlPreviewFrame
+          v-for="p in ports.filter((x) => isUrlPreview(x))"
+          v-show="activeKey === previewTabKey(p)"
+          :key="`url-${previewTabKey(p)}`"
+          :url="(p.url || '').trim()"
+          :title="previewTabLabel(p)"
+        />
         <DirectPreviewFrame
           v-for="p in ports.filter((x) => isDirectPort(x))"
-          v-show="activePort === p.port"
-          :key="`direct-${p.port}`"
+          v-show="activeKey === previewTabKey(p)"
+          :key="`direct-${previewTabKey(p)}`"
           :direct-url="p.directUrl || ''"
-          :title="tabLabel(p)"
+          :title="previewTabLabel(p)"
           @pick="onPick"
           @staged-pick="onStagedPick"
         />
         <keep-alive :max="ports.length">
           <NovncPreviewPanel
-            v-for="p in ports.filter((x) => !isApiPort(x) && !isDirectPort(x))"
-            v-show="activePort === p.port"
-            :key="`vnc-${p.port}`"
+            v-for="p in ports.filter((x) => !isUrlPreview(x) && !isApiPort(x) && !isDirectPort(x))"
+            v-show="activeKey === previewTabKey(p)"
+            :key="`vnc-${previewTabKey(p)}`"
             :run-id="runId"
             :node-id="nodeId"
             :port="p.port"
@@ -185,12 +202,12 @@ function selectPort(port: number) {
           />
         </keep-alive>
         <iframe
-          v-for="p in ports.filter((x) => isApiPort(x) && !isDirectPort(x))"
-          v-show="activePort === p.port"
-          :key="`api-${p.port}`"
+          v-for="p in ports.filter((x) => isApiPort(x) && !isDirectPort(x) && !isUrlPreview(x))"
+          v-show="activeKey === previewTabKey(p)"
+          :key="`api-${previewTabKey(p)}`"
           :src="p.proxyUrl"
           class="h-full w-full border-0 bg-base"
-          :title="tabLabel(p)"
+          :title="previewTabLabel(p)"
         />
       </div>
       <PreviewFeedbackChat

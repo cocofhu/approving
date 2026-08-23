@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import NovncPreviewPanel from '@/components/run/NovncPreviewPanel.vue'
 import DirectPreviewFrame from '@/components/run/DirectPreviewFrame.vue'
+import ExternalUrlPreviewFrame from '@/components/run/ExternalUrlPreviewFrame.vue'
 import {
   publicGateApi,
   publicPreviewVncWsUrl,
@@ -30,6 +31,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
+const activeKey = ref<string | null>(null)
 const activePort = ref<number | null>(null)
 const vncWsUrl = ref('')
 const apiIframeUrl = ref('')
@@ -39,7 +41,18 @@ const linkInactive = ref(false)
 let ticketAbort: AbortController | null = null
 let ticketGen = 0
 
-const sortedPorts = computed(() => props.ports.filter((p) => p.port > 0))
+const sortedPorts = computed(() =>
+  props.ports.filter((p) => p.port > 0 || (p.kind || '') === 'url' || !!(p.url || '').trim()),
+)
+
+function isUrlPreview(p: PublicPreviewPort): boolean {
+  return p.kind === 'url' || !!(p.url || '').trim()
+}
+
+function publicTabKey(p: PublicPreviewPort): string {
+  if (isUrlPreview(p)) return `url:${(p.url || p.directUrl || '').trim()}`
+  return `port:${p.port}`
+}
 
 function isApiPort(p: PublicPreviewPort): boolean {
   if ((p.mode || '').toLowerCase() === 'api') return true
@@ -47,20 +60,43 @@ function isApiPort(p: PublicPreviewPort): boolean {
 }
 
 function isDirectPort(p: PublicPreviewPort): boolean {
+  if (isUrlPreview(p)) return true
   return !!(p.directUrl || '').trim()
 }
 
 function tabLabel(p: PublicPreviewPort): string {
-  return (p.label || '').trim() || String(p.port)
+  const label = (p.label || '').trim()
+  if (label) return label
+  if (isUrlPreview(p)) {
+    const u = (p.url || p.directUrl || '').trim()
+    try {
+      const parsed = new URL(u)
+      return parsed.host + parsed.pathname
+    } catch {
+      return u
+    }
+  }
+  return String(p.port)
 }
 
-const activeMeta = computed(() => sortedPorts.value.find((p) => p.port === activePort.value) || null)
+const activeMeta = computed(
+  () => sortedPorts.value.find((p) => publicTabKey(p) === activeKey.value) || null,
+)
+const activeIsUrl = computed(() => (activeMeta.value ? isUrlPreview(activeMeta.value) : false))
 const activeIsApi = computed(() => (activeMeta.value ? isApiPort(activeMeta.value) : false))
 const activeIsDirect = computed(() => (activeMeta.value ? isDirectPort(activeMeta.value) : false))
-const activeDirectUrl = computed(() => (activeMeta.value?.directUrl || '').trim())
+const activeDirectUrl = computed(() => {
+  if (!activeMeta.value) return ''
+  if (isUrlPreview(activeMeta.value)) {
+    return (activeMeta.value.url || activeMeta.value.directUrl || '').trim()
+  }
+  return (activeMeta.value.directUrl || '').trim()
+})
 
-function selectPort(port: number) {
-  activePort.value = port
+function selectPreview(key: string) {
+  activeKey.value = key
+  const meta = sortedPorts.value.find((p) => publicTabKey(p) === key)
+  activePort.value = meta && !isUrlPreview(meta) ? meta.port : null
 }
 
 async function exchangeTicket() {
@@ -77,14 +113,14 @@ async function exchangeTicket() {
     return
   }
   if (props.mobile) return
-  const port = activePort.value
-  if (port == null) return
-  const meta = sortedPorts.value.find((p) => p.port === port)
+  const meta = activeMeta.value
   if (!meta) return
-  if (isDirectPort(meta)) {
+  if (isUrlPreview(meta) || isDirectPort(meta)) {
     ticketBusy.value = false
     return
   }
+  const port = meta.port
+  if (port <= 0) return
 
   ticketBusy.value = true
   try {
@@ -121,21 +157,27 @@ async function exchangeTicket() {
 }
 
 watch(
-  () => [props.token, props.active, props.mobile, sortedPorts.value.map((p) => p.port).join(',')],
+  () => [props.token, props.active, props.mobile, sortedPorts.value.map((p) => publicTabKey(p)).join(',')],
   () => {
     if (!sortedPorts.value.length) {
+      activeKey.value = null
       activePort.value = null
       return
     }
-    if (activePort.value == null || !sortedPorts.value.some((p) => p.port === activePort.value)) {
-      activePort.value = sortedPorts.value[0].port
+    if (
+      activeKey.value == null ||
+      !sortedPorts.value.some((p) => publicTabKey(p) === activeKey.value)
+    ) {
+      activeKey.value = publicTabKey(sortedPorts.value[0])
     }
+    const meta = sortedPorts.value.find((p) => publicTabKey(p) === activeKey.value)
+    activePort.value = meta && !isUrlPreview(meta) ? meta.port : null
   },
   { immediate: true },
 )
 
 watch(
-  () => [props.token, props.active, props.mobile, activePort.value],
+  () => [props.token, props.active, props.mobile, activeKey.value],
   () => {
     void exchangeTicket()
   },
@@ -196,16 +238,20 @@ function retry() {
       <div v-if="sortedPorts.length > 1" class="mb-2 flex shrink-0 flex-wrap gap-1 px-2 pt-2">
         <button
           v-for="p in sortedPorts"
-          :key="p.port"
+          :key="publicTabKey(p)"
           type="button"
           class="px-2.5 py-1 text-xs font-medium transition"
           :class="
-            p.port === activePort
+            publicTabKey(p) === activeKey
               ? 'bg-accent/15 text-accent'
               : 'border border-line text-txt2 hover:bg-elevated hover:text-txt'
           "
-          :data-testid="`public-gate-app-preview-port-${p.port}`"
-          @click="selectPort(p.port)"
+          :data-testid="
+            isUrlPreview(p)
+              ? `public-gate-app-preview-url-${publicTabKey(p).slice('url:'.length)}`
+              : `public-gate-app-preview-port-${p.port}`
+          "
+          @click="selectPreview(publicTabKey(p))"
         >
           {{ tabLabel(p) }}
         </button>
@@ -235,8 +281,13 @@ function retry() {
           </button>
         </div>
 
+        <ExternalUrlPreviewFrame
+          v-if="activeIsUrl && activeDirectUrl"
+          :url="activeDirectUrl"
+          :title="activeMeta ? tabLabel(activeMeta) : 'preview'"
+        />
         <DirectPreviewFrame
-          v-if="activeIsDirect && activeDirectUrl"
+          v-else-if="activeIsDirect && activeDirectUrl"
           :direct-url="activeDirectUrl"
           :title="activeMeta ? tabLabel(activeMeta) : 'preview'"
           @pick="onPick"

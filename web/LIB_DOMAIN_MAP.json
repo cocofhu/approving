@@ -154,6 +154,7 @@
       "migrateOutputConfig.ts",
       "previewFps.ts",
       "previewPickUrl.ts",
+      "previewTabKey.ts",
       "previewVncChannel.ts",
       "refreshChrome.ts",
       "regionPolicy.ts",
@@ -173,6 +174,6 @@
     "pm": 6,
     "project": 4,
     "run": 50,
-    "shared": 36
+    "shared": 37
   }
 }

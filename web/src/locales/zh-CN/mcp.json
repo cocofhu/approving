@@ -108,8 +108,8 @@
           "desc": "读取实现结果说明"
         },
         "set_preview": {
-          "signature": "set_preview(port, label?)",
-          "desc": "仅 app_preview 节点:注册沙箱内预览端口,返回完整代理 URL"
+          "signature": "set_preview(port?, url?, label?)",
+          "desc": "仅 app_preview 节点:注册沙箱端口或外部 http(s) URL(二选一);URL 可含端口,iframe 直连,无服务端探测"
         },
         "set_artifact_preview": {
           "signature": "set_artifact_preview(name)",

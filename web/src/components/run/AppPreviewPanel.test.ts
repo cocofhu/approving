@@ -167,4 +167,26 @@ describe('AppPreviewPanel', () => {
     expect(wrapper.text()).not.toContain('IP 直连预览不支持取点标注')
     wrapper.unmount()
   })
+
+  it('external url preview iframes url directly without pick controls', async () => {
+    apiMocks.nodePreviews.mockResolvedValue({
+      ports: [
+        {
+          kind: 'url',
+          port: 0,
+          url: 'https://staging.example.com:8443/app',
+          label: 'Staging',
+          healthy: true,
+        },
+      ],
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
+    const frame = wrapper.get('[data-testid="app-preview-external-url-frame"]')
+    expect(frame.find('iframe').attributes('src')).toBe('https://staging.example.com:8443/app')
+    expect(wrapper.text()).toContain('外部 URL 直连预览')
+    expect(wrapper.find('[data-testid="direct-preview-inspect"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

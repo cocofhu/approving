@@ -2537,6 +2537,7 @@
       "directScriptMissing": "应用页未加载取点脚本。直连预览需同域 /__approving/preview-pick.js（请使用含 preview-inject 的新沙箱镜像）。",
       "directGotoInvalid": "只能跳转到同一预览 origin 的地址。",
       "directAddressPlaceholder": "http://IP:port/",
+      "externalUrlHint": "外部 URL 直连预览；跨域站点不支持取点标注。",
       "novnc": {
         "back": "后退",
         "forward": "前进",
