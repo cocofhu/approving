@@ -147,16 +147,16 @@ A release is complete only when all three workflows succeed, and
 `publish-sandbox` is green for every matrix provider
 (`cursor`, `claude_code`, `codebuddy`, `trae`). If any job fails, re-run the
 failed workflow via **Actions → workflow_dispatch** (e.g. re-run
-`publish-sandbox` for an existing `v*` tag such as `v0.2.2-beta`).
+`publish-sandbox` for an existing `v*` tag such as `v0.3.0-beta`).
 
 Sandbox builds are large (often 30–90+ minutes). Packages may start private;
 set them Public under GitHub → Packages if anonymous pulls are required.
 
 Default tags used by `./start.sh` (overridable in `.env`):
 
-- `ghcr.io/cocofhu/approving:0.2.2-beta`
-- `ghcr.io/cocofhu/sandbox-gateway:0.2.2-beta`
-- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.2.2-beta`
+- `ghcr.io/cocofhu/approving:0.3.0-beta`
+- `ghcr.io/cocofhu/sandbox-gateway:0.3.0-beta`
+- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.3.0-beta`
   (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke)
 
 ### release-smoke (manual; not a PR required check)
