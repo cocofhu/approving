@@ -10,6 +10,10 @@ import { installRoutePendingGuards } from '../src/lib/shared/routePending'
 import { installAuthGuard } from '../src/lib/shared/authGuard'
 import NotificationsView from '../src/views/NotificationsView.vue'
 import { sidebarNavGroups } from '../src/data/sidebarNav'
+import {
+  prefsKeyForUser,
+  storageKeyForUser,
+} from '../src/lib/run/useRunTerminalNotifications'
 
 installIdleScrollbar()
 
@@ -373,7 +377,7 @@ async function bootstrap() {
     scene === 'legacy-structured-page' ||
     scene === 'paged'
   ) {
-    const prefsKey = 'approving.notifications.prefs.e2e'
+    const prefsKey = prefsKeyForUser('e2e')
     // Seed only when absent so reload tests can assert read-state persistence.
     if (!localStorage.getItem(prefsKey)) {
       localStorage.setItem(
@@ -382,8 +386,8 @@ async function bootstrap() {
       )
     }
   } else {
-    localStorage.removeItem('approving.notifications.prefs.e2e')
-    localStorage.removeItem('approving.runTerminalNotifications.readIds.e2e')
+    localStorage.removeItem(prefsKeyForUser('e2e'))
+    localStorage.removeItem(storageKeyForUser('e2e'))
   }
 
   const DashboardPage = defineComponent({

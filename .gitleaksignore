@@ -1,2 +1,4 @@
 # RFC 6455 example nonce used only to construct a WebSocket test request.
 684d5428c38607c2b4b2e637da755123a2541947:server/internal/handlers/vnc_production_router_test.go:generic-api-key:21
+# E2E localStorage prefs key (approving.notifications.prefs.e2e) — not a secret.
+e35960d3362f881f45758972b8b1f18e7b4fa181:web/e2e/notifications-center-main.ts:generic-api-key:376
