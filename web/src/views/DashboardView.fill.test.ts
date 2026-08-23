@@ -10,6 +10,10 @@ const particleBgSrc = readFileSync(
   join(dir, '../components/dashboard/HomeParticleMeshBackground.vue'),
   'utf8',
 )
+const pipelineSelectSrc = readFileSync(
+  join(dir, '../components/dashboard/HomePipelineSelect.vue'),
+  'utf8',
+)
 const shellSrc = readFileSync(join(dir, '../components/shell/AppShell.vue'), 'utf8')
 const globalCss = readFileSync(join(dir, '../styles/global.css'), 'utf8')
 
@@ -66,7 +70,9 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/home-composer__send/)
     expect(src).toMatch(/data-testid="home-composer"/)
     expect(src).toMatch(/data-testid="home-composer-plus"/)
-    expect(src).toMatch(/data-testid="home-pipeline-select"/)
+    expect(src).toMatch(/HomePipelineSelect/)
+    expect(pipelineSelectSrc).toMatch(/data-testid="home-pipeline-select"/)
+    expect(src).not.toMatch(/<select[^>]*home-pipeline-select/)
     expect(src).toMatch(/data-testid="home-composer-send"/)
     expect(src).toMatch(/<textarea/)
   })

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HomeParticleMeshBackground from '@/components/dashboard/HomeParticleMeshBackground.vue'
+import HomePipelineSelect from '@/components/dashboard/HomePipelineSelect.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
@@ -217,11 +218,6 @@ function onComposerBlur() {
 
 function goProjects() {
   void router.push('/projects')
-}
-
-function onPipelineChange(e: Event) {
-  const el = e.target as HTMLSelectElement | null
-  if (el) selectPipeline(el.value)
 }
 
 function onComposerSubmit(e: Event) {
@@ -459,17 +455,12 @@ onBeforeUnmount(() => {
               <Icon name="plus" :size="16" />
             </button>
             <label class="sr-only" for="home-pipeline-select">{{ t('pages.dashboard.pickPipeline') }}</label>
-            <select
-              id="home-pipeline-select"
-              class="home-composer__pipeline max-w-[12rem] min-w-0 cursor-pointer appearance-none border bg-transparent px-2.5 py-1.5 text-xs font-medium outline-none disabled:cursor-default disabled:text-txt3"
-              data-testid="home-pipeline-select"
+            <HomePipelineSelect
+              :pipelines="pipelines"
+              :model-value="selectedId"
               :disabled="!pipelines.length || sending"
-              :value="selectedId"
-              @change="onPipelineChange"
-            >
-              <option v-if="!pipelines.length" value="">{{ t('pages.dashboard.noPipelineShort') }}</option>
-              <option v-for="p in pipelines" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
+              @update:model-value="selectPipeline"
+            />
             <div class="flex-1" />
             <button
               type="submit"
@@ -728,22 +719,6 @@ onBeforeUnmount(() => {
   background: rgb(var(--c-accent) / 0.12);
 }
 
-.home-composer__pipeline {
-  border-color: rgb(var(--c-line));
-  color: rgb(var(--c-accent-2));
-  height: 32px;
-  background-image: linear-gradient(45deg, transparent 50%, rgb(var(--c-txt3)) 50%),
-    linear-gradient(135deg, rgb(var(--c-txt3)) 50%, transparent 50%);
-  background-position: calc(100% - 12px) 12px, calc(100% - 7px) 12px;
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 26px;
-}
-
-.home-composer__pipeline:focus {
-  border-color: rgb(var(--c-line-strong));
-}
-
 .home-composer__send {
   background: rgb(var(--c-txt));
   color: rgb(var(--c-base));
@@ -939,8 +914,5 @@ onBeforeUnmount(() => {
     justify-content: flex-start;
   }
 
-  .home-composer__pipeline {
-    max-width: none;
-  }
 }
 </style>
