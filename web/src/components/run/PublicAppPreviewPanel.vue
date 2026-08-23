@@ -246,7 +246,11 @@ function retry() {
               ? 'bg-accent/15 text-accent'
               : 'border border-line text-txt2 hover:bg-elevated hover:text-txt'
           "
-          :data-testid="`public-gate-app-preview-port-${publicTabKey(p)}`"
+          :data-testid="
+            isUrlPreview(p)
+              ? `public-gate-app-preview-url-${publicTabKey(p).slice('url:'.length)}`
+              : `public-gate-app-preview-port-${p.port}`
+          "
           @click="selectPreview(publicTabKey(p))"
         >
           {{ tabLabel(p) }}
