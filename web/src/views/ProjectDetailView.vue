@@ -170,7 +170,7 @@ const {
 
 <template>
   <div
-    class="flex min-h-0 flex-1 flex-col"
+    class="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
     data-testid="project-detail-panel"
     :aria-busy="loading || wfRefreshing ? 'true' : 'false'"
   >
