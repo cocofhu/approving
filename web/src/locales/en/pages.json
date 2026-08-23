@@ -4,6 +4,13 @@
       "title": "Start a pre-dev clarification in one sentence",
       "subtitle": "Pick an Approve pipeline; the first message becomes the Run title",
       "placeholder": "Start your next iteration quickly",
+      "placeholders": [
+        "Start your next iteration quickly",
+        "Describe a feature — e.g. add a login page",
+        "Or a bugfix — CSV export garbles Chinese",
+        "Copy or layout tweaks — one sentence is enough",
+        "Attach a doc or screenshot to start clarifying"
+      ],
       "selectProject": "Select a project",
       "noProject": "No project selected. Pick a project to start an Approve pipeline from Home.",
       "noPipelines": "No published pipeline whose first node after start is Approve is available on this account.",

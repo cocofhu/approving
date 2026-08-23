@@ -228,6 +228,33 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
+  it('configures multiple dashboard placeholder lines in i18n', () => {
+    const lines = pages.pages.dashboard.placeholders as string[]
+    expect(lines.length).toBe(5)
+    expect(lines[0]).toBe('快速开启你的迭代')
+    expect(lines[1]).toContain('说一个功能')
+  })
+
+  it('cycles placeholder typewriter to the next configured line', async () => {
+    const lines = pages.pages.dashboard.placeholders as string[]
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const firstLen = lines[0].length
+    const advanceMs = 80 + 70 * firstLen + 1800 + 32 * firstLen + 400 + 70 * 5
+    await vi.advanceTimersByTimeAsync(advanceMs)
+    expect(wrapper.get('[data-testid="home-composer-placeholder"]').text()).toContain(lines[1].slice(0, 4))
+    wrapper.unmount()
+  })
+
+  it('shows static first placeholder under reduced-motion', async () => {
+    stubReducedMotion(true)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-composer-placeholder"]').text()).toContain('快速开启你的迭代')
+    expect(wrapper.get('label.sr-only').text()).toContain('快速开启你的迭代')
+    wrapper.unmount()
+  })
+
   // plan g2.1 — no project gate; still loads cross-project pipelines
   it('loads pipelines without a stored project and does not show project empty state', async () => {
     mocks.readStoredProjectId.mockReturnValue('')

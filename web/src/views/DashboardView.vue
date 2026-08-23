@@ -17,7 +17,7 @@ const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = u
 const BRAND_TEXT = 'Approving'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, tm } = useI18n()
 const {
   projectId,
   pipelines,
@@ -63,7 +63,16 @@ const phCursor = ref(false)
 let phTimer: ReturnType<typeof setTimeout> | null = null
 let phHoldTimer: ReturnType<typeof setTimeout> | null = null
 
-const placeholderFull = computed(() => t('pages.dashboard.placeholder'))
+const placeholderLines = computed(() => {
+  const raw = tm('pages.dashboard.placeholders') as unknown
+  if (Array.isArray(raw) && raw.length > 0) {
+    const lines = raw.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    if (lines.length > 0) return lines
+  }
+  const single = String(t('pages.dashboard.placeholder')).trim()
+  return single ? [single] : []
+})
+const placeholderPrimary = computed(() => placeholderLines.value[0] ?? '')
 const showPhTypewriter = computed(() => !draft.value.trim() && !composerFocused.value)
 
 function prefersReducedMotion(): boolean {
@@ -121,26 +130,30 @@ function clearPhTimers() {
   }
 }
 
-/** g1.2 — idle placeholder typewriter (type → hold → delete → repeat). */
+/** g1.2 — idle placeholder typewriter (type → hold → delete → next line → repeat). */
 function runPlaceholderTypewriter() {
   clearPhTimers()
-  const full = placeholderFull.value
+  const lines = placeholderLines.value
   if (!showPhTypewriter.value) {
     phVisible.value = ''
     phCursor.value = false
     return
   }
+  const first = lines[0] ?? ''
   if (prefersReducedMotion()) {
-    phVisible.value = full
+    phVisible.value = first
     phCursor.value = true
     return
   }
   phVisible.value = ''
   phCursor.value = true
+  let li = 0
   let i = 0
   let deleting = false
   const tick = () => {
     if (!showPhTypewriter.value) return
+    const full = lines[li] ?? ''
+    if (!full) return
     if (!deleting) {
       i += 1
       phVisible.value = full.slice(0, i)
@@ -158,6 +171,7 @@ function runPlaceholderTypewriter() {
     phVisible.value = full.slice(0, Math.max(0, i))
     if (i <= 0) {
       deleting = false
+      li = (li + 1) % lines.length
       phTimer = setTimeout(tick, 400)
       return
     }
@@ -214,7 +228,7 @@ function openFilePicker() {
 
 watch(draft, () => nextTick(autoGrow))
 watch(showPhTypewriter, () => runPlaceholderTypewriter(), { immediate: true })
-watch(placeholderFull, () => {
+watch(placeholderLines, () => {
   if (showPhTypewriter.value) runPlaceholderTypewriter()
 })
 
@@ -312,7 +326,7 @@ onBeforeUnmount(() => {
             @change="onPickFiles"
           />
           <div class="home-composer__field relative px-4 pb-3 pt-4">
-            <label class="sr-only" for="home-composer-input">{{ t('pages.dashboard.placeholder') }}</label>
+            <label class="sr-only" for="home-composer-input">{{ placeholderPrimary }}</label>
             <textarea
               id="home-composer-input"
               ref="textareaRef"
