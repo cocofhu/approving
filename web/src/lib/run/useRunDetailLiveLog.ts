@@ -22,6 +22,7 @@ import {
   putLiveLogEventPage,
   putLiveLogMcpCalls,
 } from '@/lib/run/liveLogSnapshotCache'
+import type { RefreshIntent } from '@/lib/shared/loadingTypes'
 import type { AcpEvent, McpCall, NodeRun, NodeRunStatus, Run } from '@/lib/shared/types'
 
 export type EventPageState = {
@@ -227,28 +228,49 @@ export function useRunDetailLiveLog(opts: {
     }
   }
 
-  async function fetchSandboxLog(nodeId: string | null) {
+  async function fetchSandboxLog(
+    nodeId: string | null,
+    opts?: { intent?: RefreshIntent },
+  ) {
     if (!nodeId) {
       sandboxLogAbort?.abort()
       sandboxLogAbort = null
       sbxLogLoading.value = false
       return
     }
+    const intent = opts?.intent ?? 'user_initiated'
+    const silent = intent === 'silent_poll'
+    // Do not interrupt an in-flight user refresh or flash RefreshStrip on poll.
+    if (silent && sbxLogLoading.value) return
+
     const attemptGen = ++sandboxLogGen
     sandboxLogAbort?.abort()
     sandboxLogAbort = new AbortController()
-    sbxLogLoading.value = true
+    if (!silent) sbxLogLoading.value = true
     try {
       const r = await api.nodeSandboxLog(runId.value, nodeId, { signal: sandboxLogAbort.signal })
       if (attemptGen !== sandboxLogGen) return
-      // Always write the response so empty live / found=false / error map correctly
-      // (do not treat empty content as "no update").
-      sbxLogs[nodeId] = {
+      const next: SbxLogState = {
         content: r.content ?? '',
         live: !!r.live,
         found: !!r.found,
         error: r.error || undefined,
       }
+      if (silent) {
+        const prev = sbxLogs[nodeId]
+        if (
+          prev &&
+          prev.content === next.content &&
+          prev.live === next.live &&
+          prev.found === next.found &&
+          prev.error === next.error
+        ) {
+          return
+        }
+      }
+      // Always write the response so empty live / found=false / error map correctly
+      // (do not treat empty content as "no update").
+      sbxLogs[nodeId] = next
     } catch (e) {
       if (attemptGen !== sandboxLogGen) return
       if (isAbortError(e)) return
@@ -260,7 +282,7 @@ export function useRunDetailLiveLog(opts: {
         error: t('pages.runDetail.sandboxLog.loadFailed'),
       }
     } finally {
-      if (attemptGen === sandboxLogGen) sbxLogLoading.value = false
+      if (!silent && attemptGen === sandboxLogGen) sbxLogLoading.value = false
     }
   }
 

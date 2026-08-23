@@ -20,6 +20,7 @@ vi.mock('@/lib/api/api', async () => {
   }
 })
 
+import { api } from '@/lib/api/api'
 import { useRunDetailLiveLog } from './useRunDetailLiveLog'
 
 describe('useRunDetailLiveLog', () => {
@@ -95,6 +96,130 @@ describe('useRunDetailLiveLog', () => {
     live.resetLiveLogState('run-1')
     live.abortSandboxFetches()
     live.disposeAllRehydrateOrchs()
+
+    app.unmount()
+  })
+
+  it('silent_poll does not toggle sbxLogLoading; user_initiated does', async () => {
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0)
+      return 1
+    })
+
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div />' } }],
+    })
+    await router.push('/')
+    await router.isReady()
+
+    const run = ref({
+      id: 'run-1',
+      status: 'running',
+      nodeRuns: { a1: { nodeId: 'a1', status: 'running', events: [], mcpCalls: [] } },
+      artifacts: [],
+    } as unknown as Run)
+    const selected = ref<string | null>('a1')
+    const nodeTab = ref('sandbox')
+    const selIterIdx = ref<number | null>(null)
+
+    let live!: ReturnType<typeof useRunDetailLiveLog>
+    const app = createApp({
+      setup() {
+        live = useRunDetailLiveLog({
+          runId: computed(() => 'run-1'),
+          run,
+          selected,
+          selExecIdx: computed(() => 0),
+          selIterIdx,
+          selRun: computed(() => run.value.nodeRuns.a1 || null),
+          selStatus: computed(() => 'running'),
+          viewingLatest: computed(() => true),
+          nodeTab,
+          hasLog: computed(() => true),
+        })
+        return () => null
+      },
+    })
+    app.use(i18n)
+    app.use(router)
+    app.mount(document.createElement('div'))
+
+    live.sbxLogs.a1 = { content: 'cached', live: true, found: true }
+    expect(live.sbxLogLoading.value).toBe(false)
+
+    const silentPromise = live.fetchSandboxLog('a1', { intent: 'silent_poll' })
+    expect(live.sbxLogLoading.value).toBe(false)
+    await silentPromise
+    expect(live.sbxLogLoading.value).toBe(false)
+
+    const userPromise = live.fetchSandboxLog('a1', { intent: 'user_initiated' })
+    expect(live.sbxLogLoading.value).toBe(true)
+    await userPromise
+    expect(live.sbxLogLoading.value).toBe(false)
+
+    app.unmount()
+  })
+
+  it('silent_poll skips write-back when snapshot unchanged', async () => {
+    const nodeSandboxLog = vi.mocked(api.nodeSandboxLog)
+    nodeSandboxLog.mockResolvedValueOnce({
+      content: 'same',
+      live: true,
+      found: true,
+    })
+
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div />' } }],
+    })
+    await router.push('/')
+    await router.isReady()
+
+    const run = ref({
+      id: 'run-1',
+      status: 'running',
+      nodeRuns: { a1: { nodeId: 'a1', status: 'running', events: [], mcpCalls: [] } },
+      artifacts: [],
+    } as unknown as Run)
+    const selected = ref<string | null>('a1')
+
+    let live!: ReturnType<typeof useRunDetailLiveLog>
+    const app = createApp({
+      setup() {
+        live = useRunDetailLiveLog({
+          runId: computed(() => 'run-1'),
+          run,
+          selected,
+          selExecIdx: computed(() => 0),
+          selIterIdx: ref(null),
+          selRun: computed(() => run.value.nodeRuns.a1 || null),
+          selStatus: computed(() => 'running'),
+          viewingLatest: computed(() => true),
+          nodeTab: ref('sandbox'),
+          hasLog: computed(() => true),
+        })
+        return () => null
+      },
+    })
+    app.use(i18n)
+    app.use(router)
+    app.mount(document.createElement('div'))
+
+    const prev = { content: 'same', live: true, found: true }
+    live.sbxLogs.a1 = { ...prev }
+    await live.fetchSandboxLog('a1', { intent: 'silent_poll' })
+    expect(live.sbxLogs.a1).toEqual(prev)
 
     app.unmount()
   })
