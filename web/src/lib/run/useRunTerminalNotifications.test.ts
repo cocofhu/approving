@@ -326,4 +326,123 @@ describe('useRunTerminalNotifications', () => {
     expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
     n.stopPolling()
   })
+
+  it('markRead survives module reset + auth rehydrate (page refresh)', async () => {
+    seedBaseline()
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([
+        run({ id: 'a', status: 'failed' }),
+        run({ id: 'b', status: 'completed' }),
+      ]),
+    )
+    const n1 = useRunTerminalNotifications()
+    await n1.refresh({ source: 'mount' })
+    expect(n1.unreadCount.value).toBe(2)
+    n1.markRead('a')
+    expect(n1.unreadCount.value).toBe(1)
+
+    __resetRunTerminalNotificationsForTests()
+    authReady.value = false
+    authUser.value = null
+
+    const n2 = useRunTerminalNotifications()
+    n2.startPolling()
+    expect(n2.ensureUsername()).toBe(false)
+    expect(n2.unreadCount.value).toBe(0)
+
+    authUser.value = { username: 'alice', expiresAt: 't' }
+    authReady.value = true
+    await vi.waitFor(() => {
+      expect(n2.unreadCount.value).toBe(1)
+      expect(n2.badgeLabel.value).toBe('1')
+    })
+    expect(n2.previewItems.value.find((x) => x.runId === 'a')?.unread).toBe(false)
+    expect(n2.previewItems.value.find((x) => x.runId === 'b')?.unread).toBe(true)
+    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
+    expect(prefs.readIds).toContain('a')
+    expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
+    n2.stopPolling()
+  })
+
+  it('markAllRead survives logout and same-account re-login', async () => {
+    seedBaseline()
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([
+        run({ id: 'a', status: 'failed' }),
+        run({ id: 'b', status: 'completed' }),
+      ]),
+    )
+    const n1 = useRunTerminalNotifications()
+    await n1.refresh({ source: 'mount' })
+    expect(n1.unreadCount.value).toBe(2)
+    n1.markAllRead()
+    expect(n1.unreadCount.value).toBe(0)
+
+    authUser.value = null
+    authReady.value = true
+    __resetRunTerminalNotificationsForTests()
+
+    const n2 = useRunTerminalNotifications()
+    n2.startPolling()
+    await vi.waitFor(() => {
+      expect(n2.ensureUsername()).toBe(true)
+    })
+    expect(n2.unreadCount.value).toBe(0)
+
+    authUser.value = { username: 'alice', expiresAt: 't' }
+    await vi.waitFor(() => {
+      expect(n2.unreadCount.value).toBe(0)
+      expect(n2.badgeLabel.value).toBe('')
+    })
+    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
+    expect(prefs.readIds).toEqual(expect.arrayContaining(['a', 'b']))
+    n2.stopPolling()
+  })
+
+  it('markRead before auth settle does not stamp anonymous prefs', async () => {
+    authReady.value = false
+    authUser.value = null
+    localStorage.removeItem(prefsKeyForUser('anonymous'))
+    localStorage.removeItem(prefsKeyForUser('alice'))
+
+    const n = useRunTerminalNotifications()
+    n.markRead('ghost')
+    expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
+    expect(localStorage.getItem(prefsKeyForUser('alice'))).toBeNull()
+  })
+
+  it('markAllRead before auth settle does not stamp anonymous prefs', async () => {
+    authReady.value = false
+    authUser.value = null
+    localStorage.removeItem(prefsKeyForUser('anonymous'))
+    localStorage.removeItem(prefsKeyForUser('alice'))
+
+    const n = useRunTerminalNotifications()
+    n.markAllRead()
+    expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
+    expect(localStorage.getItem(prefsKeyForUser('alice'))).toBeNull()
+  })
+
+  it('new terminal events after markAllRead still count as unread', async () => {
+    seedBaseline()
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([run({ id: 'a', status: 'completed' })]),
+    )
+    const n = useRunTerminalNotifications()
+    await n.refresh({ source: 'mount' })
+    expect(n.unreadCount.value).toBe(1)
+    n.markAllRead()
+    expect(n.unreadCount.value).toBe(0)
+
+    vi.mocked(api.listRuns).mockResolvedValue(
+      paged([
+        run({ id: 'new', status: 'failed', startedAt: '2026-08-10T14:00:00Z' }),
+        run({ id: 'a', status: 'completed' }),
+      ]),
+    )
+    await n.refresh({ source: 'manual' })
+    expect(n.unreadCount.value).toBe(1)
+    expect(n.previewItems.value.find((x) => x.runId === 'new')?.unread).toBe(true)
+    expect(n.previewItems.value.find((x) => x.runId === 'a')?.unread).toBe(false)
+  })
 })

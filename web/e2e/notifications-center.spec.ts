@@ -206,6 +206,27 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3', { timeout: 5_000 })
   })
 
+  test('mark-all-read persists across hard reload (no unread resurgence)', async ({ page }) => {
+    await page.goto('/notifications-center.html?scene=with-items&start=notifications')
+    await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
+    await settleAuth(page)
+    await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
+
+    await page.getByTestId('notifications-mark-all').click()
+    await expect(page.getByTestId('run-notifications-badge')).toHaveCount(0)
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
+    await expect(page.getByTestId('notifications-unread-count')).toContainText('0')
+
+    await page.reload()
+    await expect(page.getByTestId('notifications-page')).toBeVisible({ timeout: 15_000 })
+    await settleAuth(page)
+    await expect(page.getByTestId('run-notifications-badge')).toHaveCount(0)
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
+    await expect(page.getByTestId('notifications-unread-count')).toContainText('0')
+    await page.getByTestId('notifications-filter-unread').click()
+    await expect(page.getByTestId('notifications-item')).toHaveCount(0)
+  })
+
   test('independent page paginates at 20; filter and topbar entry reset to page 1 (g4.3)', async ({
     page,
   }) => {
