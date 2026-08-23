@@ -182,12 +182,10 @@ describe('GatesInboxView app_preview stage (g2.2)', () => {
     expect(stages.length).toBe(2)
     for (const block of stages) {
       expect(block).toMatch(/:remote-kind="inboxRemoteKind"/)
-      expect(block).toMatch(/:share-enabled="inboxAppPreviewActive"/)
+      expect(block).not.toMatch(/:share-enabled=/)
+      expect(block).not.toMatch(/@open-share=/)
       expect(block).toMatch(/:run="activeRun \|\| undefined"/)
     }
-    expect(src).toMatch(/@pick="onAppPreviewReviewPick"/)
-    expect(src).toMatch(/@staged-pick="onAppPreviewStagedPick"/)
-    expect(src).toMatch(/@open-share="openSharePanel\(active\)"/)
     expect(src).not.toMatch(/<AppPreviewPanel/)
   })
 })

@@ -181,13 +181,14 @@ describe('NovncPreviewPanel', () => {
     wrapper.unmount()
   })
 
-  it('connects preview mode and shows live toolbar', async () => {
+  it('connects preview mode and shows live toolbar without share-approval entry', async () => {
     const wrapper = mountNovnc()
     await flushPromises()
     expect(apiMocks.previewVncWsUrl).toHaveBeenCalledWith('run-1', 'node-1', 5173)
     expect(wrapper.text()).toMatch(/已连接|连接中/)
     expect(inspectButton(wrapper).exists()).toBe(true)
     expect(inspectButton(wrapper).text()).toContain('取点标注')
+    expect(wrapper.find('[data-testid="novnc-share-approval"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

@@ -448,10 +448,8 @@ const {
               :node-type="inboxStageNodeType"
               :annotatable="clarifyInputActive"
               :remote-kind="inboxRemoteKind"
-              :share-enabled="inboxAppPreviewActive"
               @pick="onAppPreviewReviewPick"
               @staged-pick="onAppPreviewStagedPick"
-              @open-share="openSharePanel(active)"
             />
           </template>
           <template #sidebar>
@@ -566,10 +564,8 @@ const {
                   :node-type="inboxStageNodeType"
                   :annotatable="clarifyInputActive"
                   :remote-kind="inboxRemoteKind"
-                  :share-enabled="inboxAppPreviewActive"
                   @pick="onAppPreviewReviewPick"
                   @staged-pick="onAppPreviewStagedPick"
-                  @open-share="openSharePanel(active)"
                 />
               </template>
               <template #sidebar>
