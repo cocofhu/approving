@@ -470,4 +470,97 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
     vi.unstubAllGlobals()
   })
+
+  // plan g1 — pipeline rail scroll: hidden scrollbar + edge arrows
+  it('renders pipeline scroll arrows and hides horizontal scrollbar on cards rail', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-rail-wrap"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-pipeline-scroll-prev"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-pipeline-scroll-next"]').exists()).toBe(true)
+    const rail = wrapper.get('[data-testid="home-pipeline-cards"]')
+    expect(rail.classes()).toContain('home-pipeline-rail')
+    expect(rail.classes()).not.toContain('overflow-x-auto')
+    wrapper.unmount()
+  })
+
+  it('disables scroll arrows when pipeline list does not overflow', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const prev = wrapper.get('[data-testid="home-pipeline-scroll-prev"]').element as HTMLButtonElement
+    const next = wrapper.get('[data-testid="home-pipeline-scroll-next"]').element as HTMLButtonElement
+    expect(prev.disabled).toBe(true)
+    expect(next.disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('syncs scroll arrow disabled state and edge fades when rail overflows', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      ...approveWf,
+      id: `wf-${i}`,
+      name: `流水线 ${i}`,
+    }))
+    mocks.listWorkflows.mockResolvedValue(many)
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    const rail = wrapper.get('[data-testid="home-pipeline-cards"]').element as HTMLDivElement
+    Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 400 })
+    Object.defineProperty(rail, 'scrollWidth', { configurable: true, value: 1600 })
+    let scrollLeft = 0
+    Object.defineProperty(rail, 'scrollLeft', {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (v: number) => {
+        scrollLeft = v
+      },
+    })
+
+    await rail.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+    const prev = wrapper.get('[data-testid="home-pipeline-scroll-prev"]').element as HTMLButtonElement
+    const next = wrapper.get('[data-testid="home-pipeline-scroll-next"]').element as HTMLButtonElement
+    expect(prev.disabled).toBe(true)
+    expect(next.disabled).toBe(false)
+    expect(wrapper.find('.home-pipeline-rail-wrap--has-right').exists()).toBe(true)
+
+    scrollLeft = 1200
+    await rail.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+    expect(prev.disabled).toBe(false)
+    expect(next.disabled).toBe(true)
+    expect(wrapper.find('.home-pipeline-rail-wrap--has-left').exists()).toBe(true)
+
+    wrapper.unmount()
+  })
+
+  it('arrow click does not change pipeline card selection', async () => {
+    const second: Workflow = {
+      ...approveWf,
+      id: 'wf-lite',
+      name: '快速澄清 Lite',
+      description: '轻量 Approve 入口',
+    }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    const rail = wrapper.get('[data-testid="home-pipeline-cards"]').element as HTMLDivElement
+    Object.defineProperty(rail, 'clientWidth', { configurable: true, value: 200 })
+    Object.defineProperty(rail, 'scrollWidth', { configurable: true, value: 800 })
+    Object.defineProperty(rail, 'scrollLeft', {
+      configurable: true,
+      get: () => 0,
+      set: () => {},
+    })
+    await rail.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+
+    await wrapper.get('[data-testid="home-pipeline-scroll-next"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    wrapper.unmount()
+  })
 })
