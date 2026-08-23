@@ -178,6 +178,45 @@ func TestMcpCallTrace(t *testing.T) {
 	}
 }
 
+// TestPeekMcpCallsAndHostHooks covers PeekMcpCalls (non-destructive) and the
+// rarely-wired host setters that previously sat at 0% in the coverage gate.
+func TestPeekMcpCallsAndHostHooks(t *testing.T) {
+	store := &memStore{}
+	h := NewHost(store)
+	runID := "run-peek"
+	tok := h.RegisterRun(runID)
+	h.SetActiveNode(runID, "n1", "agent")
+
+	if peek := h.PeekMcpCalls(runID, "n1"); peek != nil {
+		t.Fatalf("empty peek should be nil, got %+v", peek)
+	}
+	if peek := h.PeekMcpCalls("missing", "n1"); peek != nil {
+		t.Fatalf("missing run peek should be nil, got %+v", peek)
+	}
+
+	call(t, h, runID, tok, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write_artifact","arguments":{"name":"note.md","content":"hi"}}}`)
+	peeked := h.PeekMcpCalls(runID, "n1")
+	if len(peeked) != 1 || peeked[0].Tool != "write_artifact" {
+		t.Fatalf("peek expected 1 write_artifact, got %+v", peeked)
+	}
+	// Peek must not drain.
+	if again := h.PeekMcpCalls(runID, "n1"); len(again) != 1 {
+		t.Fatalf("peek should be non-destructive, got %+v", again)
+	}
+	if taken := h.TakeMcpCalls(runID, "n1"); len(taken) != 1 {
+		t.Fatalf("take after peek: %+v", taken)
+	}
+
+	called := false
+	h.SetAfterWriteArtifact(func(runID, nodeID, name, content, kind string) { called = true })
+	h.SetProjectAuditHook(func(runID, nodeID, tool string, args map[string]any, resultText string, isError bool) {})
+	h.SetArtifactPreviewHook(func(runID, nodeID, name string) error { return nil })
+	if h.afterWrite == nil || h.projectAudit == nil || h.artifactPreview == nil {
+		t.Fatal("host hooks should be wired")
+	}
+	_ = called
+}
+
 func TestTrunc(t *testing.T) {
 	if got := trunc("abc", 10); got != "abc" {
 		t.Fatalf("short string should be unchanged, got %q", got)

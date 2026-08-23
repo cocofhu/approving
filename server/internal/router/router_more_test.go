@@ -128,3 +128,18 @@ func TestPublicGateMiddlewareHeadersAndPreflight(t *testing.T) {
 		t.Fatalf("OPTIONS status=%d, want 204", w.Code)
 	}
 }
+
+func TestPublicGateQueuePreflight(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := New(&handlers.Handlers{})
+	for _, path := range []string{
+		"/public/gate-approvals/queue/remove",
+		"/public/gate-approvals/queue/reorder",
+	} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, path, nil))
+		if w.Code != http.StatusNoContent {
+			t.Fatalf("OPTIONS %s status=%d, want 204", path, w.Code)
+		}
+	}
+}
