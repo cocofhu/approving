@@ -89,6 +89,8 @@ const {
   onGateResolve,
   onClarifySend,
   onClarifyCancel,
+  onClarifyQueueRemove,
+  onClarifyQueueReorder,
   onClarifyFinish,
   canCancelRun,
   showCancelConfirm,
@@ -716,6 +718,8 @@ const {
               @send="onClarifySend"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
+              @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"
+              @queue-reorder="onClarifyQueueReorder"
             />
             <RunReviewPanel
               v-else-if="nodeTab === 'review' && selNode && selRunView"
@@ -734,6 +738,8 @@ const {
               @send="onClarifySend"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
+              @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"
+              @queue-reorder="onClarifyQueueReorder"
               @pick="onAppPreviewReviewPick"
               @staged-pick="onAppPreviewStagedPick"
             />

@@ -2466,7 +2466,19 @@
       "imagePreviewTitle": "Image preview · {label}",
       "imageFallback": "Image",
       "imageFallbackN": "Image {n}",
-      "imagePreviewAria": "Preview {label}"
+      "imagePreviewAria": "Preview {label}",
+      "queueDragTitle": "Drag to reorder",
+      "queueDragAria": "Drag to change send order",
+      "queueEditTitle": "Re-edit",
+      "queueEditAria": "Re-edit queued item",
+      "queueCancelTitle": "Cancel",
+      "queueCancelAria": "Remove from queue",
+      "queueCancelled": "Removed: “{text}”",
+      "queueReordered": "Order updated",
+      "queueEditRefilled": "Moved back to the composer — send again to re-queue",
+      "queueEditBlocked": "The composer already has an unsent draft. Clear or send it before re-editing a queued item.",
+      "queueAttachmentBadge": "Files×{n}",
+      "queueAnnotationBadge": "Note"
     },
     "reviewComposer": {
       "sendClarify": "Send reply",

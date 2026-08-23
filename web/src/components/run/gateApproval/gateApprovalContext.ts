@@ -117,7 +117,12 @@ export type GateApprovalState = {
   reactAnnotations: ReactAnnotation[]
   reactSending: boolean
   reactError: string | null
-  reactQueued: { text: string }[]
+  reactQueued: { id?: string; text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] }[]
+  reactQueueNotice: string | null
+  reactQueueToast: string | null
+  cancelReactQueuedItem: (index: number) => void | Promise<void>
+  reorderReactQueuedItems: (fromIndex: number, toIndex: number) => void | Promise<void>
+  editReactQueuedItem: (index: number) => void | Promise<void>
   reactThinking: boolean
   reactStreamText: string
   reactStreamThought: string

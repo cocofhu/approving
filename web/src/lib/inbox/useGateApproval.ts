@@ -1176,7 +1176,12 @@ const reactText = ref('')
 const reactImages = ref<ClarifyImage[]>([])
 const reactSending = ref(false)
 /** Sandbox-aligned: pending-send queue + in-flight turn (HTTP returns on enqueue). */
-const reactQueued = ref<{ id?: string; text: string }[]>([])
+const reactQueued = ref<
+  { id?: string; text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] }[]
+>([])
+const reactQueueNotice = ref<string | null>(null)
+const reactQueueToast = ref<string | null>(null)
+let reactQueueToastTimer = 0
 const reactThinking = ref(false)
 /** True between turn_begin and turn_done/error (mirrors ClarifyChat liveAgentIdx). */
 const reactInFlight = ref(false)
@@ -1210,7 +1215,86 @@ const canSubmitReact = computed(
       !!pickedElementImage.value?.data),
 )
 
-function forceReactAuthoritativeIdle() {
+function hasReactComposerDraft(): boolean {
+  return !!(
+    reactText.value.trim() ||
+    reactImages.value.length > 0 ||
+    reactAnnotations.value.length > 0 ||
+    pickedElementImage.value?.data
+  )
+}
+
+function showReactQueueToast(msg: string) {
+  reactQueueToast.value = msg
+  clearTimeout(reactQueueToastTimer)
+  reactQueueToastTimer = window.setTimeout(() => {
+    reactQueueToast.value = null
+  }, 2200)
+}
+
+function syncReactQueueThinking() {
+  reactThinking.value = reactInFlight.value || reactQueued.value.length > 0
+}
+
+async function cancelReactQueuedItem(index: number) {
+  if (index < 0 || index >= reactQueued.value.length) return
+  const removed = reactQueued.value.splice(index, 1)[0]
+  syncReactQueueThinking()
+  const preview = (removed.text || '').slice(0, 18)
+  showReactQueueToast(t('pages.clarify.queueCancelled', { text: preview }))
+  if (removed.id && props.run?.id) {
+    try {
+      await api.gateReactQueueRemove(props.run.id, props.gate.nodeId, removed.id)
+    } catch (e: any) {
+      reactError.value = e?.message || t('pages.gateApproval.reactRevise.failed')
+    }
+  }
+}
+
+async function reorderReactQueuedItems(fromIndex: number, toIndex: number) {
+  if (
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= reactQueued.value.length ||
+    toIndex >= reactQueued.value.length ||
+    fromIndex === toIndex
+  ) {
+    return
+  }
+  const [moved] = reactQueued.value.splice(fromIndex, 1)
+  reactQueued.value.splice(toIndex, 0, moved)
+  showReactQueueToast(t('pages.clarify.queueReordered'))
+  const ids = reactQueued.value.map((q) => q.id).filter((id): id is string => !!id)
+  if (ids.length === reactQueued.value.length && ids.length > 0 && props.run?.id) {
+    try {
+      await api.gateReactQueueReorder(props.run.id, props.gate.nodeId, ids)
+    } catch (e: any) {
+      reactError.value = e?.message || t('pages.gateApproval.reactRevise.failed')
+    }
+  }
+}
+
+async function editReactQueuedItem(index: number) {
+  if (hasReactComposerDraft()) {
+    reactQueueNotice.value = t('pages.clarify.queueEditBlocked')
+    return
+  }
+  if (index < 0 || index >= reactQueued.value.length) return
+  reactQueueNotice.value = null
+  const item = reactQueued.value.splice(index, 1)[0]
+  reactText.value = item.text
+  reactImages.value = item.images.slice()
+  reactAnnotations.value = item.annotations.slice()
+  syncReactQueueThinking()
+  showReactQueueToast(t('pages.clarify.queueEditRefilled'))
+  if (item.id && props.run?.id) {
+    try {
+      await api.gateReactQueueRemove(props.run.id, props.gate.nodeId, item.id)
+    } catch (e: any) {
+      reactError.value = e?.message || t('pages.gateApproval.reactRevise.failed')
+    }
+  }
+}
   if (reactQueued.value.length) reactQueued.value = []
   if (reactInFlight.value) {
     reactInFlight.value = false
@@ -1328,7 +1412,12 @@ function applyReviewFrame(frame: {
             ? reactQueued.value.find((q) => q.id === id) ??
               reactQueued.value.find((q) => !q.id && q.text === text)
             : reactQueued.value.find((q) => q.text === text)
-          return { id: id ?? local?.id, text }
+          return {
+            id: id ?? local?.id,
+            text,
+            images: local?.images ?? [],
+            annotations: local?.annotations ?? [],
+          }
         })
         const maxLocal = reactInFlight.value || busy ? rebuilt.length : rebuilt.length + 1
         if (reactQueued.value.length > maxLocal) {
@@ -1471,7 +1560,11 @@ async function recordFeedbackIssue() {
 async function sendReactRevise() {
   if (!props.run?.id || !canSubmitReact.value) return
   const body = reactText.value.trim()
-  reactQueued.value.push({ text: body })
+  reactQueued.value.push({
+    text: body,
+    images: reactImages.value.slice(),
+    annotations: reactAnnotations.value.slice(),
+  })
   reactThinking.value = true
   reactSending.value = true
   reactError.value = null
@@ -1560,7 +1653,11 @@ async function sendHotReject() {
     selector: pickedSelector.value,
     elementImage: pickedElementImage.value,
   }
-  reactQueued.value.push({ text: body || '(annotate)' })
+  reactQueued.value.push({
+    text: body || '(annotate)',
+    images: reviseImages.map((im) => ({ data: im.data, mimeType: im.mimeType })),
+    annotations: anns.slice(),
+  })
   reactThinking.value = true
   try {
     const synced = await syncHotRejectHistory(anns)
@@ -1733,6 +1830,11 @@ provide(gateApprovalKey, {
     reactSending,
     reactError,
     reactQueued,
+    reactQueueNotice,
+    reactQueueToast,
+    cancelReactQueuedItem,
+    reorderReactQueuedItems,
+    editReactQueuedItem,
     reactThinking,
     reactStreamText,
     reactStreamThought,
@@ -1908,6 +2010,11 @@ provide(gateApprovalKey, {
     reactImages,
     reactSending,
     reactQueued,
+    reactQueueNotice,
+    reactQueueToast,
+    cancelReactQueuedItem,
+    reorderReactQueuedItems,
+    editReactQueuedItem,
     reactThinking,
     reactInFlight,
     reactStreamText,

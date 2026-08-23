@@ -2466,7 +2466,19 @@
       "imagePreviewTitle": "图片预览 · {label}",
       "imageFallback": "图片",
       "imageFallbackN": "图片 {n}",
-      "imagePreviewAria": "预览{label}"
+      "imagePreviewAria": "预览{label}",
+      "queueDragTitle": "拖动排序",
+      "queueDragAria": "拖动调整顺序",
+      "queueEditTitle": "重新编辑",
+      "queueEditAria": "重新编辑队列项",
+      "queueCancelTitle": "取消",
+      "queueCancelAria": "从队列取消",
+      "queueCancelled": "已取消：「{text}」",
+      "queueReordered": "顺序已更新",
+      "queueEditRefilled": "已回填输入区，修改后再次发送即可入队",
+      "queueEditBlocked": "输入区已有未发送草稿，请先清空或发送后再重新编辑队列项。",
+      "queueAttachmentBadge": "附件×{n}",
+      "queueAnnotationBadge": "批注"
     },
     "reviewComposer": {
       "sendClarify": "发送回复",

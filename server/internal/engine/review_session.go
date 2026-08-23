@@ -305,6 +305,101 @@ func (s *reviewSession) queueSnapshotLocked() []map[string]any {
 	return out
 }
 
+// RemoveQueuedItem drops one waiting (not active) item by id and broadcasts queue_state.
+func (e *Engine) RemoveQueuedItem(runID, producerID, itemID string) error {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return errors.New("item id required")
+	}
+	e.reviewMu.Lock()
+	s := e.reviewSess[e.reviewSessionKey(runID, producerID)]
+	e.reviewMu.Unlock()
+	if s == nil {
+		return errors.New("no session")
+	}
+
+	s.mu.Lock()
+	if s.active != nil && s.active.ID == itemID {
+		s.mu.Unlock()
+		return errors.New("cannot remove active item")
+	}
+	idx := -1
+	for i, it := range s.queue {
+		if it.ID == itemID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		s.mu.Unlock()
+		return errors.New("item not found")
+	}
+	s.queue = append(s.queue[:idx], s.queue[idx+1:]...)
+	if s.waiting > 0 {
+		s.waiting--
+	}
+	waiting := s.waiting
+	busy := s.active != nil
+	items := s.queueSnapshotLocked()
+	kind := string(s.kind)
+	s.mu.Unlock()
+
+	e.publishReview(runID, producerID, "queue_state", map[string]any{
+		"waiting": waiting,
+		"items":   items,
+		"busy":    busy,
+		"kind":    kind,
+	})
+	return nil
+}
+
+// ReorderQueuedItems sets the waiting FIFO to itemIDs order (must match exactly).
+func (e *Engine) ReorderQueuedItems(runID, producerID string, itemIDs []string) error {
+	if len(itemIDs) == 0 {
+		return errors.New("item ids required")
+	}
+	e.reviewMu.Lock()
+	s := e.reviewSess[e.reviewSessionKey(runID, producerID)]
+	e.reviewMu.Unlock()
+	if s == nil {
+		return errors.New("no session")
+	}
+
+	s.mu.Lock()
+	if len(s.queue) != len(itemIDs) {
+		s.mu.Unlock()
+		return errors.New("item count mismatch")
+	}
+	byID := make(map[string]*reviewQueueItem, len(s.queue))
+	for _, it := range s.queue {
+		byID[it.ID] = it
+	}
+	reordered := make([]*reviewQueueItem, 0, len(itemIDs))
+	for _, id := range itemIDs {
+		id = strings.TrimSpace(id)
+		it, ok := byID[id]
+		if !ok {
+			s.mu.Unlock()
+			return errors.New("item not found")
+		}
+		reordered = append(reordered, it)
+	}
+	s.queue = reordered
+	waiting := s.waiting
+	busy := s.active != nil
+	items := s.queueSnapshotLocked()
+	kind := string(s.kind)
+	s.mu.Unlock()
+
+	e.publishReview(runID, producerID, "queue_state", map[string]any{
+		"waiting": waiting,
+		"items":   items,
+		"busy":    busy,
+		"kind":    kind,
+	})
+	return nil
+}
+
 // CancelReviewSession clears all not-yet-started queue items, requests ACP
 // Cancel on the active turn (bridge PromptQueue cleared via session/cancel),
 // and keeps the session parked for further edits. Does not AbortRun / RetireSession.

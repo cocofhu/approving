@@ -112,3 +112,83 @@ func TestReviewEnqueueCapacity(t *testing.T) {
 	_ = eng.CancelReviewSession(run.ID, "prop")
 	_ = eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second)
 }
+
+// TestReviewQueueRemoveAndReorder: item-level cancel/reorder on waiting FIFO only.
+func TestReviewQueueRemoveAndReorder(t *testing.T) {
+	eng, db, provider := setupReviewEngine(t, true)
+	hold := make(chan struct{})
+	provider.reviseHold = hold
+
+	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "prop")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	if _, err := eng.EnqueueReviewTurn(run.ID, "prop", "第一条", nil, nil, "node", ""); err != nil {
+		t.Fatalf("enqueue1: %v", err)
+	}
+	if _, err := eng.EnqueueReviewTurn(run.ID, "prop", "第二条", nil, nil, "node", ""); err != nil {
+		t.Fatalf("enqueue2: %v", err)
+	}
+	if _, err := eng.EnqueueReviewTurn(run.ID, "prop", "第三条", nil, nil, "node", ""); err != nil {
+		t.Fatalf("enqueue3: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		w, thinking := eng.ReviewSessionState(run.ID, "prop")
+		if thinking && w >= 2 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	snap, ok := eng.ReviewSessionSnapshotFor(run.ID, "prop")
+	if !ok || len(snap.Items) < 2 {
+		t.Fatalf("expected pending items, snap=%+v", snap)
+	}
+	removeID, _ := snap.Items[0]["id"].(string)
+	reorderIDs := make([]string, 0, len(snap.Items))
+	for _, it := range snap.Items {
+		if id, ok := it["id"].(string); ok {
+			reorderIDs = append(reorderIDs, id)
+		}
+	}
+	if removeID == "" || len(reorderIDs) < 2 {
+		t.Fatalf("missing item ids: %+v", snap.Items)
+	}
+
+	if err := eng.RemoveQueuedItem(run.ID, "prop", removeID); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	snap, _ = eng.ReviewSessionSnapshotFor(run.ID, "prop")
+	if snap.Waiting != 1 {
+		t.Fatalf("after remove waiting=%d", snap.Waiting)
+	}
+	for _, it := range snap.Items {
+		if id, _ := it["id"].(string); id == removeID {
+			t.Fatalf("removed item still present")
+		}
+	}
+
+	// Reverse remaining order.
+	if len(reorderIDs) >= 2 {
+		reorderIDs = reorderIDs[1:] // drop removed head
+		for i, j := 0, len(reorderIDs)-1; i < j; i, j = i+1, j-1 {
+			reorderIDs[i], reorderIDs[j] = reorderIDs[j], reorderIDs[i]
+		}
+		if err := eng.ReorderQueuedItems(run.ID, "prop", reorderIDs); err != nil {
+			t.Fatalf("reorder: %v", err)
+		}
+		snap, _ = eng.ReviewSessionSnapshotFor(run.ID, "prop")
+		if got, _ := snap.Items[0]["id"].(string); got != reorderIDs[0] {
+			t.Fatalf("reorder head=%s want %s", got, reorderIDs[0])
+		}
+	}
+
+	close(hold)
+	_ = eng.CancelReviewSession(run.ID, "prop")
+	_ = eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second)
+}

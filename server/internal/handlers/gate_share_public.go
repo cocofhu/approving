@@ -39,6 +39,16 @@ type publicCancelBody struct {
 	Token string `json:"token"`
 }
 
+type publicQueueItemBody struct {
+	Token  string `json:"token"`
+	ItemID string `json:"itemId"`
+}
+
+type publicQueueReorderBody struct {
+	Token   string   `json:"token"`
+	ItemIDs []string `json:"itemIds"`
+}
+
 func (h *Handlers) publicRateLimit(c *gin.Context, bucket string) bool {
 	if h.GateShareLimiter == nil {
 		return true
@@ -267,6 +277,112 @@ func (h *Handlers) PublicGateCancel(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "kind": models.ShareLinkKindHumanGate})
+}
+
+func (h *Handlers) publicShareQueueTarget(lookup *gateshare.LookupResult) (runID, nodeID string, err error) {
+	kind := publicShareKind(lookup)
+	if kind == models.ShareLinkKindReview {
+		return lookup.Link.RunID, lookup.Link.NodeID, nil
+	}
+	producerID, alive := h.Eng.GateReactInfo(lookup.Link.RunID, lookup.Link.NodeID)
+	if producerID == "" || !alive {
+		return "", "", errors.New("上游复审会话不可用")
+	}
+	return lookup.Link.RunID, producerID, nil
+}
+
+func (h *Handlers) PublicGateQueueRemove(c *gin.Context) {
+	applyPublicSecurityHeaders(c)
+	if !h.publicRateLimit(c, gateshare.RateBucketPreview) {
+		return
+	}
+	if h.GateShare == nil || h.Eng == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+	if !h.checkPublicCSRF(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "csrf", "message": "请求未通过安全校验"})
+		return
+	}
+	var body publicQueueItemBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
+		return
+	}
+	token := strings.TrimSpace(body.Token)
+	if token == "" || !gateshare.ValidTokenShape(token) {
+		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+		return
+	}
+	lookup, st, err := h.GateShare.LookupByToken(token)
+	if err != nil || lookup == nil || st != models.ShareLinkStateActive {
+		if st == "" {
+			st = "invalid"
+		}
+		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	if !gateshare.Allow(lookup.Link.PermissionPreset, gateshare.ActionReply) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission_denied", "message": "当前链接权限不允许回复"})
+		return
+	}
+	runID, nodeID, err := h.publicShareQueueTarget(lookup)
+	if err != nil {
+		h.writePublicReactErr(c, err)
+		return
+	}
+	if err := h.Eng.RemoveQueuedItem(runID, nodeID, body.ItemID); err != nil {
+		h.writePublicReactErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "kind": publicShareKind(lookup)})
+}
+
+func (h *Handlers) PublicGateQueueReorder(c *gin.Context) {
+	applyPublicSecurityHeaders(c)
+	if !h.publicRateLimit(c, gateshare.RateBucketPreview) {
+		return
+	}
+	if h.GateShare == nil || h.Eng == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "unavailable"})
+		return
+	}
+	if !h.checkPublicCSRF(c) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "csrf", "message": "请求未通过安全校验"})
+		return
+	}
+	var body publicQueueReorderBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_body"})
+		return
+	}
+	token := strings.TrimSpace(body.Token)
+	if token == "" || !gateshare.ValidTokenShape(token) {
+		c.JSON(http.StatusOK, gin.H{"status": "invalid"})
+		return
+	}
+	lookup, st, err := h.GateShare.LookupByToken(token)
+	if err != nil || lookup == nil || st != models.ShareLinkStateActive {
+		if st == "" {
+			st = "invalid"
+		}
+		c.JSON(http.StatusOK, gin.H{"status": st})
+		return
+	}
+	if !gateshare.Allow(lookup.Link.PermissionPreset, gateshare.ActionReply) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "permission_denied", "message": "当前链接权限不允许回复"})
+		return
+	}
+	runID, nodeID, err := h.publicShareQueueTarget(lookup)
+	if err != nil {
+		h.writePublicReactErr(c, err)
+		return
+	}
+	if err := h.Eng.ReorderQueuedItems(runID, nodeID, body.ItemIDs); err != nil {
+		h.writePublicReactErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "kind": publicShareKind(lookup)})
 }
 
 func (h *Handlers) writePublicReactErr(c *gin.Context, err error) {

@@ -238,6 +238,18 @@ export const runsClient = {
   /** 轮级 Cancel for node-inline review (clears FIFO + aborts active ACP turn). */
   reactCancel: (runId: string, nodeId: string) =>
     req<{ status: string }>(`/runs/${runId}/react/${nodeId}/cancel`, { method: 'POST' }),
+  /** Remove one waiting queue item by server id. */
+  reactQueueRemove: (runId: string, nodeId: string, itemId: string) =>
+    req<{ status: string }>(`/runs/${runId}/react/${nodeId}/queue/remove`, {
+      method: 'POST',
+      body: JSON.stringify({ itemId }),
+    }),
+  /** Reorder waiting queue items (authoritative ids). */
+  reactQueueReorder: (runId: string, nodeId: string, itemIds: string[]) =>
+    req<{ status: string }>(`/runs/${runId}/react/${nodeId}/queue/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ itemIds }),
+    }),
   // Approval-gate ReAct reject: send annotations/text/images to the gate's
   // upstream producer's still-alive session for an in-place edit; the gate stays
   // pending. Requires gate.reactSessionAlive.
@@ -260,6 +272,16 @@ export const runsClient = {
     req<{ status: string; producerNodeId?: string }>(
       `/runs/${runId}/gates/${nodeId}/react-cancel`,
       { method: 'POST' },
+    ),
+  gateReactQueueRemove: (runId: string, nodeId: string, itemId: string) =>
+    req<{ status: string; producerNodeId?: string }>(
+      `/runs/${runId}/gates/${nodeId}/react-queue/remove`,
+      { method: 'POST', body: JSON.stringify({ itemId }) },
+    ),
+  gateReactQueueReorder: (runId: string, nodeId: string, itemIds: string[]) =>
+    req<{ status: string; producerNodeId?: string }>(
+      `/runs/${runId}/gates/${nodeId}/react-queue/reorder`,
+      { method: 'POST', body: JSON.stringify({ itemIds }) },
     ),
 
   exportRunLogsUrl: (id: string) => `${origin()}/api/runs/${id}/logs/export`,

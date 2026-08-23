@@ -169,11 +169,15 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.POST("/runs/:id/reviews/:nodeId/share-link/revoke", h.RevokeReviewShareLink)
 		api.POST("/runs/:id/gates/:nodeId/react-revise", h.GateReactRevise)
 		api.POST("/runs/:id/gates/:nodeId/react-cancel", h.GateReactCancel)
+		api.POST("/runs/:id/gates/:nodeId/react-queue/remove", h.GateReactQueueRemove)
+		api.POST("/runs/:id/gates/:nodeId/react-queue/reorder", h.GateReactQueueReorder)
 		api.GET("/runs/:id/gates/:nodeId/primary-artifacts", h.ListGatePrimaryArtifacts)
 		api.PUT("/runs/:id/gates/:nodeId/artifacts/:name", h.SaveGateArtifact)
 		api.PUT("/runs/:id/gates/:nodeId/annotation-artifact", h.SaveAnnotationArtifact)
 		api.POST("/runs/:id/react/:nodeId/reply", h.ReactReply)
 		api.POST("/runs/:id/react/:nodeId/cancel", h.ReactCancel)
+		api.POST("/runs/:id/react/:nodeId/queue/remove", h.ReactQueueRemove)
+		api.POST("/runs/:id/react/:nodeId/queue/reorder", h.ReactQueueReorder)
 		api.GET("/runs/:id/events", h.RunEvents)
 
 		api.GET("/gates", h.ListGates)
@@ -316,6 +320,8 @@ func New(h *handlers.Handlers) *gin.Engine {
 		pub.POST("/decide", h.PublicGateDecide)
 		pub.POST("/reply", h.PublicGateReply)
 		pub.POST("/cancel", h.PublicGateCancel)
+		pub.POST("/queue/remove", h.PublicGateQueueRemove)
+		pub.POST("/queue/reorder", h.PublicGateQueueReorder)
 		pub.OPTIONS("/preview", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/artifacts", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/artifacts/:name/content", func(c *gin.Context) { c.Status(http.StatusNoContent) })
@@ -324,6 +330,8 @@ func New(h *handlers.Handlers) *gin.Engine {
 		pub.OPTIONS("/decide", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/reply", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 		pub.OPTIONS("/cancel", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		pub.OPTIONS("/queue/remove", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+		pub.OPTIONS("/queue/reorder", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 	}
 
 	// SPA fallback: serve index.html for unknown non-API paths so vue-router

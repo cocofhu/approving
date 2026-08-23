@@ -561,6 +561,28 @@ async function onClarifyCancel() {
     console.warn('reactCancel failed', e?.message || e)
   }
 }
+
+async function onClarifyQueueRemove(itemId: string | undefined) {
+  if (!itemId) return
+  const conv = selClarify.value
+  if (!conv || conv.done) return
+  try {
+    await api.reactQueueRemove(runId.value, conv.nodeId, itemId)
+  } catch (e: any) {
+    console.warn('reactQueueRemove failed', e?.message || e)
+  }
+}
+
+async function onClarifyQueueReorder(itemIds: string[]) {
+  if (!itemIds.length) return
+  const conv = selClarify.value
+  if (!conv || conv.done) return
+  try {
+    await api.reactQueueReorder(runId.value, conv.nodeId, itemIds)
+  } catch (e: any) {
+    console.warn('reactQueueReorder failed', e?.message || e)
+  }
+}
 // Clarify: finish early. Review: confirm product & advance (different prompt).
 function onClarifyFinish() {
   const prompt = reviewActive.value
@@ -1214,6 +1236,8 @@ function selectExecution(nodeId: string, idx: number) {
   onGateResolve,
   onClarifySend,
   onClarifyCancel,
+  onClarifyQueueRemove,
+  onClarifyQueueReorder,
   onClarifyFinish,
   canCancelRun,
   showCancelConfirm,
