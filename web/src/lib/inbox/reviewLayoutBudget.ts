@@ -154,3 +154,18 @@ export function applyOuterSashMem(mem: OuterSashMem | null, workspace: number): 
   if (mem) return clampOuterRight(mem.width, workspace, false)
   return { width: reviewDefaultRightPx(workspace), fullOpen: false }
 }
+
+/** Rough split-root width before mount (sidebar-aware; outer sash is desktop-only). */
+export function estimateOuterWorkspace(): number {
+  if (typeof window === 'undefined') return 1280
+  const vw = window.innerWidth || 0
+  if (vw <= 0) return 1280
+  // App shell sidebar ≈240px on md+; mobile has no horizontal outer sash.
+  if (vw >= 768) return Math.max(400, vw - 240)
+  return vw
+}
+
+/** Sync read localStorage and apply before first paint (re-clamp after real measure). */
+export function initOuterSashFromMemory(workspace = estimateOuterWorkspace()): OuterSashMem {
+  return applyOuterSashMem(readSharedOuterSashMem(), workspace)
+}

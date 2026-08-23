@@ -145,6 +145,7 @@ const {
   workspacePx,
   outerRightPx,
   outerFullOpen,
+  outerSashBooting,
   outerSashDragging,
   outerSashStartX,
   outerSashStartW,
@@ -415,6 +416,7 @@ const {
         ref="splitRootRef"
         data-testid="run-detail-content"
         class="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col md:flex-row"
+        :class="{ 'run-detail-outer-sash-booting': outerSashBooting && desktopOuterSashLayout }"
       >
       <!-- View mode switcher: always visible so mobile can open stats. -->
       <div
@@ -912,6 +914,9 @@ const {
 </template>
 
 <style scoped>
+.run-detail-outer-sash-booting {
+  visibility: hidden;
+}
 .run-detail-outer-sash {
   width: 4px;
   flex-shrink: 0;
