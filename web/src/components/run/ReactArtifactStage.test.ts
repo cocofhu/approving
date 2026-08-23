@@ -347,7 +347,7 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="app-preview-stub"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="app-preview-stub"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').text()).toContain('应用预览')
     wrapper.unmount()
