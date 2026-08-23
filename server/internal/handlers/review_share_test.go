@@ -584,3 +584,75 @@ func TestReviewSharePermissionPresetReactOnly(t *testing.T) {
 		t.Fatal("must not consume on denied decide")
 	}
 }
+
+func TestReviewSharePublicArtifactsListAndContent(t *testing.T) {
+	h := newHarness(t)
+	seedInboxReview(t, h, "run-rev-arts", "research1", true)
+
+	created := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-rev-arts/reviews/research1/share-link", map[string]any{"ttlTier": "24h"}))
+	url, _ := created["url"].(string)
+	token := strings.TrimPrefix(url[strings.Index(url, "#t="):], "#t=")
+
+	list := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/artifacts", nil, map[string]string{headerShareToken: token}))
+	if list["status"] != models.ShareLinkStateActive {
+		t.Fatalf("list status: %+v", list)
+	}
+	arts, _ := list["artifacts"].([]any)
+	if len(arts) < 2 {
+		t.Fatalf("expected run artifacts including other node, got %+v", list)
+	}
+	names := map[string]bool{}
+	for _, raw := range arts {
+		m, _ := raw.(map[string]any)
+		names[m["name"].(string)] = true
+		if _, ok := m["runId"]; ok {
+			t.Fatalf("public list must not leak runId: %+v", m)
+		}
+	}
+	if !names["research.json"] || !names["page.html"] {
+		t.Fatalf("missing expected artifacts: %+v", names)
+	}
+	if list["nodes"] == nil {
+		t.Fatal("expected sanitized graph nodes for stage filtering")
+	}
+
+	body := h.doPublic(http.MethodGet, "/public/gate-approvals/artifacts/research.json/content", nil, map[string]string{headerShareToken: token})
+	if body.Code != 200 {
+		t.Fatalf("content: %d %s", body.Code, body.Body.String())
+	}
+	content := parseJSON(t, body)
+	if !strings.Contains(content["content"].(string), "调研摘要") {
+		t.Fatalf("content body: %+v", content)
+	}
+	if strings.Contains(body.Body.String(), "run-rev-arts") {
+		t.Fatalf("content leaked run id: %s", body.Body.String())
+	}
+}
+
+func TestReviewSharePublicArtifactsInactiveAndHumanGateDenied(t *testing.T) {
+	h := newHarness(t)
+	seedInboxReview(t, h, "run-rev-arts-deny", "research1", true)
+
+	rev := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-rev-arts-deny/reviews/research1/share-link", map[string]any{"ttlTier": "24h"}))
+	gate := parseJSON(t, h.do(http.MethodPost, "/api/runs/run-rev-arts-deny/gates/hg-r/share-link", map[string]any{"ttlTier": "8h"}))
+	revTok := strings.TrimPrefix(rev["url"].(string)[strings.Index(rev["url"].(string), "#t="):], "#t=")
+	gateTok := strings.TrimPrefix(gate["url"].(string)[strings.Index(gate["url"].(string), "#t="):], "#t=")
+
+	if w := h.doPublic(http.MethodGet, "/public/gate-approvals/artifacts", nil, map[string]string{headerShareToken: gateTok}); w.Code != 403 {
+		t.Fatalf("human_gate artifacts list: %d %s", w.Code, w.Body.String())
+	}
+	if w := h.doPublic(http.MethodGet, "/public/gate-approvals/artifacts/research.json/content", nil, map[string]string{headerShareToken: gateTok}); w.Code != 403 {
+		t.Fatalf("human_gate artifact content: %d %s", w.Code, w.Body.String())
+	}
+
+	h.db.Model(&models.GateShareLink{}).Where("token_hash = ?", gateshare.HashToken(revTok)).
+		Update("expires_at", time.Now().Add(-time.Hour))
+	exp := parseJSON(t, h.doPublic(http.MethodGet, "/public/gate-approvals/artifacts", nil, map[string]string{headerShareToken: revTok}))
+	if exp["status"] != models.ShareLinkStateExpired {
+		t.Fatalf("expired list: %+v", exp)
+	}
+	if _, ok := exp["artifacts"]; ok {
+		t.Fatalf("expired must not return artifacts: %+v", exp)
+	}
+}
+

@@ -8,6 +8,7 @@ import NovncPreviewPanel from '@/components/run/NovncPreviewPanel.vue'
 import AppPreviewPanel from '@/components/run/AppPreviewPanel.vue'
 import PublicAppPreviewPanel from '@/components/run/PublicAppPreviewPanel.vue'
 import { api } from '@/lib/api/api'
+import { publicGateApi } from '@/lib/inbox/gateShareLink'
 import type { PublicPreviewPort } from '@/lib/inbox/gateShareLink'
 import { relTime } from '@/lib/shared/format'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
@@ -411,7 +412,9 @@ watch(
         continue
       } else {
         try {
-          const full = await api.artifactContent(a.id, { signal: ac.signal })
+          const full = props.token
+            ? await publicGateApi.artifactContent(props.token, a.name, ac.signal)
+            : await api.artifactContent(a.id, { signal: ac.signal })
           if (gen !== summaryThumbGen) return
           content = full.content ?? ''
           summaryThumbFp[a.id] = fp
@@ -755,6 +758,7 @@ onBeforeUnmount(() => {
         :artifacts="stageArtifacts"
         :run-id="runId"
         hide-delete
+        :share-token="token"
         :annotatable="artifactAnnotatable(resolvedArtifact(artifactByName(name)))"
         class="min-h-0 flex-1"
       />

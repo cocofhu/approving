@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<ArtifactPreviewProps>(), {
   hideZoom: false,
   hideExport: false,
   annotatable: false,
+  shareToken: '',
 })
 const emit = defineEmits<ArtifactPreviewEmit>()
 

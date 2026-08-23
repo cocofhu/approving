@@ -18,6 +18,7 @@ import { renderMarkdown } from '@/lib/shared/markdown'
 import { isJsonArtifact, parseJsonState } from '@/lib/shared/highlightJson'
 import { fmtTime } from '@/lib/shared/format'
 import { api } from '@/lib/api/api'
+import { publicGateApi } from '@/lib/inbox/gateShareLink'
 import { copyToClipboard } from '@/lib/shared/copyToClipboard'
 import { useToast } from '@/lib/composables/useToast'
 import { exportStructuredArtifact, type StructuredExportFormat } from '@/lib/run/exportStructuredArtifact'
@@ -35,6 +36,8 @@ export interface ArtifactPreviewProps {
   hideZoom?: boolean
   hideExport?: boolean
   annotatable?: boolean
+  /** When set, load content via public review-share token instead of session API. */
+  shareToken?: string
 }
 
 export type ArtifactPreviewEmit = { (e: 'deleted', id: string): void }
@@ -237,9 +240,19 @@ async function loadImageDownload(a: Artifact) {
   imageDownloadError.value = false
   imageDownloadLoading.value = true
   try {
-    const res = await fetch(api.artifactDownloadUrl(a.id), { credentials: 'include' })
-    if (!res.ok) throw new Error(String(res.status))
-    const blob = await res.blob()
+    let blob: Blob
+    if (props.shareToken) {
+      const full = await publicGateApi.artifactContent(props.shareToken, a.name)
+      const raw = full.content ?? ''
+      const binary = atob(raw.replace(/\s/g, ''))
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      blob = new Blob([bytes], { type: a.kind === 'image' ? 'image/png' : 'application/octet-stream' })
+    } else {
+      const res = await fetch(api.artifactDownloadUrl(a.id), { credentials: 'include' })
+      if (!res.ok) throw new Error(String(res.status))
+      blob = await res.blob()
+    }
     if (gen !== imageLoadGen) return
     const url = URL.createObjectURL(blob)
     imageBlobUrl = url
@@ -275,7 +288,9 @@ async function loadContent(a: Artifact, opts?: { force?: boolean }) {
   loading.value = true
   loadErr.value = ''
   try {
-    const full = await api.artifactContent(a.id, { signal: contentLoadAbort.signal })
+    const full = props.shareToken
+      ? await publicGateApi.artifactContent(props.shareToken, a.name, contentLoadAbort.signal)
+      : await api.artifactContent(a.id, { signal: contentLoadAbort.signal })
     if (gen !== contentLoadGen) return
     contentCache.value[a.id] = full.content ?? ''
   } catch (e: any) {

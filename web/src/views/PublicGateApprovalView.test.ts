@@ -13,6 +13,7 @@ import { setTheme } from '@/lib/shared/theme'
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   upstream: vi.fn(),
+  artifacts: vi.fn(),
   decide: vi.fn(),
   reply: vi.fn(),
   cancel: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('@/lib/inbox/gateShareLink', async () => {
     publicGateApi: {
       preview: mocks.preview,
       upstream: mocks.upstream,
+      artifacts: mocks.artifacts,
       decide: mocks.decide,
       reply: mocks.reply,
       cancel: mocks.cancel,
@@ -87,6 +89,8 @@ function mountView(locale: 'zh-CN' | 'en' = 'zh-CN') {
 beforeEach(() => {
   mocks.preview.mockReset()
   mocks.upstream.mockReset()
+  mocks.artifacts.mockReset()
+  mocks.artifacts.mockResolvedValue({ status: 'active', artifacts: [], nodes: [] })
   mocks.decide.mockReset()
   mocks.reply.mockReset()
   mocks.cancel.mockReset()
