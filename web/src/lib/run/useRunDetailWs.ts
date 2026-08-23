@@ -42,7 +42,10 @@ export function useRunDetailWs(opts: {
   mergeLiveWsAcpPage: (nodeId: string, wsEvents: AcpEvent[]) => void
   rehydrateByNode: Record<string, string>
   rehydrateNodeEvents: (nodeId: string | null, opts?: { force?: boolean }) => Promise<void>
-  fetchSandboxLog: (nodeId: string | null) => Promise<void> | void
+  fetchSandboxLog: (
+    nodeId: string | null,
+    opts?: { intent?: 'user_initiated' | 'silent_poll' },
+  ) => Promise<void> | void
   maybePollSandboxForBoot: () => void
   isClarifySessionBusy: () => boolean
   loadRun: (hard?: boolean) => Promise<void> | void
@@ -342,7 +345,9 @@ export function useRunDetailWs(opts: {
               void rehydrateNodeEvents(sel)
             }
           }
-          if (nodeTab.value === 'sandbox') fetchSandboxLog(selected.value)
+          if (nodeTab.value === 'sandbox') {
+            fetchSandboxLog(selected.value, { intent: 'silent_poll' })
+          }
           // Boot-stage empty state needs fresh sandbox row status/containerStatus.
           maybePollSandboxForBoot()
         }

@@ -99,6 +99,58 @@ describe('useRunDetailWs', () => {
     expect(typeof api.connectWs).toBe('function')
   })
 
+  it('polls sandbox log silently on sandbox tab interval', async () => {
+    vi.useFakeTimers()
+    const fetchSandboxLog = vi.fn()
+    const run = ref({
+      id: 'run-3',
+      status: 'running',
+      reactSessions: {},
+      nodeRuns: { n1: { nodeId: 'n1', status: 'running' } },
+    } as unknown as Run)
+    const selected = ref<string | null>('n1')
+    const nodeTab = ref('sandbox')
+    const eventPages: Record<string, any> = {
+      n1: { events: [{ kind: 'message', text: 'x', t: 1 }], nextCursor: '', hasMore: false, live: true },
+    }
+
+    const api = useRunDetailWs({
+      runId: computed(() => 'run-3'),
+      run,
+      selected,
+      manual: ref(false),
+      liveBusy: {},
+      liveNode: ref('n1'),
+      eventPages,
+      nodeTab,
+      reviewChatRef: ref(null),
+      gateApprovalRef: ref(null),
+      selClarify: computed(() => null),
+      fetchNodeEvents: vi.fn(async () => true),
+      mergeLiveWsAcpPage: vi.fn(),
+      rehydrateByNode: { n1: 'ready' },
+      rehydrateNodeEvents: vi.fn(async () => undefined),
+      fetchSandboxLog,
+      maybePollSandboxForBoot: vi.fn(),
+      isClarifySessionBusy: () => false,
+      loadRun: vi.fn(),
+    })
+
+    await api.initAfterLoadSuccess({
+      applyDetailArtifactsDeepLink: () => false,
+      applyOutputDeepLinkFocus: () => false,
+      defaultNode: 'n1',
+      syncAllMcpCallsFromRun: () => undefined,
+    })
+    fetchSandboxLog.mockClear()
+
+    vi.advanceTimersByTime(2000)
+    expect(fetchSandboxLog).toHaveBeenCalledWith('n1', { intent: 'silent_poll' })
+
+    api.teardownRealtime()
+    vi.useRealTimers()
+  })
+
   it('restores idle sessions and flushes without busy seed', async () => {
     const run = ref({
       id: 'run-2',
