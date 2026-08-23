@@ -58,6 +58,12 @@ const composerFocused = ref(false)
 const composing = ref(false)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const overflowScroll = ref(false)
+const pipelineCardsEl = ref<HTMLDivElement | null>(null)
+const pipelineCanScrollPrev = ref(false)
+const pipelineCanScrollNext = ref(false)
+const pipelineFadeLeft = ref(false)
+const pipelineFadeRight = ref(false)
+let pipelineStripObserver: ResizeObserver | null = null
 const phVisible = ref('')
 const phCursor = ref(false)
 let phTimer: ReturnType<typeof setTimeout> | null = null
@@ -222,6 +228,70 @@ function onComposerSubmit(e: Event) {
   void send()
 }
 
+const PIPELINE_SCROLL_EPS = 2
+
+function pipelineCardStep(): number {
+  const rail = pipelineCardsEl.value
+  if (!rail) return 204
+  const card = rail.querySelector('.home-shell__card')
+  if (!card) return 204
+  const styles = getComputedStyle(rail)
+  const gap = parseFloat(styles.columnGap || styles.gap || '12') || 12
+  return card.getBoundingClientRect().width + gap
+}
+
+function syncPipelineNav() {
+  const rail = pipelineCardsEl.value
+  if (!rail) {
+    pipelineCanScrollPrev.value = false
+    pipelineCanScrollNext.value = false
+    pipelineFadeLeft.value = false
+    pipelineFadeRight.value = false
+    return
+  }
+  const max = Math.max(0, rail.scrollWidth - rail.clientWidth)
+  const left = rail.scrollLeft
+  const atStart = left <= PIPELINE_SCROLL_EPS
+  const atEnd = left >= max - PIPELINE_SCROLL_EPS
+  const overflow = max > PIPELINE_SCROLL_EPS
+  pipelineCanScrollPrev.value = overflow && !atStart
+  pipelineCanScrollNext.value = overflow && !atEnd
+  pipelineFadeLeft.value = overflow && !atStart
+  pipelineFadeRight.value = overflow && !atEnd
+}
+
+function scrollPipelineByDir(dir: number) {
+  const rail = pipelineCardsEl.value
+  if (!rail) return
+  const delta = pipelineCardStep() * dir
+  if (prefersReducedMotion()) {
+    rail.classList.add('home-pipeline-rail--instant')
+    rail.scrollLeft += delta
+    requestAnimationFrame(() => rail.classList.remove('home-pipeline-rail--instant'))
+  } else {
+    rail.scrollBy({ left: delta, behavior: 'smooth' })
+  }
+}
+
+function onPipelineWheel(e: WheelEvent) {
+  const rail = pipelineCardsEl.value
+  if (!rail) return
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey) return
+  const dx = e.shiftKey ? e.deltaY : e.deltaX
+  if (!dx) return
+  e.preventDefault()
+  rail.scrollLeft += dx
+}
+
+function bindPipelineStripObserver() {
+  if (typeof ResizeObserver === 'undefined') return
+  pipelineStripObserver?.disconnect()
+  pipelineStripObserver = null
+  if (!pipelineCardsEl.value) return
+  pipelineStripObserver = new ResizeObserver(() => syncPipelineNav())
+  pipelineStripObserver.observe(pipelineCardsEl.value)
+}
+
 function openFilePicker() {
   fileInput.value?.click()
 }
@@ -232,14 +302,30 @@ watch(placeholderLines, () => {
   if (showPhTypewriter.value) runPlaceholderTypewriter()
 })
 
+watch(
+  () => pipelines.value.length,
+  () => nextTick(() => {
+    syncPipelineNav()
+    bindPipelineStripObserver()
+  }),
+)
+
 onMounted(() => {
   runBrandTypewriter()
-  nextTick(autoGrow)
+  nextTick(() => {
+    autoGrow()
+    syncPipelineNav()
+    bindPipelineStripObserver()
+  })
+  window.addEventListener('resize', syncPipelineNav)
 })
 
 onBeforeUnmount(() => {
   clearBrandTimers()
   clearPhTimers()
+  pipelineStripObserver?.disconnect()
+  pipelineStripObserver = null
+  window.removeEventListener('resize', syncPipelineNav)
 })
 </script>
 
@@ -429,33 +515,74 @@ onBeforeUnmount(() => {
 
       <div
         v-else
-        class="mt-10 flex w-full justify-center gap-3 overflow-x-auto pb-1"
-        data-testid="home-pipeline-cards"
+        class="home-pipeline-rail-wrap mt-10 w-full"
+        :class="{
+          'home-pipeline-rail-wrap--has-left': pipelineFadeLeft,
+          'home-pipeline-rail-wrap--has-right': pipelineFadeRight,
+        }"
+        data-testid="home-pipeline-rail-wrap"
       >
         <button
-          v-for="p in pipelines"
-          :key="p.id"
           type="button"
-          class="home-shell__card w-48 shrink-0 overflow-hidden border border-line p-0 text-left"
-          :class="p.id === selected?.id ? 'home-shell__card--selected' : 'hover:border-line-strong'"
-          :data-testid="`home-pipeline-card-${p.id}`"
-          @click="selectPipeline(p.id)"
+          class="home-pipeline-nav home-pipeline-nav--prev"
+          data-testid="home-pipeline-scroll-prev"
+          :disabled="!pipelineCanScrollPrev"
+          :aria-label="t('pages.dashboard.scrollLeft')"
+          :title="t('pages.dashboard.scrollLeft')"
+          @click="scrollPipelineByDir(-1)"
         >
-          <div class="home-shell__card-top flex h-20 items-center justify-center">
-            <span class="flex items-center gap-1.5">
-              <span class="h-2 w-2 bg-txt3" />
-              <span class="h-px w-6 bg-line-strong" />
-              <span class="h-2.5 w-2.5 bg-accent" />
-              <span class="h-px w-6 bg-line-strong" />
-              <span class="h-2 w-2 bg-txt3" />
-            </span>
-          </div>
-          <div class="px-3 py-2.5">
-            <div class="truncate text-[13px] font-medium text-txt">{{ p.name }}</div>
-            <div class="mt-0.5 line-clamp-2 text-[11px] text-txt3">
-              {{ p.description || t('pages.dashboard.cardFallback') }}
+          <Icon name="chevron-left" :size="16" />
+        </button>
+        <div class="home-pipeline-fade home-pipeline-fade--left" aria-hidden="true" />
+        <div class="home-pipeline-fade home-pipeline-fade--right" aria-hidden="true" />
+
+        <div
+          ref="pipelineCardsEl"
+          class="home-pipeline-rail flex w-full justify-center gap-3 pb-1"
+          data-testid="home-pipeline-cards"
+          tabindex="0"
+          role="list"
+          @scroll.passive="syncPipelineNav"
+          @wheel="onPipelineWheel"
+        >
+          <button
+            v-for="p in pipelines"
+            :key="p.id"
+            type="button"
+            role="listitem"
+            class="home-shell__card w-48 shrink-0 overflow-hidden border border-line p-0 text-left"
+            :class="p.id === selected?.id ? 'home-shell__card--selected' : 'hover:border-line-strong'"
+            :data-testid="`home-pipeline-card-${p.id}`"
+            @click="selectPipeline(p.id)"
+          >
+            <div class="home-shell__card-top flex h-20 items-center justify-center">
+              <span class="flex items-center gap-1.5">
+                <span class="h-2 w-2 bg-txt3" />
+                <span class="h-px w-6 bg-line-strong" />
+                <span class="h-2.5 w-2.5 bg-accent" />
+                <span class="h-px w-6 bg-line-strong" />
+                <span class="h-2 w-2 bg-txt3" />
+              </span>
             </div>
-          </div>
+            <div class="px-3 py-2.5">
+              <div class="truncate text-[13px] font-medium text-txt">{{ p.name }}</div>
+              <div class="mt-0.5 line-clamp-2 text-[11px] text-txt3">
+                {{ p.description || t('pages.dashboard.cardFallback') }}
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          class="home-pipeline-nav home-pipeline-nav--next"
+          data-testid="home-pipeline-scroll-next"
+          :disabled="!pipelineCanScrollNext"
+          :aria-label="t('pages.dashboard.scrollRight')"
+          :title="t('pages.dashboard.scrollRight')"
+          @click="scrollPipelineByDir(1)"
+        >
+          <Icon name="chevron-right" :size="16" />
         </button>
       </div>
     </div>
@@ -648,6 +775,100 @@ onBeforeUnmount(() => {
   background: rgb(244 244 245);
 }
 
+/* g2 — pipeline rail: hidden scrollbar + edge arrows (aligned to page.html demo) */
+.home-pipeline-rail-wrap {
+  position: relative;
+}
+
+.home-pipeline-rail {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  padding: 4px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.home-pipeline-rail::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+  background: transparent;
+}
+
+.home-pipeline-rail--instant {
+  scroll-behavior: auto;
+}
+
+.home-pipeline-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(calc(-50% - 4px));
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgb(var(--c-line));
+  background: color-mix(in srgb, rgb(var(--c-surface)) 92%, transparent);
+  backdrop-filter: blur(6px);
+  color: rgb(var(--c-txt2));
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    opacity 0.2s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.home-pipeline-nav:hover:not(:disabled) {
+  color: rgb(var(--c-txt));
+  border-color: rgb(var(--c-line-strong));
+  background: rgb(var(--c-surface));
+}
+
+.home-pipeline-nav:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.home-pipeline-nav--prev {
+  left: -6px;
+}
+
+.home-pipeline-nav--next {
+  right: -6px;
+}
+
+.home-pipeline-fade {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  bottom: 8px;
+  width: 28px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.home-pipeline-fade--left {
+  left: 0;
+  background: linear-gradient(90deg, rgb(var(--c-base)), transparent);
+}
+
+.home-pipeline-fade--right {
+  right: 0;
+  background: linear-gradient(270deg, rgb(var(--c-base)), transparent);
+}
+
+.home-pipeline-rail-wrap--has-left .home-pipeline-fade--left,
+.home-pipeline-rail-wrap--has-right .home-pipeline-fade--right {
+  opacity: 1;
+}
+
 @keyframes home-brand-caret {
   0%,
   49% {
@@ -685,6 +906,20 @@ onBeforeUnmount(() => {
   .home-composer__ph-cursor {
     animation: none;
     opacity: 1;
+  }
+
+  .home-pipeline-rail {
+    scroll-behavior: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .home-pipeline-nav--prev {
+    left: 0;
+  }
+
+  .home-pipeline-nav--next {
+    right: 0;
   }
 }
 

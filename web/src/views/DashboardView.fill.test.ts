@@ -92,6 +92,23 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/prefers-reduced-motion/)
   })
 
+  // plan g1 — pipeline rail hides scrollbar and adds edge nav aligned to page.html demo
+  it('hides pipeline horizontal scrollbar and adds edge scroll arrows', () => {
+    expect(src).toMatch(/data-testid="home-pipeline-rail-wrap"/)
+    expect(src).toMatch(/data-testid="home-pipeline-scroll-prev"/)
+    expect(src).toMatch(/data-testid="home-pipeline-scroll-next"/)
+    expect(src).toMatch(/home-pipeline-rail/)
+    expect(src).toMatch(/scrollbar-width:\s*none/)
+    expect(src).toMatch(/::-webkit-scrollbar/)
+    expect(src).toMatch(/home-pipeline-nav/)
+    expect(src).toMatch(/home-pipeline-fade/)
+    expect(src).toMatch(/syncPipelineNav/)
+    expect(src).toMatch(/scrollPipelineByDir/)
+    expect(src).not.toMatch(
+      /data-testid="home-pipeline-cards"[^>]*overflow-x-auto/,
+    )
+  })
+
   // plan g2.5 / g3.2 — scoped only; no external fonts
   it('keeps styles scoped to DashboardView and does not load external fonts', () => {
     expect(src).toMatch(/<style scoped>/)

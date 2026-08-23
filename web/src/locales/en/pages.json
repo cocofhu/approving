@@ -21,7 +21,9 @@
       "needText": "Describe the goal or attach a file first",
       "send": "Send",
       "missingRequired": "Fill required launch fields before starting",
-      "cardFallback": "Approve pre-dev clarification"
+      "cardFallback": "Approve pre-dev clarification",
+      "scrollLeft": "Scroll left",
+      "scrollRight": "Scroll right"
     },
     "board": {
       "title": "Requirement progress board",
