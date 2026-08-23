@@ -67,4 +67,20 @@ describe('OutputSourcesEditor', () => {
     expect(wrapper.text()).toContain('调研')
     wrapper.unmount()
   })
+
+  it('uses fixed-width index badges for 10+ selected sources', () => {
+    // plan_coverage: g1.1 / g2.1 — 序号徽章等宽，避免一位/两位数字挤开同行控件
+    const results = Array.from({ length: 12 }, (_, i) => `custom.source.${i + 1}`)
+    const wrapper = mountEditor({ withUpstream: false, results })
+    const badges = wrapper.findAll('.inline-flex.w-\\[22px\\].tabular-nums')
+    expect(badges).toHaveLength(12)
+    for (const badge of badges) {
+      expect(badge.classes()).toContain('w-[22px]')
+      expect(badge.classes()).toContain('shrink-0')
+      expect(badge.classes()).not.toContain('min-w-[18px]')
+    }
+    expect(badges[8]?.text()).toBe('9')
+    expect(badges[9]?.text()).toBe('10')
+    wrapper.unmount()
+  })
 })

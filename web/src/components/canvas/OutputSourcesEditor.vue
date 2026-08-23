@@ -100,7 +100,7 @@ function onDrop(target: string) {
           @drop.prevent="onDrop(template)"
         >
           <span class="cursor-grab text-[12px] text-txt3">⠿</span>
-          <span class="min-w-[18px] bg-accent-dim px-1.5 py-0.5 text-center text-[10px] text-accent-2">{{ i + 1 }}</span>
+          <span class="inline-flex w-[22px] shrink-0 items-center justify-center bg-accent-dim py-0.5 text-[10px] tabular-nums text-accent-2">{{ i + 1 }}</span>
           <AppSwitch
             :model-value="true"
             :aria-label="labelFor(template)"
