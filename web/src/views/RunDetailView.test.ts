@@ -287,7 +287,7 @@ describe('RunDetailView ACP log rehydrate state machine', () => {
 describe('RunDetailView desktop outer sash layout (all node tabs)', () => {
   it('enables outer sash on desktop for every node tab with bound width', () => {
     expect(src).toMatch(/from '@\/lib\/inbox\/reviewLayoutBudget'/)
-    expect(src).toMatch(/reviewRightPanelCssWidth/)
+    expect(src).toMatch(/initOuterSashFromMemory/)
     expect(src).toMatch(
       /desktopOuterSashLayout = computed\(\(\) => !isMobile\.value\)/,
     )
@@ -299,6 +299,20 @@ describe('RunDetailView desktop outer sash layout (all node tabs)', () => {
     expect(viewOrchestrationSrc).toMatch(/v-if="desktopOuterSashLayout"/)
     expect(viewOrchestrationSrc).toMatch(/readSharedOuterSashMem/)
     expect(viewOrchestrationSrc).toMatch(/writeSharedOuterSashMem/)
+    expect(viewOrchestrationSrc).toMatch(/initOuterSashFromMemory/)
+    expect(viewOrchestrationSrc).toMatch(/outerSashBooting/)
+  })
+
+  it('sync-inits width from memory and hides split until apply (no default flash)', () => {
+    expect(detailOrchestrationSrc).toMatch(/initOuterSashFromMemory\(initialOuterWs\)/)
+    expect(detailOrchestrationSrc).toMatch(/outerRightPx = ref\(initialOuterLayout\.width\)/)
+    expect(detailOrchestrationSrc).not.toMatch(/reviewRightPanelCssWidth/)
+    expect(viewSrc).toMatch(/run-detail-outer-sash-booting/)
+    expect(viewSrc).toMatch(/outerSashBooting && desktopOuterSashLayout/)
+    expect(detailOrchestrationSrc).toMatch(/revealOuterSashLayout/)
+    expect(detailOrchestrationSrc).toMatch(
+      /watch\(\s*\(\) => runLoading\.value,/,
+    )
   })
 
   it('keeps in-memory outer width across tab switches (no per-tab re-read)', () => {

@@ -9,11 +9,12 @@ import { useToast } from '@/lib/composables/useToast'
 import {
   applyOuterSashMem,
   clampOuterRight,
+  estimateOuterWorkspace,
+  initOuterSashFromMemory,
   outerRightMax,
   outerRightMin,
   readSharedOuterSashMem,
   reviewDefaultRightPx,
-  reviewRightPanelCssWidth,
   writeSharedOuterSashMem,
 } from '@/lib/inbox/reviewLayoutBudget'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
@@ -950,9 +951,13 @@ const activePath = computed(() => {
  */
 const desktopOuterSashLayout = computed(() => !isMobile.value)
 const splitRootRef = ref<HTMLElement | null>(null)
-const workspacePx = ref(0)
-const outerRightPx = ref(0)
-const outerFullOpen = ref(false)
+const initialOuterWs = estimateOuterWorkspace()
+const initialOuterLayout = initOuterSashFromMemory(initialOuterWs)
+const workspacePx = ref(initialOuterWs)
+const outerRightPx = ref(initialOuterLayout.width)
+const outerFullOpen = ref(initialOuterLayout.fullOpen)
+/** Hide split until memory/default width is applied — prevents default→memory flash. */
+const outerSashBooting = ref(!isMobile.value)
 const outerSashDragging = ref(false)
 let outerSashStartX = 0
 let outerSashStartW = 0
@@ -964,14 +969,22 @@ function measureWorkspace(): number {
   return w && w > 0 ? w : 0
 }
 
+function revealOuterSashLayout() {
+  outerSashBooting.value = false
+}
+
 function applyOuterLayout() {
-  if (!desktopOuterSashLayout.value) return
+  if (!desktopOuterSashLayout.value) {
+    outerSashBooting.value = false
+    return
+  }
   const ws = measureWorkspace()
   if (ws <= 0) return
   workspacePx.value = ws
   const next = applyOuterSashMem(readSharedOuterSashMem(), ws)
   outerRightPx.value = next.width
   outerFullOpen.value = next.fullOpen
+  revealOuterSashLayout()
 }
 
 function persistOuterLayout() {
@@ -1046,8 +1059,7 @@ function onOuterSashWindowResize() {
 
 const reviewRightPanelStyle = computed(() => {
   if (!desktopOuterSashLayout.value) return undefined
-  if (outerRightPx.value > 0) return { width: `${outerRightPx.value}px` }
-  return { width: reviewRightPanelCssWidth() }
+  return { width: `${outerRightPx.value}px` }
 })
 
 const outerAriaMin = computed(() => outerRightMin(workspacePx.value))
@@ -1072,7 +1084,19 @@ const leftPaneStyle = computed(() => {
 watch(
   () => desktopOuterSashLayout.value,
   (on) => {
-    if (on) nextTick(() => applyOuterLayout())
+    if (on) {
+      outerSashBooting.value = true
+      nextTick(() => applyOuterLayout())
+    } else {
+      outerSashBooting.value = false
+    }
+  },
+)
+
+watch(
+  () => runLoading.value,
+  (loading) => {
+    if (!loading && !loadError.value) nextTick(() => applyOuterLayout())
   },
 )
 
@@ -1270,6 +1294,7 @@ function selectExecution(nodeId: string, idx: number) {
   workspacePx,
   outerRightPx,
   outerFullOpen,
+  outerSashBooting,
   outerSashDragging,
   outerSashStartX,
   outerSashStartW,

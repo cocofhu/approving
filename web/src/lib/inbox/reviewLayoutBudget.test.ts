@@ -19,6 +19,8 @@ import {
   applyOuterSashMem,
   clampOuterRight,
   computeDesktopReviewSplit,
+  estimateOuterWorkspace,
+  initOuterSashFromMemory,
   isOuterSashTab,
   outerRightMax,
   parseOuterSashMem,
@@ -193,5 +195,42 @@ describe('outer sash drag clamp (canvas minWidth is 0, not REVIEW_CANVAS_MIN)', 
     })
     expect(parseOuterSashMem('not-json')).toBeNull()
     expect(applyOuterSashMem(null, 1280).width).toBe(781)
+  })
+
+  it('initOuterSashFromMemory sync-applies shared memory before mount measure', () => {
+    const store = new Map<string, string>()
+    const ls = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v)
+      },
+    }
+    const orig = globalThis.localStorage
+    Object.defineProperty(globalThis, 'localStorage', { value: ls, configurable: true })
+    try {
+      store.set(OUTER_SASH_WIDTH_KEY_SHARED, '{"width":650,"fullOpen":false}')
+      const ws = 1280
+      const init = initOuterSashFromMemory(ws)
+      expect(init.width).toBe(650)
+      expect(init.fullOpen).toBe(false)
+      expect(init).toEqual(applyOuterSashMem(readSharedOuterSashMem(), ws))
+      store.delete(OUTER_SASH_WIDTH_KEY_SHARED)
+      expect(initOuterSashFromMemory(ws).width).toBe(reviewDefaultRightPx(ws))
+    } finally {
+      Object.defineProperty(globalThis, 'localStorage', { value: orig, configurable: true })
+    }
+  })
+
+  it('estimateOuterWorkspace subtracts shell sidebar on desktop widths', () => {
+    const orig = globalThis.window
+    Object.defineProperty(globalThis, 'window', {
+      value: { innerWidth: 1400 },
+      configurable: true,
+    })
+    try {
+      expect(estimateOuterWorkspace()).toBe(1160)
+    } finally {
+      Object.defineProperty(globalThis, 'window', { value: orig, configurable: true })
+    }
   })
 })
