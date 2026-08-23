@@ -39,13 +39,39 @@ export const REVIEW_SHELL_WIDTH_KEY_CLARIFY = 'review-shell-sidebar-width:clarif
  */
 export const OUTER_SASH_WIDTH_KEY_CLARIFY = 'run-detail-outer-sash:clarify'
 export const OUTER_SASH_WIDTH_KEY_REVIEW = 'run-detail-outer-sash:review'
+/** Shared across all desktop node tabs so tab switches do not jump width. */
+export const OUTER_SASH_WIDTH_KEY_SHARED = 'run-detail-outer-sash:shared'
 
+/** @deprecated clarify|review-only; desktop layout no longer gates on this. */
 export function isOuterSashTab(tab: string): tab is OuterSashTab {
   return tab === 'clarify' || tab === 'review'
 }
 
 export function outerSashStorageKey(tab: OuterSashTab): string {
   return tab === 'review' ? OUTER_SASH_WIDTH_KEY_REVIEW : OUTER_SASH_WIDTH_KEY_CLARIFY
+}
+
+/** Read shared outer sash memory, migrating from legacy per-scene keys when needed. */
+export function readSharedOuterSashMem(): OuterSashMem | null {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const shared = parseOuterSashMem(localStorage.getItem(OUTER_SASH_WIDTH_KEY_SHARED))
+    if (shared) return shared
+    const clarify = parseOuterSashMem(localStorage.getItem(OUTER_SASH_WIDTH_KEY_CLARIFY))
+    if (clarify) return clarify
+    return parseOuterSashMem(localStorage.getItem(OUTER_SASH_WIDTH_KEY_REVIEW))
+  } catch {
+    return null
+  }
+}
+
+export function writeSharedOuterSashMem(mem: OuterSashMem) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(OUTER_SASH_WIDTH_KEY_SHARED, JSON.stringify(mem))
+  } catch {
+    /* quota / private mode */
+  }
 }
 
 /** CSS width for the right panel default (un-customized) on outer-sash tabs. */
