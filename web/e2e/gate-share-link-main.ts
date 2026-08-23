@@ -126,6 +126,18 @@ let clarifyLinkUsed = false
 const originalFetch = window.fetch.bind(window)
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  if (url.includes('/public/gate-approvals/artifacts') && !url.includes('/content')) {
+    return new Response(JSON.stringify({ status: 'active', artifacts: [], nodes: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  if (url.includes('/public/gate-approvals/artifacts/') && url.includes('/content')) {
+    return new Response(JSON.stringify({ status: 'active', name: 'research.json', content: '{}' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
   if (
     url.includes('/public/gate-approvals/preview') &&
     !url.includes('/preview-ticket') &&

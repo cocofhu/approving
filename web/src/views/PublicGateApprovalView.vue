@@ -32,7 +32,9 @@ import {
   type PublicGateQueueItem,
 } from '@/lib/inbox/gateShareLink'
 import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
-import type { AcpEvent, Artifact, ClarifyImage, ClarifyTurn, ReactAnnotation } from '@/lib/shared/types'
+import type { AcpEvent, Artifact, ClarifyImage, ClarifyTurn, ReactAnnotation, Run } from '@/lib/shared/types'
+
+const PUBLIC_SHARE_RUN_ID = 'public-share'
 
 type PublicChatRef = {
   discardLastQueued?: () => void
@@ -92,7 +94,11 @@ let previewGen = 0
 let previewAbort: AbortController | null = null
 let decideAbort: AbortController | null = null
 let upstreamAbort: AbortController | null = null
+let artifactsAbort: AbortController | null = null
 let stuckTimer: number | null = null
+
+const publicArtifacts = ref<Artifact[]>([])
+const publicRunGraph = ref<Run | null>(null)
 
 function clearStuckTimer() {
   if (stuckTimer != null) {
@@ -152,42 +158,12 @@ const confirmDisabled = computed(
 )
 const showDecideFields = computed(() => showConfirm.value || canReject.value || linkInvalid.value)
 const productKind = computed(() => preview.value?.productKind || inferProductKind())
-const publicStageArtifacts = computed<Artifact[]>(() => {
-  const p = preview.value
-  if (!p) return []
-  const out: Artifact[] = []
-  if (p.visualHtml) {
-    out.push({
-      id: 'public-visual',
-      name: p.productKind === 'visual' && p.productName ? p.productName : 'page.html',
-      kind: 'html',
-      nodeId: 'public',
-      runId: 'public-share',
-      workflowName: '',
-      sizeBytes: p.visualHtml.length,
-      createdAt: '',
-      content: p.visualHtml,
-      revision: 1,
-    })
-  }
-  if (p.structured?.doc || p.structured?.name) {
-    const raw = JSON.stringify(p.structured.doc || {})
-    out.push({
-      id: 'public-structured',
-      name: p.structured?.name || p.productName || 'clarified_requirement.json',
-      kind: 'json',
-      nodeId: 'public',
-      runId: 'public-share',
-      workflowName: '',
-      sizeBytes: raw.length,
-      createdAt: '',
-      content: raw,
-      revision: 1,
-    })
-  }
-  return out
+const publicStageArtifacts = computed<Artifact[]>(() => publicArtifacts.value)
+const publicPreviewName = computed(() => {
+  const pin = preview.value?.productName || preview.value?.structured?.name || ''
+  if (pin && publicStageArtifacts.value.some((a) => a.name === pin)) return pin
+  return publicStageArtifacts.value[0]?.name || pin
 })
-const publicPreviewName = computed(() => publicStageArtifacts.value[0]?.name || '')
 const productName = computed(() => preview.value?.productName || preview.value?.structured?.name || '')
 const inspectable = computed(
   () =>
@@ -315,6 +291,82 @@ function applyPreviewPayload(next: PublicGatePreview, silent: boolean) {
   return true
 }
 
+function abortArtifacts() {
+  artifactsAbort?.abort()
+  artifactsAbort = null
+}
+
+async function loadPublicArtifacts(opts?: { silent?: boolean }) {
+  if (!isReview.value || !token.value) {
+    publicArtifacts.value = []
+    publicRunGraph.value = null
+    return
+  }
+  if (!isActive.value) {
+    publicArtifacts.value = []
+    return
+  }
+  abortArtifacts()
+  artifactsAbort = new AbortController()
+  const signal = artifactsAbort.signal
+  try {
+    const res = await publicGateApi.artifacts(token.value, signal)
+    if (signal.aborted) return
+    if (res.status !== 'active') {
+      if (!opts?.silent) {
+        publicArtifacts.value = []
+      }
+      return
+    }
+    publicArtifacts.value = (res.artifacts || []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      kind: a.kind,
+      nodeId: a.nodeId,
+      runId: PUBLIC_SHARE_RUN_ID,
+      workflowName: '',
+      sizeBytes: a.sizeBytes,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      revision: a.revision,
+    }))
+    if (res.nodes?.length) {
+      publicRunGraph.value = {
+        id: PUBLIC_SHARE_RUN_ID,
+        workflowId: '',
+        workflowName: '',
+        status: 'waiting_human',
+        trigger: '',
+        startedAt: '',
+        durationSec: 0,
+        progress: 0,
+        branch: '',
+        nodeRuns: {},
+        nodes: res.nodes.map((n) => ({
+          id: n.id,
+          type: n.type,
+          label: n.label || n.id,
+          config: n.config || {},
+        })),
+        edges: [],
+        artifacts: publicArtifacts.value,
+        vars: [],
+        trace: [],
+        priority: 'normal',
+        tags: [],
+      }
+    } else {
+      publicRunGraph.value = null
+    }
+  } catch (e) {
+    if (isAbortError(e) || signal.aborted) return
+    if (!opts?.silent) {
+      publicArtifacts.value = []
+      publicRunGraph.value = null
+    }
+  }
+}
+
 async function loadPreview(opts?: { silent?: boolean; issueNonce?: boolean }) {
   if (doneKind.value) return
   const attemptGen = ++previewGen
@@ -372,6 +424,7 @@ async function loadPreview(opts?: { silent?: boolean; issueNonce?: boolean }) {
       if (attemptGen === previewGen) {
         await nextTick()
         syncChatQueueFromPreview()
+        await loadPublicArtifacts({ silent: true })
       }
       return
     }
@@ -393,6 +446,7 @@ async function loadPreview(opts?: { silent?: boolean; issueNonce?: boolean }) {
   if (attemptGen !== previewGen) return
   await nextTick()
   syncChatQueueFromPreview()
+  await loadPublicArtifacts({ silent: !!opts?.silent })
 }
 
 function abortUpstream() {
@@ -956,6 +1010,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
   abortPreview()
   abortUpstream()
+  abortArtifacts()
   decideAbort?.abort()
   decideAbort = null
   reapplyThemeChrome()
@@ -1096,7 +1151,8 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             <ReactArtifactStage
               :artifacts="publicStageArtifacts"
               :preview-artifact="publicPreviewName"
-              inline-content
+              :run="publicRunGraph"
+              :node-type="preview?.nodeType"
               :annotatable="inspectable"
               :remote-kind="productKind === 'app_preview' ? 'public' : 'off'"
               :token="token"

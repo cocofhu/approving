@@ -1,4 +1,4 @@
-import type { ClarifyInboxItem, GateInboxItem, GateShareInboxStatus, InboxItem } from '@/lib/shared/types'
+import type { Artifact, ClarifyInboxItem, GateInboxItem, GateShareInboxStatus, InboxItem } from '@/lib/shared/types'
 
 export const GATE_SHARE_TTL_TIERS = ['1h', '8h', '24h', '72h', '7d'] as const
 export type GateShareTTLTier = (typeof GATE_SHARE_TTL_TIERS)[number]
@@ -343,6 +343,43 @@ export type PublicGateReplyResult = {
   kind?: string
 }
 
+/** Public review-share artifact list item (metadata only; no runId). */
+export type PublicGateArtifactMeta = {
+  id: string
+  name: string
+  kind: Artifact['kind']
+  nodeId: string
+  sizeBytes: number
+  createdAt: string
+  updatedAt?: string
+  revision?: number
+}
+
+export type PublicGateArtifactsResult = {
+  status: string
+  artifacts?: PublicGateArtifactMeta[]
+  /** Sanitized graph nodes for ReactArtifactStage grid filtering. */
+  nodes?: Array<{ id: string; type: string; label?: string; config?: Record<string, unknown> }>
+  error?: string
+  message?: string
+}
+
+export type PublicGateArtifactContentResult = {
+  status?: string
+  id?: string
+  name?: string
+  kind?: Artifact['kind']
+  nodeId?: string
+  sizeBytes?: number
+  createdAt?: string
+  updatedAt?: string
+  revision?: number
+  content?: string
+  etag?: string
+  error?: string
+  message?: string
+}
+
 async function readJson<T>(res: Response): Promise<T> {
   try {
     return (await res.json()) as T
@@ -566,6 +603,51 @@ export const publicGateApi = {
       body: JSON.stringify({ token }),
     }).then(async (res) => {
       const body = await readJson<PublicGateReplyResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
+  artifacts(token: string, signal?: AbortSignal): Promise<PublicGateArtifactsResult> {
+    return fetch('/public/gate-approvals/artifacts', {
+      method: 'GET',
+      credentials: 'omit',
+      signal,
+      headers: {
+        [GATE_SHARE_TOKEN_HEADER]: token,
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+    }).then(async (res) => {
+      const body = await readJson<PublicGateArtifactsResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
+  artifactContent(
+    token: string,
+    name: string,
+    signal?: AbortSignal,
+  ): Promise<PublicGateArtifactContentResult> {
+    const encoded = encodeURIComponent(name)
+    return fetch(`/public/gate-approvals/artifacts/${encoded}/content`, {
+      method: 'GET',
+      credentials: 'omit',
+      signal,
+      headers: {
+        [GATE_SHARE_TOKEN_HEADER]: token,
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+    }).then(async (res) => {
+      const body = await readJson<PublicGateArtifactContentResult>(res)
       if (!res.ok) {
         throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
           status: res.status,
