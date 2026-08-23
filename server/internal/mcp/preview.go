@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -10,11 +11,19 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const (
+	PreviewKindPort = "port"
+	PreviewKindURL  = "url"
+)
+
 // PreviewPort is a registered preview endpoint for an app_preview node.
 type PreviewPort struct {
 	RunID       string `json:"runId"`
 	NodeID      string `json:"nodeId"`
+	Kind        string `json:"kind,omitempty"`
+	ItemKey     string `json:"-"`
 	Port        int    `json:"port"`
+	URL         string `json:"url,omitempty"`
 	Label       string `json:"label,omitempty"`
 	ProxyURL    string `json:"proxyUrl"`
 	SandboxName string `json:"-"`
@@ -72,6 +81,57 @@ type PreviewVNCWarmer interface {
 }
 
 func previewKey(runID, nodeID string) string { return runID + "|" + nodeID }
+
+func previewItemKey(kind string, port int, externalURL string) string {
+	if kind == PreviewKindURL || strings.TrimSpace(externalURL) != "" {
+		return "u:" + strings.TrimSpace(externalURL)
+	}
+	return fmt.Sprintf("p:%d", port)
+}
+
+func previewPortKind(p PreviewPort) string {
+	if k := strings.TrimSpace(p.Kind); k != "" {
+		return k
+	}
+	if strings.TrimSpace(p.URL) != "" {
+		return PreviewKindURL
+	}
+	return PreviewKindPort
+}
+
+// PreviewItemKeyFor returns the stable upsert key for a preview registration.
+func PreviewItemKeyFor(p PreviewPort) string {
+	if k := strings.TrimSpace(p.ItemKey); k != "" {
+		return k
+	}
+	return previewItemKey(previewPortKind(p), p.Port, p.URL)
+}
+
+func previewPortItemKey(p PreviewPort) string {
+	return PreviewItemKeyFor(p)
+}
+
+// ValidatePreviewURL checks an absolute http/https URL (authority may include a port).
+func ValidatePreviewURL(raw string) (string, error) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", fmt.Errorf("url is required")
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return "", fmt.Errorf("invalid url: %w", err)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("url scheme must be http or https")
+	}
+	if !u.IsAbs() || strings.TrimSpace(u.Host) == "" {
+		return "", fmt.Errorf("url must be an absolute http(s) address")
+	}
+	u.Scheme = scheme
+	u.Host = strings.ToLower(u.Host)
+	return u.String(), nil
+}
 
 // SetPreviewBaseURL sets the browser-facing base URL used to build proxy links.
 func (h *Host) SetPreviewBaseURL(base string) {
@@ -227,18 +287,39 @@ func (h *Host) ListPreviewPorts(runID, nodeID string) []PreviewPort {
 	if len(mem) == 0 {
 		return h.annotatePreviewTransport(runID, nodeID, dbPorts)
 	}
-	byPort := map[int]PreviewPort{}
+	byKey := map[string]PreviewPort{}
 	for _, p := range dbPorts {
-		byPort[p.Port] = p
+		byKey[previewPortItemKey(p)] = p
 	}
 	for _, p := range mem {
-		byPort[p.Port] = p
+		byKey[previewPortItemKey(p)] = p
 	}
-	out := make([]PreviewPort, 0, len(byPort))
-	for _, p := range byPort {
+	out := make([]PreviewPort, 0, len(byKey))
+	for _, p := range byKey {
 		out = append(out, p)
 	}
 	return h.annotatePreviewTransport(runID, nodeID, out)
+}
+
+func (h *Host) upsertPreviewMem(runID, nodeID string, rec PreviewPort) {
+	key := previewKey(runID, nodeID)
+	if h.previewMem == nil {
+		h.previewMem = map[string][]PreviewPort{}
+	}
+	ports := h.previewMem[key]
+	itemKey := previewPortItemKey(rec)
+	found := false
+	for i, p := range ports {
+		if previewPortItemKey(p) == itemKey {
+			ports[i] = rec
+			found = true
+			break
+		}
+	}
+	if !found {
+		ports = append(ports, rec)
+	}
+	h.previewMem[key] = ports
 }
 
 func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (string, error) {
@@ -282,28 +363,14 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 	}
 	proxyURL := h.previewProxyURL(runID, nodeID, port)
 	rec := PreviewPort{
-		RunID: runID, NodeID: nodeID, Port: port, Label: strings.TrimSpace(label),
+		RunID: runID, NodeID: nodeID, Kind: PreviewKindPort,
+		ItemKey: previewItemKey(PreviewKindPort, port, ""),
+		Port: port, Label: strings.TrimSpace(label),
 		ProxyURL: proxyURL, SandboxName: sandboxName, Host: host, Healthy: true,
 		KeepalivePID: keepalivePID, RegisteredAt: time.Now(),
 	}
 	h.mu.Lock()
-	key := previewKey(runID, nodeID)
-	if h.previewMem == nil {
-		h.previewMem = map[string][]PreviewPort{}
-	}
-	ports := h.previewMem[key]
-	found := false
-	for i, p := range ports {
-		if p.Port == port {
-			ports[i] = rec
-			found = true
-			break
-		}
-	}
-	if !found {
-		ports = append(ports, rec)
-	}
-	h.previewMem[key] = ports
+	h.upsertPreviewMem(runID, nodeID, rec)
 	h.mu.Unlock()
 	if store != nil {
 		if err := store.UpsertPreviewPort(rec); err != nil {
@@ -319,6 +386,32 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 	return proxyURL, nil
 }
 
+func (h *Host) setPreviewURL(runID, nodeID, rawURL, label string) (string, error) {
+	normalized, err := ValidatePreviewURL(rawURL)
+	if err != nil {
+		return "", err
+	}
+	h.mu.RLock()
+	store := h.previewStore
+	h.mu.RUnlock()
+	rec := PreviewPort{
+		RunID: runID, NodeID: nodeID, Kind: PreviewKindURL,
+		ItemKey: previewItemKey(PreviewKindURL, 0, normalized),
+		URL: normalized, Label: strings.TrimSpace(label),
+		Healthy: true, RegisteredAt: time.Now(),
+	}
+	h.mu.Lock()
+	h.upsertPreviewMem(runID, nodeID, rec)
+	h.mu.Unlock()
+	if store != nil {
+		if err := store.UpsertPreviewPort(rec); err != nil {
+			return "", err
+		}
+	}
+	h.SignalPreviewReady(runID, nodeID)
+	return normalized, nil
+}
+
 // PutPreviewPortForTest seeds a memory-only healthy preview port without sandbox ops.
 // Used by engine unit tests that exercise app_preview pause paths offline.
 func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label string) {
@@ -326,18 +419,16 @@ func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label strin
 		return
 	}
 	rec := PreviewPort{
-		RunID: runID, NodeID: nodeID, Port: port, Label: strings.TrimSpace(label),
+		RunID: runID, NodeID: nodeID, Kind: PreviewKindPort,
+		ItemKey: previewItemKey(PreviewKindPort, port, ""),
+		Port: port, Label: strings.TrimSpace(label),
 		ProxyURL: h.previewProxyURL(runID, nodeID, port), Healthy: true,
 		// Non-zero sentinel so ListPreviewKeepalivePIDs / AbortRun whitelist
 		// paths exercise the same registration shape as real set_preview.
 		KeepalivePID: 1, RegisteredAt: time.Now(),
 	}
 	h.mu.Lock()
-	key := previewKey(runID, nodeID)
-	if h.previewMem == nil {
-		h.previewMem = map[string][]PreviewPort{}
-	}
-	h.previewMem[key] = append(h.previewMem[key], rec)
+	h.upsertPreviewMem(runID, nodeID, rec)
 	h.mu.Unlock()
 	h.SignalPreviewReady(runID, nodeID)
 }

@@ -19,7 +19,11 @@ export interface PaginatedResponse<T> {
 export interface PreviewPort {
   runId: string
   nodeId: string
+  /** port | url; legacy rows may omit kind when only port is set. */
+  kind?: 'port' | 'url' | string
   port: number
+  /** External absolute URL when kind=url. */
+  url?: string
   label?: string
   proxyUrl: string
   healthy: boolean

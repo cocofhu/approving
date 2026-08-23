@@ -664,9 +664,12 @@ type Setting struct {
 // RunPreviewPort records a preview proxy registration for an app_preview node.
 type RunPreviewPort struct {
 	ID          uint   `gorm:"primaryKey" json:"id"`
-	RunID       string `gorm:"index:idx_preview_run_node_port,unique" json:"runId"`
-	NodeID      string `gorm:"index:idx_preview_run_node_port,unique" json:"nodeId"`
-	Port        int    `gorm:"index:idx_preview_run_node_port,unique" json:"port"`
+	RunID       string `gorm:"index:idx_preview_run_node_item,unique" json:"runId"`
+	NodeID      string `gorm:"index:idx_preview_run_node_item,unique" json:"nodeId"`
+	ItemKey     string `gorm:"index:idx_preview_run_node_item,unique" json:"-"`
+	Kind        string `gorm:"default:port" json:"kind"`
+	Port        int    `json:"port"`
+	ExternalURL string `json:"externalUrl,omitempty"`
 	Label       string `json:"label,omitempty"`
 	ProxyURL    string `json:"proxyUrl"`
 	SandboxName string `json:"-"`

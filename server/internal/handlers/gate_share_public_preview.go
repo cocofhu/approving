@@ -358,16 +358,30 @@ func (h *Handlers) publicAppPreviewPorts(runID, nodeID string) []gateshare.Publi
 	raw := h.MCP.ListPreviewPorts(runID, nodeID)
 	out := make([]gateshare.PublicPreviewPort, 0, len(raw))
 	for _, p := range raw {
-		if p.Port <= 0 {
+		if p.Port <= 0 && strings.TrimSpace(p.URL) == "" {
 			continue
 		}
 		label := strings.TrimSpace(p.Label)
-		out = append(out, gateshare.PublicPreviewPort{
+		entry := gateshare.PublicPreviewPort{
 			Port:      p.Port,
 			Label:     label,
+			Kind:      strings.TrimSpace(p.Kind),
+			URL:       strings.TrimSpace(p.URL),
 			Mode:      gateshare.InferPreviewMode(label),
 			DirectURL: strings.TrimSpace(p.DirectURL),
-		})
+		}
+		if entry.Kind == "" {
+			if entry.URL != "" {
+				entry.Kind = "url"
+			} else {
+				entry.Kind = "port"
+			}
+		}
+		if entry.Kind == "url" && entry.URL != "" {
+			entry.DirectURL = entry.URL
+			entry.Mode = "url"
+		}
+		out = append(out, entry)
 	}
 	return out
 }

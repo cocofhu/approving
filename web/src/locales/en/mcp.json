@@ -108,8 +108,8 @@
           "desc": "Read the implementation result summary"
         },
         "set_preview": {
-          "signature": "set_preview(port, label?)",
-          "desc": "app_preview only: register preview port; returns full proxy URL"
+          "signature": "set_preview(port?, url?, label?)",
+          "desc": "app_preview only: register sandbox port or external http(s) URL (exactly one); URL may include a port; iframe direct, no server probe"
         },
         "set_artifact_preview": {
           "signature": "set_artifact_preview(name)",

@@ -76,6 +76,9 @@ func formatMCPAuditAction(tool string, args map[string]any) string {
 		if label := whitelistArg(args, "label"); label != "" {
 			return "注册预览 · " + label
 		}
+		if u := whitelistArg(args, "url"); u != "" {
+			return "注册预览 · " + u
+		}
 		if port := whitelistArg(args, "port"); port != "" {
 			return "注册预览 · 端口 " + port
 		}

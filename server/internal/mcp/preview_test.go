@@ -52,6 +52,76 @@ func TestSetPreviewGateAndUpsert(t *testing.T) {
 	}
 }
 
+func TestSetPreviewURLGateAndUpsert(t *testing.T) {
+	h := NewHost(&memStore{})
+	tok := h.RegisterRun("r1")
+	h.SetActiveNode("r1", "preview1", "app_preview")
+
+	resp := callPreviewTool(t, h, "r1", tok, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"set_preview","arguments":{"url":"https://staging.example.com:8443/app","label":"Staging"}}}`)
+	text := previewResultText(t, resp)
+	if text == "" || previewTextIsError(text) {
+		t.Fatalf("set_preview url failed: %s", text)
+	}
+	if !h.HasPreviewPorts("r1", "preview1") {
+		t.Fatal("expected url preview registered")
+	}
+	ports := h.ListPreviewPorts("r1", "preview1")
+	if len(ports) != 1 || ports[0].Kind != PreviewKindURL || ports[0].URL != "https://staging.example.com:8443/app" {
+		t.Fatalf("unexpected url ports: %+v", ports)
+	}
+	if !ports[0].Healthy || ports[0].Port != 0 {
+		t.Fatalf("url preview must be healthy with port=0: %+v", ports[0])
+	}
+
+	resp2 := callPreviewTool(t, h, "r1", tok, `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"set_preview","arguments":{"url":"https://staging.example.com:8443/app","label":"STG"}}}`)
+	if previewTextIsError(previewResultText(t, resp2)) {
+		t.Fatal("url upsert failed")
+	}
+	ports = h.ListPreviewPorts("r1", "preview1")
+	if len(ports) != 1 || ports[0].Label != "STG" {
+		t.Fatalf("url upsert label: %+v", ports)
+	}
+}
+
+func TestSetPreviewMutualExclusive(t *testing.T) {
+	h := NewHost(&memStore{})
+	tok := h.RegisterRun("r1")
+	h.SetActiveNode("r1", "preview1", "app_preview")
+
+	both := callPreviewTool(t, h, "r1", tok, `{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"set_preview","arguments":{"port":8080,"url":"https://x.example/"}}}`)
+	if !previewResultIsError(both) {
+		t.Fatal("expected both port+url to fail")
+	}
+	neither := callPreviewTool(t, h, "r1", tok, `{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"set_preview","arguments":{"label":"x"}}}`)
+	if !previewResultIsError(neither) {
+		t.Fatal("expected neither port nor url to fail")
+	}
+}
+
+func TestValidatePreviewURL(t *testing.T) {
+	cases := []struct {
+		in   string
+		ok   bool
+		want string
+	}{
+		{"https://staging.example.com:8443/path", true, "https://staging.example.com:8443/path"},
+		{"http://127.0.0.1:3000/", true, "http://127.0.0.1:3000/"},
+		{"javascript:alert(1)", false, ""},
+		{"/relative", false, ""},
+		{"ftp://x.example/", false, ""},
+	}
+	for _, tc := range cases {
+		got, err := ValidatePreviewURL(tc.in)
+		if tc.ok {
+			if err != nil || got != tc.want {
+				t.Fatalf("ValidatePreviewURL(%q) = %q, %v want %q", tc.in, got, err, tc.want)
+			}
+		} else if err == nil {
+			t.Fatalf("ValidatePreviewURL(%q) want error", tc.in)
+		}
+	}
+}
+
 func TestSetPreviewUnreachableFails(t *testing.T) {
 	h := NewHost(&memStore{})
 	h.SetPreviewSandboxOps(&fakePreviewOps{name: "sb", ok: true, healthy: false, up: "http://10.0.0.1:9"})

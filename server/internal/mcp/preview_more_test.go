@@ -15,8 +15,9 @@ func (m *memPreviewStore) UpsertPreviewPort(rec PreviewPort) error {
 	if m.err != nil {
 		return m.err
 	}
+	key := PreviewItemKeyFor(rec)
 	for i, p := range m.ports {
-		if p.RunID == rec.RunID && p.NodeID == rec.NodeID && p.Port == rec.Port {
+		if p.RunID == rec.RunID && p.NodeID == rec.NodeID && PreviewItemKeyFor(p) == key {
 			m.ports[i] = rec
 			return nil
 		}
