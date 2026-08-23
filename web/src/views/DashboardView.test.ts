@@ -518,11 +518,15 @@ describe('DashboardView home composer', () => {
 
     await rail.dispatchEvent(new Event('scroll'))
     await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-cards"]').classes()).toContain(
+      'home-pipeline-rail--overflow',
+    )
     const prev = wrapper.get('[data-testid="home-pipeline-scroll-prev"]').element as HTMLButtonElement
     const next = wrapper.get('[data-testid="home-pipeline-scroll-next"]').element as HTMLButtonElement
     expect(prev.disabled).toBe(true)
     expect(next.disabled).toBe(false)
     expect(wrapper.find('.home-pipeline-rail-wrap--has-right').exists()).toBe(true)
+    expect(wrapper.find('.home-pipeline-rail-wrap--has-left').exists()).toBe(false)
 
     scrollLeft = 1200
     await rail.dispatchEvent(new Event('scroll'))
@@ -530,7 +534,55 @@ describe('DashboardView home composer', () => {
     expect(prev.disabled).toBe(false)
     expect(next.disabled).toBe(true)
     expect(wrapper.find('.home-pipeline-rail-wrap--has-left').exists()).toBe(true)
+    expect(wrapper.find('.home-pipeline-rail-wrap--has-right').exists()).toBe(false)
 
+    scrollLeft = 0
+    await rail.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+    expect(prev.disabled).toBe(true)
+    expect(wrapper.find('.home-pipeline-rail-wrap--has-left').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
+  it('left-aligns pipeline rail when overflowing so first card is not clipped', async () => {
+    const many = Array.from({ length: 6 }, (_, i) => ({
+      ...approveWf,
+      id: `wf-${i}`,
+      name: `流水线 ${i}`,
+    }))
+    mocks.listWorkflows.mockResolvedValue(many)
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    const rail = wrapper.get('[data-testid="home-pipeline-cards"]')
+    const railEl = rail.element as HTMLDivElement
+    Object.defineProperty(railEl, 'clientWidth', { configurable: true, value: 400 })
+    Object.defineProperty(railEl, 'scrollWidth', { configurable: true, value: 1200 })
+    Object.defineProperty(railEl, 'scrollLeft', { configurable: true, value: 0, writable: true })
+
+    await railEl.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+
+    expect(rail.classes()).toContain('home-pipeline-rail--overflow')
+    expect(rail.classes()).not.toContain('justify-center')
+    wrapper.unmount()
+  })
+
+  it('keeps pipeline rail centered when cards do not overflow', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    const rail = wrapper.get('[data-testid="home-pipeline-cards"]')
+    const railEl = rail.element as HTMLDivElement
+    Object.defineProperty(railEl, 'clientWidth', { configurable: true, value: 800 })
+    Object.defineProperty(railEl, 'scrollWidth', { configurable: true, value: 200 })
+    Object.defineProperty(railEl, 'scrollLeft', { configurable: true, value: 0, writable: true })
+
+    await railEl.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+
+    expect(rail.classes()).not.toContain('home-pipeline-rail--overflow')
     wrapper.unmount()
   })
 
