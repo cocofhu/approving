@@ -639,6 +639,12 @@ func (e *Engine) ResumeFrom(runID, nodeID string) error {
 	if snap, ok := e.nodeStartVars(runID, nodeID); ok {
 		e.restoreVars(c, snap)
 	}
+	// A cancelled/failed approve visit may have already delivered FirstMessage;
+	// release the latch so the fresh visit opened by this resume can claim again.
+	if c.run.FirstMessage != nil {
+		e.releaseApproveFirstMessageLatch(runID)
+		c.run.FirstMessageDeliveredAt = nil
+	}
 	// Record the manual resume in the trace before handing off to admission.
 	// loadCtx already re-restored the MCP token from the persisted Run.McpToken
 	// (finish() unregistered it on failure), so in-sandbox artifact writes
@@ -774,6 +780,9 @@ func (e *Engine) Cancel(runID string) error {
 	// for the remainder of a long RunAgent call. The late driver observes the
 	// terminal status and exits without routing; its endExecute is gen-guarded.
 	e.forceEndExecute(runID)
+	if run.FirstMessage != nil {
+		e.releaseApproveFirstMessageLatch(runID)
+	}
 	return nil
 }
 
