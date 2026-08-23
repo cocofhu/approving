@@ -626,6 +626,8 @@ function removeAnnotation(i: number) {
 // Selected option ids per question, plus optional "其他" free text.
 const sel = ref<Record<string, string[]>>({})
 const other = ref<Record<string, string>>({})
+/** Per-question "其他" checkbox — free text only counts when checked. */
+const otherChecked = ref<Record<string, boolean>>({})
 
 // The interactive choice card is only shown for the latest unanswered agent
 // question turn while the dialogue is live (not done / not mid-send).
@@ -649,8 +651,20 @@ function toggle(q: ReactQuestion, oid: string) {
     sel.value[q.id] = cur.includes(oid) ? [] : [oid]
   }
 }
+function isOtherSelected(qid: string): boolean {
+  return !!otherChecked.value[qid]
+}
+
+function toggleOther(q: ReactQuestion) {
+  otherChecked.value[q.id] = !otherChecked.value[q.id]
+}
+
+function otherAnswered(q: ReactQuestion): boolean {
+  return !!otherChecked.value[q.id] && !!other.value[q.id]?.trim()
+}
+
 function answered(q: ReactQuestion): boolean {
-  return (sel.value[q.id]?.length ?? 0) > 0 || !!other.value[q.id]?.trim()
+  return (sel.value[q.id]?.length ?? 0) > 0 || otherAnswered(q)
 }
 const someAnswered = computed(() => activeQuestions.value.some(answered))
 
@@ -718,7 +732,7 @@ function submitChoices() {
   // Skipped questions are omitted; only answered ones are summarized.
   const lines = qs.filter(answered).map((q) => {
     const picked = q.options.filter((o) => (sel.value[q.id] || []).includes(o.id)).map((o) => o.label)
-    const extra = other.value[q.id]?.trim()
+    const extra = otherChecked.value[q.id] ? other.value[q.id]?.trim() : ''
     if (extra) picked.push(extra)
     return `- ${q.prompt} → ${picked.join('、')}`
   })
@@ -726,6 +740,7 @@ function submitChoices() {
   writeSessionChoice(qs, text)
   sel.value = {}
   other.value = {}
+  otherChecked.value = {}
   step.value = 0
   sendMessage(text)
 }
@@ -1276,6 +1291,10 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     attachNotice,
     sel,
     other,
+    otherChecked,
+    isOtherSelected,
+    toggleOther,
+    otherAnswered,
     activeQuestions,
     someAnswered,
     hasRecommended,
