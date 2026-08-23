@@ -386,6 +386,8 @@ describe('ReviewShell sidebar width', () => {
   })
 })
 
+// plan_coverage leaves (mobile drawer fix): g1.1 drag events, g1.2 hit area, g1.3 aria/locale,
+// g1.4 adaptive default + stage min, g3.1 unit tests — use leaf ids only in test_result.
 describe('ReviewShell mobile drawer', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -398,6 +400,7 @@ describe('ReviewShell mobile drawer', () => {
     vi.restoreAllMocks()
   })
 
+  // plan_coverage: g1.4 — adaptive default height + stage≥160 clamp
   it('adaptive default height preserves stage min and stays below old 340 default', async () => {
     const w = mountMobileShell({}, 600)
     await w.vm.$nextTick()
@@ -412,6 +415,7 @@ describe('ReviewShell mobile drawer', () => {
     w.unmount()
   })
 
+  // plan_coverage: g1.2 / g1.3 — 44px hit area, touch-action:none, horizontal separator aria + 拖动文案
   it('drawer handle has touch-action none and expanded hit area', () => {
     const w = mountMobileShell()
     const handle = w.get('[data-testid="review-shell-drawer-handle"]')
@@ -422,6 +426,7 @@ describe('ReviewShell mobile drawer', () => {
     w.unmount()
   })
 
+  // plan_coverage: g1.1 — pointer capture, preventDefault, scroll lock while dragging
   it('dragging drawer handle changes height and locks scroll', async () => {
     const w = mountMobileShell({}, 600)
     await w.vm.$nextTick()

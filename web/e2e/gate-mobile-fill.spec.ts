@@ -37,7 +37,9 @@ async function mockApi(
   })
 }
 
+// plan_coverage: g2.1 mobile-fill no drawer-height=340; g3.2 e2e stage min + drag resize (leaf ids only).
 test.describe('Run 详情移动端 visual 定高预览', () => {
+  // plan_coverage: g2.1 / g3.2 — adaptive drawer<340, stage>160, handle drag grows drawer
   test('390×844：n_open=0 确认并流转 + 取点，预览占满 stage', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, [])
