@@ -26,6 +26,7 @@ const notifMocks = vi.hoisted(() => ({
 }))
 
 const favMocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { ref } = require('vue') as typeof import('vue')
   return {
     displayItems: ref<
