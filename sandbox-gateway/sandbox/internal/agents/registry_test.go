@@ -134,13 +134,20 @@ func indexOfArg(args []string, want string) int {
 	return -1
 }
 
-func TestClaudeFamilyDoesNotUseBareStrictMcp(t *testing.T) {
-	// Only codebuddy opts into --strict-mcp-config (with streamjson auto --mcp-config).
-	// Claude loads ~/.claude/mcp.json by default — do not add bare strict here.
+// TestClaudeCodeArgsGoldenStrictPlusMcpConfig: headless -p ignores ConfigRoot/mcp.json
+// unless --strict-mcp-config triggers streamjson to attach --mcp-config <root>/mcp.json.
+func TestClaudeCodeArgsGoldenStrictPlusMcpConfig(t *testing.T) {
 	for _, n := range []provider.Name{provider.ClaudeCode, provider.ClaudeStream} {
-		if registry[n].DefaultConfigRoot() == "" {
-			t.Fatalf("%s missing ConfigRoot", n)
-		}
+		t.Run(string(n), func(t *testing.T) {
+			args := mustArgsForTest(t, registry[n])
+			if !containsArg(args, "--strict-mcp-config") {
+				t.Fatalf("%s missing --strict-mcp-config in %v", n, args)
+			}
+			wantPath := "/root/.claude/mcp.json"
+			if i := indexOfArg(args, "--mcp-config"); i < 0 || i+1 >= len(args) || args[i+1] != wantPath {
+				t.Fatalf("%s want --mcp-config %s in %v", n, wantPath, args)
+			}
+		})
 	}
 }
 
