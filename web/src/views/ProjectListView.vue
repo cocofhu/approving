@@ -128,14 +128,14 @@ onMounted(() => {
       <div :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
         <div
           v-if="showSkeleton"
-          class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          class="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3"
           data-testid="project-list-skeleton"
           aria-hidden="true"
         >
           <div
             v-for="n in SKELETON_CARDS"
             :key="'skel-' + n"
-            class="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4"
+            class="flex min-w-0 w-full flex-col gap-2 rounded-lg border border-line bg-surface p-4"
           >
             <div class="flex items-start gap-3">
               <div class="h-9 w-9 shrink-0 bg-elevated animate-pulse" />
@@ -188,12 +188,12 @@ onMounted(() => {
           </EmptyState>
         </div>
 
-        <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="project-list-cards">
+        <div v-else class="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3" data-testid="project-list-cards">
           <button
             v-for="p in projects"
             :key="p.id"
             type="button"
-            class="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4 text-left transition hover:border-line-strong hover:bg-elevated"
+            class="flex min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden rounded-lg border border-line bg-surface p-4 text-left transition hover:border-line-strong hover:bg-elevated"
             @click="openProject(p)"
           >
             <div class="flex items-start gap-3">
@@ -202,20 +202,20 @@ onMounted(() => {
               </div>
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-semibold text-txt">{{ p.name }}</div>
-                <div v-if="p.description" class="mt-0.5 line-clamp-2 text-[12px] text-txt3">
+                <div v-if="p.description" class="mt-0.5 line-clamp-2 break-words text-[12px] text-txt3">
                   {{ p.description }}
                 </div>
               </div>
             </div>
-            <div class="flex flex-wrap items-center border-t border-line pt-2.5 text-[11px] text-txt3">
-              <span>{{ t('pages.projectList.workflowCount', { n: p.workflowCount ?? 0 }) }}</span>
+            <div class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 border-t border-line pt-2.5 text-[11px] text-txt3">
+              <span class="shrink-0">{{ t('pages.projectList.workflowCount', { n: p.workflowCount ?? 0 }) }}</span>
               <template v-if="p.updatedAt">
-                <span class="mx-1.5 text-[#d9d9d9]" aria-hidden="true">·</span>
-                <span>{{ fmtTime(p.updatedAt) }}</span>
+                <span class="text-[#d9d9d9]" aria-hidden="true">·</span>
+                <span class="shrink-0">{{ fmtTime(p.updatedAt) }}</span>
               </template>
-              <span class="mx-1.5 text-[#d9d9d9]" aria-hidden="true">·</span>
+              <span class="text-[#d9d9d9]" aria-hidden="true">·</span>
               <span
-                class="group relative tabular-nums"
+                class="group relative min-w-0 tabular-nums"
                 :class="[
                   p.totalTokens == null ? 'text-txt3' : 'text-txt2',
                   p.totalTokens != null ? 'cursor-help' : '',
