@@ -133,4 +133,21 @@ describe('DashboardView home chat layout', () => {
     expect(shellSrc).toMatch(/h-screen/)
     expect(shellSrc).toMatch(/min-h-0 flex-1/)
   })
+
+  // plan g1.1 / g2.1 — mobile top spacing: ~4–4.5rem padding-top, keep flex-start
+  it('uses moderate mobile top padding without vertical centering', () => {
+    expect(src).toMatch(
+      /@media \(max-width: 520px\)[\s\S]*\.home-shell__content[\s\S]*padding-top:\s*4\.25rem/,
+    )
+    expect(src).not.toMatch(
+      /@media \(max-width: 520px\)[\s\S]*\.home-shell__content[\s\S]*padding-top:\s*2rem/,
+    )
+    expect(src).toMatch(
+      /@media \(max-width: 520px\)[\s\S]*\.home-shell__content[\s\S]*justify-content:\s*flex-start/,
+    )
+    expect(src).not.toMatch(
+      /@media \(max-width: 520px\)[\s\S]*\.home-shell__content[\s\S]*justify-content:\s*center/,
+    )
+    expect(src).toMatch(/justify-center/)
+  })
 })

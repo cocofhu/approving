@@ -909,7 +909,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 520px) {
   .home-shell__content {
-    padding-top: 2rem;
+    padding-top: 4.25rem;
     padding-bottom: 2.5rem;
     justify-content: flex-start;
   }
