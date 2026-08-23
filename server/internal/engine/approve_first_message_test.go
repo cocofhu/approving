@@ -118,3 +118,59 @@ func TestApproveWithoutFirstMessageParksEmpty(t *testing.T) {
 		t.Fatal("latch must stay unset when there is nothing to deliver")
 	}
 }
+
+// Cancel then ResumeFrom must re-deliver FirstMessage into the new approve visit,
+// matching a fresh run — not leave the UI at "共 0 条".
+func TestApproveFirstMessageRedeliveredAfterCancelResume(t *testing.T) {
+	eng, db, _ := setupEngineGraphP(t, approveOnlyGraph())
+	msg := &models.CompositeText{Text: "把登录做清楚"}
+	run, err := eng.StartRunWithFirstMessage("wf", nil, "test", "", nil, nil, "", msg)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	turn := waitFirstHumanTurn(t, db, run.ID, "predev")
+	if turn.Text != "把登录做清楚" {
+		t.Fatalf("first delivery text = %q", turn.Text)
+	}
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	if err := eng.Cancel(run.ID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "cancelled")
+
+	var stored models.Run
+	if err := db.First(&stored, "id = ?", run.ID).Error; err != nil {
+		t.Fatalf("load run: %v", err)
+	}
+	if stored.FirstMessageDeliveredAt != nil {
+		t.Fatal("cancel must release delivery latch")
+	}
+
+	if err := eng.ResumeFrom(run.ID, "predev"); err != nil {
+		t.Fatalf("ResumeFrom: %v", err)
+	}
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "predev").
+		Order("iteration desc").First(&conv).Error; err != nil {
+		t.Fatalf("conv: %v", err)
+	}
+	if conv.Iteration < 2 {
+		t.Fatalf("expected new visit iteration >= 2, got %d", conv.Iteration)
+	}
+	humans := 0
+	for _, m := range conv.Messages {
+		if m.Role == "human" {
+			humans++
+			if m.Text != "把登录做清楚" {
+				t.Fatalf("redelivered text = %q", m.Text)
+			}
+		}
+	}
+	if humans != 1 {
+		t.Fatalf("new visit human turns = %d, want 1", humans)
+	}
+}
