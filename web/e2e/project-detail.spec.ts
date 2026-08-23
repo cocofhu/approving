@@ -602,7 +602,7 @@ test.describe('ProjectDetailView 项目信息面板', () => {
 
     const panel = page
       .locator('.border.border-line.bg-surface')
-      .filter({ hasText: '修改名称或描述后点击保存' })
+      .filter({ hasText: '修改名称、描述或未知模型显示名后点击保存' })
       .first()
     await expect(panel).toBeVisible()
     await expect(panel.getByRole('heading', { name: '项目信息' })).toBeVisible()
@@ -756,7 +756,9 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await page.getByRole('button', { name: '定时任务' }).click()
     await expect(page.getByText('暂无定时任务')).toBeVisible()
     await expect(page).toHaveURL(/tab=cronJobs/)
-    await page.getByRole('button', { name: '通知' }).click()
+    const notifyTab = page.getByTestId('project-tab-notify')
+    await notifyTab.scrollIntoViewIfNeeded()
+    await notifyTab.click()
     await expect(page.getByTestId('project-notify-panel')).toBeVisible()
     await expect(page).toHaveURL(/tab=notify/)
     await page.getByRole('button', { name: '项目信息' }).click()
@@ -1134,7 +1136,7 @@ test.describe('ProjectDetailView PM Leader 滚动', () => {
     await gotoPmLeaderChat(page, { captureWs: true })
 
     const scroller = page.getByTestId('pm-message-scroller')
-    await page.getByPlaceholder('输入问题，Enter 发送；可粘贴或选择图片').fill('测试 stick')
+    await page.getByPlaceholder('输入问题，Enter 发送；可粘贴或选择附件').fill('测试 stick')
     await page.getByRole('button', { name: '发送' }).click()
     await expect(page.getByTestId('pm-stream-bubble')).toBeVisible({ timeout: 10_000 })
 
