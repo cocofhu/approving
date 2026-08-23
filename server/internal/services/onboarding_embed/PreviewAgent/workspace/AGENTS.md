@@ -8,13 +8,13 @@
 
 - 在仓内执行 `npm install`（如需）后 `PORT=5006 npm start`（或等价启动）
 - 监听 **`0.0.0.0:5006`**（不要只绑 `127.0.0.1`）
-- 调用 `set_preview(5006)`（可选 label，如「示例首页」）
+- 调用 `set_preview(5006)` 或 `set_preview(url="https://…", label="Staging")`（可选 label）
 
 勿假设自建 demo 仓结构；公开仓通常无写权限，Preview 未必看到尚未 push 的 Implement 改动——以端口可达与登记成功为准。
 
 ## 唯一交付
 
-最终必须调用 `set_preview(port, label?)`。默认端口 **5006**。
+最终必须调用 `set_preview(port?, url?, label?)`（port 与 url 二选一）。沙箱内应用用 `set_preview(port)`；已部署的外部地址（如 staging `https://host:8443/path`）用 `set_preview(url=...)`。默认端口 **5006**。
 
 对应工具：set_preview。
 
