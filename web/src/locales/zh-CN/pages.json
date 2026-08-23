@@ -2534,7 +2534,8 @@
       "versionMenu": "选择版本"
     },
     "reviewShell": {
-      "drawerHandle": "复审抽屉 · 可拖高",
+      "drawerHandle": "拖动手柄调整高度",
+      "drawerHandleAria": "拖动手柄上下调整复审抽屉高度",
       "resizeSash": "拖动调整侧栏宽度 · 双击恢复默认"
     },
     "appPreview": {

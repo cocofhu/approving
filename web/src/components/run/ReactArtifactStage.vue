@@ -533,14 +533,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0 flex-col bg-base" data-testid="react-artifact-stage">
     <div
-      class="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2 py-1.5"
+      class="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2 py-1.5 max-md:px-1.5 max-md:py-1"
       data-testid="react-artifact-tabs"
       role="tablist"
     >
       <button
         type="button"
         role="tab"
-        class="inline-flex max-w-[200px] items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] transition"
+        class="inline-flex max-w-[200px] items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] transition max-md:px-2 max-md:py-0.5 max-md:text-[11px]"
         :class="
           showingGrid
             ? 'bg-elevated text-txt'
@@ -556,7 +556,7 @@ onBeforeUnmount(() => {
       <div
         v-for="name in openNames"
         :key="name"
-        class="group inline-flex max-w-[220px] items-center gap-1 rounded-md text-[12px] transition"
+        class="group inline-flex max-w-[220px] items-center gap-1 rounded-md text-[12px] transition max-md:text-[11px]"
         :class="
           activePreviewName === name
             ? 'bg-elevated text-txt'
@@ -587,7 +587,7 @@ onBeforeUnmount(() => {
       </div>
       <div
         v-if="novncOpen"
-        class="group inline-flex max-w-[220px] items-center gap-1 rounded-md text-[12px] transition"
+        class="group inline-flex max-w-[220px] items-center gap-1 rounded-md text-[12px] transition max-md:text-[11px]"
         :class="
           showingNovnc
             ? 'bg-elevated text-txt'
