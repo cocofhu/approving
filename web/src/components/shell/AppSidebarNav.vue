@@ -226,18 +226,11 @@ const configGroups = sidebarNavGroups.slice(1)
       </RouterLink>
     </div>
 
-    <!-- Quick pipelines: independent of sidebarNavGroups (between notifications & config) -->
-    <div class="mb-3" data-testid="nav-quick-pipelines">
+    <!-- Quick pipelines: only when there are favorites to show -->
+    <div v-if="displayItems.length" class="mb-3" data-testid="nav-quick-pipelines">
       <div class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-txt3">
         {{ t('nav.quickPipelines') }}
       </div>
-      <p
-        v-if="!displayItems.length"
-        class="px-3 text-[12px] leading-snug text-txt3"
-        data-testid="nav-quick-pipelines-empty"
-      >
-        {{ t('nav.quickPipelinesEmpty') }}
-      </p>
       <div ref="quickList" class="quick-pipelines-list">
         <template v-for="(item, index) in dragItems" :key="item.workflowId">
           <div

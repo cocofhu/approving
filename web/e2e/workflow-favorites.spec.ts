@@ -6,12 +6,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const shotDir = path.join(__dirname, '..', '..', '.tmp-test-shots')
 
 test.describe('workflow favorites quick-launch', () => {
-  test('empty state keeps section title and guide copy', async ({ page }) => {
+  test('empty state hides the quick-pipelines section entirely', async ({ page }) => {
     await page.goto('/workflow-favorites.html?scene=empty')
-    await expect(page.getByTestId('nav-quick-pipelines')).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByTestId('nav-quick-pipelines')).toContainText('快捷流水线')
-    await expect(page.getByTestId('nav-quick-pipelines-empty')).toContainText('星标')
-    // Primary nav still present (notifications before quick zone)
+    await expect(page.getByTestId('app-sidebar-nav')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByTestId('nav-quick-pipelines')).toHaveCount(0)
+    await expect(page.getByText('快捷流水线')).toHaveCount(0)
+    // Primary nav still present (notifications before config)
     await expect(page.getByRole('link', { name: '通知' })).toBeVisible()
     await expect(page.getByRole('link', { name: '设置' })).toBeVisible()
     await page.screenshot({ path: path.join(shotDir, 'fav-empty.png'), fullPage: true })
