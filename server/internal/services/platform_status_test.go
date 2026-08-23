@@ -292,8 +292,11 @@ func TestPlatformStatus_singleflightMerges(t *testing.T) {
 			_, errs[i] = dash.PlatformStatus(context.Background(), q)
 		}(i)
 	}
-	// Give goroutines time to enter singleflight.
-	time.Sleep(50 * time.Millisecond)
+	// Wait until the singleflight leader enters the hook (avoid fixed-sleep flake).
+	deadline := time.Now().Add(2 * time.Second)
+	for atomic.LoadInt32(&started) == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
 	if got := atomic.LoadInt32(&started); got != 1 {
 		release.Done()
 		t.Fatalf("expected 1 in-flight compute, got %d", got)
