@@ -266,8 +266,8 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g2.2 — dropdown and card selection stay in sync
-  it('keeps pipeline select and card selection in sync', async () => {
+  // plan g2.2 — combobox and card selection stay in sync
+  it('keeps pipeline combobox and card selection in sync', async () => {
     const second: Workflow = {
       ...approveWf,
       id: 'wf-lite',
@@ -277,22 +277,86 @@ describe('DashboardView home composer', () => {
     mocks.listWorkflows.mockResolvedValue([approveWf, second])
     const wrapper = mountDashboard()
     await flushPromises()
-    const select = wrapper.get('[data-testid="home-pipeline-select"]')
-    expect((select.element as HTMLSelectElement).value).toBe('wf-ap')
+    const trigger = wrapper.get('[data-testid="home-pipeline-select-trigger"]')
+    expect(trigger.text()).toContain('自我迭代PRO')
     expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
       'home-shell__card--selected',
     )
     await wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').trigger('click')
     await flushPromises()
-    expect((select.element as HTMLSelectElement).value).toBe('wf-lite')
+    expect(trigger.text()).toContain('快速澄清 Lite')
     expect(wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').classes()).toContain(
       'home-shell__card--selected',
     )
-    await select.setValue('wf-ap')
+    await trigger.trigger('click')
     await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-option-wf-ap"]').trigger('click')
+    await flushPromises()
+    expect(trigger.text()).toContain('自我迭代PRO')
     expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
       'home-shell__card--selected',
     )
+    wrapper.unmount()
+  })
+
+  it('filters pipelines by keyword in the combobox search', async () => {
+    const second: Workflow = {
+      ...approveWf,
+      id: 'wf-lite',
+      name: '快速澄清 Lite',
+      description: '轻量 Approve 入口',
+    }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = wrapper.get('[data-testid="home-pipeline-select-search"]')
+    await search.setValue('Lite')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-lite"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-ap"]').exists()).toBe(false)
+    await search.setValue('nomatch-xyz')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-select-empty"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-pipeline-select-empty"]').text()).toContain('无匹配流水线')
+    await search.setValue('')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-ap"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('selects pipeline from combobox via Enter after keyword filter', async () => {
+    const second: Workflow = {
+      ...approveWf,
+      id: 'wf-lite',
+      name: '快速澄清 Lite',
+      description: '轻量 Approve 入口',
+    }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = wrapper.get('[data-testid="home-pipeline-select-search"]')
+    await search.setValue('Lite')
+    await flushPromises()
+    await search.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').text()).toContain('快速澄清 Lite')
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    wrapper.unmount()
+  })
+
+  it('disables pipeline combobox when no pipelines are available', async () => {
+    mocks.listWorkflows.mockResolvedValue([])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const triggerEl = wrapper.get('[data-testid="home-pipeline-select-trigger"]').element as HTMLButtonElement
+    expect(triggerEl.disabled).toBe(true)
+    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').text()).toContain('未选择流水线')
     wrapper.unmount()
   })
 
