@@ -1295,6 +1295,12 @@ async function editReactQueuedItem(index: number) {
     }
   }
 }
+
+/**
+ * Authoritative idle (waiting=0 ∧ !busy ∧ no activeItem): force-clear local
+ * sticky busy — ghost queued, unfinished inFlight, and thinking.
+ */
+function forceReactAuthoritativeIdle() {
   if (reactQueued.value.length) reactQueued.value = []
   if (reactInFlight.value) {
     reactInFlight.value = false
