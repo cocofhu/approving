@@ -26,18 +26,19 @@ const notifMocks = vi.hoisted(() => ({
 }))
 
 const favMocks = vi.hoisted(() => {
-  // Plain { value } bags — script paths must read .value (same as gate/notif mocks).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { ref } = require('vue') as typeof import('vue')
   return {
-    displayItems: {
-      value: [] as Array<{
+    displayItems: ref<
+      Array<{
         workflowId: string
         favoritedAt: number
         name: string
         projectId: string
         projectName: string
         status: 'draft' | 'published'
-      }>,
-    },
+      }>
+    >([]),
     hydrateDisplay: vi.fn(async () => undefined),
     unfavorite: vi.fn(),
     getFavoriteWorkflow: vi.fn(),
@@ -67,19 +68,15 @@ vi.mock('@/lib/run/useRunTerminalNotifications', () => ({
   }),
 }))
 
-vi.mock('@/lib/run/useWorkflowFavorites', async () => {
-  const { computed } = await import('vue')
-  return {
-    useWorkflowFavorites: () => ({
-      // Expose a computed so template auto-tracks the hoisted bag.
-      displayItems: computed(() => favMocks.displayItems.value),
-      hydrateDisplay: favMocks.hydrateDisplay,
-      unfavorite: favMocks.unfavorite,
-      getFavoriteWorkflow: favMocks.getFavoriteWorkflow,
-      reorderFavorites: favMocks.reorderFavorites,
-    }),
-  }
-})
+vi.mock('@/lib/run/useWorkflowFavorites', () => ({
+  useWorkflowFavorites: () => ({
+    displayItems: favMocks.displayItems,
+    hydrateDisplay: favMocks.hydrateDisplay,
+    unfavorite: favMocks.unfavorite,
+    getFavoriteWorkflow: favMocks.getFavoriteWorkflow,
+    reorderFavorites: favMocks.reorderFavorites,
+  }),
+}))
 
 vi.mock('@/lib/composables/useBreakpoint', () => ({
   useBreakpoint: () => breakpointMocks,
@@ -95,6 +92,7 @@ import AppSidebarNav from './AppSidebarNav.vue'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  favMocks.unfavorite.mockReset()
   gateMocks.peek.mockResolvedValue(undefined)
   gateMocks.refresh.mockResolvedValue(undefined)
   gateMocks.count.value = 2
@@ -149,14 +147,39 @@ describe('AppSidebarNav', () => {
     vi.useRealTimers()
   })
 
-  it('renders independent quick-pipelines section with empty guidance', async () => {
+  it('hides quick-pipelines section when there are no favorites', async () => {
     const wrapper = mountNav()
     await flushPromises()
-    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="nav-quick-pipelines-empty"]').text()).toContain('星标')
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('快捷流水线')
     // Primary nav still present
     expect(wrapper.find('[data-to="/notifications"]').exists()).toBe(true)
     expect(wrapper.find('[data-to="/settings"]').exists()).toBe(true)
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('hides quick-pipelines section after the last favorite is removed', async () => {
+    favMocks.displayItems.value = [
+      {
+        workflowId: 'wf-1',
+        favoritedAt: 1,
+        name: '夜间回归',
+        projectId: 'p1',
+        projectName: 'checkout-service',
+        status: 'published',
+      },
+    ]
+    favMocks.unfavorite.mockImplementation(() => {
+      favMocks.displayItems.value = []
+    })
+    const wrapper = mountNav()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(true)
+
+    await wrapper.find('[data-testid="nav-quick-pipeline-unfavorite"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
     wrapper.unmount()
     vi.useRealTimers()
   })
@@ -175,7 +198,6 @@ describe('AppSidebarNav', () => {
     favMocks.getFavoriteWorkflow.mockResolvedValue({ id: 'wf-1', name: '夜间回归', nodes: [], edges: [] })
     const wrapper = mountNav()
     await flushPromises()
-    expect(wrapper.find('[data-testid="nav-quick-pipelines-empty"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="nav-quick-pipeline-item"]').text()).toContain('夜间回归')
     expect(wrapper.text()).toContain('草稿')
 
