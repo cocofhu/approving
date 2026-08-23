@@ -32,7 +32,7 @@ import {
   type PublicGateQueueItem,
 } from '@/lib/inbox/gateShareLink'
 import { isClarifyInteractive } from '@/lib/shared/clarifyInteractive'
-import type { AcpEvent, Artifact, ClarifyImage, ClarifyTurn, ReactAnnotation, Run } from '@/lib/shared/types'
+import type { AcpEvent, Artifact, ClarifyImage, ClarifyTurn, NodeType, ReactAnnotation, Run } from '@/lib/shared/types'
 
 const PUBLIC_SHARE_RUN_ID = 'public-share'
 
@@ -344,8 +344,9 @@ async function loadPublicArtifacts(opts?: { silent?: boolean }) {
         nodeRuns: {},
         nodes: res.nodes.map((n) => ({
           id: n.id,
-          type: n.type,
+          type: n.type as NodeType,
           label: n.label || n.id,
+          position: { x: 0, y: 0 },
           config: n.config || {},
         })),
         edges: [],

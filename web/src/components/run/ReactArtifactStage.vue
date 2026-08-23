@@ -413,7 +413,7 @@ watch(
       } else {
         try {
           const full = props.token
-            ? await publicGateApi.artifactContent(props.token, a.name, { signal: ac.signal })
+            ? await publicGateApi.artifactContent(props.token, a.name, ac.signal)
             : await api.artifactContent(a.id, { signal: ac.signal })
           if (gen !== summaryThumbGen) return
           content = full.content ?? ''
