@@ -170,6 +170,9 @@ const {
   attachNotice,
   sel,
   other,
+  otherChecked,
+  isOtherSelected,
+  toggleOther,
   activeQuestions,
   someAnswered,
   hasRecommended,
@@ -434,12 +437,32 @@ const {
                           >{{ translate('pages.clarify.recommended') }}</span>
                         </button>
                       </div>
-                      <input
-                        v-model="other[curQuestion.id]"
-                        type="text"
-                        class="input mt-1.5 h-8 w-full text-[12px]"
-                        :placeholder="translate('pages.clarify.otherPlaceholder')"
-                      />
+                      <div
+                        class="mt-1.5 flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[12px] transition-colors"
+                        :class="isOtherSelected(curQuestion.id) ? 'border-accent bg-accent-dim/60 text-txt' : 'border-line bg-surface text-txt2'"
+                        data-testid="clarify-other-row"
+                      >
+                        <button
+                          type="button"
+                          class="flex h-4 w-4 shrink-0 items-center justify-center border"
+                          :class="[
+                            curQuestion.allowMultiple ? 'rounded' : 'rounded-full',
+                            isOtherSelected(curQuestion.id) ? 'border-accent bg-accent text-white' : 'border-line-strong',
+                          ]"
+                          data-testid="clarify-other-checkbox"
+                          :aria-label="translate('pages.clarify.otherPlaceholder')"
+                          @click="toggleOther(curQuestion)"
+                        >
+                          <Icon v-if="isOtherSelected(curQuestion.id)" name="check" :size="10" />
+                        </button>
+                        <input
+                          v-model="other[curQuestion.id]"
+                          type="text"
+                          class="input min-h-0 flex-1 border-0 bg-transparent p-0 text-[12px] shadow-none focus:border-transparent focus:ring-0"
+                          :placeholder="translate('pages.clarify.otherPlaceholder')"
+                          data-testid="clarify-other-input"
+                        />
+                      </div>
 
                       <!-- Demo previews (options with demoHtml) -->
                       <div v-if="demoOptionsOf(curQuestion).length" class="mt-2.5">

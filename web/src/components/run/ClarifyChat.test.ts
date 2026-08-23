@@ -158,6 +158,84 @@ describe('ClarifyChat', () => {
     wrapper.unmount()
   })
 
+  const OTHER_QUESTION_TURN: ClarifyTurn = {
+    role: 'agent',
+    text: '',
+    at: '2026-07-18T00:00:00Z',
+    questions: [
+      {
+        id: 'q1',
+        prompt: '选择部署方式',
+        options: [
+          { id: 'k8s', label: 'Kubernetes' },
+          { id: 'vm', label: '虚拟机' },
+        ],
+      },
+    ],
+  }
+
+  function submitChoicesBtn(wrapper: ReturnType<typeof mountChat>) {
+    return wrapper.findAll('button').find((b) => b.text().includes('确认选择'))
+  }
+
+  it('other: typed text without checkbox cannot submit alone (g1.2)', async () => {
+    const wrapper = mountChat({ turns: [OTHER_QUESTION_TURN] })
+    await wrapper.find('[data-testid="clarify-other-input"]').setValue('自由补充内容')
+    await flushPromises()
+    const submitBtn = submitChoicesBtn(wrapper)
+    expect(submitBtn).toBeTruthy()
+    expect((submitBtn!.element as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('other: checked + non-empty text enables submit and appears in summary (g1.2/g1.3)', async () => {
+    const wrapper = mountChat({ turns: [OTHER_QUESTION_TURN] })
+    await wrapper.find('[data-testid="clarify-other-checkbox"]').trigger('click')
+    await wrapper.find('[data-testid="clarify-other-input"]').setValue('仅其他补充')
+    await flushPromises()
+    const submitBtn = submitChoicesBtn(wrapper)!
+    expect((submitBtn.element as HTMLButtonElement).disabled).toBe(false)
+    await submitBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('send')).toBeTruthy()
+    const sent = String(wrapper.emitted('send')![0][0])
+    expect(sent).toContain('仅其他补充')
+    expect(sent).not.toContain('Kubernetes')
+    wrapper.unmount()
+  })
+
+  it('other: checked but empty text does not count as answered (g1.2)', async () => {
+    const wrapper = mountChat({ turns: [OTHER_QUESTION_TURN] })
+    await wrapper.find('[data-testid="clarify-other-checkbox"]').trigger('click')
+    await flushPromises()
+    const submitBtn = submitChoicesBtn(wrapper)!
+    expect((submitBtn.element as HTMLButtonElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('other: unchecked text is omitted when option + other both present (g1.2)', async () => {
+    const wrapper = mountChat({ turns: [OTHER_QUESTION_TURN] })
+    const optionBtn = wrapper.findAll('button').find((b) => b.text().includes('Kubernetes'))
+    await optionBtn!.trigger('click')
+    await wrapper.find('[data-testid="clarify-other-input"]').setValue('不应出现')
+    await flushPromises()
+    const submitBtn = submitChoicesBtn(wrapper)!
+    expect((submitBtn.element as HTMLButtonElement).disabled).toBe(false)
+    await submitBtn.trigger('click')
+    await flushPromises()
+    const sent = String(wrapper.emitted('send')![0][0])
+    expect(sent).toContain('Kubernetes')
+    expect(sent).not.toContain('不应出现')
+    wrapper.unmount()
+  })
+
+  it('other row shows checkbox control matching question mode (g1.1)', () => {
+    const wrapper = mountChat({ turns: [OTHER_QUESTION_TURN] })
+    expect(wrapper.find('[data-testid="clarify-other-checkbox"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-other-row"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('emits finish on early finish click', async () => {
     const wrapper = mountChat()
     const finishBtn = wrapper.findAll('button').find((b) => b.text().includes('结束交互'))

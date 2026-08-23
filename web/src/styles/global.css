@@ -103,12 +103,24 @@ body {
 *.is-scrolling {
   scrollbar-color: rgb(var(--c-line)) transparent;
 }
+/* Dark theme: UA-native scrollbars stay dark; visible track matches base surface */
+html:not(.light) {
+  color-scheme: dark;
+}
+html:not(.light) *:hover,
+html:not(.light) *.is-scrolling {
+  scrollbar-color: rgb(var(--c-line)) rgb(var(--c-base));
+}
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+html:not(.light) *:hover::-webkit-scrollbar-track,
+html:not(.light) *.is-scrolling::-webkit-scrollbar-track {
+  background: rgb(var(--c-base));
 }
 ::-webkit-scrollbar-thumb {
   background: transparent;
@@ -122,6 +134,10 @@ body {
 *:hover::-webkit-scrollbar-thumb:hover,
 *.is-scrolling::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--c-line-strong));
+}
+html:not(.light) *:hover::-webkit-scrollbar,
+html:not(.light) *.is-scrolling::-webkit-scrollbar {
+  background: rgb(var(--c-base));
 }
 
 @layer components {
@@ -172,6 +188,10 @@ body {
   .scroll-area:hover,
   .scroll-area.is-scrolling {
     scrollbar-color: rgb(var(--c-line)) transparent;
+  }
+  html:not(.light) .scroll-area:hover,
+  html:not(.light) .scroll-area.is-scrolling {
+    scrollbar-color: rgb(var(--c-line)) rgb(var(--c-base));
   }
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom, 0px);
