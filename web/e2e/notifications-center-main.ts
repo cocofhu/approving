@@ -373,10 +373,14 @@ async function bootstrap() {
     scene === 'legacy-structured-page' ||
     scene === 'paged'
   ) {
-    localStorage.setItem(
-      'approving.notifications.prefs.e2e',
-      JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),
-    )
+    const prefsKey = 'approving.notifications.prefs.e2e'
+    // Seed only when absent so reload tests can assert read-state persistence.
+    if (!localStorage.getItem(prefsKey)) {
+      localStorage.setItem(
+        prefsKey,
+        JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),
+      )
+    }
   } else {
     localStorage.removeItem('approving.notifications.prefs.e2e')
     localStorage.removeItem('approving.runTerminalNotifications.readIds.e2e')

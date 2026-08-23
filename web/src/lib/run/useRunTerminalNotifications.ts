@@ -263,6 +263,14 @@ const remainingCount = computed(() => Math.max(pool.value.length - RUN_TERMINAL_
 
 const poolTotal = computed(() => pool.value.length)
 
+function flushPrefsForKey(key: string) {
+  if (!key || !prefsHydrated) return
+  persistPrefs(key, {
+    enabledAt: enabledAt.value || new Date().toISOString(),
+    readIds: [...readIds.value],
+  })
+}
+
 /** @returns true when prefs are hydrated for a settled auth identity */
 function ensureUsername(): boolean {
   const { name, settled } = resolveUsername()
@@ -272,6 +280,7 @@ function ensureUsername(): boolean {
     return false
   }
   if (name !== usernameKey.value) {
+    flushPrefsForKey(usernameKey.value)
     usernameKey.value = name
     const prefs = loadPrefs(name)
     enabledAt.value = prefs.enabledAt
@@ -318,7 +327,12 @@ function installAuthWatch() {
 }
 
 function persistCurrent() {
-  persistPrefs(usernameKey.value, {
+  const { name, settled } = resolveUsername()
+  // Never stamp anonymous / wrong key while auth is still in flight.
+  if (!settled) return
+  usernameKey.value = name
+  prefsHydrated = true
+  persistPrefs(name, {
     enabledAt: enabledAt.value || new Date().toISOString(),
     readIds: [...readIds.value],
   })
@@ -326,6 +340,7 @@ function persistCurrent() {
 
 function markRead(runId: string) {
   if (!runId || readIds.value.has(runId)) return
+  if (!ensureUsername()) return
   const next = new Set(readIds.value)
   next.add(runId)
   readIds.value = next
@@ -333,7 +348,7 @@ function markRead(runId: string) {
 }
 
 function markAllRead() {
-  ensureUsername()
+  if (!ensureUsername()) return
   if (!pool.value.length) {
     // Still persist baseline so empty sessions don't re-seed oddly.
     persistCurrent()
