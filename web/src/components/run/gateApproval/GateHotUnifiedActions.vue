@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useGateApprovalCtx } from './gateApprovalContext'
 import Icon from '../../ui/Icon.vue'
 import GateReactStreamPanel from '../GateReactStreamPanel.vue'
+import PendingSendQueuePanel from '../PendingSendQueuePanel.vue'
 
 const props = defineProps<{
   /** mobile: always touch-sized; content-fit: min-height only when isMobile */
@@ -95,22 +96,16 @@ const cancelBtnClass = computed(() => {
       Cancel
     </button>
   </div>
-  <div
+  <PendingSendQueuePanel
     v-if="s.reactQueued.length"
-    class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
-    data-testid="gate-react-queue"
-  >
-    <div class="mb-1 text-[11px] text-txt3">
-      {{ t('pages.agentChatTester.queue', { n: s.reactQueued.length }) }}
-    </div>
-    <div
-      v-for="(q, qi) in s.reactQueued"
-      :key="qi"
-      class="truncate text-[12px] text-txt2"
-    >
-      {{ qi + 1 }}. {{ q.text }}
-    </div>
-  </div>
+    panel-test-id="gate-react-queue"
+    :items="s.reactQueued"
+    :notice="s.reactQueueNotice"
+    :toast="s.reactQueueToast"
+    @cancel="s.cancelReactQueuedItem"
+    @edit="s.editReactQueuedItem"
+    @reorder="s.reorderReactQueuedItems"
+  />
   <GateReactStreamPanel
     :thinking="s.reactThinking"
     :stream-text="s.reactStreamText"

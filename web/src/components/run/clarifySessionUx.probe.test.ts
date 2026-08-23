@@ -336,4 +336,47 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     expect(body).toContain('流式正文')
     w.unmount()
   })
+
+  it('queue row cancel removes item without confirm dialog', async () => {
+    const w = mountClarify()
+    await sendText(w, '甲')
+    await sendText(w, '乙')
+    expect(w.findAll('[data-testid="clarify-queue-item"]').length).toBe(2)
+    await w.find('[data-testid="clarify-queue-cancel"]').trigger('click')
+    await flushPromises()
+    expect(w.findAll('[data-testid="clarify-queue-item"]').length).toBe(1)
+    expect(w.find('[data-testid="clarify-queue-item"]').text()).toContain('乙')
+    expect(w.emitted('queue-remove')).toBeFalsy()
+    w.unmount()
+  })
+
+  it('edit refills composer; draft conflict blocks overwrite', async () => {
+    const w = mountClarify()
+    await sendText(w, '排队原文')
+    await w.find('textarea').setValue('未发送草稿')
+    await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-queue-notice"]').exists()).toBe(true)
+    expect(w.find('textarea').element.value).toBe('未发送草稿')
+
+    await w.find('textarea').setValue('')
+    await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+    expect(w.find('textarea').element.value).toBe('排队原文')
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('drag reorder updates visible order', async () => {
+    const w = mountClarify()
+    await sendText(w, '第一条')
+    await sendText(w, '第二条')
+    const vm = w.vm as unknown as { reorderQueuedItems: (from: number, to: number) => void }
+    vm.reorderQueuedItems(0, 1)
+    await nextTick()
+    const rows = w.findAll('[data-testid="clarify-queue-item"]')
+    expect(rows[0]?.text()).toContain('第二条')
+    expect(rows[1]?.text()).toContain('第一条')
+    w.unmount()
+  })
 })

@@ -614,6 +614,46 @@ export const publicGateApi = {
       return body
     })
   },
+  queueRemove(token: string, itemId: string): Promise<PublicGateReplyResult> {
+    return fetch('/public/gate-approvals/queue/remove', {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+      body: JSON.stringify({ token, itemId }),
+    }).then(async (res) => {
+      const body = await readJson<PublicGateReplyResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
+  queueReorder(token: string, itemIds: string[]): Promise<PublicGateReplyResult> {
+    return fetch('/public/gate-approvals/queue/reorder', {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+        [GATE_SHARE_REQUEST_HEADER]: '1',
+      },
+      body: JSON.stringify({ token, itemIds }),
+    }).then(async (res) => {
+      const body = await readJson<PublicGateReplyResult>(res)
+      if (!res.ok) {
+        throw Object.assign(new Error(body.message || body.error || `${res.status}`), {
+          status: res.status,
+          body,
+        })
+      }
+      return body
+    })
+  },
   artifacts(token: string, signal?: AbortSignal): Promise<PublicGateArtifactsResult> {
     return fetch('/public/gate-approvals/artifacts', {
       method: 'GET',

@@ -874,6 +874,26 @@ async function onCancel() {
   }
 }
 
+async function onQueueRemove(itemId: string | undefined) {
+  if (!itemId) return
+  try {
+    await publicGateApi.queueRemove(token.value, itemId)
+    await loadPreview({ silent: true })
+  } catch (e) {
+    errorText.value = e instanceof Error ? e.message : t('pages.publicGate.replyFailed')
+  }
+}
+
+async function onQueueReorder(itemIds: string[]) {
+  if (!itemIds.length) return
+  try {
+    await publicGateApi.queueReorder(token.value, itemIds)
+    await loadPreview({ silent: true })
+  } catch (e) {
+    errorText.value = e instanceof Error ? e.message : t('pages.publicGate.replyFailed')
+  }
+}
+
 function onHtmlPick(payload: { selector: string; tagName: string }) {
   if (!inspectable.value) return
   const next: ReactAnnotation = { selector: payload.selector, label: payload.selector || payload.tagName }
@@ -1241,6 +1261,8 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
                   hide-finish
                   @send="onSend"
                   @cancel="onCancel"
+                  @queue-remove="(itemId) => onQueueRemove(itemId)"
+                  @queue-reorder="onQueueReorder"
                 />
               </div>
             </template>

@@ -49,6 +49,8 @@ const emit = defineEmits<{
   send: [text: string, images: ClarifyImage[], annotations: ReactAnnotation[]]
   finish: []
   cancel: []
+  'queue-remove': [itemId: string | undefined, index: number]
+  'queue-reorder': [itemIds: string[]]
   pick: [payload: AppPreviewPickPayload]
   stagedPick: [payload: AppPreviewPickPayload | null]
 }>()
@@ -115,6 +117,8 @@ defineExpose({
         @send="(text: string, images: ClarifyImage[], anns: ReactAnnotation[]) => emit('send', text, images, anns)"
         @finish="emit('finish')"
         @cancel="emit('cancel')"
+        @queue-remove="(itemId, index) => emit('queue-remove', itemId, index)"
+        @queue-reorder="(itemIds) => emit('queue-reorder', itemIds)"
       />
       <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
     </template>

@@ -192,6 +192,88 @@ func (h *Handlers) GateReactRevise(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "accepted", "waiting": waiting, "producerNodeId": producerID})
 }
 
+type reactQueueItemBody struct {
+	ItemID string `json:"itemId"`
+}
+
+type reactQueueReorderBody struct {
+	ItemIDs []string `json:"itemIds"`
+}
+
+// ReactQueueRemove drops one waiting item from the node-inline review/clarify FIFO.
+func (h *Handlers) ReactQueueRemove(c *gin.Context) {
+	var b reactQueueItemBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	runID, nodeID := c.Param("id"), c.Param("nodeId")
+	if err := h.Eng.RemoveQueuedItem(runID, nodeID, b.ItemID); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// ReactQueueReorder reorders waiting items for a node-inline review/clarify session.
+func (h *Handlers) ReactQueueReorder(c *gin.Context) {
+	var b reactQueueReorderBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	runID, nodeID := c.Param("id"), c.Param("nodeId")
+	if err := h.Eng.ReorderQueuedItems(runID, nodeID, b.ItemIDs); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// GateReactQueueRemove drops one waiting item from the upstream producer FIFO.
+func (h *Handlers) GateReactQueueRemove(c *gin.Context) {
+	var b reactQueueItemBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	runID, gateNodeID := c.Param("id"), c.Param("nodeId")
+	producerID, alive := h.Eng.GateReactInfo(runID, gateNodeID)
+	if producerID == "" || !alive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "上游复审会话不可用"})
+		return
+	}
+	if err := h.Eng.RemoveQueuedItem(runID, producerID, b.ItemID); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "producerNodeId": producerID})
+}
+
+// GateReactQueueReorder reorders waiting items on the upstream producer FIFO.
+func (h *Handlers) GateReactQueueReorder(c *gin.Context) {
+	var b reactQueueReorderBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	runID, gateNodeID := c.Param("id"), c.Param("nodeId")
+	producerID, alive := h.Eng.GateReactInfo(runID, gateNodeID)
+	if producerID == "" || !alive {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "上游复审会话不可用"})
+		return
+	}
+	if err := h.Eng.ReorderQueuedItems(runID, producerID, b.ItemIDs); err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "producerNodeId": producerID})
+}
+
 // GateReactCancel cancels the upstream producer's review turn/queue from a gate.
 func (h *Handlers) GateReactCancel(c *gin.Context) {
 	runID, gateNodeID := c.Param("id"), c.Param("nodeId")

@@ -5,6 +5,7 @@ import ChatImagePreviewModal from '../ui/ChatImagePreviewModal.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 import AnnotationChip from './AnnotationChip.vue'
+import PendingSendQueuePanel from './PendingSendQueuePanel.vue'
 import type {
   ClarifyTurn,
   ClarifyImage,
@@ -49,6 +50,8 @@ const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
   (e: 'cancel'): void
+  (e: 'queue-remove', itemId: string | undefined, index: number): void
+  (e: 'queue-reorder', itemIds: string[]): void
 }>()
 
 const draft = defineModel<string>('draft', { default: '' })
@@ -64,6 +67,7 @@ defineExpose({
   cancelReview: chat.cancelReview,
   discardLastQueued: chat.discardLastQueued,
   isSessionBusy: chat.isSessionBusy,
+  reorderQueuedItems: chat.reorderQueuedItems,
 })
 
 const {
@@ -192,6 +196,11 @@ const {
   demoOptionsOf,
   selectedDemoOption,
   useSideBySide,
+  queueNotice,
+  queueToast,
+  cancelQueuedItem,
+  reorderQueuedItems,
+  editQueuedItem,
 } = chat
 </script>
 
@@ -622,27 +631,14 @@ const {
     </div>
     <div v-else class="border-t border-line p-3">
       <!-- pending-send queue panel (Demo / AgentChatTester): clarify + review -->
-      <div
-        v-if="queued.length"
-        class="mb-2 rounded-md border border-line bg-base/40 px-2.5 py-2"
-        data-testid="clarify-review-queue"
-      >
-        <div class="mb-1 flex items-center gap-1.5 text-[11px] text-txt3">
-          <Icon name="clock" :size="11" />
-          {{ translate('pages.agentChatTester.queue', { n: queued.length }) }}
-        </div>
-        <div class="space-y-1">
-          <div
-            v-for="(q, qi) in queued"
-            :key="q.id || qi"
-            data-testid="clarify-queue-item"
-            class="flex items-center gap-2 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2"
-          >
-            <span class="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-line text-[9px] text-txt3">{{ qi + 1 }}</span>
-            <span class="truncate">{{ q.text || (q.images.length || q.annotations.length ? '…' : '') }}</span>
-          </div>
-        </div>
-      </div>
+      <PendingSendQueuePanel
+        :items="queued"
+        :notice="queueNotice"
+        :toast="queueToast"
+        @cancel="cancelQueuedItem"
+        @edit="editQueuedItem"
+        @reorder="reorderQueuedItems"
+      />
       <div v-if="showAnnotationChips && annotations.length" class="mb-2 flex flex-wrap gap-1.5">
         <AnnotationChip
           v-for="(a, ai) in annotations"

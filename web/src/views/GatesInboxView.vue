@@ -96,6 +96,8 @@ const {
   onClarifySend,
   onClarifyFinish,
   onClarifyCancel,
+  onClarifyQueueRemove,
+  onClarifyQueueReorder,
   onFocus,
   onVisible,
   itemTitle,
@@ -472,6 +474,8 @@ const {
               @send="onClarifySend"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
+              @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"
+              @queue-reorder="onClarifyQueueReorder"
             />
           </template>
         </ReviewShell>
@@ -588,6 +592,8 @@ const {
                   @send="onClarifySend"
                   @finish="onClarifyFinish"
                   @cancel="onClarifyCancel"
+                  @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"
+                  @queue-reorder="onClarifyQueueReorder"
                 />
               </template>
             </ReviewShell>

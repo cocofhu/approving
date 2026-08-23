@@ -54,6 +54,8 @@ export type ClarifyChatEmit = {
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
   (e: 'cancel'): void
+  (e: 'queue-remove', itemId: string | undefined, index: number): void
+  (e: 'queue-reorder', itemIds: string[]): void
 }
 
 export type ClarifyChatModels = {
@@ -412,6 +414,81 @@ function imagePreviewLabel(images: ClarifyImage[], index: number): string {
 }
 
 const attachNotice = ref<string | null>(null)
+const queueNotice = ref<string | null>(null)
+const queueToast = ref<string | null>(null)
+let queueToastTimer = 0
+
+function hasComposerDraft(): boolean {
+  return !!(draft.value.trim() || attachments.value.length > 0 || annotations.value.length > 0)
+}
+
+function truncateQueueText(text: string, max: number): string {
+  const s = String(text || '')
+  return s.length > max ? s.slice(0, max) + '…' : s
+}
+
+function showQueueToast(msg: string) {
+  queueToast.value = msg
+  clearTimeout(queueToastTimer)
+  queueToastTimer = window.setTimeout(() => {
+    queueToast.value = null
+  }, 2200)
+}
+
+function syncQueueThinking() {
+  thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0
+}
+
+function cancelQueuedItem(index: number) {
+  if (index < 0 || index >= queued.value.length) return
+  const removed = queued.value.splice(index, 1)[0]
+  syncQueueThinking()
+  const preview = truncateQueueText(removed.text || '', 18)
+  showQueueToast(translate('pages.clarify.queueCancelled', { text: preview }))
+  if (removed.id) emit('queue-remove', removed.id, index)
+}
+
+function reorderQueuedItems(fromIndex: number, toIndex: number) {
+  if (
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= queued.value.length ||
+    toIndex >= queued.value.length ||
+    fromIndex === toIndex
+  ) {
+    return
+  }
+  const [moved] = queued.value.splice(fromIndex, 1)
+  queued.value.splice(toIndex, 0, moved)
+  showQueueToast(translate('pages.clarify.queueReordered'))
+  const ids = queued.value.map((q) => q.id).filter((id): id is string => !!id)
+  if (ids.length === queued.value.length && ids.length > 0) {
+    emit('queue-reorder', ids)
+  }
+}
+
+function editQueuedItem(index: number) {
+  if (hasComposerDraft()) {
+    queueNotice.value = translate('pages.clarify.queueEditBlocked')
+    return
+  }
+  if (index < 0 || index >= queued.value.length) return
+  queueNotice.value = null
+  const item = queued.value.splice(index, 1)[0]
+  draft.value = item.text
+  attachments.value = item.images.slice()
+  annotations.value = item.annotations.slice()
+  attachNotice.value = null
+  syncQueueThinking()
+  nextTick(autoGrow)
+  textareaRef.value?.focus()
+  showQueueToast(translate('pages.clarify.queueEditRefilled'))
+  if (item.id) emit('queue-remove', item.id, index)
+}
+
+watch(draft, () => {
+  if (!hasComposerDraft()) queueNotice.value = null
+})
 
 function openImagePreview(images: ClarifyImage[], index: number) {
   const im = images[index]
@@ -1289,6 +1366,12 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     latestQuestionAnswered,
     displayTurns,
     attachNotice,
+    queueNotice,
+    queueToast,
+    hasComposerDraft,
+    cancelQueuedItem,
+    reorderQueuedItems,
+    editQueuedItem,
     sel,
     other,
     otherChecked,

@@ -96,6 +96,8 @@ const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
   (e: 'finish'): void
   (e: 'cancel'): void
+  (e: 'queue-remove', itemId: string | undefined, index: number): void
+  (e: 'queue-reorder', itemIds: string[]): void
 }>()
 
 const chatRef = ref<{
@@ -210,6 +212,8 @@ function onConfirm() {
       @send="(text, images, anns) => emit('send', text, images, anns)"
       @finish="emit('finish')"
       @cancel="emit('cancel')"
+      @queue-remove="(itemId, index) => emit('queue-remove', itemId, index)"
+      @queue-reorder="(itemIds) => emit('queue-reorder', itemIds)"
     />
   </div>
 
