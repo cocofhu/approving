@@ -98,6 +98,12 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/data-testid="home-pipeline-scroll-prev"/)
     expect(src).toMatch(/data-testid="home-pipeline-scroll-next"/)
     expect(src).toMatch(/home-pipeline-rail/)
+    expect(src).toMatch(/home-pipeline-rail--overflow/)
+    expect(src).toMatch(/justify-content:\s*center/)
+    expect(src).toMatch(/home-pipeline-rail--overflow[\s\S]*justify-content:\s*flex-start/)
+    expect(src).not.toMatch(
+      /data-testid="home-pipeline-cards"[^>]*justify-center/,
+    )
     expect(src).toMatch(/scrollbar-width:\s*none/)
     expect(src).toMatch(/::-webkit-scrollbar/)
     expect(src).toMatch(/home-pipeline-nav/)

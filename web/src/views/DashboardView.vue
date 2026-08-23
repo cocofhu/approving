@@ -63,6 +63,7 @@ const pipelineCanScrollPrev = ref(false)
 const pipelineCanScrollNext = ref(false)
 const pipelineFadeLeft = ref(false)
 const pipelineFadeRight = ref(false)
+const pipelineOverflows = ref(false)
 let pipelineStripObserver: ResizeObserver | null = null
 const phVisible = ref('')
 const phCursor = ref(false)
@@ -247,6 +248,7 @@ function syncPipelineNav() {
     pipelineCanScrollNext.value = false
     pipelineFadeLeft.value = false
     pipelineFadeRight.value = false
+    pipelineOverflows.value = false
     return
   }
   const max = Math.max(0, rail.scrollWidth - rail.clientWidth)
@@ -254,6 +256,7 @@ function syncPipelineNav() {
   const atStart = left <= PIPELINE_SCROLL_EPS
   const atEnd = left >= max - PIPELINE_SCROLL_EPS
   const overflow = max > PIPELINE_SCROLL_EPS
+  pipelineOverflows.value = overflow
   pipelineCanScrollPrev.value = overflow && !atStart
   pipelineCanScrollNext.value = overflow && !atEnd
   pipelineFadeLeft.value = overflow && !atStart
@@ -538,7 +541,8 @@ onBeforeUnmount(() => {
 
         <div
           ref="pipelineCardsEl"
-          class="home-pipeline-rail flex w-full justify-center gap-3 pb-1"
+          class="home-pipeline-rail flex w-full gap-3 pb-1"
+          :class="{ 'home-pipeline-rail--overflow': pipelineOverflows }"
           data-testid="home-pipeline-cards"
           tabindex="0"
           role="list"
@@ -781,6 +785,7 @@ onBeforeUnmount(() => {
 }
 
 .home-pipeline-rail {
+  justify-content: center;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-behavior: smooth;
@@ -789,6 +794,10 @@ onBeforeUnmount(() => {
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+
+.home-pipeline-rail--overflow {
+  justify-content: flex-start;
 }
 
 .home-pipeline-rail::-webkit-scrollbar {
