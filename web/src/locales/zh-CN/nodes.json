@@ -541,7 +541,7 @@
     },
     "app_preview": {
       "label": "应用预览",
-      "desc": "沙箱内启动应用并通过 set_preview 注册预览；等待态为取点标注 · 等待人工确认（单出口）",
+      "desc": "沙箱内启动应用或登记外部 URL，通过 set_preview 注册预览；等待态为取点标注 · 等待人工确认（单出口）",
       "fields": {
         "skill_profile": {
           "label": "Agent 配置"

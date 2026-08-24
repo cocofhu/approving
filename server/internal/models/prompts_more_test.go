@@ -204,3 +204,38 @@ func TestDefaultMRContractHostRoutingAndFailurePhrases(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultPreviewContractAcceptsURL(t *testing.T) {
+	contract := DefaultPreviewContract
+	retry := DefaultPreviewRetry
+	for _, want := range []string{
+		"port 与 url 必须恰好提供其一",
+		"外部 URL",
+		`set_preview(url=`,
+		"不做服务端探测",
+		"不要为了走 port 而在沙箱里反代外部站点",
+		"禁止",
+		"dsh web",
+	} {
+		if !strings.Contains(contract, want) {
+			t.Fatalf("DefaultPreviewContract missing %q\n%s", want, contract)
+		}
+	}
+	if strings.Contains(contract, "port 必填") {
+		t.Fatal("DefaultPreviewContract must not require port")
+	}
+	for _, want := range []string{
+		"port?, url?, label?",
+		"port 与 url 恰好其一",
+		`set_preview(url=`,
+		"不要在沙箱起反代",
+		"也不要改用 port",
+	} {
+		if !strings.Contains(retry, want) {
+			t.Fatalf("DefaultPreviewRetry missing %q\n%s", want, retry)
+		}
+	}
+	if strings.Contains(retry, "set_preview(port, label?)") && !strings.Contains(retry, "url") {
+		t.Fatal("DefaultPreviewRetry must not be port-only")
+	}
+}

@@ -353,7 +353,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
       direct_preview: false,
       auto_inject: true,
       title: '应用预览',
-      prompt: '在沙箱内构建并启动上游实现的应用,调用 set_preview(port, label?) 注册预览端口,供人工在 noVNC 中取点标注并复审确认。',
+      prompt: '在沙箱内启动应用并 set_preview(port),或对已部署地址 set_preview(url)(port 与 url 二选一),供人工取点标注并复审确认。',
     },
     help: 'nodes.app_preview.help',
   },
