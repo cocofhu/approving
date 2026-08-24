@@ -14,6 +14,7 @@ import {
   RehydrateOrchestrator,
   type RehydrateStatus,
 } from '@/lib/run/liveLogRehydrate'
+import { isNodeEventsUnavailable } from '@/lib/run/nodeEventsResponse'
 import {
   clearLiveLogSnapshotsExceptRun,
   cloneEventPageSnapshot,
@@ -119,6 +120,7 @@ export function useRunDetailLiveLog(opts: {
       })
       if (opts?.signal?.aborted) return false
       if (eventFetchGen[nodeId] !== gen) return false
+      if (isNodeEventsUnavailable(r)) return false
       const prev = eventPages[nodeId]?.events || []
       const merged = mergeAcpEvents(prev, r.events || [], { live: !!r.live })
       if ('hasMore' in r) {

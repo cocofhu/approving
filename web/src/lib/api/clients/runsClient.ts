@@ -10,6 +10,7 @@ import type { InboxContextResponse } from '../../inbox/inboxContext'
 import { apiState, BASE, origin, req, wsUrl } from '../httpCore'
 import type {
   EventPaginatedResponse,
+  NodeEventsResponse,
   PaginatedResponse,
   PreviewIssue,
   PreviewPort,
@@ -301,7 +302,7 @@ export const runsClient = {
     if (params?.cursor || params?.limit != null) {
       return req<EventPaginatedResponse>(path, init)
     }
-    return req<{ events: AcpEvent[]; live: boolean }>(path, init)
+    return req<NodeEventsResponse>(path, init)
   },
   // Raw sandbox container logs (docker logs): live if running, else the archived
   // snapshot captured at teardown. Used for post-mortem troubleshooting.

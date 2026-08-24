@@ -294,12 +294,30 @@ func (h *Handlers) RunArtifacts(c *gin.Context) {
 	c.JSON(http.StatusOK, h.Arts.ByRun(c.Param("id")))
 }
 
+// writeNodeEventsLiveReadErr returns HTTP 200 with an explicit unavailable marker
+// so browsers do not log Failed to load resource for expected transient bridge
+// failures while a live sandbox is registered. Callers distinguish this from
+// a genuine empty timeline via unavailable=true (never a silent empty success).
+func writeNodeEventsLiveReadErr(c *gin.Context, paginated bool) {
+	body := gin.H{
+		"events":      []models.AcpEvent{},
+		"live":        false,
+		"unavailable": true,
+		"error":       "live event log read failed",
+	}
+	if paginated {
+		body["nextCursor"] = ""
+		body["hasMore"] = false
+	}
+	c.JSON(http.StatusOK, body)
+}
+
 // NodeEvents returns a run node's agent event log. While the node is executing
 // it is read live from its sandbox (so it survives a UI refresh / re-entry);
 // once the sandbox is gone it falls back to the node's persisted final snapshot.
 // When a live sandbox is registered but the bridge read fails, the handler
-// returns 502 with an error body so the UI can show a rehydrate failure
-// instead of a fake empty "waiting for first event" state.
+// returns HTTP 200 with unavailable=true so the UI can show a rehydrate failure
+// without polluting the browser console with 502 Failed to load resource.
 func (h *Handlers) NodeEvents(c *gin.Context) {
 	runID := c.Param("id")
 	nodeID := c.Param("nodeId")
@@ -311,7 +329,7 @@ func (h *Handlers) NodeEvents(c *gin.Context) {
 		ev, live, err := h.Eng.LiveNodeEvents(c.Request.Context(), runID, nodeID)
 		if err != nil {
 			_ = c.Error(err)
-			c.JSON(http.StatusBadGateway, gin.H{"error": "live event log read failed", "live": false})
+			writeNodeEventsLiveReadErr(c, false)
 			return
 		}
 		if live {
@@ -329,7 +347,7 @@ func (h *Handlers) NodeEvents(c *gin.Context) {
 	ev, next, hasMore, live, err := h.Eng.LiveNodeEventsPage(c.Request.Context(), runID, nodeID, cp.Cursor, cp.Limit)
 	if err != nil {
 		_ = c.Error(err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "live event log read failed", "live": false})
+		writeNodeEventsLiveReadErr(c, true)
 		return
 	}
 	if live {

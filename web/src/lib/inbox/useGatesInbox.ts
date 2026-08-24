@@ -39,6 +39,7 @@ import {
   createBusySeedRetryController,
   runBusySeedRetry,
 } from '@/lib/run/busySeedRetry'
+import { isNodeEventsUnavailable } from '@/lib/run/nodeEventsResponse'
 import { createWsReconnectController } from '@/lib/run/wsReconnect'
 import { useToast } from '@/lib/composables/useToast'
 import { inboxShareKind, isHumanGateInboxItem, isShareableInboxItem } from '@/lib/inbox/gateShareLink'
@@ -1013,6 +1014,7 @@ async function seedClarifyAcpFromNodeEventsOnce(
 ): Promise<boolean> {
   try {
     const r = await api.nodeEvents(runId, nodeId, { limit: 50 })
+    if (isNodeEventsUnavailable(r)) return false
     if (!r.events?.length) return false
     const rails = pickAcpRails(r.events)
     if (!rails.thought && !rails.message) return false
@@ -1039,7 +1041,7 @@ async function seedClarifyAcpFromNodeEventsOnce(
     dialogueRailsFilled = true
     return true
   } catch {
-    /* 502 / empty — caller retries while busy */
+    /* soft-fail / empty — caller retries while busy */
     return false
   }
 }
