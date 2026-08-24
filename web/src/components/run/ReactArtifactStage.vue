@@ -65,7 +65,6 @@ const props = withDefaults(
     /** Enable 取点 / 划选 / ⤴ 标注 on the current node's artifacts. */
     annotatable?: boolean
     remoteKind?: ReactStageRemoteKind
-    shareEnabled?: boolean
     token?: string
     ports?: PublicPreviewPort[]
     publicActive?: boolean
@@ -79,7 +78,6 @@ const props = withDefaults(
     nodeType: '',
     inlineContent: false,
     annotatable: false,
-    shareEnabled: false,
     token: '',
     ports: () => [],
     publicActive: true,
@@ -90,7 +88,6 @@ const props = withDefaults(
 const emit = defineEmits<{
   pick: [payload: AppPreviewPickPayload]
   stagedPick: [payload: AppPreviewPickPayload | null]
-  openShare: []
 }>()
 
 const { t } = useI18n()
@@ -776,10 +773,8 @@ onBeforeUnmount(() => {
         :node-id="nodeId"
         fill
         :show-feedback="false"
-        :share-enabled="shareEnabled"
         @pick="onRemotePick"
         @staged-pick="emit('stagedPick', $event)"
-        @open-share="emit('openShare')"
       />
       <PublicAppPreviewPanel
         v-else-if="resolvedRemoteKind === 'public'"

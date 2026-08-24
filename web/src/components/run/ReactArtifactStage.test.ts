@@ -68,10 +68,10 @@ const stubs = {
     template: '<div data-testid="artifact-preview">{{ artifact?.name }}|{{ annotatable ? \'on\' : \'off\' }}{{ artifact?.content ? \'|\' + artifact.content : \'\' }}</div>',
   }),
   AppPreviewPanel: defineComponent({
-    props: { runId: String, nodeId: String, shareEnabled: Boolean },
-    emits: ['pick', 'stagedPick', 'openShare'],
+    props: { runId: String, nodeId: String },
+    emits: ['pick', 'stagedPick'],
     template:
-      '<div data-testid="app-preview-stub" :data-share="shareEnabled ? \'1\' : \'0\'">' +
+      '<div data-testid="app-preview-stub">' +
       '<button type="button" data-testid="app-preview-pick" @click="$emit(\'pick\', { selector: \'#hero\', tagName: \'DIV\', outerHTML: \'<div id=hero></div>\', url: \'http://app/\' })">pick</button>' +
       '</div>',
   }),
@@ -342,13 +342,12 @@ describe('ReactArtifactStage', () => {
         nodeId: 'preview',
         annotatable: true,
         remoteKind: 'app',
-        shareEnabled: true,
       },
       global: { plugins: [i18n()], stubs },
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="novnc-stub"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="app-preview-stub"]').attributes('data-share')).toBe('1')
+    expect(wrapper.find('[data-testid="app-preview-stub"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').text()).toContain('应用预览')
     wrapper.unmount()

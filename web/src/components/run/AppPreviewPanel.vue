@@ -20,17 +20,14 @@ const props = withDefaults(
     fill?: boolean
     /** When false, hide PreviewFeedbackChat (review ReAct is the primary dialogue). */
     showFeedback?: boolean
-    /** Gates Inbox: show share-approval on noVNC toolbar. */
-    shareEnabled?: boolean
   }>(),
-  { compact: false, fill: false, showFeedback: true, shareEnabled: false },
+  { compact: false, fill: false, showFeedback: true },
 )
 
 const emit = defineEmits<{
   (e: 'pick', payload: AppPreviewPickPayload): void
   (e: 'staged-pick', payload: AppPreviewPickPayload | null): void
   (e: 'issues-changed'): void
-  (e: 'open-share'): void
 }>()
 
 const { t } = useI18n()
@@ -195,10 +192,8 @@ function selectPreview(key: string) {
             :port="p.port"
             fill
             :compact="compact"
-            :share-enabled="shareEnabled"
             @pick="onPick"
             @staged-pick="onStagedPick"
-            @open-share="emit('open-share')"
           />
         </keep-alive>
         <iframe
