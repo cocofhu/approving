@@ -722,6 +722,7 @@ func AllModels() []any {
 		&GateShareNonce{},
 		&GateSharePreviewTicket{},
 		&RequirementDraft{},
+		&NotificationReadPrefs{},
 	}
 }
 

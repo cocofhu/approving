@@ -13,6 +13,7 @@ import { agentsClient } from './clients/agentsClient'
 import { sandboxesClient } from './clients/sandboxesClient'
 import { artifactsClient } from './clients/artifactsClient'
 import { settingsClient } from './clients/settingsClient'
+import { notificationsClient } from './clients/notificationsClient'
 
 export function isPaginated<T>(data: T[] | PaginatedResponse<T>): data is PaginatedResponse<T> {
   return data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data
@@ -27,6 +28,7 @@ export const api = {
   ...sandboxesClient,
   ...artifactsClient,
   ...settingsClient,
+  ...notificationsClient,
 }
 
 export const authApi = {

@@ -9,9 +9,30 @@ const authUser = ref<{ username: string; expiresAt: string } | null>({
 })
 const authReady = ref(true)
 
+const serverPrefs = ref({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] as string[] })
+
 vi.mock('@/lib/api/api', () => ({
   api: {
     listRuns: vi.fn(),
+    getNotificationReadPrefs: vi.fn(async () => ({
+      enabledAt: serverPrefs.value.enabledAt,
+      readIds: [...serverPrefs.value.readIds],
+    })),
+    markNotificationRead: vi.fn(async (runId: string) => {
+      if (!serverPrefs.value.readIds.includes(runId)) {
+        serverPrefs.value = {
+          ...serverPrefs.value,
+          readIds: [...serverPrefs.value.readIds, runId],
+        }
+      }
+      return { enabledAt: serverPrefs.value.enabledAt, readIds: [...serverPrefs.value.readIds] }
+    }),
+    markAllNotificationsRead: vi.fn(async (runIds: string[]) => {
+      const next = new Set(serverPrefs.value.readIds)
+      for (const id of runIds) next.add(id)
+      serverPrefs.value = { ...serverPrefs.value, readIds: [...next] }
+      return { enabledAt: serverPrefs.value.enabledAt, readIds: [...serverPrefs.value.readIds] }
+    }),
   },
   isPaginated: (data: unknown): data is { items: unknown[]; total: number } =>
     data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
@@ -58,9 +79,9 @@ function paged(items: Run[], total = items.length) {
   return { items, total, page: 1, pageSize: RUN_TERMINAL_POOL_SIZE, hasMore: total > items.length }
 }
 
-/** Seed enable baseline in the past so fixtures count as post-enable events. */
+/** Seed server prefs baseline (mock API store). */
 function seedBaseline(enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []) {
-  localStorage.setItem(prefsKeyForUser('alice'), JSON.stringify({ enabledAt, readIds }))
+  serverPrefs.value = { enabledAt, readIds: [...readIds] }
 }
 
 describe('formatUnreadBadge', () => {
@@ -127,9 +148,13 @@ describe('useRunTerminalNotifications', () => {
     localStorage.clear()
     authUser.value = { username: 'alice', expiresAt: 't' }
     authReady.value = true
+    seedBaseline('2020-01-01T00:00:00Z', [])
     __resetRunTerminalNotificationsForTests()
     vi.mocked(api.listRuns).mockReset()
     vi.mocked(api.listRuns).mockResolvedValue(paged([]))
+    vi.mocked(api.getNotificationReadPrefs).mockClear()
+    vi.mocked(api.markNotificationRead).mockClear()
+    vi.mocked(api.markAllNotificationsRead).mockClear()
   })
 
   it('loads pool via listRuns(completed,failed) and sorts by finishedApprox desc', async () => {
@@ -151,6 +176,7 @@ describe('useRunTerminalNotifications', () => {
         order: 'desc',
       }),
     )
+    expect(api.getNotificationReadPrefs).toHaveBeenCalled()
     expect(n.pool.value.map((x) => x.runId)).toEqual(['b', 'a'])
     expect(n.unreadCount.value).toBe(2)
     expect(n.badgeLabel.value).toBe('2')
@@ -158,7 +184,9 @@ describe('useRunTerminalNotifications', () => {
   })
 
   it('treats pre-enable history as read so badge is not inventory', async () => {
-    // Default first-enable: enabledAt ≈ now; fixtures are in the past → all read.
+    // First-enable: server returns enabledAt ≈ now; fixtures are in the past → all read.
+    const now = new Date().toISOString()
+    seedBaseline(now, [])
     vi.mocked(api.listRuns).mockResolvedValue(
       paged(
         Array.from({ length: 7 }, (_, i) =>
@@ -182,7 +210,7 @@ describe('useRunTerminalNotifications', () => {
     ).toBe(true)
   })
 
-  it('computes unread from per-user prefs read set after baseline', async () => {
+  it('computes unread from server prefs read set after baseline', async () => {
     seedBaseline('2020-01-01T00:00:00Z', ['a'])
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([
@@ -199,7 +227,7 @@ describe('useRunTerminalNotifications', () => {
     expect(n.previewItems.value.find((x) => x.runId === 'b')?.unread).toBe(true)
   })
 
-  it('markRead updates only that run and persists prefs', async () => {
+  it('markRead updates only that run and posts to server', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([
@@ -213,12 +241,16 @@ describe('useRunTerminalNotifications', () => {
     n.markRead('a')
     expect(n.unreadCount.value).toBe(1)
     expect(n.hasUnreadFailed.value).toBe(false)
-    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
-    expect(prefs.readIds).toContain('a')
+    await vi.waitFor(() => {
+      expect(api.markNotificationRead).toHaveBeenCalledWith('a')
+      expect(serverPrefs.value.readIds).toContain('a')
+    })
+    // localStorage must not be the authority.
+    expect(localStorage.getItem(prefsKeyForUser('alice'))).toBeNull()
     expect(n.previewItems.value.find((x) => x.runId === 'b')?.unread).toBe(true)
   })
 
-  it('markAllRead clears badge and persists all pool ids', async () => {
+  it('markAllRead clears badge and posts all pool ids', async () => {
     seedBaseline()
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([
@@ -232,8 +264,11 @@ describe('useRunTerminalNotifications', () => {
     n.markAllRead()
     expect(n.unreadCount.value).toBe(0)
     expect(n.badgeLabel.value).toBe('')
-    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
-    expect(prefs.readIds).toEqual(expect.arrayContaining(['a', 'b']))
+    await vi.waitFor(() => {
+      expect(api.markAllNotificationsRead).toHaveBeenCalledWith(expect.arrayContaining(['a', 'b']))
+      expect(serverPrefs.value.readIds).toEqual(expect.arrayContaining(['a', 'b']))
+    })
+    expect(localStorage.getItem(prefsKeyForUser('alice'))).toBeNull()
   })
 
   it('previewItems caps at 5 and remainingCount is T-5', async () => {
@@ -281,24 +316,25 @@ describe('useRunTerminalNotifications', () => {
     expect(n.badgeLabel.value).toBe('')
   })
 
-  it('migrates legacy readIds storage into prefs', async () => {
-    localStorage.setItem(storageKeyForUser('alice'), JSON.stringify(['legacy-1']))
-    vi.mocked(api.listRuns).mockResolvedValue(paged([]))
+  it('does not use localStorage as prefs authority (cleared localStorage still uses server)', async () => {
+    seedBaseline('2020-01-01T00:00:00Z', ['legacy-1'])
+    localStorage.setItem(prefsKeyForUser('alice'), JSON.stringify({ enabledAt: '1999-01-01T00:00:00Z', readIds: [] }))
+    localStorage.setItem(storageKeyForUser('alice'), JSON.stringify(['ignored']))
+    vi.mocked(api.listRuns).mockResolvedValue(paged([run({ id: 'legacy-1', status: 'completed' })]))
     const n = useRunTerminalNotifications()
-    n.ensureUsername()
-    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
-    expect(prefs.enabledAt).toBeTruthy()
-    expect(prefs.readIds).toContain('legacy-1')
+    await n.refresh({ source: 'mount' })
+    expect(n.unreadCount.value).toBe(0)
+    expect(n.previewItems.value.find((x) => x.runId === 'legacy-1')?.unread).toBe(false)
+    // Clearing localStorage does not change server-hydrated read state.
+    localStorage.clear()
+    expect(n.unreadCount.value).toBe(0)
   })
 
   it('does not hydrate anonymous prefs before auth; rehydrates on user settle without focus', async () => {
     // Drop ready before clearing user so we never briefly settle as anonymous.
     authReady.value = false
     authUser.value = null
-    localStorage.setItem(
-      prefsKeyForUser('alice'),
-      JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),
-    )
+    seedBaseline('2020-01-01T00:00:00Z', [])
     localStorage.removeItem(prefsKeyForUser('anonymous'))
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([
@@ -339,6 +375,7 @@ describe('useRunTerminalNotifications', () => {
     await n1.refresh({ source: 'mount' })
     expect(n1.unreadCount.value).toBe(2)
     n1.markRead('a')
+    await vi.waitFor(() => expect(serverPrefs.value.readIds).toContain('a'))
     expect(n1.unreadCount.value).toBe(1)
 
     __resetRunTerminalNotificationsForTests()
@@ -358,8 +395,6 @@ describe('useRunTerminalNotifications', () => {
     })
     expect(n2.previewItems.value.find((x) => x.runId === 'a')?.unread).toBe(false)
     expect(n2.previewItems.value.find((x) => x.runId === 'b')?.unread).toBe(true)
-    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
-    expect(prefs.readIds).toContain('a')
     expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
     n2.stopPolling()
   })
@@ -376,6 +411,9 @@ describe('useRunTerminalNotifications', () => {
     await n1.refresh({ source: 'mount' })
     expect(n1.unreadCount.value).toBe(2)
     n1.markAllRead()
+    await vi.waitFor(() =>
+      expect(serverPrefs.value.readIds).toEqual(expect.arrayContaining(['a', 'b'])),
+    )
     expect(n1.unreadCount.value).toBe(0)
 
     authUser.value = null
@@ -387,19 +425,17 @@ describe('useRunTerminalNotifications', () => {
     await vi.waitFor(() => {
       expect(n2.ensureUsername()).toBe(true)
     })
-    expect(n2.unreadCount.value).toBe(0)
-
+    // anonymous settle may hydrate empty/new prefs; re-login as alice restores server set.
     authUser.value = { username: 'alice', expiresAt: 't' }
     await vi.waitFor(() => {
       expect(n2.unreadCount.value).toBe(0)
       expect(n2.badgeLabel.value).toBe('')
     })
-    const prefs = JSON.parse(localStorage.getItem(prefsKeyForUser('alice')) || '{}')
-    expect(prefs.readIds).toEqual(expect.arrayContaining(['a', 'b']))
+    expect(serverPrefs.value.readIds).toEqual(expect.arrayContaining(['a', 'b']))
     n2.stopPolling()
   })
 
-  it('markRead before auth settle does not stamp anonymous prefs', async () => {
+  it('markRead before auth settle does not call server or stamp anonymous prefs', async () => {
     authReady.value = false
     authUser.value = null
     localStorage.removeItem(prefsKeyForUser('anonymous'))
@@ -407,11 +443,12 @@ describe('useRunTerminalNotifications', () => {
 
     const n = useRunTerminalNotifications()
     n.markRead('ghost')
+    expect(api.markNotificationRead).not.toHaveBeenCalled()
     expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
     expect(localStorage.getItem(prefsKeyForUser('alice'))).toBeNull()
   })
 
-  it('markAllRead before auth settle does not stamp anonymous prefs', async () => {
+  it('markAllRead before auth settle does not call server or stamp anonymous prefs', async () => {
     authReady.value = false
     authUser.value = null
     localStorage.removeItem(prefsKeyForUser('anonymous'))
@@ -419,6 +456,7 @@ describe('useRunTerminalNotifications', () => {
 
     const n = useRunTerminalNotifications()
     n.markAllRead()
+    expect(api.markAllNotificationsRead).not.toHaveBeenCalled()
     expect(localStorage.getItem(prefsKeyForUser('anonymous'))).toBeNull()
     expect(localStorage.getItem(prefsKeyForUser('alice'))).toBeNull()
   })
@@ -432,6 +470,7 @@ describe('useRunTerminalNotifications', () => {
     await n.refresh({ source: 'mount' })
     expect(n.unreadCount.value).toBe(1)
     n.markAllRead()
+    await vi.waitFor(() => expect(serverPrefs.value.readIds).toContain('a'))
     expect(n.unreadCount.value).toBe(0)
 
     vi.mocked(api.listRuns).mockResolvedValue(
@@ -444,5 +483,21 @@ describe('useRunTerminalNotifications', () => {
     expect(n.unreadCount.value).toBe(1)
     expect(n.previewItems.value.find((x) => x.runId === 'new')?.unread).toBe(true)
     expect(n.previewItems.value.find((x) => x.runId === 'a')?.unread).toBe(false)
+  })
+
+  it('empty pool refresh does not clear server readIds', async () => {
+    seedBaseline('2020-01-01T00:00:00Z', ['kept-id'])
+    vi.mocked(api.listRuns).mockResolvedValue(paged([]))
+    const n = useRunTerminalNotifications()
+    await n.refresh({ source: 'mount' })
+    expect(serverPrefs.value.readIds).toContain('kept-id')
+    expect(api.markNotificationRead).not.toHaveBeenCalled()
+    expect(api.markAllNotificationsRead).not.toHaveBeenCalled()
+    // Rehydrate still sees kept-id from server.
+    __resetRunTerminalNotificationsForTests()
+    await n.refresh({ source: 'manual' })
+    expect(n.enabledAt.value).toBe('2020-01-01T00:00:00Z')
+    // pool empty → unread 0, but server prefs untouched
+    expect(serverPrefs.value.readIds).toEqual(['kept-id'])
   })
 })

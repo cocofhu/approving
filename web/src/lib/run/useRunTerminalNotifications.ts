@@ -58,11 +58,18 @@ export function formatUnreadBadge(n: number): string {
   return String(n)
 }
 
-/** @deprecated Prefer prefsKeyForUser; kept for migration of legacy read sets. */
+/**
+ * @deprecated Legacy localStorage key; server prefs are authoritative.
+ * Kept for e2e/harness cleanup of old keys only.
+ */
 export function storageKeyForUser(username: string): string {
   return `approving.runTerminalNotifications.readIds.${username || 'anonymous'}`
 }
 
+/**
+ * @deprecated Legacy localStorage prefs key; server prefs are authoritative.
+ * Kept for e2e/harness cleanup of old keys only — do not read/write as source of truth.
+ */
 export function prefsKeyForUser(username: string): string {
   return `approving.notifications.prefs.${username || 'anonymous'}`
 }
@@ -121,54 +128,9 @@ function compareFinishedDesc(a: RunTerminalNotification, b: RunTerminalNotificat
   return b.runId.localeCompare(a.runId)
 }
 
-function loadPrefs(username: string): NotificationPrefs {
-  const now = new Date().toISOString()
-  if (typeof localStorage === 'undefined') {
-    return { enabledAt: now, readIds: [] }
-  }
-  try {
-    const raw = localStorage.getItem(prefsKeyForUser(username))
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<NotificationPrefs>
-      const enabledAt =
-        typeof parsed.enabledAt === 'string' && parsed.enabledAt.trim()
-          ? parsed.enabledAt
-          : now
-      const readIds = Array.isArray(parsed.readIds)
-        ? parsed.readIds.filter((x): x is string => typeof x === 'string')
-        : []
-      return { enabledAt, readIds }
-    }
-  } catch {
-    // fall through to migrate / create
-  }
-
-  // Migrate legacy readIds-only storage once.
-  let legacyIds: string[] = []
-  try {
-    const legacy = localStorage.getItem(storageKeyForUser(username))
-    if (legacy) {
-      const parsed = JSON.parse(legacy) as unknown
-      if (Array.isArray(parsed)) {
-        legacyIds = parsed.filter((x): x is string => typeof x === 'string')
-      }
-    }
-  } catch {
-    legacyIds = []
-  }
-
-  const prefs: NotificationPrefs = { enabledAt: now, readIds: legacyIds }
-  persistPrefs(username, prefs)
-  return prefs
-}
-
-function persistPrefs(username: string, prefs: NotificationPrefs) {
-  if (typeof localStorage === 'undefined') return
-  try {
-    localStorage.setItem(prefsKeyForUser(username), JSON.stringify(prefs))
-  } catch {
-    // Quota / private mode — ignore; unread may reset next session.
-  }
+function applyPrefs(prefs: NotificationPrefs) {
+  enabledAt.value = prefs.enabledAt
+  readIds.value = new Set(prefs.readIds)
 }
 
 const pool = ref<RunTerminalNotification[]>([])
@@ -187,6 +149,7 @@ let pollTimer: number | undefined
 let listenersAttached = false
 let prefsHydrated = false
 let authWatchInstalled = false
+let prefsFetchPromise: Promise<boolean> | null = null
 
 /**
  * Resolve the prefs username only after auth has settled.
@@ -263,47 +226,101 @@ const remainingCount = computed(() => Math.max(pool.value.length - RUN_TERMINAL_
 
 const poolTotal = computed(() => pool.value.length)
 
-function flushPrefsForKey(key: string) {
-  if (!key || !prefsHydrated) return
-  persistPrefs(key, {
-    enabledAt: enabledAt.value || new Date().toISOString(),
-    readIds: [...readIds.value],
-  })
+async function fetchServerPrefs(signal?: AbortSignal): Promise<NotificationPrefs | null> {
+  try {
+    const prefs = await api.getNotificationReadPrefs(signal ? { signal } : undefined)
+    return {
+      enabledAt:
+        typeof prefs.enabledAt === 'string' && prefs.enabledAt.trim()
+          ? prefs.enabledAt
+          : new Date().toISOString(),
+      readIds: Array.isArray(prefs.readIds)
+        ? prefs.readIds.filter((x): x is string => typeof x === 'string')
+        : [],
+    }
+  } catch (err) {
+    if (isAbortError(err)) return null
+    throw err
+  }
 }
 
-/** @returns true when prefs are hydrated for a settled auth identity */
+/**
+ * Ensure auth identity is settled. Kicks off async server prefs hydrate when needed.
+ * @returns true when auth identity is settled (prefs may still be loading).
+ */
 function ensureUsername(): boolean {
   const { name, settled } = resolveUsername()
   if (!settled) {
-    // Stay pending so the next real identity always rehydrates (no anonymous stamp).
     prefsHydrated = false
     return false
   }
   if (name !== usernameKey.value) {
-    flushPrefsForKey(usernameKey.value)
     usernameKey.value = name
-    const prefs = loadPrefs(name)
-    enabledAt.value = prefs.enabledAt
-    readIds.value = new Set(prefs.readIds)
-    prefsHydrated = true
-    return true
+    prefsHydrated = false
+    enabledAt.value = ''
+    readIds.value = new Set()
   }
   if (!prefsHydrated) {
-    const prefs = loadPrefs(name)
-    enabledAt.value = prefs.enabledAt
-    readIds.value = new Set(prefs.readIds)
-    prefsHydrated = true
+    void ensurePrefsHydrated()
   }
   return true
+}
+
+async function ensurePrefsHydrated(signal?: AbortSignal): Promise<boolean> {
+  const { name, settled } = resolveUsername()
+  if (!settled) {
+    prefsHydrated = false
+    return false
+  }
+  if (name !== usernameKey.value) {
+    usernameKey.value = name
+    prefsHydrated = false
+    enabledAt.value = ''
+    readIds.value = new Set()
+  }
+  if (prefsHydrated) return true
+  if (prefsFetchPromise) return prefsFetchPromise
+
+  // Pre-init so finally can compare the same handle (avoids TS2454 on self-ref).
+  let flight: Promise<boolean> | null = null
+  flight = (async () => {
+    try {
+      const prefs = await fetchServerPrefs(signal)
+      // Identity may have flipped while the request was in flight.
+      const again = resolveUsername()
+      if (!again.settled || again.name !== name) return false
+      if (!prefs) return false
+      applyPrefs(prefs)
+      usernameKey.value = name
+      prefsHydrated = true
+      return true
+    } catch (err) {
+      error.value = err instanceof Error && err.message ? err.message : String(err || 'prefs load failed')
+      return false
+    } finally {
+      if (prefsFetchPromise === flight) prefsFetchPromise = null
+    }
+  })()
+  prefsFetchPromise = flight
+  return flight
 }
 
 function onAuthIdentityChange() {
   const prevKey = usernameKey.value
   const prevHydrated = prefsHydrated
-  const ok = ensureUsername()
-  if (!ok) return
+  const { name, settled } = resolveUsername()
+  if (!settled) {
+    prefsHydrated = false
+    return
+  }
+  if (name !== usernameKey.value) {
+    usernameKey.value = name
+    prefsHydrated = false
+    enabledAt.value = ''
+    readIds.value = new Set()
+  }
   // Rehydrate + refresh as soon as auth paints — do not wait for focus/15s poll.
-  if (!prevHydrated || prevKey !== usernameKey.value) {
+  if (!prevHydrated || prevKey !== name) {
     void refresh({ source: 'auth' })
   }
 }
@@ -326,38 +343,47 @@ function installAuthWatch() {
   )
 }
 
-function persistCurrent() {
-  const { name, settled } = resolveUsername()
-  // Never stamp anonymous / wrong key while auth is still in flight.
-  if (!settled) return
-  usernameKey.value = name
-  prefsHydrated = true
-  persistPrefs(name, {
-    enabledAt: enabledAt.value || new Date().toISOString(),
-    readIds: [...readIds.value],
-  })
-}
-
 function markRead(runId: string) {
   if (!runId || readIds.value.has(runId)) return
-  if (!ensureUsername()) return
+  const { settled } = resolveUsername()
+  if (!settled) return
+  // Optimistic local update; server is authoritative.
   const next = new Set(readIds.value)
   next.add(runId)
   readIds.value = next
-  persistCurrent()
+  void (async () => {
+    try {
+      const prefs = await api.markNotificationRead(runId)
+      applyPrefs({
+        enabledAt: prefs.enabledAt || enabledAt.value || new Date().toISOString(),
+        readIds: Array.isArray(prefs.readIds) ? prefs.readIds : [...next],
+      })
+      prefsHydrated = true
+    } catch (err) {
+      error.value = err instanceof Error && err.message ? err.message : String(err || 'mark read failed')
+    }
+  })()
 }
 
 function markAllRead() {
-  if (!ensureUsername()) return
-  if (!pool.value.length) {
-    // Still persist baseline so empty sessions don't re-seed oddly.
-    persistCurrent()
-    return
-  }
+  const { settled } = resolveUsername()
+  if (!settled) return
+  const ids = pool.value.map((n) => n.runId)
   const next = new Set(readIds.value)
-  for (const n of pool.value) next.add(n.runId)
+  for (const id of ids) next.add(id)
   readIds.value = next
-  persistCurrent()
+  void (async () => {
+    try {
+      const prefs = await api.markAllNotificationsRead(ids)
+      applyPrefs({
+        enabledAt: prefs.enabledAt || enabledAt.value || new Date().toISOString(),
+        readIds: Array.isArray(prefs.readIds) ? prefs.readIds : [...next],
+      })
+      prefsHydrated = true
+    } catch (err) {
+      error.value = err instanceof Error && err.message ? err.message : String(err || 'mark all read failed')
+    }
+  })()
 }
 
 async function fetchPool(signal?: AbortSignal): Promise<RunTerminalNotification[]> {
@@ -381,9 +407,9 @@ async function fetchPool(signal?: AbortSignal): Promise<RunTerminalNotification[
 
 async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<void> {
   installAuthWatch()
-  const hydrated = ensureUsername()
+  const { settled } = resolveUsername()
   // Auth still in flight: keep pool empty of unread semantics until identity settles.
-  if (!hydrated && opts?.source !== 'auth') {
+  if (!settled && opts?.source !== 'auth') {
     return
   }
   if (refreshPromise) {
@@ -392,6 +418,7 @@ async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<vo
       refreshGeneration++
       abortCtrl?.abort()
       refreshPromise = null
+      prefsFetchPromise = null
     } else {
       return refreshPromise
     }
@@ -406,18 +433,17 @@ async function refresh(opts?: { source?: RunTerminalRefreshSource }): Promise<vo
   holder.flight = (async () => {
     loading.value = true
     try {
+      // Server prefs first — never derive unread from localStorage.
+      const hydrated = await ensurePrefsHydrated(tc.signal)
+      if (gen !== refreshGeneration) return
+      if (!hydrated && opts?.source !== 'auth') {
+        // Keep waiting for a successful prefs hydrate on non-auth refreshes.
+      }
       const next = await fetchPool(tc.signal)
       if (gen !== refreshGeneration) return
-      // Auth may have settled while the request was in flight.
-      ensureUsername()
       pool.value = next
-      // Keep read set bounded to current pool (+ already-persisted ids intersecting pool).
-      const poolIds = new Set(next.map((n) => n.runId))
-      const pruned = new Set([...readIds.value].filter((id) => poolIds.has(id)))
-      if (pruned.size !== readIds.value.size) {
-        readIds.value = pruned
-        persistCurrent()
-      }
+      // Do NOT prune/persist readIds against the pool: empty/partial pulls must
+      // never clear server-authoritative readIds (clarified business rule).
       error.value = null
       lastRefreshSource.value = opts?.source ?? null
       lastPeekAt.value = Date.now()
@@ -489,7 +515,14 @@ export function __resetRunTerminalNotificationsForTests() {
   refreshPromise = null
   refreshGeneration = 0
   prefsHydrated = false
+  prefsFetchPromise = null
   // Keep authWatchInstalled: watch is idempotent and must survive test resets.
+}
+
+/** Test helper: apply server prefs without HTTP (unit tests). */
+export function __setRunTerminalPrefsForTests(prefs: NotificationPrefs) {
+  applyPrefs(prefs)
+  prefsHydrated = true
 }
 
 export function useRunTerminalNotifications() {

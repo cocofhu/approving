@@ -20,6 +20,59 @@ installIdleScrollbar()
 const params = new URLSearchParams(window.location.search)
 const scene = params.get('scene') || 'with-items'
 
+/** In-memory + sessionStorage-backed mock of server prefs (survives hard reload). */
+const HARNESS_PREFS_KEY = 'e2e.harness.notificationReadPrefs'
+
+function loadHarnessPrefsRaw(): { enabledAt: string; readIds: string[] } | null {
+  try {
+    const raw = sessionStorage.getItem(HARNESS_PREFS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { enabledAt?: string; readIds?: string[] }
+    if (typeof parsed.enabledAt !== 'string') return null
+    return {
+      enabledAt: parsed.enabledAt,
+      readIds: Array.isArray(parsed.readIds)
+        ? parsed.readIds.filter((x): x is string => typeof x === 'string')
+        : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveHarnessPrefs(prefs: { enabledAt: string; readIds: string[] }) {
+  sessionStorage.setItem(HARNESS_PREFS_KEY, JSON.stringify(prefs))
+}
+
+let harnessPrefs: { enabledAt: string; readIds: string[] } | null = loadHarnessPrefsRaw()
+
+function initHarnessPrefs() {
+  // Clear legacy app localStorage keys so tests prove they are not the authority.
+  localStorage.removeItem(prefsKeyForUser('e2e'))
+  localStorage.removeItem(storageKeyForUser('e2e'))
+  if (harnessPrefs) return
+  if (
+    scene === 'post-enable' ||
+    scene === 'with-items' ||
+    scene === 'capped' ||
+    scene === 'legacy-structured-page' ||
+    scene === 'paged'
+  ) {
+    harnessPrefs = { enabledAt: '2020-01-01T00:00:00Z', readIds: [] }
+    saveHarnessPrefs(harnessPrefs)
+  }
+}
+
+initHarnessPrefs()
+
+function getOrInitHarnessPrefs() {
+  if (!harnessPrefs) {
+    harnessPrefs = { enabledAt: new Date().toISOString(), readIds: [] }
+    saveHarnessPrefs(harnessPrefs)
+  }
+  return harnessPrefs
+}
+
 function makeRun(partial: Record<string, unknown>) {
   return {
     workflowId: 'wf',
@@ -294,13 +347,56 @@ function poolForScene() {
   return postEnableItems
 }
 
-window.fetch = async (input: RequestInfo | URL) => {
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const method = (init?.method || (typeof input !== 'string' && !(input instanceof URL) ? input.method : 'GET') || 'GET').toUpperCase()
   if (url.includes('/auth/me')) {
     return new Response(
       JSON.stringify({ username: 'e2e', expires_at: '2099-01-01T00:00:00Z', is_admin: true }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
+  }
+  if (url.includes('/notifications/prefs/read-all') && method === 'POST') {
+    const prefs = getOrInitHarnessPrefs()
+    let body: { runIds?: string[] } = {}
+    try {
+      body = JSON.parse(String(init?.body || '{}')) as { runIds?: string[] }
+    } catch {
+      body = {}
+    }
+    const next = new Set(prefs.readIds)
+    for (const id of body.runIds || []) {
+      if (typeof id === 'string' && id) next.add(id)
+    }
+    prefs.readIds = [...next]
+    saveHarnessPrefs(prefs)
+    return new Response(JSON.stringify(prefs), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  if (url.includes('/notifications/prefs/read') && method === 'POST') {
+    const prefs = getOrInitHarnessPrefs()
+    let body: { runId?: string } = {}
+    try {
+      body = JSON.parse(String(init?.body || '{}')) as { runId?: string }
+    } catch {
+      body = {}
+    }
+    if (body.runId && !prefs.readIds.includes(body.runId)) {
+      prefs.readIds = [...prefs.readIds, body.runId]
+    }
+    saveHarnessPrefs(prefs)
+    return new Response(JSON.stringify(prefs), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  if (url.includes('/notifications/prefs')) {
+    return new Response(JSON.stringify(getOrInitHarnessPrefs()), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
   if (url.includes('/health') || url.includes('/live')) {
     return new Response(JSON.stringify({ status: 'ok' }), {
@@ -367,28 +463,6 @@ window.fetch = async (input: RequestInfo | URL) => {
 async function bootstrap() {
   await initLocale()
   await setLocale('zh-CN')
-
-  // Seed enable baseline: for post-enable / with-items / capped, baseline in past so items unread;
-  // for history-only, leave unset so first enable treats history as read.
-  if (
-    scene === 'post-enable' ||
-    scene === 'with-items' ||
-    scene === 'capped' ||
-    scene === 'legacy-structured-page' ||
-    scene === 'paged'
-  ) {
-    const prefsKey = prefsKeyForUser('e2e')
-    // Seed only when absent so reload tests can assert read-state persistence.
-    if (!localStorage.getItem(prefsKey)) {
-      localStorage.setItem(
-        prefsKey,
-        JSON.stringify({ enabledAt: '2020-01-01T00:00:00Z', readIds: [] }),
-      )
-    }
-  } else {
-    localStorage.removeItem(prefsKeyForUser('e2e'))
-    localStorage.removeItem(storageKeyForUser('e2e'))
-  }
 
   const DashboardPage = defineComponent({
     name: 'NotifDashboard',

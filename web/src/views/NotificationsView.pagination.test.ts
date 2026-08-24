@@ -30,6 +30,18 @@ vi.mock('@/lib/api/api', () => ({
     getRun: vi.fn(),
     artifactContent: vi.fn(),
     artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
+    getNotificationReadPrefs: vi.fn(async () => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [] as string[],
+    })),
+    markNotificationRead: vi.fn(async (runId: string) => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [runId],
+    })),
+    markAllNotificationsRead: vi.fn(async (runIds: string[]) => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: runIds,
+    })),
   },
   isPaginated: (data: unknown): data is { items: unknown[]; total: number } =>
     data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
@@ -38,7 +50,6 @@ vi.mock('@/lib/api/api', () => ({
 import { api } from '@/lib/api/api'
 import {
   __resetRunTerminalNotificationsForTests,
-  prefsKeyForUser,
   RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
   useRunTerminalNotifications,
@@ -70,10 +81,6 @@ function paged(items: Run[], total = items.length) {
   return { items, total, page: 1, pageSize: RUN_TERMINAL_POOL_SIZE, hasMore: false }
 }
 
-function seedBaseline(enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []) {
-  localStorage.setItem(prefsKeyForUser('tester'), JSON.stringify({ enabledAt, readIds }))
-}
-
 function makeItems(n: number, unreadCount = n) {
   return Array.from({ length: n }, (_, i) =>
     run({
@@ -91,7 +98,10 @@ function makeItems(n: number, unreadCount = n) {
 }
 
 async function mountView(items: Run[], readIds: string[] = []) {
-  seedBaseline('2020-01-01T00:00:00Z', readIds)
+  vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
+    enabledAt: '2020-01-01T00:00:00Z',
+    readIds: [...readIds],
+  })
   vi.mocked(api.listRuns).mockResolvedValue(paged(items, items.length))
   const i18n = createI18n({
     legacy: false,
@@ -123,7 +133,12 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
     vi.mocked(api.listRuns).mockReset()
+    vi.mocked(api.getNotificationReadPrefs).mockReset()
     vi.mocked(api.listRuns).mockResolvedValue(paged([]))
+    vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [],
+    })
   })
 
   afterEach(() => {
