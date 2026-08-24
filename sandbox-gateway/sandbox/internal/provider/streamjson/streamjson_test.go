@@ -139,6 +139,55 @@ func TestParseResult(t *testing.T) {
 	}
 }
 
+// TestParseClaudeCodeResultUsageNested is the 2026 Claude Code stream-json
+// shape: result.usage is an object with nested server_tool_use / cache_creation
+// plus a sibling modelUsage map. A rigid map[string]int64 (or Usage int64)
+// used to fail the whole line → prompt_done with empty usage.
+func TestParseClaudeCodeResultUsageNested(t *testing.T) {
+	c := &codec{}
+	line := []byte(`{"type":"result","subtype":"success","is_error":false,"duration_api_ms":156811,"num_turns":11,"stop_reason":"end_turn","session_id":"3ce37a6e-5da6-40c7-9292-abc","usage":{"input_tokens":120,"output_tokens":80,"cache_read_input_tokens":2000,"cache_creation_input_tokens":15,"server_tool_use":{"web_search_requests":1,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":15}},"modelUsage":{"claude-sonnet-4-5":{"inputTokens":120,"outputTokens":80,"cacheReadInputTokens":2000,"cacheCreationInputTokens":15,"costUSD":0.01,"contextWindow":200000}}}`)
+	pr := c.ParseLine(line)
+	if pr.SessionID != "3ce37a6e-5da6-40c7-9292-abc" {
+		t.Fatalf("sid=%q", pr.SessionID)
+	}
+	if pr.StopReason != "end_turn" {
+		t.Fatalf("stop=%q", pr.StopReason)
+	}
+	u := pr.Usage["claude-sonnet-4-5"]
+	if u.InputTokens != 120 || u.OutputTokens != 80 || u.CacheReadTokens != 2000 || u.CacheWriteTokens != 15 {
+		t.Fatalf("modelUsage=%+v", u)
+	}
+	if _, ok := pr.Usage["default"]; ok {
+		t.Fatalf("should prefer modelUsage over flat usage, got %+v", pr.Usage)
+	}
+}
+
+// Nested usage without modelUsage is the live failure mode: the result line
+// still has to parse, and tokens fall back onto the flat usage object.
+func TestParseClaudeCodeResultUsageNestedNoModelUsage(t *testing.T) {
+	c := &codec{}
+	line := []byte(`{"type":"result","subtype":"success","is_error":false,"duration_api_ms":156811,"num_turns":11,"stop_reason":"end_turn","session_id":"3ce37a6e-5da6-40c7-9292-abc","usage":{"input_tokens":120,"output_tokens":80,"cache_read_input_tokens":2000,"cache_creation_input_tokens":15,"server_tool_use":{"web_search_requests":1},"service_tier":"standard","cache_creation":{"ephemeral_5m_input_tokens":15}}}`)
+	pr := c.ParseLine(line)
+	if pr.StopReason != "end_turn" {
+		t.Fatalf("stop=%q (nested usage must not drop the result line)", pr.StopReason)
+	}
+	u := pr.Usage["default"]
+	if u.InputTokens != 120 || u.OutputTokens != 80 || u.CacheReadTokens != 2000 || u.CacheWriteTokens != 15 {
+		t.Fatalf("flat usage=%+v", u)
+	}
+}
+
+func TestParseResultUsageIgnoresBareNumber(t *testing.T) {
+	c := &codec{}
+	pr := c.ParseLine([]byte(`{"type":"result","subtype":"success","session_id":"S1","usage":42}`))
+	if pr.StopReason != "end_turn" {
+		t.Fatalf("bare usage number must not drop the result line: %+v", pr)
+	}
+	if len(pr.Usage) != 0 {
+		t.Fatalf("bare number usage should be ignored: %+v", pr.Usage)
+	}
+}
+
 func TestParseToolResult(t *testing.T) {
 	c := &codec{}
 	pr := c.ParseLine([]byte(`{"type":"user","message":{"content":[{"type":"tool_result","id":"t1","content":[{"type":"text","text":"out"}]}]}}`))

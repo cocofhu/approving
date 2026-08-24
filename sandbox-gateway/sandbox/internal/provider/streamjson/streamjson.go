@@ -5,6 +5,7 @@
 package streamjson
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
@@ -231,6 +232,10 @@ type message struct {
 // (input_tokens / cache_read_input_tokens / cache_creation_input_tokens) and
 // the camelCase variant some CLIs emit (inputTokens / cacheReadTokens /
 // cacheWriteTokens), so one parser serves several stream-json dialects.
+//
+// Claude Code ≥2026 result.usage also carries nested objects (server_tool_use,
+// cache_creation) and strings (service_tier). Those must be ignored — a rigid
+// map[string]int64 would fail the whole result line and drop token totals.
 type wireUsage struct {
 	InputTokens         int64
 	OutputTokens        int64
@@ -239,35 +244,50 @@ type wireUsage struct {
 }
 
 func (u *wireUsage) UnmarshalJSON(b []byte) error {
-	var m map[string]int64
-	if err := json.Unmarshal(b, &m); err != nil {
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 || string(b) == "null" {
+		return nil
+	}
+	// Legacy CLIs / older mirrors typed usage as a bare number. Ignore it
+	// rather than failing the enclosing event (we cannot split in/out).
+	if b[0] != '{' {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
 		return err
 	}
 	pick := func(keys ...string) int64 {
 		for _, k := range keys {
-			if v, ok := m[k]; ok {
-				return v
+			v, ok := raw[k]
+			if !ok {
+				continue
+			}
+			var n int64
+			if json.Unmarshal(v, &n) == nil {
+				return n
 			}
 		}
 		return 0
 	}
 	u.InputTokens = pick("input_tokens", "inputTokens")
 	u.OutputTokens = pick("output_tokens", "outputTokens")
-	u.CacheReadTokens = pick("cache_read_input_tokens", "cacheReadTokens", "cache_read_tokens")
-	u.CacheCreationTokens = pick("cache_creation_input_tokens", "cacheWriteTokens", "cache_creation_tokens")
+	u.CacheReadTokens = pick("cache_read_input_tokens", "cacheReadTokens", "cache_read_tokens", "cacheReadInputTokens")
+	u.CacheCreationTokens = pick("cache_creation_input_tokens", "cacheWriteTokens", "cache_creation_tokens", "cacheCreationInputTokens")
 	return nil
 }
 
 type streamEvent struct {
-	Type      string     `json:"type"`
-	Subtype   string     `json:"subtype"`
-	SessionID string     `json:"session_id"`
-	Model     string     `json:"model"`
-	Text      string     `json:"text"` // top-level text (e.g. cursor's thinking deltas)
-	Message   *message   `json:"message"`
-	Usage     *wireUsage `json:"usage"`
-	Result    string     `json:"result"`
-	IsError   bool       `json:"is_error"`
+	Type       string               `json:"type"`
+	Subtype    string               `json:"subtype"`
+	SessionID  string               `json:"session_id"`
+	Model      string               `json:"model"`
+	Text       string               `json:"text"` // top-level text (e.g. cursor's thinking deltas)
+	Message    *message             `json:"message"`
+	Usage      *wireUsage           `json:"usage"`
+	ModelUsage map[string]wireUsage `json:"modelUsage"`
+	Result     string               `json:"result"`
+	IsError    bool                 `json:"is_error"`
 }
 
 func (d *codec) ParseLine(line []byte) oneshot.ParseResult {
@@ -280,7 +300,7 @@ func (d *codec) ParseLine(line []byte) oneshot.ParseResult {
 	res.SessionID = ev.SessionID
 
 	addUsage := func(u *wireUsage, model string) {
-		if u == nil {
+		if u == nil || (u.InputTokens == 0 && u.OutputTokens == 0 && u.CacheReadTokens == 0 && u.CacheCreationTokens == 0) {
 			return
 		}
 		if model == "" {
@@ -337,7 +357,16 @@ func (d *codec) ParseLine(line []byte) oneshot.ParseResult {
 			}
 		}
 	case "result":
-		addUsage(ev.Usage, ev.Model)
+		// Prefer per-model breakdown when Claude Code emits modelUsage; fall
+		// back to the flat usage object (often the only field older CLIs send).
+		if len(ev.ModelUsage) > 0 {
+			for model, u := range ev.ModelUsage {
+				uu := u
+				addUsage(&uu, model)
+			}
+		} else {
+			addUsage(ev.Usage, ev.Model)
+		}
 		if ev.IsError {
 			res.StopReason = "failed"
 			if ev.Result != "" {
