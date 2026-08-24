@@ -79,6 +79,49 @@ function mountList(locale: 'zh-CN' | 'en' = 'zh-CN') {
   })
 }
 
+describe('ProjectListView narrow-screen overflow constraints', () => {
+  it('locks grid, skeleton, and card width constraints for mobile overflow prevention', () => {
+    expect(src).toMatch(/data-testid="project-list-cards"/)
+    expect(src).toMatch(/data-testid="project-list-skeleton"/)
+    expect(src).toMatch(/grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3/)
+    expect(src).toMatch(/min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden/)
+    expect(src).toMatch(/line-clamp-2 break-words/)
+    expect(src).toMatch(/flex min-w-0 flex-wrap items-center gap-x-1\.5 gap-y-0\.5/)
+  })
+
+  it('renders long URL description inside card without layout regression', async () => {
+    const longUrl =
+      'https://github.com/example/very-long-repository-name-without-spaces-that-would-overflow-on-narrow-screens'
+    apiMocks.listProjects.mockResolvedValue([
+      {
+        ...SAMPLE,
+        name: 'HarnessPlugin',
+        description: longUrl,
+        totalTokens: 1234567,
+      },
+    ])
+    const w = mountList()
+    await flushPromises()
+    const card = w.get('[data-testid="project-list-cards"] button')
+    expect(card.classes()).toContain('min-w-0')
+    expect(card.classes()).toContain('max-w-full')
+    expect(card.text()).toContain('github.com')
+    expect(w.find('[data-testid="project-list-token"]').exists()).toBe(true)
+    w.unmount()
+  })
+  it('card click still navigates to project detail', async () => {
+    const { writeStoredProjectId } = await import('@/lib/composables/useProjectContext')
+    apiMocks.listProjects.mockResolvedValue([SAMPLE])
+    const w = mountList()
+    await flushPromises()
+    await w.get('[data-testid="project-list-cards"] button').trigger('click')
+    await flushPromises()
+    expect(writeStoredProjectId).toHaveBeenCalledWith('p1')
+    expect(w.vm.$router.currentRoute.value.path).toBe('/projects/p1')
+    w.unmount()
+  })
+})
+
 describe('ProjectListView source lock (Demo loading)', () => {
   it('uses isomorphic card skeleton (icon + title + meta), not equal-width bars only', () => {
     expect(src).toMatch(/data-testid="project-list-skeleton"/)
