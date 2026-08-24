@@ -18,10 +18,11 @@ const shellSrc = readFileSync(join(dir, '../components/shell/AppShell.vue'), 'ut
 const globalCss = readFileSync(join(dir, '../styles/global.css'), 'utf8')
 
 describe('DashboardView home chat layout', () => {
-  it('root uses md+ flex fill without overflow-hidden', () => {
-    expect(src).toMatch(/data-testid="dashboard-view"[^>]*class="[^"]*flex flex-col md:h-full md:min-h-0/)
+  it('root uses flex fill without overflow-hidden (plan g1.4 mobile + desktop)', () => {
+    expect(src).toMatch(/data-testid="dashboard-view"[^>]*class="[^"]*flex h-full min-h-0 flex-col/)
     expect(src).not.toMatch(/data-testid="dashboard-view"[^>]*overflow-hidden/)
     expect(src).not.toMatch(/calc\(100vh/)
+    expect(src).toMatch(/home-shell__content[^>]*overflow-y-auto/)
   })
 
   it('centers composer, pipeline cards, and empty states', () => {

@@ -147,14 +147,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div data-testid="board-view" class="min-w-0">
-    <div v-if="!embedded" class="mb-5 flex flex-wrap items-start justify-between gap-4">
+  <!-- plan g1.3: fill-height + single overflow-y-auto (standalone + embedded) -->
+  <div data-testid="board-view" class="flex h-full min-h-0 min-w-0 flex-col">
+    <div v-if="!embedded" class="mb-5 flex shrink-0 flex-wrap items-start justify-between gap-4">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.board.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.board.subtitle') }}</p>
       </div>
     </div>
 
+    <div class="min-h-0 flex-1 overflow-y-auto">
     <div
       v-if="error && error !== 'missing_project'"
       class="mb-4 flex flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
@@ -249,6 +251,7 @@ onUnmounted(() => {
         :truncated-hint="truncatedHint(col.key)"
         @select="openPreview"
       />
+    </div>
     </div>
 
     <RunBoardPreviewDrawer :open="drawerOpen" :run="selected" @close="closePreview" />

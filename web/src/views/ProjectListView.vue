@@ -101,8 +101,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <div class="mb-5 flex flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
+  <!-- plan g1.1: fill-height + single overflow-y-auto scroll exit (align RunList) -->
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="mb-5 flex shrink-0 flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.projectList.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.projectList.subtitle') }}</p>
@@ -114,6 +115,7 @@ onMounted(() => {
 
     <div
       data-testid="project-list-panel"
+      class="min-h-0 flex-1 overflow-y-auto"
       :aria-busy="loading ? 'true' : 'false'"
     >
       <div

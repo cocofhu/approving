@@ -121,9 +121,9 @@ describe('RunListView fill scope lock (g4.3)', () => {
     expect(routerSrc).not.toMatch(/path: '\/runs'[^}]*full:\s*true/)
   })
 
-  it('does not change other list pages, EmptyState, or empty/fail i18n strings', () => {
-    expect(sandboxSrc).toMatch(/^\s*<div>\s*$/m)
-    expect(projectSrc).toMatch(/^\s*<div>\s*$/m)
+  it('does not change EmptyState or empty/fail i18n strings (list A pages now use fill scroll — plan g1)', () => {
+    expect(sandboxSrc).toMatch(/flex h-full min-h-0 flex-col/)
+    expect(projectSrc).toMatch(/flex h-full min-h-0 flex-col/)
     expect(src).not.toMatch(/EmptyState/)
     expect(zhCommon).toMatch(/"noRuns": "暂无运行记录"/)
     expect(zhCommon).toMatch(/"noMatchingRuns": "无匹配运行记录"/)

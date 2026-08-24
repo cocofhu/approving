@@ -329,10 +329,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div data-testid="dashboard-view" class="home-shell relative flex flex-col md:h-full md:min-h-0">
+  <div data-testid="dashboard-view" class="home-shell relative flex h-full min-h-0 flex-col">
     <HomeParticleMeshBackground />
     <div
-      class="home-shell__content relative z-[1] mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-4 py-10"
+      class="home-shell__content relative z-[1] mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-10"
     >
       <h1 class="home-brand" data-testid="home-brand" aria-label="Approving">
         <span class="home-brand__text" data-testid="home-brand-text">{{ brandVisible }}</span>
