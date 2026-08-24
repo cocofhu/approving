@@ -223,4 +223,66 @@ describe('useRunDetailLiveLog', () => {
 
     app.unmount()
   })
+
+  it('fetchNodeEvents soft-fail (unavailable) returns false and leaves rehydrate as error', async () => {
+    vi.mocked(api.nodeEvents).mockResolvedValueOnce({
+      events: [],
+      live: false,
+      unavailable: true,
+      error: 'live event log read failed',
+    })
+
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0)
+      return 1
+    })
+
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/', component: { template: '<div />' } }],
+    })
+    await router.push('/')
+    await router.isReady()
+
+    const run = ref({
+      id: 'run-1',
+      status: 'running',
+      nodeRuns: { a1: { nodeId: 'a1', status: 'running', events: [], mcpCalls: [] } },
+      artifacts: [],
+    } as unknown as Run)
+    const selected = ref<string | null>('a1')
+
+    let live!: ReturnType<typeof useRunDetailLiveLog>
+    const app = createApp({
+      setup() {
+        live = useRunDetailLiveLog({
+          runId: computed(() => 'run-1'),
+          run,
+          selected,
+          selExecIdx: computed(() => 0),
+          selIterIdx: ref(null),
+          selRun: computed(() => run.value.nodeRuns.a1 || null),
+          selStatus: computed(() => 'running'),
+          viewingLatest: computed(() => true),
+          nodeTab: ref('log'),
+          hasLog: computed(() => true),
+        })
+        return () => null
+      },
+    })
+    app.use(i18n)
+    app.use(router)
+    app.mount(document.createElement('div'))
+
+    await live.rehydrateNodeEvents('a1')
+    expect(live.logEvents.value).toEqual([])
+    expect(live.selRehydrateStatus.value).toBe('error')
+
+    app.unmount()
+  })
 })

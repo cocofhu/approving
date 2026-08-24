@@ -51,6 +51,16 @@ export interface EventPaginatedResponse {
   nextCursor: string
   hasMore: boolean
   live?: boolean
+  /** Live sandbox registered but bridge read failed transiently. */
+  unavailable?: boolean
+  error?: string
+}
+
+export interface NodeEventsResponse {
+  events: AcpEvent[]
+  live: boolean
+  unavailable?: boolean
+  error?: string
 }
 
 export interface MCPServer {

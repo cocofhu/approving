@@ -15,7 +15,7 @@ export type BusySeedRetryOptions = {
   liveIncrementalReceived?: () => boolean
   /**
    * Attempt one seed. Resolve true when content was obtained and applied.
-   * Empty / 502 / network errors should resolve false (not throw).
+   * Empty / soft-fail / network errors should resolve false (not throw).
    */
   seed: () => Promise<boolean>
   /** Delay between attempts (default 1500ms). */

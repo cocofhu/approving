@@ -1778,7 +1778,8 @@ func TestNodeEventsPaginationPersisted(t *testing.T) {
 }
 
 // liveReadFailProvider simulates a registered live sandbox whose bridge read
-// fails — NodeEvents must surface 502 {error, live:false}, not a fake empty page.
+// fails — NodeEvents must surface HTTP 200 {unavailable, error, live:false},
+// not a fake empty page and not 502 (avoids DevTools Failed to load resource).
 type liveReadFailProvider struct{ fakeProvider }
 
 func (liveReadFailProvider) LiveNodeEvents(ctx context.Context, runID, nodeID string) ([]models.AcpEvent, bool, error) {
@@ -1789,7 +1790,7 @@ func (liveReadFailProvider) LiveNodeEventsPage(ctx context.Context, runID, nodeI
 	return nil, "", false, false, errors.New("bridge unreachable")
 }
 
-func TestNodeEventsLiveReadFailureReturns502(t *testing.T) {
+func TestNodeEventsLiveReadFailureReturnsSoftFail(t *testing.T) {
 	h := newHarness(t)
 	h.db.Create(&models.Run{ID: "run-live-fail", Status: "running", StartedAt: time.Now()})
 
@@ -1801,11 +1802,11 @@ func TestNodeEventsLiveReadFailureReturns502(t *testing.T) {
 		h.h.Eng = old
 	})
 
-	assert502 := func(path string) {
+	assertSoftFail := func(path string, paginated bool) {
 		t.Helper()
 		w := h.do(http.MethodGet, path, nil)
-		if w.Code != http.StatusBadGateway {
-			t.Fatalf("%s status = %d, want 502; body=%s", path, w.Code, w.Body.String())
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200; body=%s", path, w.Code, w.Body.String())
 		}
 		var body map[string]any
 		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
@@ -1817,10 +1818,21 @@ func TestNodeEventsLiveReadFailureReturns502(t *testing.T) {
 		if body["live"] != false {
 			t.Fatalf("%s live = %v, want false", path, body["live"])
 		}
+		if body["unavailable"] != true {
+			t.Fatalf("%s unavailable = %v, want true", path, body["unavailable"])
+		}
+		if paginated {
+			if _, ok := body["nextCursor"]; !ok {
+				t.Fatalf("%s missing nextCursor: %v", path, body)
+			}
+			if _, ok := body["hasMore"]; !ok {
+				t.Fatalf("%s missing hasMore: %v", path, body)
+			}
+		}
 	}
 
-	assert502("/api/runs/run-live-fail/nodes/n1/events")
-	assert502("/api/runs/run-live-fail/nodes/n1/events?limit=20")
+	assertSoftFail("/api/runs/run-live-fail/nodes/n1/events", false)
+	assertSoftFail("/api/runs/run-live-fail/nodes/n1/events?limit=20", true)
 }
 
 func TestDoctorArtifactSessionIsLoopbackAndTokenProtected(t *testing.T) {
