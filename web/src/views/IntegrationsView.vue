@@ -59,12 +59,14 @@ function cardIconClass(scope: McpServer['scope']): string {
 </script>
 
 <template>
-  <div>
-    <div class="mb-5">
+  <!-- plan g1.2: fill-height + single overflow-y-auto scroll exit -->
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="mb-5 shrink-0">
       <h2 class="text-lg font-semibold text-txt">{{ t('mcp.integrations.title') }}</h2>
       <p class="text-sm text-txt3">{{ t('mcp.integrations.subtitle') }}</p>
     </div>
 
+    <div class="min-h-0 flex-1 overflow-y-auto">
     <div class="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-txt3">
       {{ t('mcp.integrations.sectionTitle') }}
       <span class="chip border-accent/30 text-accent-2">{{ t('mcp.integrations.noConfigNeeded') }}</span>
@@ -108,6 +110,7 @@ function cardIconClass(scope: McpServer['scope']): string {
         </span>
       </div>
     </button>
+    </div>
 
     <AppModal
       :open="!!selected"

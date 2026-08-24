@@ -89,6 +89,26 @@ describe('ProjectListView narrow-screen overflow constraints', () => {
     expect(src).toMatch(/flex min-w-0 flex-wrap items-center gap-x-1\.5 gap-y-0\.5/)
   })
 
+  // plan g3.3 — narrow viewport: fill root + list panel is the scroll exit (末卡可达)
+  it('uses fill-height root and project-list-panel overflow-y-auto scroll exit (g3.3)', async () => {
+    expect(src).toMatch(/flex h-full min-h-0 flex-col/)
+    expect(src).toMatch(/data-testid="project-list-panel"[\s\S]*?class="min-h-0 flex-1 overflow-y-auto"/)
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      ...SAMPLE,
+      id: `p${i}`,
+      name: `项目 ${i}`,
+    }))
+    apiMocks.listProjects.mockResolvedValue(many)
+    const w = mountList()
+    await flushPromises()
+    const panel = w.get('[data-testid="project-list-panel"]')
+    expect(panel.classes()).toEqual(expect.arrayContaining(['min-h-0', 'flex-1', 'overflow-y-auto']))
+    const cards = w.findAll('[data-testid="project-list-cards"] button')
+    expect(cards.length).toBe(12)
+    expect(cards[11].text()).toContain('项目 11')
+    w.unmount()
+  })
+
   it('renders long URL description inside card without layout regression', async () => {
     const longUrl =
       'https://github.com/example/very-long-repository-name-without-spaces-that-would-overflow-on-narrow-screens'

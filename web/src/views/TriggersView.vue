@@ -14,12 +14,13 @@ const triggers = computed(() => [
 </script>
 
 <template>
-  <div>
-    <div class="mb-5">
+  <!-- plan g1.2: fill-height + single overflow-y-auto scroll exit -->
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="mb-5 shrink-0">
       <h2 class="text-lg font-semibold text-txt">{{ t('pages.triggers.title') }}</h2>
       <p class="text-sm text-txt3">{{ t('pages.triggers.subtitle') }}</p>
     </div>
-    <div class="space-y-3">
+    <div class="min-h-0 flex-1 space-y-3 overflow-y-auto">
       <div v-for="item in triggers" :key="item.type" class="card flex min-h-11 items-center gap-3 p-4" :class="item.available ? '' : 'opacity-70'">
         <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md" :class="item.available ? 'bg-accent-dim text-accent-2' : 'bg-elevated text-txt3'">
           <Icon :name="item.icon" :size="18" />

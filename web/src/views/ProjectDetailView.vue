@@ -358,13 +358,17 @@ const {
         </div>
       </div>
 
-      <div v-else-if="tab === 'board'" class="min-w-0" data-testid="project-board-panel">
-        <BoardView :project-id="projectId" embedded />
+      <div
+        v-else-if="tab === 'board'"
+        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        data-testid="project-board-panel"
+      >
+        <BoardView :project-id="projectId" embedded class="min-h-0 flex-1" />
       </div>
 
       <div
         v-else-if="tab === 'requirementDrafts'"
-        class="min-w-0"
+        class="scroll-area min-h-0 flex-1 overflow-y-auto"
         data-testid="project-requirement-drafts-panel"
       >
         <RequirementDraftsPanel ref="draftsPanelRef" :project-id="projectId" />
@@ -419,11 +423,18 @@ const {
         </div>
       </div>
 
-      <div v-else-if="tab === 'cronJobs'" class="flex min-h-[420px] flex-col">
+      <!-- plan g2.1: cronJobs/notify fill + scroll exit (drop 420px hard floor) -->
+      <div
+        v-else-if="tab === 'cronJobs'"
+        class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto"
+      >
         <PmCronJobsPanel :project-id="projectId" />
       </div>
 
-      <div v-else-if="tab === 'notify' && project" class="min-h-[420px]">
+      <div
+        v-else-if="tab === 'notify' && project"
+        class="scroll-area min-h-0 flex-1 overflow-y-auto"
+      >
         <ProjectNotifyPanel
           :project-id="projectId"
           :project="project"
@@ -432,9 +443,9 @@ const {
         />
       </div>
 
-      <!-- Workflows tab -->
-      <div v-else-if="tab === 'workflows'">
-        <div class="mb-3 flex justify-end gap-2">
+      <!-- Workflows tab — plan g2.1: min-h-0 flex-1 + overflow-y-auto -->
+      <div v-else-if="tab === 'workflows'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div class="mb-3 flex shrink-0 justify-end gap-2">
           <AppButton
             v-if="isOnboardingEmpty"
             variant="outline"
@@ -451,6 +462,7 @@ const {
             {{ t('common.buttons.newWorkflow') }}
           </AppButton>
         </div>
+        <div class="scroll-area min-h-0 flex-1 overflow-y-auto">
         <div
           v-if="isOnboardingEmpty"
           class="card px-5 py-10 text-center text-[13px] text-txt3"
@@ -824,6 +836,7 @@ const {
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       </div>
 

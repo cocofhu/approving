@@ -294,8 +294,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div data-testid="sandbox-list-panel" :aria-busy="loading || initialLoading ? 'true' : 'false'">
-    <div class="mb-5 flex flex-col items-start gap-2.5 md:flex-row md:items-end md:justify-between">
+  <!-- plan g1.2: fill-height + single overflow-y-auto scroll exit -->
+  <div
+    class="flex h-full min-h-0 flex-col"
+    data-testid="sandbox-list-panel"
+    :aria-busy="loading || initialLoading ? 'true' : 'false'"
+  >
+    <div class="mb-5 flex shrink-0 flex-col items-start gap-2.5 md:flex-row md:items-end md:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.sandboxes.title') }}</h2>
       </div>
@@ -304,12 +309,12 @@ onBeforeUnmount(() => {
 
     <div
       v-if="error && !initialLoading && rows.length && !initialLoadFailed && !loadDenied"
-      class="card mb-3 border-err/40 p-3 text-[13px] text-err"
+      class="card mb-3 shrink-0 border-err/40 p-3 text-[13px] text-err"
     >{{ t('pages.sandboxes.errorPrefix') }}{{ error }}</div>
 
     <div
       v-if="showTableLoading"
-      class="mb-2 h-[2px] overflow-hidden bg-line"
+      class="mb-2 h-[2px] shrink-0 overflow-hidden bg-line"
       data-testid="sandbox-list-thin-progress"
       aria-hidden="true"
     >
@@ -317,7 +322,11 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Mobile card list -->
-    <div v-if="isMobile" :class="{ 'table-loading': showTableLoading }">
+    <div
+      v-if="isMobile"
+      class="min-h-0 flex-1 overflow-y-auto"
+      :class="{ 'table-loading': showTableLoading }"
+    >
       <template v-if="initialLoading">
         <div class="flex flex-col gap-2">
           <div
@@ -450,8 +459,12 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Desktop table -->
-    <div v-else class="card overflow-hidden" :class="{ 'table-loading': showTableLoading }">
-      <div class="scroll-area overflow-x-auto">
+    <div
+      v-else
+      class="card flex min-h-0 flex-1 flex-col overflow-hidden"
+      :class="{ 'table-loading': showTableLoading }"
+    >
+      <div class="scroll-area min-h-0 flex-1 overflow-auto">
         <table class="w-full min-w-[920px] text-left text-[13px]">
           <thead class="border-b border-line text-[11px] uppercase tracking-wider text-txt3">
             <tr>

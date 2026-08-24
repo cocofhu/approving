@@ -56,9 +56,11 @@ describe('ProjectDetailView pmLeader fill-height chain (g2.2 / g2.3)', () => {
 })
 
 describe('ProjectDetailView height fix scope lock (g3.2)', () => {
-  it('other short tabs keep existing min-h-[420px] shells unchanged', () => {
-    expect(detailSrc).toMatch(/tab === 'cronJobs'" class="flex min-h-\[420px\] flex-col"/)
-    expect(detailSrc).toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
+  it('list B tabs use fill + overflow-y-auto (plan g2.1; no 420px floor)', () => {
+    expect(detailSrc).toMatch(/tab === 'cronJobs'[\s\S]*?class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto"/)
+    expect(detailSrc).toMatch(/tab === 'notify' && project[\s\S]*?class="scroll-area min-h-0 flex-1 overflow-y-auto"/)
+    expect(detailSrc).not.toMatch(/tab === 'cronJobs'" class="flex min-h-\[420px\] flex-col"/)
+    expect(detailSrc).not.toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
   })
 
   it('fill-height tabs (meta/audit/variables/sandboxEnv) remain min-h-0 flex-1', () => {

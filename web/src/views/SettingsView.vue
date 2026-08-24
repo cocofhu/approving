@@ -198,8 +198,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div data-testid="settings-panel" :aria-busy="loading || saving ? 'true' : 'false'">
-    <div class="mb-5 flex flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between">
+  <!-- plan g1.2: fill-height + single overflow-y-auto scroll exit -->
+  <div
+    class="flex h-full min-h-0 flex-col"
+    data-testid="settings-panel"
+    :aria-busy="loading || saving ? 'true' : 'false'"
+  >
+    <div class="mb-5 flex shrink-0 flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.settings.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.settings.subtitle') }}</p>
@@ -215,6 +220,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <div class="min-h-0 flex-1 overflow-y-auto">
     <div
       v-if="error && items.length && !loadFailed && !loadDenied"
       class="mb-4 rounded-lg border border-err/30 bg-err/10 px-3 py-2 text-sm text-err"
@@ -427,6 +433,7 @@ onBeforeUnmount(() => {
     <p class="mt-1 text-xs text-txt3">
       {{ t('pages.settings.priorityNote') }}
     </p>
+    </div>
   </div>
 </template>
 
