@@ -24,6 +24,7 @@ function boxesIntersect(
 }
 
 test.describe('Run 详情移动端单面板生产路径 (390×844)', () => {
+  // plan_coverage: g2.3 — ReviewShell mobile entries (gate/review/mobile-fill) share drawer behavior
   test('completed：单面板 + 末项可视 + 汇总与条目无几何相交 (g1/g2)', async ({ page }) => {
     await gotoPanel(page, 'completed')
 

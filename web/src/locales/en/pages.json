@@ -2534,7 +2534,8 @@
       "versionMenu": "Choose version"
     },
     "reviewShell": {
-      "drawerHandle": "Review drawer · drag to resize",
+      "drawerHandle": "Drag handle to resize",
+      "drawerHandleAria": "Drag handle up or down to resize the review drawer",
       "resizeSash": "Drag to resize sidebar · double-click to reset"
     },
     "appPreview": {

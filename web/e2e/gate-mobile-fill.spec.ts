@@ -37,7 +37,9 @@ async function mockApi(
   })
 }
 
+// plan_coverage: g2.1 mobile-fill no drawer-height=340; g3.2 e2e stage min + drag resize (leaf ids only).
 test.describe('Run 详情移动端 visual 定高预览', () => {
+  // plan_coverage: g2.1 / g3.2 — adaptive drawer<340, stage>160, handle drag grows drawer
   test('390×844：n_open=0 确认并流转 + 取点，预览占满 stage', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, [])
@@ -66,9 +68,22 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
     // Stage (preview) sits above the ReviewShell drawer; drawer is a sizable bottom panel.
     expect(previewBox!.y).toBeLessThan(drawerBox!.y)
     expect(previewBox!.height).toBeGreaterThan(160)
-    // Default drawer height raised (~340) so feedback + decisions fit.
-    expect(drawerBox!.height).toBeGreaterThan(280)
+    // Adaptive default is lower than the old fixed 340px so preview stays readable.
+    expect(drawerBox!.height).toBeLessThan(340)
     expect(drawerBox!.y + drawerBox!.height).toBeLessThanOrEqual(rootBox!.y + rootBox!.height + 1)
+
+    // Dragging the handle upward grows the drawer.
+    const handle = page.getByTestId('review-shell-drawer-handle')
+    const handleBox = await handle.boundingBox()
+    expect(handleBox).toBeTruthy()
+    const initialDrawerHeight = drawerBox!.height
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y - 80, { steps: 6 })
+    await page.mouse.up()
+    const draggedDrawerBox = await drawer.boundingBox()
+    expect(draggedDrawerBox).toBeTruthy()
+    expect(draggedDrawerBox!.height).toBeGreaterThan(initialDrawerHeight)
 
     // Feedback lives inside the sidebar/drawer (not under the stage preview).
     expect(feedbackBox!.y).toBeGreaterThanOrEqual(drawerBox!.y - 1)

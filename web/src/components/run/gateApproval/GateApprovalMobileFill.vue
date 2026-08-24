@@ -134,7 +134,6 @@ const {
         class="min-h-0 flex-1"
         mobile
         :sidebar-width="400"
-        :drawer-height="340"
         :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
       >
         <template #stage>

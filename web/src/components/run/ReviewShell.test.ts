@@ -19,7 +19,8 @@ function mountShell(
       zh: {
         pages: {
           reviewShell: {
-            drawerHandle: '拖拽',
+            drawerHandle: '拖动手柄调整高度',
+            drawerHandleAria: '拖动手柄上下调整复审抽屉高度',
             resizeSash: '拖动调整侧栏宽度 · 双击恢复默认',
           },
         },
@@ -45,16 +46,46 @@ function firePointer(
   el: Element,
   type: 'pointerdown' | 'pointermove' | 'pointerup',
   clientX: number,
+  clientY = 0,
 ) {
   el.dispatchEvent(
     new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
       clientX,
-      clientY: 0,
+      clientY,
       pointerId: 1,
     }),
   )
+}
+
+function drawerHeightStyle(wrapper: ReturnType<typeof mountShell>): string {
+  return wrapper.get('[data-testid="review-shell-sidebar"]').attributes('style') || ''
+}
+
+function mountMobileShell(
+  props: { drawerHeight?: number } = {},
+  shellHeight = 600,
+) {
+  Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+    configurable: true,
+    value() {
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        bottom: shellHeight,
+        right: 390,
+        width: 390,
+        height: shellHeight,
+        toJSON() {
+          return {}
+        },
+      }
+    },
+  })
+  return mountShell({ mobile: true, ...props })
 }
 
 describe('ReviewShell sidebar width', () => {
@@ -351,6 +382,86 @@ describe('ReviewShell sidebar width', () => {
     firePointer(sash, 'pointerup', 600)
     await w.vm.$nextTick()
     expect(document.body.classList.contains('review-shell-sash-dragging')).toBe(false)
+    w.unmount()
+  })
+})
+
+// plan_coverage leaves (mobile drawer fix): g1.1 drag events, g1.2 hit area, g1.3 aria/locale,
+// g1.4 adaptive default + stage min, g3.1 unit tests — use leaf ids only in test_result.
+describe('ReviewShell mobile drawer', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.body.classList.remove('review-shell-drawer-dragging')
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    document.body.classList.remove('review-shell-drawer-dragging')
+    vi.restoreAllMocks()
+  })
+
+  // plan_coverage: g1.4 — adaptive default height + stage≥160 clamp
+  it('adaptive default height preserves stage min and stays below old 340 default', async () => {
+    const w = mountMobileShell({}, 600)
+    await w.vm.$nextTick()
+    const style = drawerHeightStyle(w)
+    const match = style.match(/height:\s*(\d+)px/)
+    expect(match).toBeTruthy()
+    const drawerH = Number(match![1])
+    expect(drawerH).toBeLessThan(340)
+    expect(drawerH).toBeGreaterThanOrEqual(180)
+    // stage = shell 600 - drawer should stay >= STAGE_MIN 160
+    expect(600 - drawerH).toBeGreaterThanOrEqual(160)
+    w.unmount()
+  })
+
+  // plan_coverage: g1.2 / g1.3 — 44px hit area, touch-action:none, horizontal separator aria + 拖动文案
+  it('drawer handle has touch-action none and expanded hit area', () => {
+    const w = mountMobileShell()
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]')
+    expect(handle.classes()).toContain('review-shell-drawer-handle')
+    expect(handle.attributes('role')).toBe('separator')
+    expect(handle.attributes('aria-orientation')).toBe('horizontal')
+    expect(handle.attributes('aria-label')).toContain('拖动')
+    w.unmount()
+  })
+
+  // plan_coverage: g1.1 — pointer capture, preventDefault, scroll lock while dragging
+  it('dragging drawer handle changes height and locks scroll', async () => {
+    const w = mountMobileShell({}, 600)
+    await w.vm.$nextTick()
+    const before = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
+    firePointer(handle, 'pointerdown', 200, 500)
+    firePointer(handle, 'pointermove', 200, 420)
+    await w.vm.$nextTick()
+    const after = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    expect(after).toBeGreaterThan(before)
+    expect(document.body.classList.contains('review-shell-drawer-dragging')).toBe(true)
+    firePointer(handle, 'pointerup', 200, 420)
+    await w.vm.$nextTick()
+    expect(document.body.classList.contains('review-shell-drawer-dragging')).toBe(false)
+    w.unmount()
+  })
+
+  it('clamps drawer drag to shell budget on short viewports', async () => {
+    const w = mountMobileShell({}, 360)
+    await w.vm.$nextTick()
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
+    const start = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    firePointer(handle, 'pointerdown', 200, 300)
+    firePointer(handle, 'pointermove', 200, 50)
+    await w.vm.$nextTick()
+    const end = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    expect(end).toBeGreaterThan(start)
+    expect(360 - end).toBeGreaterThanOrEqual(160)
+    w.unmount()
+  })
+
+  it('stage section enforces min height on mobile', () => {
+    const w = mountMobileShell()
+    const stage = w.get('[data-testid="review-shell-stage"]')
+    expect(stage.attributes('style')).toMatch(/min-height:\s*160px/)
     w.unmount()
   })
 })

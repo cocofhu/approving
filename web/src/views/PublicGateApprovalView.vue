@@ -1047,7 +1047,8 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
     :aria-busy="(!ready || loading || submitting) ? 'true' : 'false'"
   >
     <header
-      class="flex shrink-0 items-center justify-between border-b border-line bg-surface px-4 py-2 text-txt"
+      class="flex shrink-0 items-center justify-between border-b border-line bg-surface text-txt"
+      :class="isMobile ? 'px-3 py-1.5' : 'px-4 py-2'"
       data-testid="public-gate-chrome"
     >
       <div class="flex items-center gap-2">
@@ -1184,7 +1185,10 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             />
           </div>
           <section v-else class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-stage">
-            <div class="flex shrink-0 items-baseline gap-2 border-b border-line px-4 py-2">
+            <div
+              class="flex shrink-0 items-baseline gap-2 border-b border-line"
+              :class="isMobile ? 'px-3 py-1.5' : 'px-4 py-2'"
+            >
               <h2 class="text-sm font-semibold" data-testid="public-gate-product-label">{{ productLabel }}</h2>
               <span v-if="productName" class="text-[11px] text-txt3" data-testid="public-gate-product-name">{{ productName }}</span>
             </div>
@@ -1238,7 +1242,8 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
             <template v-else>
               <p
                 v-if="!reactAlive"
-                class="shrink-0 border-b border-line px-4 py-2 text-[11px] text-txt3"
+                class="shrink-0 border-b border-line text-[11px] text-txt3"
+                :class="isMobile ? 'px-3 py-1.5' : 'px-4 py-2'"
                 data-testid="public-gate-cold-hint"
               >
                 {{ coldHintText }}
@@ -1271,7 +1276,8 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
       </ReviewShell>
 
       <footer
-        class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface px-4 py-2.5 md:flex-row md:items-center"
+        class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface md:flex-row md:items-center"
+        :class="isMobile ? 'px-3 py-2' : 'px-4 py-2.5'"
         data-testid="public-gate-footer"
       >
         <div class="min-w-0 flex-1 text-xs text-txt2" data-testid="public-gate-upstream">

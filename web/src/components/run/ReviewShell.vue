@@ -17,13 +17,19 @@ const STAGE_MIN = 160
 const SASH_WIDTH = 4
 const DRAG_THRESHOLD_PX = 3
 
+/** Mobile drawer floor (content area, excluding handle). */
+const DRAWER_MIN = 180
+const DRAWER_MAX_RATIO = 0.75
+/** Visual handle bar is thin; hit target is expanded to this minimum. */
+const HANDLE_HIT_MIN = 44
+
 const props = withDefaults(
   defineProps<{
     /** Narrow / mobile: stage on top, sidebar as bottom drawer. */
     mobile?: boolean
     /** Desktop sidebar default width in px (also used for double-click reset). */
     sidebarWidth?: number
-    /** Initial drawer height on mobile. */
+    /** Initial drawer height hint on mobile (clamped to shell + stage budget). */
     drawerHeight?: number
     /** localStorage key for scene-isolated width persistence. */
     storageKey?: string
@@ -40,9 +46,9 @@ const { t } = useI18n()
 
 const shellRef = ref<HTMLElement | null>(null)
 const sashDragging = ref(false)
+const drawerDragging = ref(false)
 
 const height = ref(props.drawerHeight)
-let drawerDragging = false
 let startY = 0
 let startH = 0
 
@@ -69,6 +75,44 @@ function clampSidebar(px: number): number {
   const max = effectiveMax()
   const min = Math.min(SIDEBAR_MIN, max)
   return Math.max(min, Math.min(max, Math.round(px)))
+}
+
+/** Shell container height — prefer parent box over window (iframe / plugin embed). */
+function effectiveShellHeight(): number {
+  const shellH = shellRef.value?.getBoundingClientRect().height
+  if (shellH && shellH > 0) return shellH
+  return typeof window !== 'undefined' ? window.innerHeight : 600
+}
+
+function effectiveDrawerMax(shellH = effectiveShellHeight()): number {
+  return Math.floor(shellH * DRAWER_MAX_RATIO)
+}
+
+function effectiveDrawerMin(shellH = effectiveShellHeight()): number {
+  const max = effectiveDrawerMax(shellH)
+  const stageCap = Math.max(0, shellH - STAGE_MIN)
+  return Math.min(DRAWER_MIN, max, stageCap)
+}
+
+/** Clamp drawer height while guaranteeing stage ≥ STAGE_MIN. */
+function clampDrawerHeight(px: number, shellH = effectiveShellHeight()): number {
+  const min = effectiveDrawerMin(shellH)
+  const max = effectiveDrawerMax(shellH)
+  const stageCap = Math.max(min, shellH - STAGE_MIN)
+  const ceiling = Math.min(max, stageCap)
+  return Math.max(min, Math.min(ceiling, Math.round(px)))
+}
+
+/** Adaptive default: ~38% of shell, never squeezing stage below STAGE_MIN. */
+function defaultDrawerHeight(shellH = effectiveShellHeight()): number {
+  const stageCap = shellH - STAGE_MIN
+  const preferred = Math.min(Math.round(shellH * 0.38), props.drawerHeight, stageCap)
+  return clampDrawerHeight(preferred, shellH)
+}
+
+function initDrawerHeight() {
+  if (!props.mobile) return
+  height.value = defaultDrawerHeight()
 }
 
 /** Read stored width; returns null for missing/illegal/out-of-[240,480] values. */
@@ -108,27 +152,42 @@ const width = ref(clampSidebar(readStored() ?? props.sidebarWidth))
  * (Run Detail outer sash) which does not fire window.resize.
  */
 function onShellSizeChange() {
-  if (props.mobile || sashDragging.value) return
+  if (sashDragging.value) return
+  if (props.mobile) {
+    if (!drawerDragging.value) {
+      height.value = clampDrawerHeight(height.value)
+    }
+    return
+  }
   width.value = clampSidebar(width.value)
+}
+
+function setDrawerDraggingUi(on: boolean) {
+  if (typeof document === 'undefined') return
+  document.body.classList.toggle('review-shell-drawer-dragging', on)
 }
 
 function onPointerDown(e: PointerEvent) {
   if (!props.mobile) return
-  drawerDragging = true
+  drawerDragging.value = true
   startY = e.clientY
   startH = height.value
+  setDrawerDraggingUi(true)
   ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  e.preventDefault()
 }
 
 function onPointerMove(e: PointerEvent) {
-  if (!drawerDragging) return
+  if (!drawerDragging.value) return
   const dy = startY - e.clientY
-  const max = Math.floor(window.innerHeight * 0.75)
-  height.value = Math.max(180, Math.min(max, startH + dy))
+  height.value = clampDrawerHeight(startH + dy)
+  e.preventDefault()
 }
 
 function onPointerUp() {
-  drawerDragging = false
+  if (!drawerDragging.value) return
+  drawerDragging.value = false
+  setDrawerDraggingUi(false)
 }
 
 function setSashDraggingUi(on: boolean) {
@@ -172,7 +231,11 @@ function onSashDblClick() {
 watch(
   () => [props.storageKey, props.sidebarWidth, props.mobile] as const,
   () => {
-    if (props.mobile || sashDragging.value) return
+    if (props.mobile) {
+      if (!drawerDragging.value) initDrawerHeight()
+      return
+    }
+    if (sashDragging.value) return
     initWidth()
   },
 )
@@ -180,18 +243,20 @@ watch(
 let shellObserver: ResizeObserver | undefined
 
 onMounted(() => {
-  if (!props.mobile) initWidth()
+  if (props.mobile) initDrawerHeight()
+  else initWidth()
   window.addEventListener('resize', onShellSizeChange)
-  if (!props.mobile && typeof ResizeObserver !== 'undefined' && shellRef.value) {
+  if (typeof ResizeObserver !== 'undefined' && shellRef.value) {
     shellObserver = new ResizeObserver(() => onShellSizeChange())
     shellObserver.observe(shellRef.value)
   }
 })
 
 onBeforeUnmount(() => {
-  drawerDragging = false
+  drawerDragging.value = false
   sashDragging.value = false
   setSashDraggingUi(false)
+  setDrawerDraggingUi(false)
   shellObserver?.disconnect()
   shellObserver = undefined
   window.removeEventListener('resize', onShellSizeChange)
@@ -204,13 +269,14 @@ onBeforeUnmount(() => {
     class="flex h-full min-h-0"
     :class="[
       mobile ? 'flex-col' : 'flex-row',
-      sashDragging ? 'select-none' : '',
+      sashDragging || drawerDragging ? 'select-none' : '',
     ]"
     data-testid="review-shell"
   >
     <section
       class="flex min-h-0 flex-1 flex-col overflow-hidden"
       :class="mobile ? 'min-w-0 border-b border-line' : 'review-shell-stage'"
+      :style="mobile ? { minHeight: `${STAGE_MIN}px` } : undefined"
       data-testid="review-shell-stage"
     >
       <slot name="stage" />
@@ -240,22 +306,33 @@ onBeforeUnmount(() => {
       :class="mobile ? 'w-full' : 'shrink-0'"
       :style="
         mobile
-          ? { height: `${height}px`, maxHeight: '75vh', minHeight: '180px' }
+          ? {
+              height: `${height}px`,
+              maxHeight: `${effectiveDrawerMax()}px`,
+              minHeight: `${effectiveDrawerMin()}px`,
+            }
           : { width: `${width}px` }
       "
       data-testid="review-shell-sidebar"
     >
       <div
         v-if="mobile"
-        class="flex h-[22px] shrink-0 cursor-ns-resize items-center justify-center gap-2 border-b border-line text-[11px] text-txt3"
+        class="review-shell-drawer-handle relative flex shrink-0 cursor-ns-resize items-center justify-center gap-2 border-b border-line text-[11px] text-txt3"
+        role="separator"
+        aria-orientation="horizontal"
+        :aria-valuemin="effectiveDrawerMin()"
+        :aria-valuemax="effectiveDrawerMax()"
+        :aria-valuenow="height"
+        :aria-label="t('pages.reviewShell.drawerHandleAria')"
+        :title="t('pages.reviewShell.drawerHandleAria')"
         data-testid="review-shell-drawer-handle"
         @pointerdown="onPointerDown"
         @pointermove="onPointerMove"
         @pointerup="onPointerUp"
         @pointercancel="onPointerUp"
       >
-        <span class="inline-block h-[3px] w-9 bg-line-strong" />
-        {{ t('pages.reviewShell.drawerHandle') }}
+        <span class="review-shell-drawer-handle-pill inline-block h-1 w-11 rounded-full bg-line-strong" />
+        <span class="pointer-events-none select-none">{{ t('pages.reviewShell.drawerHandle') }}</span>
       </div>
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <slot name="sidebar" />
@@ -280,6 +357,23 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0 -4px;
 }
+.review-shell-drawer-handle {
+  min-height: 44px;
+  touch-action: none;
+  z-index: 2;
+}
+/* Expanded vertical hit target without a tall visual bar. */
+.review-shell-drawer-handle::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -10px;
+  bottom: -10px;
+}
+.review-shell-drawer-handle-pill {
+  pointer-events: none;
+}
 </style>
 
 <style>
@@ -287,5 +381,10 @@ onBeforeUnmount(() => {
 body.review-shell-sash-dragging {
   cursor: col-resize;
   user-select: none;
+}
+body.review-shell-drawer-dragging {
+  cursor: ns-resize;
+  user-select: none;
+  touch-action: none;
 }
 </style>
