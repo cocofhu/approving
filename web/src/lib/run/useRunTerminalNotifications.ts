@@ -281,7 +281,9 @@ async function ensurePrefsHydrated(signal?: AbortSignal): Promise<boolean> {
   if (prefsHydrated) return true
   if (prefsFetchPromise) return prefsFetchPromise
 
-  const flight = (async () => {
+  // Pre-init so finally can compare the same handle (avoids TS2454 on self-ref).
+  let flight: Promise<boolean> | null = null
+  flight = (async () => {
     try {
       const prefs = await fetchServerPrefs(signal)
       // Identity may have flipped while the request was in flight.
