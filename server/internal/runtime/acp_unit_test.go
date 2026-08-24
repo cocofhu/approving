@@ -405,6 +405,18 @@ func TestPreviewNodePromptExtras(t *testing.T) {
 	if strings.Contains(off, "节点配置:direct_preview") {
 		t.Errorf("default must not inject direct_preview: %q", off)
 	}
+	for _, want := range []string{
+		"port 与 url 必须恰好提供其一",
+		`set_preview(url=`,
+		"不要为了走 port 而在沙箱里反代外部站点",
+	} {
+		if !strings.Contains(off, want) {
+			t.Errorf("preview contract missing %q:\n%s", want, off)
+		}
+	}
+	if strings.Contains(off, "port 必填") {
+		t.Errorf("preview contract must not require port: %q", off)
+	}
 }
 
 func TestApplyAppPreviewEnv(t *testing.T) {

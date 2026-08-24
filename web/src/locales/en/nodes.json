@@ -541,7 +541,7 @@
     },
     "app_preview": {
       "label": "App preview",
-      "desc": "Start app in sandbox via set_preview; wait state is pick-annotate · await confirmation (single exit)",
+      "desc": "Start app in sandbox or register an external URL via set_preview; wait state is pick-annotate · await confirmation (single exit)",
       "fields": {
         "skill_profile": {
           "label": "Agent profile"
