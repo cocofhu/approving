@@ -25,7 +25,15 @@ const designDoc: PlanDoc = {
   },
   data_design: {
     summary: 'data',
-    entities: [{ name: 'planDoc' }],
+    entities: [{
+      name: 'planDoc',
+      fields: [
+        { name: 'title', type: 'string' },
+        { name: 'id', type: 'uuid', pk: true, fk: 'Other.ref' },
+      ],
+      relationships: ['1..* planGoal'],
+    }],
+    relationships: ['planDoc contains planGoal'],
     diagram: { source: 'erDiagram\n  A ||--o{ B : has' },
   },
   interfaces: [{ name: 'set_plan', summary: '写入' }],
@@ -117,6 +125,36 @@ describe('PlanView', () => {
     expect(wrapper.find('[data-testid="plan-sec-test"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('1/3')
     expect(mermaidRender).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('renders entity fields, badges, and relationships', async () => {
+    const wrapper = mountPlan(designDoc)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plan-entity-fields"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('title')
+    expect(wrapper.text()).toContain('string')
+    expect(wrapper.text()).toContain('PK')
+    expect(wrapper.text()).toContain('fk→Other.ref')
+    expect(wrapper.find('[data-testid="plan-entity-relationships"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('1..* planGoal')
+    expect(wrapper.find('[data-testid="plan-data-relationships"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('planDoc contains planGoal')
+    wrapper.unmount()
+  })
+
+  it('renders legacy attributes when fields absent', () => {
+    const doc: PlanDoc = {
+      data_design: {
+        summary: 'legacy',
+        entities: [{ name: 'Old', attributes: ['id', 'name'] }],
+      },
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    }
+    const wrapper = mountPlan(doc)
+    expect(wrapper.find('[data-testid="plan-entity-attributes"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('legacy')
+    expect(wrapper.text()).toContain('id')
     wrapper.unmount()
   })
 

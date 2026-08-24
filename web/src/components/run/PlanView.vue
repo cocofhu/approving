@@ -8,8 +8,17 @@ import type { Artifact } from '@/lib/shared/types'
 
 export type PlanSub = { id?: string; title?: string; detail?: string; status?: string }
 export type PlanGoal = { id?: string; title?: string; detail?: string; status?: string; subgoals?: PlanSub[] }
+export type PlanField = {
+  name?: string
+  type?: string
+  pk?: boolean
+  nullable?: boolean
+  fk?: string
+  description?: string
+}
 export type PlanEntity = {
   name?: string
+  fields?: PlanField[]
   attributes?: string[]
   description?: string
   relationships?: string[]
@@ -88,6 +97,13 @@ const STATUS: Record<string, { labelKey: string; cls: string; dot: string }> = {
   in_progress: { labelKey: 'pages.plan.status.in_progress', cls: 'bg-info/15 text-info', dot: 'bg-info animate-pulseglow' },
   pending: { labelKey: 'pages.plan.status.pending', cls: 'bg-elevated text-txt3', dot: 'bg-line-strong' },
 }
+function fieldBadges(f: PlanField) {
+  const tags: string[] = []
+  if (f.pk) tags.push('PK')
+  if (f.nullable) tags.push('nullable')
+  if (f.fk) tags.push(`fk→${f.fk}`)
+  return tags
+}
 function st(s?: string) {
   const key = s || 'pending'
   const meta = STATUS[key] || STATUS.pending
@@ -152,12 +168,46 @@ function st(s?: string) {
         >
           {{ displaySummary(doc.data_design.summary) }}
         </div>
-        <ul v-if="doc.data_design.entities?.length" class="mt-2 space-y-1">
+        <ul v-if="doc.data_design.entities?.length" class="mt-2 space-y-2">
           <li v-for="(e, ei) in doc.data_design.entities" :key="e.name || ei" class="text-[12px] text-txt2">
-            <code class="font-mono text-[11px] text-txt3">{{ e.name }}</code>
-            <span v-if="e.description"> — {{ e.description }}</span>
-            <AnnotateBtn :json-path="`data_design.entities[${ei}]`" :label="e.name || `entity ${ei + 1}`" />
+            <div class="group flex flex-wrap items-center gap-2">
+              <code class="font-mono text-[11px] text-txt3">{{ e.name }}</code>
+              <span v-if="e.description"> — {{ e.description }}</span>
+              <AnnotateBtn :json-path="`data_design.entities[${ei}]`" :label="e.name || `entity ${ei + 1}`" />
+            </div>
+            <ul v-if="e.fields?.length" class="mt-1 space-y-0.5 border-l border-line pl-2" data-testid="plan-entity-fields">
+              <li v-for="(f, fi) in e.fields" :key="f.name || fi" class="flex flex-wrap items-center gap-1.5">
+                <code class="font-mono text-[11px] text-txt">{{ f.name }}</code>
+                <span class="text-[11px] text-txt3">{{ f.type }}</span>
+                <span
+                  v-for="tag in fieldBadges(f)"
+                  :key="tag"
+                  class="rounded bg-base px-1 py-0.5 text-[10px] font-medium text-txt3"
+                  data-testid="plan-field-badge"
+                >{{ tag }}</span>
+                <span v-if="f.description" class="text-[11px] text-txt3">— {{ f.description }}</span>
+              </li>
+            </ul>
+            <ul v-if="e.attributes?.length" class="mt-1 space-y-0.5 border-l border-line pl-2" data-testid="plan-entity-attributes">
+              <li v-for="(a, ai) in e.attributes" :key="ai" class="text-[11px] text-txt3">
+                <span class="italic">legacy</span> {{ a }}
+              </li>
+            </ul>
+            <ul v-if="e.relationships?.length" class="mt-1 space-y-0.5 border-l border-line pl-2" data-testid="plan-entity-relationships">
+              <li v-for="(r, ri) in e.relationships" :key="ri" class="text-[11px] text-txt2">{{ r }}</li>
+            </ul>
           </li>
+        </ul>
+        <ul
+          v-if="doc.data_design.relationships?.length"
+          class="mt-2 space-y-0.5"
+          data-testid="plan-data-relationships"
+        >
+          <li
+            v-for="(r, ri) in doc.data_design.relationships"
+            :key="ri"
+            class="text-[12px] text-txt2"
+          >{{ r }}</li>
         </ul>
         <MermaidDiagram
           v-if="doc.data_design.diagram?.source"
