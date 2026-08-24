@@ -332,3 +332,9 @@ export interface AuthLoginResponse {
   expires_at: string
   redirect?: string
 }
+
+/** Server-authoritative run-terminal notification read prefs. */
+export interface NotificationReadPrefs {
+  enabledAt: string
+  readIds: string[]
+}

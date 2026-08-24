@@ -23,41 +23,42 @@ import (
 
 // Handlers bundles dependencies for route handlers.
 type Handlers struct {
-	WF                *services.WorkflowService
-	Projects          *services.ProjectService
-	Runs              *services.RunService
-	Arts              *services.ArtifactService
-	APIKeys           *services.APIKeyService
-	Skill             *services.SkillService
-	Org               *services.OrgService
-	Dash              *services.DashboardService
-	Sbx               *services.SandboxService
-	Eng               *engine.Engine
-	MCP               *mcp.Host
-	Pm                *services.PmService
-	PmProgress        *services.PmProgress
-	PmTurns           *services.PmTurnRunner
-	PMMCP             *pmmcp.Host
-	MemoryMCP         *memorymcp.Host
-	ContextMCP        *contextmcp.Host
-	SchedulerMCP      *schedulermcp.Host
-	Preview           *services.PreviewService
-	Issues            *services.IssueService
-	RequirementDrafts *services.RequirementDraftService
-	Settings          *services.SettingsService
-	Shutdown          *shutdown.Coordinator
-	Auth              *auth.Service
-	PlatformRules     *services.PlatformRuleService
-	Channels          *services.ChannelConfigService
-	RunNotify         *services.RunNotifyService
-	Browser           *browser.Service
-	Audit             *services.ProjectAuditService
-	Onboarding        *services.OnboardingService
-	GateShare         *gateshare.Service
-	GateShareNonces   *gateshare.NonceStore
-	GateShareTickets  *gateshare.TicketStore
-	GateShareSessions *gateshare.PreviewSessionHub
-	GateShareLimiter  *gateshare.IPLimiter
+	WF                    *services.WorkflowService
+	Projects              *services.ProjectService
+	Runs                  *services.RunService
+	Arts                  *services.ArtifactService
+	APIKeys               *services.APIKeyService
+	Skill                 *services.SkillService
+	Org                   *services.OrgService
+	Dash                  *services.DashboardService
+	Sbx                   *services.SandboxService
+	Eng                   *engine.Engine
+	MCP                   *mcp.Host
+	Pm                    *services.PmService
+	PmProgress            *services.PmProgress
+	PmTurns               *services.PmTurnRunner
+	PMMCP                 *pmmcp.Host
+	MemoryMCP             *memorymcp.Host
+	ContextMCP            *contextmcp.Host
+	SchedulerMCP          *schedulermcp.Host
+	Preview               *services.PreviewService
+	Issues                *services.IssueService
+	RequirementDrafts     *services.RequirementDraftService
+	NotificationReadPrefs *services.NotificationReadPrefsService
+	Settings              *services.SettingsService
+	Shutdown              *shutdown.Coordinator
+	Auth                  *auth.Service
+	PlatformRules         *services.PlatformRuleService
+	Channels              *services.ChannelConfigService
+	RunNotify             *services.RunNotifyService
+	Browser               *browser.Service
+	Audit                 *services.ProjectAuditService
+	Onboarding            *services.OnboardingService
+	GateShare             *gateshare.Service
+	GateShareNonces       *gateshare.NonceStore
+	GateShareTickets      *gateshare.TicketStore
+	GateShareSessions     *gateshare.PreviewSessionHub
+	GateShareLimiter      *gateshare.IPLimiter
 	// PublicAdvertise is the browser-facing base for QQ/preview deep links.
 	// Gate/review share URLs mint from Request.Host instead. Public CSRF
 	// compares Origin/Referer to this request's Host (never client

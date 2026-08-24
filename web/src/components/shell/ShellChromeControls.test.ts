@@ -41,6 +41,18 @@ vi.mock('@/lib/api/api', () => ({
       asOf: '2026-08-12T00:00:00Z',
       timezone: 'UTC',
     }),
+    getNotificationReadPrefs: vi.fn(async () => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [] as string[],
+    })),
+    markNotificationRead: vi.fn(async (runId: string) => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [runId],
+    })),
+    markAllNotificationsRead: vi.fn(async (runIds: string[]) => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: runIds,
+    })),
   },
   isPaginated: (data: unknown): data is { items: unknown[]; total: number } =>
     data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
@@ -50,7 +62,6 @@ import { api } from '@/lib/api/api'
 import { __resetNotificationsPageEntryForTests } from '@/lib/composables/useNotificationsPageEntry'
 import {
   __resetRunTerminalNotificationsForTests,
-  prefsKeyForUser,
   RUN_TERMINAL_PANEL_LIMIT,
   RUN_TERMINAL_POOL_SIZE,
 } from '@/lib/run/useRunTerminalNotifications'
@@ -75,8 +86,11 @@ function paged(items: Run[], total = items.length) {
   return { items, total, page: 1, pageSize: RUN_TERMINAL_POOL_SIZE, hasMore: false }
 }
 
-function seedBaseline(enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []) {
-  localStorage.setItem(prefsKeyForUser('tester'), JSON.stringify({ enabledAt, readIds }))
+function seedBaseline(_enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []) {
+  vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
+    enabledAt: '2020-01-01T00:00:00Z',
+    readIds: [...readIds],
+  })
 }
 
 function mountChrome(layout: 'bar' | 'sidebar' = 'sidebar') {
@@ -110,7 +124,22 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     vi.mocked(api.listRuns).mockReset()
     vi.mocked(api.getRun).mockReset()
     vi.mocked(api.artifactContent).mockReset()
+    vi.mocked(api.getNotificationReadPrefs).mockReset()
+    vi.mocked(api.markNotificationRead).mockReset()
+    vi.mocked(api.markAllNotificationsRead).mockReset()
     vi.mocked(api.listRuns).mockResolvedValue(paged([]))
+    vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [],
+    })
+    vi.mocked(api.markNotificationRead).mockImplementation(async (runId: string) => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: [runId],
+    }))
+    vi.mocked(api.markAllNotificationsRead).mockImplementation(async (runIds: string[]) => ({
+      enabledAt: '2020-01-01T00:00:00Z',
+      readIds: runIds,
+    }))
     vi.mocked(api.getRun).mockResolvedValue(run({ id: 'r1', status: 'completed', artifacts: [] }))
     vi.mocked(api.artifactContent).mockImplementation(async (id: string) => ({
       id,
@@ -208,6 +237,10 @@ describe('ShellChromeControls notifications (g1.2)', () => {
   })
 
   it('shows before-baseline label on history items without counting them unread', async () => {
+    vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
+      enabledAt: new Date().toISOString(),
+      readIds: [],
+    })
     vi.mocked(api.listRuns).mockResolvedValue(
       paged([run({ id: 'hist', status: 'completed', startedAt: '2026-08-01T12:00:00Z' })]),
     )
