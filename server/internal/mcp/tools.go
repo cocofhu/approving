@@ -654,6 +654,7 @@ func artifactTools() []map[string]any {
 			"name": "set_plan",
 			"description": "仅计划(plan)或 Approve 节点可用:写入本次运行的全局结构化计划。计划最多两级:大目标 goals[] → 小目标 subgoals[](小目标是叶子,其下不能再有子目标)。" +
 				"可选 SDD 设计区(architecture/data_design/interfaces/components/interaction/test_design);写入设计区时应六节齐全,无内容用「不涉及」占位,可在 architecture/data_design/interaction 挂 Mermaid diagram。" +
+				"当 data_design.summary 非「不涉及」/N/A 时(实质数据设计),必须提供 ER 图(diagram.source)、至少 1 个实体,且每个实体至少 1 个结构化 fields[](name+type 必填;可选 pk/nullable/fk/description);仅 legacy attributes 不足以通过。流程:Agent 调用 set_plan → 解析与硬门禁 → 入库 → PlanView 展示。" +
 				"存量仅 goals 的计划仍合法。在计划节点这是唯一交付;在 Approve 节点这是两份强制交付之一(另一份是 set_clarified_requirement)。不要写代码或改仓库。",
 			"inputSchema": map[string]any{
 				"type": "object",
@@ -669,7 +670,7 @@ func artifactTools() []map[string]any {
 					},
 					"data_design": map[string]any{
 						"type":        "object",
-						"description": "数据设计;summary 可为「不涉及」;可选 entities 与 ER diagram",
+						"description": "数据设计;summary 可为「不涉及」;实质启用时须 ER diagram + entities[].fields;legacy attributes 只读兼容",
 						"properties": map[string]any{
 							"summary": strProp("数据设计摘要,可为「不涉及」"),
 							"entities": map[string]any{
@@ -677,10 +678,26 @@ func artifactTools() []map[string]any {
 								"items": map[string]any{
 									"type": "object",
 									"properties": map[string]any{
-										"name":          strProp("实体名"),
-										"attributes":    strList("可选:属性列表"),
+										"name": strProp("实体名"),
+										"fields": map[string]any{
+											"type":        "array",
+											"description": "结构化表字段(实质 data_design 必填);name+type 必填",
+											"items": map[string]any{
+												"type": "object",
+												"properties": map[string]any{
+													"name":        strProp("字段名"),
+													"type":        strProp("字段类型"),
+													"pk":          map[string]any{"type": "boolean", "description": "可选:主键"},
+													"nullable":    map[string]any{"type": "boolean", "description": "可选:可空"},
+													"fk":          strProp("可选:外键引用,如 Entity.field"),
+													"description": strProp("可选:说明"),
+												},
+												"required": []string{"name", "type"},
+											},
+										},
+										"attributes":    strList("可选:legacy 属性列表(不满足硬门禁)"),
 										"description":   strProp("可选:说明"),
-										"relationships": strList("可选:关系说明"),
+										"relationships": strList("可选:实体级关系说明"),
 									},
 									"required": []string{"name"},
 								},

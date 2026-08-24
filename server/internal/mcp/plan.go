@@ -51,11 +51,21 @@ type planArchitecture struct {
 	Diagram *planDiagram `json:"diagram,omitempty"`
 }
 
+type planField struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	PK          *bool  `json:"pk,omitempty"`
+	Nullable    *bool  `json:"nullable,omitempty"`
+	FK          string `json:"fk,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 type planEntity struct {
-	Name          string   `json:"name"`
-	Attributes    []string `json:"attributes,omitempty"`
-	Description   string   `json:"description,omitempty"`
-	Relationships []string `json:"relationships,omitempty"`
+	Name          string      `json:"name"`
+	Fields        []planField `json:"fields,omitempty"`
+	Attributes    []string    `json:"attributes,omitempty"`
+	Description   string      `json:"description,omitempty"`
+	Relationships []string    `json:"relationships,omitempty"`
 }
 
 type planDataDesign struct {
@@ -132,6 +142,55 @@ func parsePlanDiagram(path string, d *planDiagram) (*planDiagram, error) {
 	return out, nil
 }
 
+func isDataDesignSubstantive(summary string) bool {
+	s := strings.TrimSpace(summary)
+	return s != "" && s != planNAPlaceholder && s != "N/A"
+}
+
+func parsePlanFields(entityIdx int, in []planField) ([]planField, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make([]planField, 0, len(in))
+	for fi, f := range in {
+		name := strings.TrimSpace(f.Name)
+		if name == "" {
+			return nil, fmt.Errorf("data_design.entities[%d].fields[%d].name 不能为空", entityIdx, fi)
+		}
+		typ := strings.TrimSpace(f.Type)
+		if typ == "" {
+			return nil, fmt.Errorf("data_design.entities[%d].fields[%d].type 不能为空", entityIdx, fi)
+		}
+		out = append(out, planField{
+			Name:        name,
+			Type:        typ,
+			PK:          f.PK,
+			Nullable:    f.Nullable,
+			FK:          strings.TrimSpace(f.FK),
+			Description: strings.TrimSpace(f.Description),
+		})
+	}
+	return out, nil
+}
+
+func validateDataDesignHardGate(dd *planDataDesign) error {
+	if dd == nil || !isDataDesignSubstantive(dd.Summary) {
+		return nil
+	}
+	if dd.Diagram == nil || strings.TrimSpace(dd.Diagram.Source) == "" {
+		return errors.New("data_design.diagram.source 不能为空")
+	}
+	if len(dd.Entities) == 0 {
+		return errors.New("data_design.entities 不能为空")
+	}
+	for i, e := range dd.Entities {
+		if len(e.Fields) == 0 {
+			return fmt.Errorf("data_design.entities[%d].fields 不能为空", i)
+		}
+	}
+	return nil
+}
+
 func parseArchitecture(in *planArchitecture) (*planArchitecture, error) {
 	if in == nil {
 		return nil, nil
@@ -162,8 +221,13 @@ func parseDataDesign(in *planDataDesign) (*planDataDesign, error) {
 		if name == "" {
 			return nil, fmt.Errorf("data_design.entities[%d] 缺少 name", i)
 		}
+		fields, err := parsePlanFields(i, e.Fields)
+		if err != nil {
+			return nil, err
+		}
 		ent := planEntity{
 			Name:        name,
+			Fields:      fields,
 			Description: strings.TrimSpace(e.Description),
 		}
 		for _, a := range e.Attributes {
@@ -187,12 +251,16 @@ func parseDataDesign(in *planDataDesign) (*planDataDesign, error) {
 	if summary == "" && diagram == nil && len(entities) == 0 && len(rels) == 0 {
 		return nil, nil
 	}
-	return &planDataDesign{
+	out := &planDataDesign{
 		Summary:       summary,
 		Entities:      entities,
 		Relationships: rels,
 		Diagram:       diagram,
-	}, nil
+	}
+	if err := validateDataDesignHardGate(out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func parseInterfaces(in []planInterfaceItem) ([]planInterfaceItem, error) {
@@ -529,6 +597,35 @@ func RenderPlanMarkdown(content string) string {
 					b.WriteString(": " + e.Description)
 				}
 				b.WriteString("\n")
+				for _, f := range e.Fields {
+					line := "  - field `" + f.Name + "` " + f.Type
+					var tags []string
+					if f.PK != nil && *f.PK {
+						tags = append(tags, "pk")
+					}
+					if f.Nullable != nil && *f.Nullable {
+						tags = append(tags, "nullable")
+					}
+					if f.FK != "" {
+						tags = append(tags, "fk→"+f.FK)
+					}
+					if len(tags) > 0 {
+						line += " (" + strings.Join(tags, ", ") + ")"
+					}
+					if f.Description != "" {
+						line += " — " + f.Description
+					}
+					b.WriteString(line + "\n")
+				}
+				for _, a := range e.Attributes {
+					b.WriteString("  - attr(legacy) `" + a + "`\n")
+				}
+				for _, r := range e.Relationships {
+					b.WriteString("  - rel: " + r + "\n")
+				}
+			}
+			for _, r := range doc.DataDesign.Relationships {
+				b.WriteString("- relationship: " + r + "\n")
 			}
 			renderDiagramMarkdown(&b, "data_design.diagram", doc.DataDesign.Diagram)
 			b.WriteString("\n")

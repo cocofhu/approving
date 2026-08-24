@@ -34,9 +34,16 @@ func TestParsePlanFullSixSections(t *testing.T) {
 			"diagram": map[string]any{"source": "flowchart LR\n  A-->B", "caption": "架构"},
 		},
 		"data_design": map[string]any{
-			"summary":  "data",
-			"entities": []any{map[string]any{"name": "planDoc", "attributes": []any{"title", "goals"}}},
-			"diagram":  map[string]any{"format": "mermaid", "source": "erDiagram\n  A ||--o{ B : has"},
+			"summary": "data",
+			"entities": []any{map[string]any{
+				"name": "planDoc",
+				"fields": []any{
+					map[string]any{"name": "title", "type": "string"},
+					map[string]any{"name": "goals", "type": "json"},
+				},
+				"attributes": []any{"title", "goals"},
+			}},
+			"diagram": map[string]any{"format": "mermaid", "source": "erDiagram\n  A ||--o{ B : has"},
 		},
 		"interfaces": []any{map[string]any{"name": "set_plan", "kind": "software", "summary": "写入"}},
 		"components": []any{map[string]any{"name": "plan.go", "responsibility": "parse"}},
@@ -56,6 +63,9 @@ func TestParsePlanFullSixSections(t *testing.T) {
 	if doc.DataDesign == nil || len(doc.DataDesign.Entities) != 1 || doc.DataDesign.Entities[0].Name != "planDoc" {
 		t.Fatalf("data_design: %+v", doc.DataDesign)
 	}
+	if len(doc.DataDesign.Entities[0].Fields) != 2 {
+		t.Fatalf("fields: %+v", doc.DataDesign.Entities[0].Fields)
+	}
 	if len(doc.Interfaces) != 1 || doc.Interfaces[0].Name != "set_plan" {
 		t.Fatalf("interfaces: %+v", doc.Interfaces)
 	}
@@ -69,7 +79,7 @@ func TestParsePlanFullSixSections(t *testing.T) {
 		t.Fatalf("test_design=%q", doc.TestDesign)
 	}
 	md := RenderPlanMarkdown(string(mustPlanJSON(doc)))
-	for _, want := range []string{"设计区", "Architecture", "Data design", "Interfaces", "Components", "Interaction", "Test design", "flowchart LR"} {
+	for _, want := range []string{"设计区", "Architecture", "Data design", "Interfaces", "Components", "Interaction", "Test design", "flowchart LR", "field `title`"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("markdown missing %q:\n%s", want, md)
 		}
@@ -185,6 +195,131 @@ func TestPlanCoverageDenominatorIgnoresDesign(t *testing.T) {
 	if !ok {
 		t.Fatalf("coverage should pass: %s", reason)
 	}
+}
+
+func TestParsePlanDataDesignHardGate(t *testing.T) {
+	base := map[string]any{
+		"goals": []any{map[string]any{"title": "G"}},
+	}
+	substantive := map[string]any{
+		"summary": "用户库表",
+		"entities": []any{map[string]any{
+			"name": "User",
+			"fields": []any{
+				map[string]any{"name": "id", "type": "uuid", "pk": true},
+				map[string]any{"name": "email", "type": "string"},
+			},
+		}},
+		"diagram": map[string]any{"source": "erDiagram\n  USER ||--o{ ORDER : places"},
+	}
+
+	t.Run("goals-only passes", func(t *testing.T) {
+		if _, err := parsePlan(map[string]any{"goals": base["goals"]}); err != nil {
+			t.Fatalf("goals-only: %v", err)
+		}
+	})
+
+	t.Run("NA exempt", func(t *testing.T) {
+		args := map[string]any{
+			"data_design": map[string]any{"summary": "不涉及"},
+			"goals":       base["goals"],
+		}
+		if _, err := parsePlan(args); err != nil {
+			t.Fatalf("NA: %v", err)
+		}
+	})
+
+	t.Run("NA N/A exempt", func(t *testing.T) {
+		args := map[string]any{
+			"data_design": map[string]any{"summary": "N/A"},
+			"goals":       base["goals"],
+		}
+		if _, err := parsePlan(args); err != nil {
+			t.Fatalf("N/A: %v", err)
+		}
+	})
+
+	t.Run("substantive ok", func(t *testing.T) {
+		args := map[string]any{"data_design": substantive, "goals": base["goals"]}
+		doc, err := parsePlan(args)
+		if err != nil {
+			t.Fatalf("ok: %v", err)
+		}
+		if len(doc.DataDesign.Entities[0].Fields) != 2 {
+			t.Fatalf("fields: %+v", doc.DataDesign.Entities[0].Fields)
+		}
+	})
+
+	t.Run("missing diagram", func(t *testing.T) {
+		dd := copyMap(substantive)
+		delete(dd, "diagram")
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "data_design.diagram.source") {
+			t.Fatalf("want diagram error, got %v", err)
+		}
+	})
+
+	t.Run("empty entities", func(t *testing.T) {
+		dd := copyMap(substantive)
+		dd["entities"] = []any{}
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "data_design.entities") {
+			t.Fatalf("want entities error, got %v", err)
+		}
+	})
+
+	t.Run("empty fields", func(t *testing.T) {
+		dd := copyMap(substantive)
+		dd["entities"] = []any{map[string]any{"name": "User", "fields": []any{}}}
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "data_design.entities[0].fields") {
+			t.Fatalf("want fields error, got %v", err)
+		}
+	})
+
+	t.Run("legacy attributes only", func(t *testing.T) {
+		dd := map[string]any{
+			"summary":  "db",
+			"entities": []any{map[string]any{"name": "User", "attributes": []any{"id", "email"}}},
+			"diagram":  map[string]any{"source": "erDiagram\n  USER {}"},
+		}
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "data_design.entities[0].fields") {
+			t.Fatalf("want fields error for legacy attrs, got %v", err)
+		}
+	})
+
+	t.Run("field missing name", func(t *testing.T) {
+		dd := copyMap(substantive)
+		dd["entities"] = []any{map[string]any{
+			"name":   "User",
+			"fields": []any{map[string]any{"type": "string"}},
+		}}
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "fields[0].name") {
+			t.Fatalf("want name error, got %v", err)
+		}
+	})
+
+	t.Run("field missing type", func(t *testing.T) {
+		dd := copyMap(substantive)
+		dd["entities"] = []any{map[string]any{
+			"name":   "User",
+			"fields": []any{map[string]any{"name": "id"}},
+		}}
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "fields[0].type") {
+			t.Fatalf("want type error, got %v", err)
+		}
+	})
+}
+
+func copyMap(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 func mustPlanJSON(doc planDoc) []byte {
