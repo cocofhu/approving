@@ -9,7 +9,7 @@ import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
 import ReposEditor, { type RepoRow } from '@/components/ui/ReposEditor.vue'
 import AcpStatusPill from '@/components/run/AcpStatusPill.vue'
 import { renderMarkdown } from '@/lib/shared/markdown'
-import { api, type SandboxView } from '@/lib/api/api'
+import { api, type CreateAgentTestPayload, type SandboxView } from '@/lib/api/api'
 import {
   SITE_ATTACH_MAX_BYTES,
   SITE_ATTACH_MAX_MIB,
@@ -33,6 +33,12 @@ const props = defineProps<{
   embedded?: boolean
   /** Agent home project id from Studio; empty = unbound (no task-scheduler). */
   homeProjectId?: string
+  /**
+   * Optional override for starting a test sandbox.
+   * Agent Studio omits this (uses POST /agents/:name/test).
+   * Project shared-config dialogue test passes createProjectSharedAgentTest.
+   */
+  createTest?: (profile: string, payload: CreateAgentTestPayload) => Promise<SandboxView>
 }>()
 
 const { t, te } = useI18n()
@@ -153,7 +159,9 @@ async function start() {
         : {
             ...(props.homeProjectId?.trim() ? { projectId: props.homeProjectId.trim() } : {}),
           }
-    sandbox.value = await api.createAgentTest(props.profile, payload)
+    sandbox.value = props.createTest
+      ? await props.createTest(props.profile, payload)
+      : await api.createAgentTest(props.profile, payload)
     await waitReady(sandbox.value.id)
   } catch (e: any) {
     status.value = 'error'

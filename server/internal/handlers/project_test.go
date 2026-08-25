@@ -1,14 +1,12 @@
 package handlers_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
 )
 
 func TestProjectCRUDAndErrors(t *testing.T) {
@@ -24,7 +22,6 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 	w = hn.do("POST", "/api/projects", map[string]any{
 		"name":        "ProjA",
 		"description": "desc",
-		"sandboxEnv":  []map[string]any{{"key": "FOO", "value": "bar"}},
 		"variables":   []map[string]any{{"name": "x", "type": "string", "value": "1"}},
 	})
 	if w.Code != http.StatusOK {
@@ -33,6 +30,9 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 	id := jsonField(w.Body.String(), "id")
 	if id == "" {
 		t.Fatalf("missing id: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "sandboxEnv") {
+		t.Fatalf("project API must not return sandboxEnv: %s", w.Body.String())
 	}
 
 	// Get
@@ -65,32 +65,15 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 		t.Fatalf("bad json create: %d", w.Code)
 	}
 
-	// Official ACP auth key accepted (forced secret, masked in response)
-	w = hn.do("POST", "/api/projects", map[string]any{
-		"name":       "AuthEnv",
-		"sandboxEnv": []map[string]any{{"key": "CURSOR_API_KEY", "value": "x", "secret": true}},
+	// Shared agent config stores project-level env (replaces sandboxEnv API)
+	w = hn.do("PUT", "/api/projects/"+id+"/shared-agent-config", map[string]any{
+		"env": map[string]string{"CURSOR_API_KEY": "x"},
 	})
 	if w.Code != http.StatusOK {
-		t.Fatalf("auth env: %d %s", w.Code, w.Body.String())
+		t.Fatalf("shared agent put: %d %s", w.Code, w.Body.String())
 	}
-	var authEnvProj models.Project
-	if err := json.Unmarshal(w.Body.Bytes(), &authEnvProj); err != nil {
-		t.Fatalf("auth env decode: %v", err)
-	}
-	if len(authEnvProj.SandboxEnv) != 1 || authEnvProj.SandboxEnv[0].Key != "CURSOR_API_KEY" {
-		t.Fatalf("auth env sandboxEnv: %+v", authEnvProj.SandboxEnv)
-	}
-	if authEnvProj.SandboxEnv[0].Value != services.SecretMask || !authEnvProj.SandboxEnv[0].Secret {
-		t.Fatalf("auth env mask/secret: %+v", authEnvProj.SandboxEnv[0])
-	}
-
-	// Secret placeholder on new key
-	w = hn.do("POST", "/api/projects", map[string]any{
-		"name":       "BadSecret",
-		"sandboxEnv": []map[string]any{{"key": "SECRET", "value": services.SecretMask, "secret": true}},
-	})
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("secret mask: %d %s", w.Code, w.Body.String())
+	if !strings.Contains(w.Body.String(), "CURSOR_API_KEY") {
+		t.Fatalf("shared agent env missing: %s", w.Body.String())
 	}
 
 	// Update
@@ -99,7 +82,6 @@ func TestProjectCRUDAndErrors(t *testing.T) {
 	w = hn.do("PUT", "/api/projects/"+id, map[string]any{
 		"name":        newName,
 		"description": newDesc,
-		"sandboxEnv":  []map[string]any{{"key": "BAR", "value": "baz"}},
 		"variables":   []map[string]any{{"name": "y", "type": "string", "value": "2"}},
 	})
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ProjA2") {

@@ -81,6 +81,9 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PATCH("/projects/:id", h.UpdateProject)
 		api.DELETE("/projects/:id", h.DeleteProject)
 		api.POST("/projects/:id/bootstrap-onboarding", h.BootstrapProjectOnboarding)
+		api.GET("/projects/:id/shared-agent-config", h.GetProjectSharedAgent)
+		api.PUT("/projects/:id/shared-agent-config", h.PutProjectSharedAgent)
+		api.POST("/projects/:id/shared-agent-config/test", h.CreateProjectSharedAgentTest)
 
 		api.GET("/projects/:id/requirement-drafts", h.ListRequirementDrafts)
 		api.POST("/projects/:id/requirement-drafts", h.CreateRequirementDraft)

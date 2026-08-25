@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/envauth"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
@@ -51,17 +50,18 @@ type OnboardingBootstrapResult struct {
 
 // OnboardingService atomically bootstraps project auth + 5 agents + light workflow.
 type OnboardingService struct {
-	Projects *ProjectService
-	Skills   *SkillService
-	WF       *WorkflowService
+	Projects    *ProjectService
+	Skills      *SkillService
+	SharedAgent *SharedAgentService
+	WF          *WorkflowService
 }
 
 // NewOnboardingService wires dependencies.
-func NewOnboardingService(projects *ProjectService, skills *SkillService, wf *WorkflowService) *OnboardingService {
-	return &OnboardingService{Projects: projects, Skills: skills, WF: wf}
+func NewOnboardingService(projects *ProjectService, skills *SkillService, shared *SharedAgentService, wf *WorkflowService) *OnboardingService {
+	return &OnboardingService{Projects: projects, Skills: skills, SharedAgent: shared, WF: wf}
 }
 
-// Bootstrap writes project sandboxEnv auth, saves five agents from embed templates,
+// Bootstrap writes shared-agent env auth, saves five agents from embed templates,
 // and publishes the light onboarding workflow. It is idempotent for the fixed names
 // within the same project. Cross-project name conflicts are rejected with
 // ErrOnboardingAgentConflict (no overwrite of another project's agents).
@@ -175,51 +175,28 @@ func (s *OnboardingService) checkOnboardingAgentConflicts(projectID string) erro
 }
 
 func (s *OnboardingService) writeProjectAuth(projectID, backend, apiKey, region string) error {
-	p, ok := s.Projects.Get(projectID)
-	if !ok {
-		return ErrOnboardingProjectNotFound
+	if s.SharedAgent == nil {
+		return fmt.Errorf("shared agent service unavailable")
 	}
-	byKey := make(map[string]models.EnvEntry, len(p.SandboxEnv))
-	order := make([]string, 0, len(p.SandboxEnv)+2)
-	for _, e := range p.SandboxEnv {
-		k := strings.TrimSpace(e.Key)
-		if k == "" {
-			continue
-		}
-		if _, seen := byKey[k]; !seen {
-			order = append(order, k)
-		}
-		byKey[k] = e
+	cfg := s.SharedAgent.Get(projectID)
+	if cfg.Env == nil {
+		cfg.Env = map[string]string{}
 	}
-	upsert := func(key, value string, secret bool) {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			return
-		}
-		if _, seen := byKey[key]; !seen {
-			order = append(order, key)
-		}
-		byKey[key] = models.EnvEntry{Key: key, Value: value, Secret: secret || envauth.IsPlatformAuthEnvKey(key)}
-	}
-	upsert(primaryAuthEnvKey(backend), apiKey, true)
+	cfg.ProjectID = projectID
+	cfg.Env[primaryAuthEnvKey(backend)] = apiKey
 	switch backend {
 	case AcpBackendCodeBuddy:
 		if region == "" {
 			region = "public"
 		}
-		upsert(runtime.EnvCodeBuddyRegion, region, false)
+		cfg.Env[runtime.EnvCodeBuddyRegion] = region
 	case AcpBackendTrae:
 		if region == "" {
 			region = "intl"
 		}
-		upsert(runtime.EnvTraeRegion, region, false)
+		cfg.Env[runtime.EnvTraeRegion] = region
 	}
-	out := make([]models.EnvEntry, 0, len(order))
-	for _, k := range order {
-		out = append(out, byKey[k])
-	}
-	_, err := s.Projects.Update(projectID, nil, nil, &out, nil, nil, nil)
-	return err
+	return s.SharedAgent.Save(cfg)
 }
 
 func primaryAuthEnvKey(backend string) string {

@@ -106,6 +106,25 @@ export interface Agent {
   prompts?: AgentPrompts
 }
 
+/** Project-level shared Agent baseline (extend layer; Agent overlays on top). */
+export interface ProjectSharedAgentConfig {
+  projectId: string
+  acpBackend?: string
+  defaultProjectId?: string
+  gitCredentialType?: string
+  files: AgentFile[]
+  mcp: MCPServer[]
+  env: Record<string, string>
+  layout: AgentLayout
+  prompts?: AgentPrompts
+}
+
+export type CreateProjectSharedAgentTestPayload = {
+  agentName: string
+  repos?: AgentTestRepo[]
+  repoUrl?: string
+}
+
 /** Virtual group in the Agent Studio organization tree (not a disk directory). */
 export interface OrgGroup {
   id: string

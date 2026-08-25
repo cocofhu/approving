@@ -62,15 +62,17 @@ type Options struct {
 	ProfilesRoot string
 	// PlatformRulesRoot is where global platform-rule defaults are stored.
 	PlatformRulesRoot string
-	// ProjectEnvForWorkflow, when set, returns the owning project's sandbox OS
-	// env (plaintext) for pipeline node sandboxes. Merged in acpProvider.spec
-	// after platform env and before Agent env. Agent Studio (startContainer)
-	// must NOT call this — interactive sandboxes do not inherit project env.
-	ProjectEnvForWorkflow func(workflowID string) map[string]string
+	// SharedAgentForProject, when set, returns the current project's shared
+	// Agent baseline used as the extend layer before overlaying the Agent.
+	// Wired for workflow Run sandboxes and project-context chat tests only —
+	// Agent Studio interactive tests must leave it unused.
+	SharedAgentForProject func(projectID string) SharedAgentView
+	// ProjectIDForWorkflow resolves workflow → owning project for extend.
+	ProjectIDForWorkflow func(workflowID string) string
 	// RunSandboxEnvForRun, when set, returns the immutable StartRun sandbox env
 	// snapshot for this Run (plaintext). Applied in acpProvider.spec after Agent
 	// env and before mergeAuthEnv / mcpVars / passwords / CONFIG_ROOT so run-level
-	// keys overlay project+Agent but never win over platform reserved write-backs.
+	// keys overlay shared+Agent but never win over platform reserved write-backs.
 	// Only pipeline openSandbox paths should wire this; Agent Studio / interactive
 	// test / PM chat / Cron must leave it nil so run env does not leak.
 	// KeepAliveForReview reuses an already-created sandbox and therefore keeps
@@ -79,6 +81,34 @@ type Options struct {
 	RunSandboxEnvForRun func(runID string) []models.EnvEntry
 	// PublicAdvertise is the browser-facing base URL (preview proxy / pick.js).
 	PublicAdvertise string
+}
+
+// SharedAgentView is the runtime-facing slice of project shared Agent config
+// needed for extend→overlay (avoids importing services into every call site).
+type SharedAgentView struct {
+	AcpBackend string
+	MCP        []SharedMCPView
+	Env        map[string]string
+	Layout     SharedLayoutView
+	Prompts    *models.AgentPrompts
+	WorkDir    string // host path to shared workspace/, empty if none
+	ProjectID  string // defaultProjectId or project id for fill-empty
+}
+
+// SharedMCPView mirrors one MCP entry from shared agent.json.
+type SharedMCPView struct {
+	Name    string
+	URL     string
+	Headers map[string]string
+	Command string
+	Args    []string
+	Env     map[string]string
+}
+
+// SharedLayoutView mirrors shared layout fields.
+type SharedLayoutView struct {
+	ConfigRoot   string
+	WorkspaceDir string
 }
 
 // NodeReq is the resolved request to execute one agent/react node.

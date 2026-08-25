@@ -39,7 +39,7 @@ func (c *acpProvider) ensureOutcome(ctx context.Context, req NodeReq, acp *sandb
 				Msg("node_complete still missing after re-prompt; engine will fail closed")
 			return nil, nil
 		}
-		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).OutcomeRetryText()
+		prompt := c.agentPrompts(req).OutcomeRetryText()
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
@@ -85,7 +85,7 @@ func (c *acpProvider) ensureStructured(ctx context.Context, req NodeReq, acp *sa
 				Msg("structured product still missing after re-prompt; engine will fail closed")
 			return nil, nil
 		}
-		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).StructuredRetryFor(name, tool)
+		prompt := c.agentPrompts(req).StructuredRetryFor(name, tool)
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
@@ -154,7 +154,7 @@ func (c *acpProvider) ensurePlanComplete(ctx context.Context, req NodeReq, acp *
 		if len(inc) == 0 {
 			return nil
 		}
-		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).PlanIncompleteRetryFor(inc)
+		prompt := c.agentPrompts(req).PlanIncompleteRetryFor(inc)
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()
@@ -190,7 +190,7 @@ func (c *acpProvider) ensurePreviewRegistered(ctx context.Context, req NodeReq, 
 		if c.host.HasPreviewPorts(req.RunID, req.NodeID) {
 			return nil
 		}
-		prompt := c.agentPrompts(str2(req.Config["skill_profile"])).PreviewRetryText()
+		prompt := c.agentPrompts(req).PreviewRetryText()
 		chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 		res, err := c.streamChat(chatCtx, acp, req, prompt, nil)
 		cancel()

@@ -5,18 +5,29 @@ const MOCK_PROJECT = {
   id: 'proj-1',
   name: 'Demo Project',
   description: 'Project for e2e',
-  sandboxEnv: [
-    { key: 'CURSOR_API_KEY', value: '****', secret: true },
-    { key: 'API_URL', value: 'https://example.com', secret: false },
-  ],
   variables: [],
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 }
 
+const MOCK_SHARED_AGENT = {
+  projectId: 'proj-1',
+  acpBackend: 'cursor',
+  defaultProjectId: '',
+  gitCredentialType: '',
+  files: [],
+  mcp: [],
+  env: {
+    CURSOR_API_KEY: '****',
+    API_URL: 'https://example.com',
+  },
+  layout: { configRoot: '/root/.cursor', workspaceDir: '/root/workspace' },
+  prompts: {},
+}
+
 const MOCK_WORKFLOWS: unknown[] = []
 
-async function gotoProjectDetail(page: import('@playwright/test').Page) {
+async function gotoSharedAgentEnv(page: import('@playwright/test').Page) {
   await page.setViewportSize({ width: 1280, height: 800 })
   await seedOnboardingDismissed(page, 'proj-1')
   await page.route('**/api/projects/proj-1', async (route) => {
@@ -25,6 +36,29 @@ async function gotoProjectDetail(page: import('@playwright/test').Page) {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify(MOCK_PROJECT),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await page.route('**/api/projects/proj-1/shared-agent-config', async (route) => {
+    const method = route.request().method()
+    if (method === 'GET' || method === 'PUT') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_SHARED_AGENT),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await page.route('**/api/agents', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ name: 'demo-agent', projectId: 'proj-1' }]),
       })
       return
     }
@@ -62,42 +96,27 @@ async function gotoProjectDetail(page: import('@playwright/test').Page) {
   await page.goto('/project-detail.html')
   await dismissOnboardingIfOpen(page)
   await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: '项目共享 Agent 配置' }).click()
+  await page.getByTestId('shared-agent-subtab-env').click()
 }
 
-test.describe('项目 env 官方 ACP 鉴权键 UI', () => {
-  test('CURSOR_API_KEY 显示强制 Secret 且不可切明文；行内强制徽标可见', async ({ page }) => {
-    await gotoProjectDetail(page)
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
+test.describe('项目共享 Agent env（原 sandboxEnv 鉴权键场景）', () => {
+  test('共享 env 可见 CURSOR_API_KEY 与 API_URL；无旧沙箱页签', async ({ page }) => {
+    await gotoSharedAgentEnv(page)
 
-    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: 'KEY' }).first()
-    await expect(panel).toBeVisible()
-    await expect(panel.getByRole('textbox', { name: 'KEY' }).first()).toHaveValue('CURSOR_API_KEY')
-    await expect(panel.getByText('强制', { exact: true })).toBeVisible()
-
-    const cursorRow = panel
-      .locator('.grid.grid-cols-1')
-      .filter({ has: page.getByRole('button', { name: '密钥' }) })
-      .first()
-    await expect(cursorRow.getByRole('button', { name: '密钥' })).toBeDisabled()
-    await expect(panel.getByRole('button', { name: '明文' })).toBeEnabled()
-
-    // g3.2: 不再经「合并规则」弹窗断言帮助文案；行内强制 Secret UI 已覆盖鉴权键约束
+    await expect(page.getByRole('button', { name: '沙箱环境变量' })).toHaveCount(0)
+    await expect(page.getByTestId('project-shared-agent-panel')).toBeVisible()
+    await expect(page.getByPlaceholder('KEY').first()).toHaveValue('CURSOR_API_KEY')
+    await expect(page.getByPlaceholder('KEY').nth(1)).toHaveValue('API_URL')
     await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
     await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
-    await expect(page.getByText('注入流水线节点沙箱的 OS 环境变量。')).toHaveCount(0)
-    await expect(cursorRow.getByText('强制', { exact: true })).toBeVisible()
   })
 
-  test('输入 CURSOR_API_KEY 时自动锁定 Secret', async ({ page }) => {
-    await gotoProjectDetail(page)
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
-
-    const panel = page.locator('.border.border-line.bg-surface').filter({ hasText: 'KEY' }).first()
-    await panel.getByRole('button', { name: '添加一行' }).click()
-
-    const newRow = panel.locator('.grid.grid-cols-1').last()
-    await newRow.locator('input').first().fill('CURSOR_API_KEY')
-    await expect(newRow.getByRole('button', { name: '密钥' })).toBeDisabled()
-    await expect(newRow.getByText('强制', { exact: true })).toBeVisible()
+  test('可新增 KEY 行（共享 env 表单）', async ({ page }) => {
+    await gotoSharedAgentEnv(page)
+    await page.getByRole('button', { name: /添加/ }).first().click()
+    const newKey = page.getByPlaceholder('KEY').last()
+    await newKey.fill('EXTRA_KEY')
+    await expect(newKey).toHaveValue('EXTRA_KEY')
   })
 })

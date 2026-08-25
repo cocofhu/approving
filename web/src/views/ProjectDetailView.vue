@@ -2,7 +2,6 @@
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
-import AppSwitch from '@/components/ui/AppSwitch.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunchModal.vue'
@@ -15,6 +14,7 @@ import PmSettingsPanel from '@/components/pm/PmSettingsPanel.vue'
 import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
+import ProjectSharedAgentPanel from '@/components/project/ProjectSharedAgentPanel.vue'
 import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.vue'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import { useProjectDetail } from '@/lib/project/useProjectDetail'
@@ -67,13 +67,11 @@ const {
   dismissPmMemoryMigration,
   goStudioMemory,
   savingMeta,
-  savingEnv,
   savingVars,
   editName,
   editDesc,
   editUnknownModelDisplayName,
   unknownModelDisplayNameError,
-  envRows,
   varRows,
   showDelete,
   deleting,
@@ -126,19 +124,10 @@ const {
   reloadWorkflows,
   saveMeta,
   clearUnknownModelDisplayName,
-  saveEnv,
   saveVars,
   SECRET_MASK,
-  PLATFORM_AUTH_ENV_KEYS,
-  isPlatformAuthEnvKey,
-  isEnvEnabled,
-  setEnvEnabled,
-  addEnvRow,
-  removeEnvRow,
   addVarRow,
   removeVarRow,
-  onEnvSecretChange,
-  onEnvKeyChange,
   onVarSecretChange,
   onVarNameChange,
   onVarTypeChange,
@@ -840,131 +829,9 @@ const {
         </div>
       </div>
 
-      <!-- Sandbox env tab: fill remaining main area; no envHint / merge-rules row -->
-      <div v-else-if="tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col">
-        <!-- Empty: same shell as data panel, fill + centered CTA, no bottom border -->
-        <div
-          v-if="!envRows.length"
-          class="flex min-h-[360px] flex-1 flex-col border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
-          data-testid="sandbox-env-empty-shell"
-        >
-          <div class="flex flex-1 flex-col items-center justify-center">
-            <EmptyState
-              icon="variable"
-              :title="t('pages.projectDetail.envEmptyTitle')"
-              :desc="t('pages.projectDetail.envEmptyDesc')"
-            >
-              <AppButton variant="primary" icon="plus" @click="addEnvRow">
-                {{ t('pages.projectDetail.addRow') }}
-              </AppButton>
-            </EmptyState>
-          </div>
-        </div>
-
-        <!-- Data: head / scroll rows / foot stick to shell bottom -->
-        <div
-          v-else
-          class="flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
-          data-testid="sandbox-env-data-panel"
-        >
-          <div
-            class="hidden shrink-0 gap-2 border-b border-line bg-elevated/55 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_96px_40px]"
-          >
-            <span>{{ t('pages.projectDetail.envKey') }}</span>
-            <span>{{ t('pages.projectDetail.colValue') }}</span>
-            <span>{{ t('pages.projectDetail.colType') }}</span>
-            <span>{{ t('pages.projectDetail.envEnabled') }}</span>
-            <span>{{ t('common.table.actions') }}</span>
-          </div>
-
-          <div class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto">
-            <div
-              v-for="(row, i) in envRows"
-              :key="i"
-              class="grid grid-cols-1 gap-2 border-b border-line bg-base/40 px-3 py-2 last:border-b-0 hover:bg-elevated/35 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_88px_96px_40px] sm:items-center"
-              data-testid="sandbox-env-row"
-              :data-env-enabled="isEnvEnabled(row) ? 'true' : 'false'"
-            >
-              <input
-                :value="row.key"
-                class="input px-2.5 py-1.5 font-mono text-xs"
-                :class="!isEnvEnabled(row) ? 'opacity-45' : ''"
-                :placeholder="t('pages.projectDetail.envKey')"
-                @input="onEnvKeyChange(row, ($event.target as HTMLInputElement).value)"
-              />
-              <input
-                v-model="row.value"
-                class="input min-w-0 px-2.5 py-1.5 text-xs"
-                :class="!isEnvEnabled(row) ? 'opacity-45' : ''"
-                :placeholder="t('pages.projectDetail.envValue')"
-                :type="row.secret ? 'password' : 'text'"
-              />
-              <div
-                class="flex w-full flex-col items-stretch gap-1"
-                :class="!isEnvEnabled(row) ? 'opacity-45' : ''"
-              >
-                <button
-                  type="button"
-                  class="chip w-full justify-center"
-                  :class="row.secret ? 'border-accent/50 text-accent-2' : 'text-txt3'"
-                  :disabled="isPlatformAuthEnvKey(row.key)"
-                  :title="
-                    isPlatformAuthEnvKey(row.key)
-                      ? t('pages.projectDetail.secretForcedHint')
-                      : row.secret
-                        ? t('pages.projectDetail.secret')
-                        : t('pages.projectDetail.plain')
-                  "
-                  @click="onEnvSecretChange(row, !row.secret)"
-                >
-                  {{ row.secret ? t('pages.projectDetail.secret') : t('pages.projectDetail.plain') }}
-                </button>
-                <span
-                  v-if="isPlatformAuthEnvKey(row.key)"
-                  class="text-center text-[10px] font-semibold tracking-wide text-accent-2"
-                >
-                  {{ t('pages.projectDetail.secretForced') }}
-                </span>
-              </div>
-              <div
-                class="flex items-center gap-2"
-                data-testid="sandbox-env-enabled"
-              >
-                <AppSwitch
-                  :model-value="isEnvEnabled(row)"
-                  :aria-label="
-                    t('pages.projectDetail.envEnabledAria', { key: row.key || t('pages.projectDetail.envKey') })
-                  "
-                  @update:model-value="setEnvEnabled(row, $event)"
-                />
-                <span class="text-xs text-txt2">
-                  {{ isEnvEnabled(row) ? t('pages.projectDetail.envOn') : t('pages.projectDetail.envOff') }}
-                </span>
-              </div>
-              <button
-                type="button"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center text-txt3 hover:text-err sm:justify-self-center"
-                :title="t('common.buttons.delete')"
-                :aria-label="t('common.buttons.delete')"
-                @click="removeEnvRow(i)"
-              >
-                <Icon name="close" :size="14" />
-              </button>
-            </div>
-          </div>
-
-          <div
-            class="flex shrink-0 flex-wrap gap-2 border-t border-line bg-surface p-3"
-            data-testid="sandbox-env-footer"
-          >
-            <AppButton variant="outline" icon="plus" @click="addEnvRow">
-              {{ t('pages.projectDetail.addRow') }}
-            </AppButton>
-            <AppButton variant="primary" :disabled="savingEnv" @click="saveEnv">
-              {{ savingEnv ? t('common.buttons.saving') : t('common.buttons.save') }}
-            </AppButton>
-          </div>
-        </div>
+      <!-- Shared Agent config: fill remaining main area -->
+      <div v-else-if="tab === 'sharedAgent'" class="flex min-h-0 flex-1 flex-col">
+        <ProjectSharedAgentPanel :project-id="projectId" />
       </div>
 
       <!-- Variables tab: fill remaining main area; no varsHint / merge-rules row -->

@@ -10,12 +10,13 @@ import (
 	"github.com/cocofhu/approving/internal/blob"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/services"
 	"github.com/rs/zerolog/log"
 )
 
-// checkSkillProfileProject enforces same-project Agent usage before any
-// agent-class execution. Empty skill_profile is allowed and skipped.
+// checkSkillProfileProject verifies the referenced Agent exists before
+// agent-class execution. Inheritance of project shared config no longer
+// requires Agent.projectId to equal the workflow project (extend uses the
+// current run's project). Empty skill_profile is allowed and skipped.
 func (e *Engine) checkSkillProfileProject(c *execCtx, node *models.Node) error {
 	if e == nil || node == nil || node.Config == nil {
 		return nil
@@ -33,16 +34,8 @@ func (e *Engine) checkSkillProfileProject(c *execCtx, node *models.Node) error {
 	if e.skills == nil {
 		return nil
 	}
-	ag, ok := e.skills.Get(profile)
-	if !ok {
+	if _, ok := e.skills.Get(profile); !ok {
 		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：已删除", label, profile)
-	}
-	projectID := services.ResolveProjectIDForRun(e.db, c.run.ID)
-	if strings.TrimSpace(ag.ProjectID) == "" {
-		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：未绑定", label, profile)
-	}
-	if !services.AgentProjectMatches(ag, projectID) {
-		return fmt.Errorf("节点「%s」的 Agent「%s」不可用：非本项目", label, profile)
 	}
 	return nil
 }

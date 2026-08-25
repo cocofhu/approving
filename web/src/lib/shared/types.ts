@@ -115,7 +115,11 @@ export interface Project {
   id: string
   name: string
   description: string
-  sandboxEnv: ProjectEnvEntry[]
+  /**
+   * @deprecated Removed from Project API — use project shared Agent config env instead.
+   * Kept optional only for transitional mocks; do not read/write in UI.
+   */
+  sandboxEnv?: ProjectEnvEntry[]
   variables: ProjectVariable[]
   workflowCount?: number
   /**

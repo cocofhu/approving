@@ -63,10 +63,10 @@ describe('ProjectDetailView height fix scope lock (g3.2)', () => {
     expect(detailSrc).not.toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
   })
 
-  it('fill-height tabs (meta/audit/variables/sandboxEnv) remain min-h-0 flex-1', () => {
+  it('fill-height tabs (meta/audit/variables/sharedAgent) remain min-h-0 flex-1', () => {
     expect(detailSrc).toMatch(/tab === 'meta'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'audit'" class="flex min-h-0 flex-1 flex-col"/)
-    expect(detailSrc).toMatch(/tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col"/)
+    expect(detailSrc).toMatch(/tab === 'sharedAgent'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'variables'" class="flex min-h-0 flex-1 flex-col"/)
   })
 })

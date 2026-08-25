@@ -100,7 +100,37 @@ func (s *SandboxService) Open(ctx context.Context, profile string, repos []sandb
 		return nil, err
 	}
 	log.Info().Str("name", name).Str("profile", profile).Str("project", projectID).Uint("id", row.ID).Msg("test sandbox creating")
-	go s.startContainer(row.ID, name, profile, projectID, runID, token, repos, agent)
+	go s.startContainer(row.ID, name, profile, projectID, runID, token, repos, agent, "")
+	return row, nil
+}
+
+// OpenWithEffective is like Open but injects a pre-merged effective Agent
+// (project shared extend → Agent overlay) and optionally overlays shared
+// workspace files under BaseWorkDirSrc. Used by project-context chat tests.
+func (s *SandboxService) OpenWithEffective(ctx context.Context, profile, projectID string, repos []sandbox.RepoSpec, effective Agent, sharedWorkDir string) (*models.Sandbox, error) {
+	if _, ok := s.skills.Get(profile); !ok {
+		return nil, fmt.Errorf("agent %q not found", profile)
+	}
+	projectID = strings.TrimSpace(projectID)
+	if maxN := s.MaxTestSandboxes(); s.activeCount() >= maxN {
+		return nil, fmt.Errorf("已达到测试沙箱上限(%d),请先清理空闲沙箱", maxN)
+	}
+
+	runID := "ptest-" + strings.ReplaceAll(filepath.Base(profile), "/", "") + "-" + randID()
+	token := s.host.RegisterRun(runID)
+	name := sandbox.NewContainerName()
+
+	row := &models.Sandbox{
+		Name: name, Profile: profile, Purpose: "test", Status: "creating",
+		RepoURL: firstTestRepoURL(repos), RunID: runID, Token: token, ProjectID: projectID,
+	}
+	if err := s.db.Create(row).Error; err != nil {
+		s.host.UnregisterRun(runID)
+		return nil, err
+	}
+	log.Info().Str("name", name).Str("profile", profile).Str("project", projectID).
+		Uint("id", row.ID).Msg("project-context test sandbox creating")
+	go s.startContainer(row.ID, name, profile, projectID, runID, token, repos, effective, sharedWorkDir)
 	return row, nil
 }
 
@@ -116,7 +146,7 @@ func firstTestRepoURL(repos []sandbox.RepoSpec) string {
 // record to running. Any failure flips it to "error" (with a short TTL so the
 // idle sweeper reclaims the dead row). Runs on a detached context since the
 // originating HTTP request has already returned.
-func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID, token string, repos []sandbox.RepoSpec, agent Agent) {
+func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID, token string, repos []sandbox.RepoSpec, agent Agent, sharedWorkDir string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -163,6 +193,7 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 	env = merged
 
 	home, err := sandbox.BuildConfigHome(sandbox.ConfigHomeSpec{
+		BaseWorkDirSrc:       sharedWorkDir,
 		WorkDirSrc:           s.skills.WorkDir(profile),
 		IncludeArtifactStore: hasArtifactStoreSpec(specs),
 		MCP:                  specs,
