@@ -348,6 +348,42 @@ describe('useHomeApproveChat', () => {
     expect(saved?.attachments).toEqual([{ data: 'z', mimeType: 'image/png' }])
   })
 
+  // plan g2.2 — unmount flushes pending debounce so quick leave still persists
+  it('flushes pending composer draft save on unmount', async () => {
+    vi.useFakeTimers()
+    let result!: ReturnType<typeof useHomeApproveChat>
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const Comp = defineComponent({
+      setup() {
+        result = useHomeApproveChat()
+        return () => null
+      },
+    })
+    const app = createApp(Comp)
+    app.use(i18n)
+    app.mount(document.createElement('div'))
+    await result.load()
+    result.draft.value = '离开前未防抖落盘'
+    expect(loadHomeComposerDraft()).toBeNull()
+    app.unmount()
+    expect(loadHomeComposerDraft()?.text).toBe('离开前未防抖落盘')
+  })
+
+  // plan g2.4 — empty pipeline list must not drop draft preference before load
+  it('keeps draft pipeline preference while pipeline list is still empty', async () => {
+    saveHomeComposerDraft('等列表', [], 'wf-lite')
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    // Before load: preference from hydrate must survive empty pipelines watch.
+    expect(chat.draft.value).toBe('等列表')
+    await chat.load()
+    expect(chat.selectedId.value).toBe('wf-lite')
+  })
+
   // plan g2.3 — clear draft after successful startRun
   it('clears local composer draft after successful send', async () => {
     saveHomeComposerDraft('will clear', [], 'wf-ap')

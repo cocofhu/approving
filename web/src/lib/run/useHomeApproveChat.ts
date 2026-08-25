@@ -162,11 +162,15 @@ export function useHomeApproveChat() {
   watch(
     pipelines,
     (list) => {
+      // While the list is still empty (initial mount / load in flight), keep any
+      // draft pipeline preference from hydrate — do not treat "not in empty list"
+      // as unavailable (plan g2.4).
+      if (list.length === 0) return
       const draftPreferred =
         preferredDraftPipelineId && list.some((w) => w.id === preferredDraftPipelineId)
           ? preferredDraftPipelineId
           : ''
-      // Drop stale draft preference so memory/default can apply (plan g2.4).
+      // Drop stale draft preference only once we know the pipeline is gone.
       if (preferredDraftPipelineId && !draftPreferred) {
         preferredDraftPipelineId = ''
       }
@@ -317,7 +321,12 @@ export function useHomeApproveChat() {
   })
   onUnmounted(() => {
     loadAbort?.abort()
-    if (saveTimer) clearTimeout(saveTimer)
+    // Flush pending debounced save so a quick leave still persists (plan g2.2).
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+      flushComposerDraftSave()
+    }
   })
 
   return {
