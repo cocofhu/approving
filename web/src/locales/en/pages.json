@@ -3025,6 +3025,12 @@
         "interaction": "Interaction",
         "testDesign": "Test design"
       },
+      "fieldTable": {
+        "name": "Field",
+        "type": "Type",
+        "constraints": "Constraints",
+        "description": "Description"
+      },
       "diagramFallback": "Diagram render failed; showing source",
       "status": {
         "done": "Done",

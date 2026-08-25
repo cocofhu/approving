@@ -175,19 +175,45 @@ function st(s?: string) {
               <span v-if="e.description"> — {{ e.description }}</span>
               <AnnotateBtn :json-path="`data_design.entities[${ei}]`" :label="e.name || `entity ${ei + 1}`" />
             </div>
-            <ul v-if="e.fields?.length" class="mt-1 space-y-0.5 border-l border-line pl-2" data-testid="plan-entity-fields">
-              <li v-for="(f, fi) in e.fields" :key="f.name || fi" class="flex flex-wrap items-center gap-1.5">
-                <code class="font-mono text-[11px] text-txt">{{ f.name }}</code>
-                <span class="text-[11px] text-txt3">{{ f.type }}</span>
-                <span
-                  v-for="tag in fieldBadges(f)"
-                  :key="tag"
-                  class="rounded bg-base px-1 py-0.5 text-[10px] font-medium text-txt3"
-                  data-testid="plan-field-badge"
-                >{{ tag }}</span>
-                <span v-if="f.description" class="text-[11px] text-txt3">— {{ f.description }}</span>
-              </li>
-            </ul>
+            <div
+              v-if="e.fields?.length"
+              class="mt-1.5 overflow-x-auto"
+              data-testid="plan-entity-fields"
+            >
+              <table class="w-full min-w-[28rem] border-collapse text-left">
+                <thead>
+                  <tr class="border-b border-line text-[10px] font-medium uppercase tracking-wide text-txt3">
+                    <th class="py-1 pr-3 font-medium">{{ t('pages.plan.fieldTable.name') }}</th>
+                    <th class="py-1 pr-3 font-medium">{{ t('pages.plan.fieldTable.type') }}</th>
+                    <th class="py-1 pr-3 font-medium">{{ t('pages.plan.fieldTable.constraints') }}</th>
+                    <th class="py-1 font-medium">{{ t('pages.plan.fieldTable.description') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(f, fi) in e.fields"
+                    :key="f.name || fi"
+                    class="border-b border-line/50 align-top last:border-b-0"
+                  >
+                    <td class="py-1 pr-3">
+                      <code class="font-mono text-[11px] text-txt">{{ f.name }}</code>
+                    </td>
+                    <td class="py-1 pr-3 text-[11px] text-txt3 break-words">{{ f.type }}</td>
+                    <td class="py-1 pr-3">
+                      <span class="inline-flex flex-wrap gap-1">
+                        <span
+                          v-for="tag in fieldBadges(f)"
+                          :key="tag"
+                          class="rounded bg-base px-1 py-0.5 text-[10px] font-medium text-txt3"
+                          data-testid="plan-field-badge"
+                        >{{ tag }}</span>
+                      </span>
+                    </td>
+                    <td class="py-1 text-[11px] text-txt3 break-words">{{ f.description }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
             <ul v-if="e.attributes?.length" class="mt-1 space-y-0.5 border-l border-line pl-2" data-testid="plan-entity-attributes">
               <li v-for="(a, ai) in e.attributes" :key="ai" class="text-[11px] text-txt3">
                 <span class="italic">legacy</span> {{ a }}
