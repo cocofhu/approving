@@ -23,7 +23,8 @@
       "missingRequired": "启动前还需填写必填项",
       "cardFallback": "Approve 开发前澄清",
       "scrollLeft": "向左滚动",
-      "scrollRight": "向右滚动"
+      "scrollRight": "向右滚动",
+      "draftRestored": "草稿已恢复"
     },
     "board": {
       "title": "需求进度看板",
