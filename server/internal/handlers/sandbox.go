@@ -65,26 +65,6 @@ func resolveTestRepos(repos []testRepoInput, repoURL string) []sandbox.RepoSpec 
 	return sandbox.ReposFromURL(repoURL)
 }
 
-// CreateAgentTest spins up an interactive sandbox bound to an Agent profile for
-// chat-testing. Body: {repos?: [{name,url,branch?}], repoUrl?}. Returns the created sandbox record.
-func (h *Handlers) CreateAgentTest(c *gin.Context) {
-	profile := c.Param("name")
-	var b struct {
-		Repos     []testRepoInput `json:"repos"`
-		RepoURL   string          `json:"repoUrl"`
-		ProjectID string          `json:"projectId"`
-	}
-	_ = c.ShouldBindJSON(&b)
-	repos := resolveTestRepos(b.Repos, b.RepoURL)
-	projectID := strings.TrimSpace(b.ProjectID)
-	row, err := h.Sbx.Open(c.Request.Context(), profile, repos, projectID)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, row)
-}
-
 // SandboxEvents returns a sandbox's full agent event log, read directly from
 // the container's acp-bridge service (no platform-side persistence).
 func (h *Handlers) SandboxEvents(c *gin.Context) {
@@ -210,7 +190,7 @@ func isSandboxLogNoSource(err error) bool {
 }
 
 // GetSandbox returns one sandbox with live-derived status. The UI polls this
-// to watch a "creating" sandbox flip to running/error after CreateAgentTest.
+// to watch a "creating" sandbox flip to running/error after test creation.
 func (h *Handlers) GetSandbox(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {

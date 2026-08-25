@@ -34,9 +34,8 @@ const props = defineProps<{
   /** Agent home project id from Studio; empty = unbound (no task-scheduler). */
   homeProjectId?: string
   /**
-   * Optional override for starting a test sandbox.
-   * Agent Studio omits this (uses POST /agents/:name/test).
-   * Project shared-config dialogue test passes createProjectSharedAgentTest.
+   * Required override for starting a test sandbox (project shared-config dialogue test).
+   * Omitted when attaching to an existing sandbox via attachId.
    */
   createTest?: (profile: string, payload: CreateAgentTestPayload) => Promise<SandboxView>
 }>()
@@ -142,6 +141,11 @@ watch(
 
 async function start() {
   if (status.value === 'starting' || !canStart.value) return
+  if (!props.createTest) {
+    status.value = 'error'
+    errorMsg.value = t('pages.agentChatTester.missingCreateTest')
+    return
+  }
   status.value = 'starting'
   errorMsg.value = ''
   turns.value = []
@@ -159,9 +163,7 @@ async function start() {
         : {
             ...(props.homeProjectId?.trim() ? { projectId: props.homeProjectId.trim() } : {}),
           }
-    sandbox.value = props.createTest
-      ? await props.createTest(props.profile, payload)
-      : await api.createAgentTest(props.profile, payload)
+    sandbox.value = await props.createTest(props.profile, payload)
     await waitReady(sandbox.value.id)
   } catch (e: any) {
     status.value = 'error'

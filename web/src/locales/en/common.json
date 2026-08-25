@@ -117,6 +117,7 @@
     "search": {
       "placeholder": "Search workflows, runs…",
       "pipelinePlaceholder": "Search pipelines…",
+      "agentPlaceholder": "Search Agents…",
       "nodePlaceholder": "Search nodes"
     },
     "shutdown": {
@@ -166,11 +167,12 @@
       "noRuns": "No runs yet",
       "noMatchingRuns": "No matching runs",
       "noMatchingPipelines": "No matching pipelines",
+      "noMatchingAgents": "No matching Agents",
       "noArtifacts": "No artifacts",
       "noArtifactsInGroup": "No artifacts in this group",
       "selectWorkflowGroup": "Select a workflow group on the left",
       "noMatchingGroups": "No matching groups",
-      "noSandboxes": "No sandboxes yet. Node sandboxes are created when workflows run, or start a test sandbox under Agent Studio → Chat test.",
+      "noSandboxes": "No sandboxes yet. Node sandboxes are created when workflows run, or start a test sandbox under Project detail → Shared Agent config → Chat test.",
       "noAgents": "No agents yet. Click New agent, or the backend seeds a default on first start.",
       "noPendingGates": "Nothing pending",
       "noPendingGatesForPipeline": "No pending items for this pipeline",

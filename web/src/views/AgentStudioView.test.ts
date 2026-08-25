@@ -2091,7 +2091,6 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
       'AgentPromptsPanel',
       'AgentPlatformRulesPanel',
       'AgentDataPanel',
-      'AgentChatTester',
       'AgentMetaPanel',
     ]) {
       expect(viewSrc).toContain(panel)
@@ -2104,7 +2103,7 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
     expect(src).toMatch(/v-if="tab === 'env'/)
     expect(src).toMatch(/v-if="tab === 'prompts'/)
     expect(src).toMatch(/tab === 'platform-rules'/)
-    expect(src).toMatch(/v-show="tab === 'test'/)
+    expect(src).not.toMatch(/tab === 'test'/)
     expect(src).toMatch(/tab === 'meta'/)
   })
 
@@ -2112,6 +2111,7 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
     mocks.listAgents.mockResolvedValue([agent()])
     const wrapper = await mountStudio({ agent: 'legacy' })
     await flushPromises()
+    expect(wrapper.text()).not.toContain('对话测试')
     const mcpBtn = wrapper.findAll('button').find((b) => /MCP/i.test(b.text()))
     expect(mcpBtn).toBeTruthy()
     await mcpBtn!.trigger('click')
