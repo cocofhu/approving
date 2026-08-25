@@ -41,6 +41,7 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ warn: vi.fn(), error: vi.fn(), success: vi.fn() }),
 }))
 
+import { HOME_COMPOSER_DRAFT_KEY } from '@/lib/run/homeComposerDraft'
 import DashboardView from './DashboardView.vue'
 
 const HomePreviewAppModalStub = {
@@ -120,10 +121,12 @@ describe('DashboardView home composer', () => {
     })
     mocks.reactReply.mockResolvedValue({ status: 'ok' })
     stubReducedMotion(false)
+    localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
     vi.useFakeTimers()
   })
 
   afterEach(() => {
+    localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
