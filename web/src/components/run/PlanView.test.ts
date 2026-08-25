@@ -128,14 +128,20 @@ describe('PlanView', () => {
     wrapper.unmount()
   })
 
-  it('renders entity fields, badges, and relationships', async () => {
+  it('renders entity fields as table with badges and relationships (g1.1/g1.3)', async () => {
     const wrapper = mountPlan(designDoc)
     await flushPromises()
-    expect(wrapper.find('[data-testid="plan-entity-fields"]').exists()).toBe(true)
+    const fields = wrapper.find('[data-testid="plan-entity-fields"]')
+    expect(fields.exists()).toBe(true)
+    expect(fields.find('table').exists()).toBe(true)
+    expect(fields.findAll('tbody tr')).toHaveLength(2)
+    // no left-border nested list for fields
+    expect(fields.find('ul').exists()).toBe(false)
     expect(wrapper.text()).toContain('title')
     expect(wrapper.text()).toContain('string')
     expect(wrapper.text()).toContain('PK')
     expect(wrapper.text()).toContain('fk→Other.ref')
+    expect(wrapper.findAll('[data-testid="plan-field-badge"]').length).toBeGreaterThanOrEqual(2)
     expect(wrapper.find('[data-testid="plan-entity-relationships"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('1..* planGoal')
     expect(wrapper.find('[data-testid="plan-data-relationships"]').exists()).toBe(true)
@@ -143,7 +149,7 @@ describe('PlanView', () => {
     wrapper.unmount()
   })
 
-  it('renders legacy attributes when fields absent', () => {
+  it('renders legacy attributes when fields absent (g2.1)', () => {
     const doc: PlanDoc = {
       data_design: {
         summary: 'legacy',
@@ -152,13 +158,29 @@ describe('PlanView', () => {
       goals: [{ id: 'g1', title: 'G', status: 'pending' }],
     }
     const wrapper = mountPlan(doc)
+    expect(wrapper.find('[data-testid="plan-entity-fields"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="plan-entity-attributes"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('legacy')
     expect(wrapper.text()).toContain('id')
     wrapper.unmount()
   })
 
-  it('zh-CN shows Chinese design section titles (g1.2)', async () => {
+  it('does not render empty fields table (g1.3 edge)', () => {
+    const doc: PlanDoc = {
+      data_design: {
+        summary: 'empty fields',
+        entities: [{ name: 'Empty', fields: [], description: 'no cols' }],
+      },
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    }
+    const wrapper = mountPlan(doc)
+    expect(wrapper.text()).toContain('Empty')
+    expect(wrapper.text()).toContain('no cols')
+    expect(wrapper.find('[data-testid="plan-entity-fields"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('zh-CN shows Chinese design section titles and field table headers (g1.2)', async () => {
     const wrapper = mountPlan(designDoc, undefined, 'zh-CN')
     await flushPromises()
     const text = wrapper.text()
@@ -168,16 +190,21 @@ describe('PlanView', () => {
     expect(text).toContain('组件')
     expect(text).toContain('交互')
     expect(text).toContain('测试设计')
+    expect(text).toContain('字段')
+    expect(text).toContain('类型')
+    expect(text).toContain('约束')
+    expect(text).toContain('说明')
     expect(text).not.toContain('Architecture')
     expect(text).not.toContain('Data design')
     expect(text).not.toContain('Interfaces')
     expect(text).not.toContain('Components')
     expect(text).not.toContain('Interaction')
     expect(text).not.toContain('Test design')
+    expect(text).not.toContain('Constraints')
     wrapper.unmount()
   })
 
-  it('en shows English design section titles', async () => {
+  it('en shows English design section titles and field table headers (g1.2)', async () => {
     const wrapper = mountPlan(designDoc, undefined, 'en')
     await flushPromises()
     const text = wrapper.text()
@@ -187,8 +214,13 @@ describe('PlanView', () => {
     expect(text).toContain('Components')
     expect(text).toContain('Interaction')
     expect(text).toContain('Test design')
+    expect(text).toContain('Field')
+    expect(text).toContain('Type')
+    expect(text).toContain('Constraints')
+    expect(text).toContain('Description')
     expect(text).not.toContain('数据设计')
     expect(text).not.toContain('测试设计')
+    expect(text).not.toContain('约束')
     wrapper.unmount()
   })
 

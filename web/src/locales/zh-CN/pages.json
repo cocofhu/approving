@@ -3025,6 +3025,12 @@
         "interaction": "交互",
         "testDesign": "测试设计"
       },
+      "fieldTable": {
+        "name": "字段",
+        "type": "类型",
+        "constraints": "约束",
+        "description": "说明"
+      },
       "diagramFallback": "图渲染失败,显示源码",
       "status": {
         "done": "完成",
