@@ -185,7 +185,7 @@ func overlayAgentFile(shared SharedAgentView, agent agentFile) agentFile {
 		byName[n] = m
 	}
 	for _, m := range shared.MCP {
-		addMCP(agentMCP{Name: m.Name, URL: m.URL, Headers: m.Headers, Command: m.Command, Args: m.Args, Env: m.Env})
+		addMCP(agentMCP(m))
 	}
 	for _, m := range agent.MCP {
 		addMCP(m)
