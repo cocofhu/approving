@@ -110,6 +110,7 @@ func newHarness(t *testing.T) *harness {
 	authSvc := auth.NewService(db, config.GetConfig)
 	projectSvc := services.NewProjectService(db)
 	wfSvc := services.NewWorkflowService(db)
+	sharedAgent := services.NewSharedAgentService(t.TempDir())
 	h := &handlers.Handlers{
 		WF:               wfSvc,
 		Projects:         projectSvc,
@@ -117,6 +118,7 @@ func newHarness(t *testing.T) *harness {
 		Arts:             arts,
 		APIKeys:          services.NewAPIKeyService(db),
 		Skill:            skills,
+		SharedAgent:      sharedAgent,
 		Dash:             services.NewDashboardService(db, projectSvc),
 		Sbx:              sbx,
 		Eng:              eng,
@@ -125,7 +127,7 @@ func newHarness(t *testing.T) *harness {
 		PlatformRules:    platformRules,
 		Issues:           services.NewIssueService(db),
 		Audit:            auditSvc,
-		Onboarding:       services.NewOnboardingService(projectSvc, skills, wfSvc),
+		Onboarding:       services.NewOnboardingService(projectSvc, skills, sharedAgent, wfSvc),
 		GateShare:         gateShareSvc,
 		GateShareNonces:   gateshare.NewNonceStore(db),
 		GateShareTickets:  gateShareTickets,

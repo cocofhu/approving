@@ -16,7 +16,6 @@ import type {
   ClarifyImage,
   PmLeaderBinding,
   Project,
-  ProjectEnvEntry,
   ProjectVariable,
   Workflow,
   WorkflowNotifyPolicy,
@@ -35,7 +34,7 @@ const PROJECT_TABS = [
   'notify',
   'pmLeader',
   'cronJobs',
-  'sandboxEnv',
+  'sharedAgent',
   'variables',
   'audit',
   'meta',
@@ -45,6 +44,8 @@ type Tab = (typeof PROJECT_TABS)[number]
 const LEGACY_PM_SETTINGS_TAB = 'pmSettings'
 /** Legacy project-memory deep-link; removed tab — fall back to board + migration banner. */
 const LEGACY_PM_MEMORY_TAB = 'pmMemory'
+/** Legacy project sandbox-env tab; replaced by shared Agent config. */
+const LEGACY_SANDBOX_ENV_TAB = 'sandboxEnv'
 type PmView = 'chat' | 'settings'
 
 function isProjectTab(q: unknown): q is Tab {
@@ -54,6 +55,7 @@ function isProjectTab(q: unknown): q is Tab {
 function parseProjectTab(q: unknown): Tab {
   if (q === LEGACY_PM_SETTINGS_TAB) return 'pmLeader'
   if (q === LEGACY_PM_MEMORY_TAB) return 'board'
+  if (q === LEGACY_SANDBOX_ENV_TAB) return 'sharedAgent'
   if (isProjectTab(q)) return q
   return 'board'
 }
@@ -150,6 +152,11 @@ function rewriteLegacyPmMemoryQuery() {
   void router.replace({ query: { ...route.query, tab: 'board' } })
 }
 
+function rewriteLegacySandboxEnvQuery() {
+  if (route.query.tab !== LEGACY_SANDBOX_ENV_TAB) return
+  void router.replace({ query: { ...route.query, tab: 'sharedAgent' } })
+}
+
 function syncTabFromRoute() {
   const q = route.query.tab
   if (q === LEGACY_PM_SETTINGS_TAB) {
@@ -162,6 +169,11 @@ function syncTabFromRoute() {
     tab.value = 'board'
     pmView.value = 'chat'
     rewriteLegacyPmMemoryQuery()
+    return
+  }
+  if (q === LEGACY_SANDBOX_ENV_TAB) {
+    tab.value = 'sharedAgent'
+    rewriteLegacySandboxEnvQuery()
     return
   }
   const next = parseProjectTab(q)
@@ -200,6 +212,11 @@ function ensureTabQuery() {
     rewriteLegacyPmMemoryQuery()
     return
   }
+  if (route.query.tab === LEGACY_SANDBOX_ENV_TAB) {
+    tab.value = 'sharedAgent'
+    rewriteLegacySandboxEnvQuery()
+    return
+  }
   if (isProjectTab(route.query.tab)) {
     return
   }
@@ -219,13 +236,11 @@ function goStudioMemory(agent?: string) {
   void router.push({ path: '/agents' })
 }
 const savingMeta = ref(false)
-const savingEnv = ref(false)
 const savingVars = ref(false)
 const editName = ref('')
 const editDesc = ref('')
 const editUnknownModelDisplayName = ref('')
 const unknownModelDisplayNameError = ref('')
-const envRows = ref<ProjectEnvEntry[]>([])
 const varRows = ref<ProjectVariable[]>([])
 const showDelete = ref(false)
 const deleting = ref(false)
@@ -265,7 +280,7 @@ const tabs: { id: Tab; labelKey: string }[] = [
   { id: 'notify', labelKey: 'pages.projectDetail.tabNotify' },
   { id: 'pmLeader', labelKey: 'pages.projectDetail.tabPmLeader' },
   { id: 'cronJobs', labelKey: 'pages.projectDetail.tabCronJobs' },
-  { id: 'sandboxEnv', labelKey: 'pages.projectDetail.tabSandboxEnv' },
+  { id: 'sharedAgent', labelKey: 'pages.projectDetail.tabSharedAgent' },
   { id: 'variables', labelKey: 'pages.projectDetail.tabVariables' },
   { id: 'audit', labelKey: 'pages.projectDetail.tabAudit' },
   { id: 'meta', labelKey: 'pages.projectDetail.tabMeta' },
@@ -428,7 +443,6 @@ async function load() {
     editDesc.value = p.description || ''
     editUnknownModelDisplayName.value = p.unknownModelDisplayName || ''
     unknownModelDisplayNameError.value = ''
-    envRows.value = (p.sandboxEnv || []).map((e) => ({ ...e }))
     // Spread-copy preserves server-side ask/required/editable (and options/desc).
     varRows.value = (p.variables || []).map((v) => ({ ...v }))
     workflows.value = wfs
@@ -517,31 +531,6 @@ function clearUnknownModelDisplayName() {
   void saveMeta()
 }
 
-async function saveEnv() {
-  if (!project.value) return
-  savingEnv.value = true
-  try {
-    const sandboxEnv = envRows.value
-      .filter((e) => e.key.trim())
-      .map((e) => ({
-        ...e,
-        enabled: e.enabled !== false,
-        secret: e.secret || isPlatformAuthEnvKey(e.key),
-      }))
-    project.value = await api.updateProject(project.value.id, { sandboxEnv })
-    envRows.value = (project.value.sandboxEnv || []).map((e) => ({
-      ...e,
-      enabled: e.enabled !== false,
-      secret: e.secret || isPlatformAuthEnvKey(e.key),
-    }))
-    toast.success(t('pages.projectDetail.saved'))
-  } catch (e: any) {
-    toast.error(String(e?.message || e))
-  } finally {
-    savingEnv.value = false
-  }
-}
-
 async function saveVars() {
   if (!project.value) return
   savingVars.value = true
@@ -562,31 +551,6 @@ async function saveVars() {
 
 const SECRET_MASK = '****'
 
-/** Official ACP CLI auth keys — project env baseline; always forced Secret (matches server). */
-const PLATFORM_AUTH_ENV_KEYS = new Set([
-  'CURSOR_API_KEY',
-  'ANTHROPIC_API_KEY',
-  'CODEBUDDY_API_KEY',
-  'TRAE_API_KEY',
-  'TRAECLI_PERSONAL_ACCESS_TOKEN',
-])
-
-function isPlatformAuthEnvKey(key: string): boolean {
-  return PLATFORM_AUTH_ENV_KEYS.has(key.trim())
-}
-
-function isEnvEnabled(row: ProjectEnvEntry): boolean {
-  return row.enabled !== false
-}
-function setEnvEnabled(row: ProjectEnvEntry, on: boolean) {
-  row.enabled = on
-}
-function addEnvRow() {
-  envRows.value.push({ key: '', value: '', secret: false, enabled: true })
-}
-function removeEnvRow(i: number) {
-  envRows.value.splice(i, 1)
-}
 function addVarRow() {
   varRows.value.push({
     name: '',
@@ -605,25 +569,6 @@ function removeVarRow(i: number) {
 }
 
 /** Clear mask when un-secreting or renaming so **** is never treated as plaintext. */
-function onEnvSecretChange(row: ProjectEnvEntry, secret: boolean) {
-  if (isPlatformAuthEnvKey(row.key)) {
-    row.secret = true
-    return
-  }
-  row.secret = secret
-  if (!secret && row.value === SECRET_MASK) {
-    row.value = ''
-  }
-}
-function onEnvKeyChange(row: ProjectEnvEntry, key: string) {
-  if (row.key !== key && row.value === SECRET_MASK) {
-    row.value = ''
-  }
-  row.key = key
-  if (isPlatformAuthEnvKey(key)) {
-    row.secret = true
-  }
-}
 function onVarSecretChange(row: ProjectVariable, secret: boolean) {
   row.secret = secret
   if (!secret && row.value === SECRET_MASK) {
@@ -890,13 +835,11 @@ onBeforeRouteUpdate(async (to, from) => {
   dismissPmMemoryMigration,
   goStudioMemory,
   savingMeta,
-  savingEnv,
   savingVars,
   editName,
   editDesc,
   editUnknownModelDisplayName,
   unknownModelDisplayNameError,
-  envRows,
   varRows,
   showDelete,
   deleting,
@@ -949,19 +892,10 @@ onBeforeRouteUpdate(async (to, from) => {
   reloadWorkflows,
   saveMeta,
   clearUnknownModelDisplayName,
-  saveEnv,
   saveVars,
   SECRET_MASK,
-  PLATFORM_AUTH_ENV_KEYS,
-  isPlatformAuthEnvKey,
-  isEnvEnabled,
-  setEnvEnabled,
-  addEnvRow,
-  removeEnvRow,
   addVarRow,
   removeVarRow,
-  onEnvSecretChange,
-  onEnvKeyChange,
   onVarSecretChange,
   onVarNameChange,
   onVarTypeChange,

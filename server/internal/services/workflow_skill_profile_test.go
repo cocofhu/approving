@@ -16,8 +16,8 @@ func (f fakeAgentLookup) Get(name string) (Agent, bool) {
 
 func TestValidateSkillProfilesProject(t *testing.T) {
 	skills := fakeAgentLookup{
-		"ok-agent":     {Name: "ok-agent", ProjectID: "alpha"},
-		"other-agent":  {Name: "other-agent", ProjectID: "beta"},
+		"ok-agent":      {Name: "ok-agent", ProjectID: "alpha"},
+		"other-agent":   {Name: "other-agent", ProjectID: "beta"},
 		"unbound-agent": {Name: "unbound-agent", ProjectID: ""},
 	}
 
@@ -41,21 +41,20 @@ func TestValidateSkillProfilesProject(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects cross project unbound and deleted", func(t *testing.T) {
+	t.Run("allows cross project and unbound; rejects deleted", func(t *testing.T) {
 		g := models.Graph{Nodes: []models.Node{
 			{ID: "a", Type: "agent", Label: "执行", Config: map[string]any{"skill_profile": "other-agent"}},
 			{ID: "b", Type: "react", Label: "澄清", Config: map[string]any{"skill_profile": "unbound-agent"}},
+		}}
+		if err := ValidateSkillProfilesProject(skills, "alpha", g); err != nil {
+			t.Fatalf("cross/unbound should pass for shared extend: %v", err)
+		}
+		g2 := models.Graph{Nodes: []models.Node{
 			{ID: "c", Type: "plan", Label: "计划", Config: map[string]any{"skill_profile": "ghost"}},
 		}}
-		err := ValidateSkillProfilesProject(skills, "alpha", g)
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		msg := err.Error()
-		for _, want := range []string{"非本项目", "未绑定", "已删除", "执行 → other-agent", "澄清 → unbound-agent", "计划 → ghost"} {
-			if !strings.Contains(msg, want) {
-				t.Fatalf("msg %q missing %q", msg, want)
-			}
+		err := ValidateSkillProfilesProject(skills, "alpha", g2)
+		if err == nil || !strings.Contains(err.Error(), "已删除") || !strings.Contains(err.Error(), "计划 → ghost") {
+			t.Fatalf("got %v", err)
 		}
 	})
 
@@ -63,10 +62,10 @@ func TestValidateSkillProfilesProject(t *testing.T) {
 		types := []string{"react", "agent", "approve", "plan", "implement", "research", "test", "review", "proposal", "submit_mr", "visual", "app_preview"}
 		for _, typ := range types {
 			g := models.Graph{Nodes: []models.Node{
-				{ID: "n", Type: typ, Label: typ, Config: map[string]any{"skill_profile": "other-agent"}},
+				{ID: "n", Type: typ, Label: typ, Config: map[string]any{"skill_profile": "ghost"}},
 			}}
 			if err := ValidateSkillProfilesProject(skills, "alpha", g); err == nil {
-				t.Fatalf("type %s: expected rejection", typ)
+				t.Fatalf("type %s: expected rejection for deleted agent", typ)
 			}
 		}
 	})
@@ -95,8 +94,14 @@ func TestWorkflowServiceSavePublishSkillProfileGate(t *testing.T) {
 			{ID: "e2", Source: "ag", Target: "out"},
 		}},
 	}
-	if err := s.Save(wf); err == nil || !strings.Contains(err.Error(), "非本项目") {
-		t.Fatalf("Save want foreign reject, got %v", err)
+	// Cross-project Agent is allowed (extend uses current workflow project).
+	if err := s.Save(wf); err != nil {
+		t.Fatalf("Save foreign should pass: %v", err)
+	}
+
+	wf.Graph.Nodes[1].Config["skill_profile"] = "ghost"
+	if err := s.Save(wf); err == nil || !strings.Contains(err.Error(), "已删除") {
+		t.Fatalf("Save want deleted reject, got %v", err)
 	}
 
 	wf.Graph.Nodes[1].Config["skill_profile"] = "ok-agent"
@@ -104,19 +109,6 @@ func TestWorkflowServiceSavePublishSkillProfileGate(t *testing.T) {
 		t.Fatalf("Save ok: %v", err)
 	}
 
-	// poison then publish
-	wf.Graph.Nodes[1].Config["skill_profile"] = "other-agent"
-	if err := s.db.Save(wf).Error; err != nil {
-		t.Fatalf("direct save: %v", err)
-	}
-	if _, err := s.Publish(wf.ID); err == nil || !strings.Contains(err.Error(), "非本项目") {
-		t.Fatalf("Publish want foreign reject, got %v", err)
-	}
-
-	wf.Graph.Nodes[1].Config["skill_profile"] = "ok-agent"
-	if err := s.db.Save(wf).Error; err != nil {
-		t.Fatalf("fix: %v", err)
-	}
 	if _, err := s.Publish(wf.ID); err != nil {
 		t.Fatalf("Publish ok: %v", err)
 	}

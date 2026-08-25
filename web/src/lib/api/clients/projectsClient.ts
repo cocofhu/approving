@@ -10,7 +10,12 @@ import type {
   RequirementDraftSchedulePatch,
 } from '../../shared/types'
 import { origin, req } from '../httpCore'
-import type { PaginatedResponse } from '../apiTypes'
+import type {
+  CreateProjectSharedAgentTestPayload,
+  PaginatedResponse,
+  ProjectSharedAgentConfig,
+  SandboxView,
+} from '../apiTypes'
 
 export const projectsClient = {
   // projects
@@ -22,6 +27,24 @@ export const projectsClient = {
   updateProject: (id: string, body: Partial<Project>) =>
     req<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteProject: (id: string) => req<{ status: string }>(`/projects/${id}`, { method: 'DELETE' }),
+
+  /** Project shared Agent baseline (extend layer before Agent overlay). */
+  getProjectSharedAgentConfig: (id: string) =>
+    req<ProjectSharedAgentConfig>(`/projects/${encodeURIComponent(id)}/shared-agent-config`),
+  putProjectSharedAgentConfig: (
+    id: string,
+    body: Omit<ProjectSharedAgentConfig, 'projectId'> & { projectId?: string },
+  ) =>
+    req<ProjectSharedAgentConfig>(`/projects/${encodeURIComponent(id)}/shared-agent-config`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  /** Project-context chat test: extend shared config then overlay chosen Agent. */
+  createProjectSharedAgentTest: (id: string, body: CreateProjectSharedAgentTestPayload) =>
+    req<SandboxView>(`/projects/${encodeURIComponent(id)}/shared-agent-config/test`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 
   listRequirementDrafts: (
     projectId: string,

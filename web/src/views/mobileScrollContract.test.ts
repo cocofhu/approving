@@ -118,7 +118,7 @@ describe('mobile scroll contract — list B ProjectDetail tabs (plan g2.1 / g3.1
     expect(detail).toMatch(/tab === 'meta'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detail).toMatch(/tab === 'audit'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detail).toMatch(/tab === 'variables'" class="flex min-h-0 flex-1 flex-col"/)
-    expect(detail).toMatch(/tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col"/)
+    expect(detail).toMatch(/tab === 'sharedAgent'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detail).toMatch(/tab === 'pmLeader'[\s\S]*?class="flex min-h-0 flex-1 flex-col"/)
     expect(detail).toMatch(
       /scroll-area flex min-h-0 flex-1 flex-col gap-3\.5 overflow-y-auto p-4/,

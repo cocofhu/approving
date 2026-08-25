@@ -29,6 +29,7 @@ type Handlers struct {
 	Arts                  *services.ArtifactService
 	APIKeys               *services.APIKeyService
 	Skill                 *services.SkillService
+	SharedAgent           *services.SharedAgentService
 	Org                   *services.OrgService
 	Dash                  *services.DashboardService
 	Sbx                   *services.SandboxService

@@ -53,22 +53,17 @@ func TestCheckSkillProfileProject(t *testing.T) {
 		}
 	})
 
-	t.Run("foreign", func(t *testing.T) {
+	t.Run("foreign allowed for shared extend", func(t *testing.T) {
 		n := &models.Node{ID: "n", Label: "执行 Agent", Config: map[string]any{"skill_profile": "foreign"}}
-		err := eng.checkSkillProfileProject(c, n)
-		if err == nil || !strings.Contains(err.Error(), "非本项目") {
-			t.Fatalf("got %v", err)
-		}
-		if !strings.Contains(err.Error(), "执行 Agent") || !strings.Contains(err.Error(), "foreign") {
-			t.Fatalf("need node+agent names: %v", err)
+		if err := eng.checkSkillProfileProject(c, n); err != nil {
+			t.Fatalf("foreign agent referenced by workflow should pass: %v", err)
 		}
 	})
 
-	t.Run("unbound", func(t *testing.T) {
+	t.Run("unbound allowed for shared extend", func(t *testing.T) {
 		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "unbound"}}
-		err := eng.checkSkillProfileProject(c, n)
-		if err == nil || !strings.Contains(err.Error(), "未绑定") {
-			t.Fatalf("got %v", err)
+		if err := eng.checkSkillProfileProject(c, n); err != nil {
+			t.Fatalf("unbound agent referenced by workflow should pass: %v", err)
 		}
 	})
 

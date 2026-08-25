@@ -34,6 +34,7 @@ func (c *acpProvider) buildConfigHome(req NodeReq, env map[string]string) string
 	profile := str2(req.Config["skill_profile"])
 	specs := c.resolvedMCPSpecs(req)
 	home, err := sandbox.BuildConfigHome(sandbox.ConfigHomeSpec{
+		BaseWorkDirSrc:       c.sharedWorkDir(req),
 		WorkDirSrc:           c.workDir(profile),
 		EmbeddedRules:        nodereg.EmbeddedRuleFiles(req.NodeType),
 		IncludeArtifactStore: hasArtifactStore(specs),
@@ -119,6 +120,131 @@ func (c *acpProvider) agentConfig(profile string) agentFile {
 	return f
 }
 
+// projectIDForReq resolves the extend source project for a workflow node.
+func (c *acpProvider) projectIDForReq(req NodeReq) string {
+	if c.opts.ProjectIDForWorkflow == nil || req.WorkflowID == "" {
+		return ""
+	}
+	return strings.TrimSpace(c.opts.ProjectIDForWorkflow(req.WorkflowID))
+}
+
+func (c *acpProvider) sharedView(req NodeReq) (SharedAgentView, bool) {
+	pid := c.projectIDForReq(req)
+	if pid == "" || c.opts.SharedAgentForProject == nil {
+		return SharedAgentView{}, false
+	}
+	return c.opts.SharedAgentForProject(pid), true
+}
+
+func (c *acpProvider) sharedWorkDir(req NodeReq) string {
+	if v, ok := c.sharedView(req); ok {
+		return v.WorkDir
+	}
+	return ""
+}
+
+// effectiveAgent returns extend(shared) → overlay(agent) for this node.
+func (c *acpProvider) effectiveAgent(req NodeReq) agentFile {
+	agent := c.agentConfig(str2(req.Config["skill_profile"]))
+	shared, ok := c.sharedView(req)
+	if !ok {
+		return agent
+	}
+	return overlayAgentFile(shared, agent)
+}
+
+func overlayAgentFile(shared SharedAgentView, agent agentFile) agentFile {
+	out := agent
+	// Env: shared base, agent keys win.
+	env := map[string]string{}
+	for k, v := range shared.Env {
+		if strings.TrimSpace(k) == "" {
+			continue
+		}
+		env[k] = v
+	}
+	for k, v := range agent.Env {
+		if strings.TrimSpace(k) == "" {
+			continue
+		}
+		env[k] = v
+	}
+	out.Env = env
+	// MCP by name
+	byName := map[string]agentMCP{}
+	order := make([]string, 0, len(shared.MCP)+len(agent.MCP))
+	addMCP := func(m agentMCP) {
+		n := strings.TrimSpace(m.Name)
+		if n == "" {
+			return
+		}
+		m.Name = n
+		if _, ok := byName[n]; !ok {
+			order = append(order, n)
+		}
+		byName[n] = m
+	}
+	for _, m := range shared.MCP {
+		addMCP(agentMCP(m))
+	}
+	for _, m := range agent.MCP {
+		addMCP(m)
+	}
+	out.MCP = make([]agentMCP, 0, len(order))
+	for _, n := range order {
+		out.MCP = append(out.MCP, byName[n])
+	}
+	// Meta / layout: non-empty agent wins
+	if strings.TrimSpace(agent.AcpBackend) == "" && strings.TrimSpace(shared.AcpBackend) != "" {
+		out.AcpBackend = shared.AcpBackend
+	}
+	if strings.TrimSpace(agent.Layout.ConfigRoot) == "" && strings.TrimSpace(shared.Layout.ConfigRoot) != "" {
+		out.Layout.ConfigRoot = shared.Layout.ConfigRoot
+	}
+	if strings.TrimSpace(agent.Layout.WorkspaceDir) == "" && strings.TrimSpace(shared.Layout.WorkspaceDir) != "" {
+		out.Layout.WorkspaceDir = shared.Layout.WorkspaceDir
+	}
+	out.Prompts = mergePromptPtrs(shared.Prompts, agent.Prompts)
+	return out
+}
+
+func mergePromptPtrs(base, overlay *models.AgentPrompts) *models.AgentPrompts {
+	if base == nil && overlay == nil {
+		return nil
+	}
+	bm := map[string]string{}
+	om := map[string]string{}
+	if base != nil {
+		b, _ := json.Marshal(base)
+		_ = json.Unmarshal(b, &bm)
+	}
+	if overlay != nil {
+		b, _ := json.Marshal(overlay)
+		_ = json.Unmarshal(b, &om)
+	}
+	out := map[string]string{}
+	for k, v := range bm {
+		out[k] = v
+	}
+	for k, v := range om {
+		if strings.TrimSpace(v) != "" {
+			out[k] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return overlay
+	}
+	var p models.AgentPrompts
+	if err := json.Unmarshal(b, &p); err != nil {
+		return overlay
+	}
+	return &p
+}
+
 // reservedArtifactStore is the conventional name for the platform's run-scoped
 // artifact-store MCP. It is NOT special-cased in mcp.json: the whole MCP config
 // is user-authored. The run-scoped endpoint + token are exposed only as
@@ -136,7 +262,7 @@ const reservedArtifactStore = "artifact-store"
 // gates optional MR creation; empty means "no credentials, skip MR".
 func (c *acpProvider) gitToken(req NodeReq) string {
 	vars := c.mcpVars(req)
-	if v := substVars(c.agentConfig(str2(req.Config["skill_profile"])).Env["GITLAB_TOKEN"], vars); v != "" {
+	if v := substVars(c.effectiveAgent(req).Env["GITLAB_TOKEN"], vars); v != "" {
 		return v
 	}
 	return c.opts.Env["GITLAB_TOKEN"]
@@ -148,7 +274,7 @@ func (c *acpProvider) gitToken(req NodeReq) string {
 // token on GitHub).
 func (c *acpProvider) gitLabURL(req NodeReq) string {
 	vars := c.mcpVars(req)
-	if v := substVars(c.agentConfig(str2(req.Config["skill_profile"])).Env["GITLAB_URL"], vars); v != "" {
+	if v := substVars(c.effectiveAgent(req).Env["GITLAB_URL"], vars); v != "" {
 		return v
 	}
 	repo := c.nodeRepoURL(req)
@@ -221,7 +347,7 @@ func substSlice(s []string, vars map[string]string) []string {
 // Workflow ACP never auto-injects live memory/context/scheduler endpoints;
 // declared entries for those names (or URL paths) are dropped here.
 func (c *acpProvider) resolvedMCPSpecs(req NodeReq) []sandbox.MCPServerSpec {
-	mcp := c.agentConfig(str2(req.Config["skill_profile"])).MCP
+	mcp := c.effectiveAgent(req).MCP
 	if len(mcp) == 0 {
 		return nil
 	}

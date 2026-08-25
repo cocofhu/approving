@@ -60,14 +60,10 @@ func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
 	if !ok {
 		t.Fatal("project missing")
 	}
-	foundKey := false
-	for _, e := range p.SandboxEnv {
-		if e.Key == "APPROVING_CURSOR_API_KEY" && e.Value == "test-key-cursor" && e.Secret {
-			foundKey = true
-		}
-	}
-	if !foundKey {
-		t.Fatalf("project sandboxEnv missing auth key: %+v", p.SandboxEnv)
+	_ = p
+	shared := svc.SharedAgent.Get(projectID)
+	if shared.Env["APPROVING_CURSOR_API_KEY"] != "test-key-cursor" {
+		t.Fatalf("shared env missing auth key: %+v", shared.Env)
 	}
 
 	for _, name := range services.OnboardingAgentNames {
@@ -123,14 +119,10 @@ func TestOnboardingBootstrapWritesCodeBuddyRegionToAgents(t *testing.T) {
 		}
 	}
 	p, _ := svc.Projects.Get(projectID)
-	foundRegion := false
-	for _, e := range p.SandboxEnv {
-		if e.Key == "APPROVING_CODEBUDDY_REGION" && e.Value == "internal" {
-			foundRegion = true
-		}
-	}
-	if !foundRegion {
-		t.Fatalf("project sandboxEnv missing region: %+v", p.SandboxEnv)
+	_ = p
+	shared := svc.SharedAgent.Get(projectID)
+	if shared.Env["APPROVING_CODEBUDDY_REGION"] != "internal" {
+		t.Fatalf("shared env missing region: %+v", shared.Env)
 	}
 }
 
@@ -371,5 +363,5 @@ func newOnboardingHarness(t *testing.T) (*services.OnboardingService, string) {
 	}
 	skills := services.NewSkillService(t.TempDir())
 	wf := services.NewWorkflowService(db)
-	return services.NewOnboardingService(projects, skills, wf), p.ID
+	return services.NewOnboardingService(projects, skills, services.NewSharedAgentService(t.TempDir()), wf), p.ID
 }

@@ -320,7 +320,7 @@ func (c *acpProvider) ReconcileOnConfirm(ctx context.Context, req NodeReq) React
 	var usageByModel models.TokenUsageByModel
 	var events []models.AcpEvent
 
-	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ReviewConfirmReconcileText()
+	prompt := c.agentPrompts(req).ReviewConfirmReconcileText()
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
 	cancel()
@@ -350,7 +350,7 @@ func (c *acpProvider) confirmSummaryTurn(ctx context.Context, req NodeReq, sess 
 	if sess == nil || sess.acp == nil || !sess.acp.IsConnected() {
 		return ""
 	}
-	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ConfirmSummaryContractText()
+	prompt := c.agentPrompts(req).ConfirmSummaryContractText()
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
 	cancel()
@@ -395,7 +395,7 @@ func (c *acpProvider) enforceOpenQuestionsGate(ctx context.Context, req NodeReq,
 	if len(open) == 0 {
 		return nil, "", nil, nil, nil, false
 	}
-	prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ClarifiedOpenQuestionsRetryFor(open)
+	prompt := c.agentPrompts(req).ClarifiedOpenQuestionsRetryFor(open)
 	chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 	res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
 	cancel()
@@ -468,7 +468,7 @@ func (c *acpProvider) buildReactOpenPrompt(req NodeReq, seeded []string) string 
 	if req.NodeType == "approve" {
 		return p + models.DefaultApproveOpenSuffix
 	}
-	return p + c.agentPrompts(str2(req.Config["skill_profile"])).ReactOpenSuffixText()
+	return p + c.agentPrompts(req).ReactOpenSuffixText()
 }
 
 // buildReactRehydratePrompt re-opens a dialogue after a crash/restart: the base

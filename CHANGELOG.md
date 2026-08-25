@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- **Project shared Agent config**: each project can edit a shared Agent baseline
+  (workspace files / MCP / env / prompts / meta). Workflow Run and project-context
+  chat tests **extend** that baseline then **overlay** the Agent. Agent Studio
+  dialogue tests stay Agent-only (no extend).
+- **Project sandboxEnv removed**: one-time migration copies `Project.sandboxEnv`
+  into shared env (same key keeps shared), then clears the project field. Project
+  API no longer accepts/returns `sandboxEnv`. **Run.sandboxEnv** is unchanged.
+- External scripts must stop sending project `sandboxEnv`; put OS env in
+  **项目共享 Agent 配置 → 环境变量** instead.
+
 ## 0.3.1-beta — 2026-08-23
 
 - Public beta follow-up on [`v0.3.1-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.1-beta)

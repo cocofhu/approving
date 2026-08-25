@@ -46,7 +46,7 @@ func (c *acpProvider) OfferCommitOnConfirm(ctx context.Context, req NodeReq) Rea
 				Msg("review confirm git wrap-up skipped: session disconnected")
 		} else {
 			files := formatDirtyFiles(ch)
-			prompt := c.agentPrompts(str2(req.Config["skill_profile"])).ReviewCommitWrapUpFor(files)
+			prompt := c.agentPrompts(req).ReviewCommitWrapUpFor(files)
 			chatCtx, cancel := context.WithTimeout(ctx, c.nodeChatTimeout(req))
 			res, err := c.streamChat(chatCtx, sess.acp, req, prompt, nil)
 			cancel()

@@ -15,14 +15,12 @@ import (
 type projectCreateBody struct {
 	Name        string                   `json:"name"`
 	Description string                   `json:"description"`
-	SandboxEnv  []models.EnvEntry        `json:"sandboxEnv"`
 	Variables   []models.ProjectVariable `json:"variables"`
 }
 
 type projectUpdateBody struct {
 	Name                    *string                     `json:"name"`
 	Description             *string                     `json:"description"`
-	SandboxEnv              *[]models.EnvEntry          `json:"sandboxEnv"`
 	Variables               *[]models.ProjectVariable   `json:"variables"`
 	NotifyPolicy            *models.ProjectNotifyPolicy `json:"notifyPolicy"`
 	UnknownModelDisplayName *string                     `json:"unknownModelDisplayName"`
@@ -81,7 +79,7 @@ func (h *Handlers) CreateProject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	p, err := h.Projects.Create(b.Name, b.Description, b.SandboxEnv, b.Variables)
+	p, err := h.Projects.Create(b.Name, b.Description, nil, b.Variables)
 	if err != nil {
 		writeProjectErr(c, err)
 		return
@@ -97,7 +95,6 @@ func (h *Handlers) CreateProject(c *gin.Context) {
 		Payload: map[string]any{
 			"name":        p.Name,
 			"description": p.Description,
-			"sandboxEnv":  services.MaskSandboxEnvForAudit(p.SandboxEnv),
 			"variables":   services.MaskProjectVarsForAudit(p.Variables),
 		},
 	})
@@ -115,7 +112,7 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		return
 	}
 	id := c.Param("id")
-	p, err := h.Projects.Update(id, b.Name, b.Description, b.SandboxEnv, b.Variables, b.NotifyPolicy, b.UnknownModelDisplayName)
+	p, err := h.Projects.Update(id, b.Name, b.Description, nil, b.Variables, b.NotifyPolicy, b.UnknownModelDisplayName)
 	if err != nil {
 		writeProjectErr(c, err)
 		return
@@ -127,9 +124,6 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 	if b.Description != nil {
 		changed = append(changed, "description")
 	}
-	if b.SandboxEnv != nil {
-		changed = append(changed, "sandboxEnv")
-	}
 	if b.Variables != nil {
 		changed = append(changed, "variables")
 	}
@@ -140,9 +134,6 @@ func (h *Handlers) UpdateProject(c *gin.Context) {
 		changed = append(changed, "unknownModelDisplayName")
 	}
 	payload := map[string]any{"changed": changed, "name": p.Name}
-	if b.SandboxEnv != nil {
-		payload["sandboxEnv"] = services.MaskSandboxEnvForAudit(p.SandboxEnv)
-	}
 	if b.Variables != nil {
 		payload["variables"] = services.MaskProjectVarsForAudit(p.Variables)
 	}

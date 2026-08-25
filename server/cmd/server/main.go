@@ -157,6 +157,8 @@ func main() {
 	projectSvc := services.NewProjectService(db)
 	auditSvc := services.NewProjectAuditService(db)
 	services.BackfillAuditElevatedFields(db)
+	sharedAgentSvc := services.NewSharedAgentService(services.DefaultSharedAgentRoot(cfg.Engine.ProfilesRoot))
+	services.MigrateProjectSandboxEnvOnce(db, projectSvc, sharedAgentSvc)
 	provider := runtime.NewProvider(cfg.Engine.ExecProvider, host, runtime.Options{
 		SandboxImage:         cfg.Sandbox.Image,
 		SandboxImages:        cfg.Sandbox.Images,
@@ -174,8 +176,33 @@ func main() {
 		Blobs:                blobStore,
 		ProfilesRoot:         cfg.Engine.ProfilesRoot,
 		PlatformRulesRoot:    cfg.Engine.PlatformRulesRoot,
-		ProjectEnvForWorkflow: func(workflowID string) map[string]string {
-			return services.ProjectEnvMap(projectSvc.SandboxEnvForWorkflow(workflowID))
+		ProjectIDForWorkflow: func(workflowID string) string {
+			var wf models.WorkflowDef
+			if err := db.Select("project_id").First(&wf, "id = ?", workflowID).Error; err != nil {
+				return ""
+			}
+			return wf.ProjectID
+		},
+		SharedAgentForProject: func(projectID string) runtime.SharedAgentView {
+			cfg := sharedAgentSvc.Get(projectID)
+			mcp := make([]runtime.SharedMCPView, 0, len(cfg.MCP))
+			for _, m := range cfg.MCP {
+				mcp = append(mcp, runtime.SharedMCPView{
+					Name: m.Name, URL: m.URL, Headers: m.Headers,
+					Command: m.Command, Args: m.Args, Env: m.Env,
+				})
+			}
+			return runtime.SharedAgentView{
+				AcpBackend: cfg.AcpBackend,
+				MCP:        mcp,
+				Env:        cfg.Env,
+				Layout: runtime.SharedLayoutView{
+					ConfigRoot: cfg.Layout.ConfigRoot, WorkspaceDir: cfg.Layout.WorkspaceDir,
+				},
+				Prompts:   cfg.Prompts,
+				WorkDir:   sharedAgentSvc.WorkDir(projectID),
+				ProjectID: pickSharedProjectID(cfg),
+			}
 		},
 		RunSandboxEnvForRun: func(runID string) []models.EnvEntry {
 			var run models.Run
@@ -406,6 +433,7 @@ func main() {
 		Arts:                  artifactSvc,
 		APIKeys:               services.NewAPIKeyService(db),
 		Skill:                 skillSvc,
+		SharedAgent:           sharedAgentSvc,
 		Org:                   orgSvc,
 		Dash:                  services.NewDashboardService(db, projectSvc),
 		Sbx:                   sbxSvc,
@@ -438,7 +466,7 @@ func main() {
 		PublicAdvertise:       cfg.Server.PublicAdvertise,
 		InjectBundles:         injectStore,
 		Blobs:                 blobStore,
-		Onboarding:            services.NewOnboardingService(projectSvc, skillSvc, wfSvc),
+		Onboarding:            services.NewOnboardingService(projectSvc, skillSvc, sharedAgentSvc, wfSvc),
 		Team:                  services.NewTeamService(projectSvc, skillSvc, orgSvc, pmSvc, sbxSvc),
 	}
 	if h.Team != nil && h.PMMCP != nil {
@@ -503,4 +531,11 @@ func main() {
 	}
 	log.Info().Msg("exit")
 	os.Exit(0)
+}
+
+func pickSharedProjectID(cfg services.SharedAgentConfig) string {
+	if v := strings.TrimSpace(cfg.DefaultProjectID); v != "" {
+		return v
+	}
+	return strings.TrimSpace(cfg.ProjectID)
 }

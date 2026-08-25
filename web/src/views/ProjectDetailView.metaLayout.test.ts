@@ -76,32 +76,33 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
     expect(detailSrc).toMatch(/tab === 'notify' && project[\s\S]*?class="scroll-area min-h-0 flex-1 overflow-y-auto"/)
     expect(detailSrc).not.toMatch(/tab === 'cronJobs'" class="flex min-h-\[420px\] flex-col"/)
     expect(detailSrc).not.toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
-    // variables / sandboxEnv 已接入铺满链（对齐 meta），不再锁定 420 硬底
-    expect(detailSrc).toMatch(/tab === 'sandboxEnv'" class="flex min-h-0 flex-1 flex-col"/)
+    // variables / sharedAgent 已接入铺满链（对齐 meta），不再锁定 420 硬底
+    expect(detailSrc).toMatch(/tab === 'sharedAgent'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'variables'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'audit'" class="flex min-h-0 flex-1 flex-col"/)
   })
 
-  it('variables / sandboxEnv shells drop bottom border and use three-zone flex (fill-height)', () => {
-    const sandboxStart = detailSrc.indexOf("tab === 'sandboxEnv'")
+  it('variables / sharedAgent shells drop bottom border and use three-zone flex (fill-height)', () => {
+    const sharedStart = detailSrc.indexOf("tab === 'sharedAgent'")
     const variablesStart = detailSrc.indexOf("tab === 'variables'")
     const auditStart = detailSrc.indexOf("tab === 'audit'")
-    expect(sandboxStart).toBeGreaterThanOrEqual(0)
-    expect(variablesStart).toBeGreaterThan(sandboxStart)
+    expect(sharedStart).toBeGreaterThanOrEqual(0)
+    expect(variablesStart).toBeGreaterThan(sharedStart)
     expect(auditStart).toBeGreaterThan(variablesStart)
-    const sandbox = detailSrc.slice(sandboxStart, variablesStart)
+    const shared = detailSrc.slice(sharedStart, variablesStart)
     const variables = detailSrc.slice(variablesStart, auditStart)
 
-    for (const block of [sandbox, variables]) {
-      expect(block).toMatch(/border border-b-0 border-line bg-surface/)
-      expect(block).toMatch(/scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto/)
-      expect(block).toMatch(/flex shrink-0 flex-wrap gap-2 border-t border-line/)
-      expect(block).not.toMatch(/min-h-\[420px\]/)
-      // g1.1 / g1.2: Tabs 下直接 empty/data shell，无 hintRow（envHint / varsHint + 合并规则）
-      expect(block).not.toMatch(/mb-3 flex shrink-0 flex-wrap items-baseline/)
-      expect(block).not.toMatch(/project-detail-merge-rules/)
-    }
-    expect(sandbox).toMatch(/data-testid="sandbox-env-footer"/)
-    expect(variables).toMatch(/data-testid="workflow-vars-footer"/)
+    expect(shared).toMatch(/ProjectSharedAgentPanel/)
+    expect(shared).toMatch(/class="flex min-h-0 flex-1 flex-col"/)
+    expect(shared).not.toMatch(/min-h-\[420px\]/)
+    expect(shared).not.toMatch(/sandbox-env/)
+
+    expect(variables).toMatch(/border border-b-0 border-line bg-surface/)
+    expect(variables).toMatch(/scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto/)
+    expect(variables).toMatch(/flex shrink-0 flex-wrap gap-2 border-t border-line/)
+    expect(variables).not.toMatch(/min-h-\[420px\]/)
+    // g1.1 / g1.2: Tabs 下直接 empty/data shell，无 hintRow（varsHint + 合并规则）
+    expect(variables).not.toMatch(/varsHint/)
+    expect(variables).not.toMatch(/project-detail-merge-rules/)
   })
 })

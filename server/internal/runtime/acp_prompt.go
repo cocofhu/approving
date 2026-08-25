@@ -11,7 +11,6 @@ import (
 
 func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
 	var b strings.Builder
-	profile := str2(req.Config["skill_profile"])
 	if sys := str2(req.Config["system"]); sys != "" {
 		b.WriteString(sys + "\n\n")
 	}
@@ -20,7 +19,7 @@ func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
 	} else {
 		b.WriteString(str2(req.Config["prompt"]))
 	}
-	prompts := c.agentPrompts(profile)
+	prompts := c.agentPrompts(req)
 	if len(seeded) > 0 {
 		b.WriteString(prompts.UpstreamHeader())
 		for _, n := range seeded {
@@ -135,8 +134,8 @@ func conditionalInjection(req NodeReq) string {
 // agentPrompts returns the Agent's per-profile prompt overrides (from its
 // agent.json), or nil when unset — the *models.AgentPrompts helpers are all
 // nil-safe and fall back to the built-in defaults.
-func (c *acpProvider) agentPrompts(profile string) *models.AgentPrompts {
-	return c.agentConfig(profile).Prompts
+func (c *acpProvider) agentPrompts(req NodeReq) *models.AgentPrompts {
+	return c.effectiveAgent(req).Prompts
 }
 
 // upstreamArtifacts lists this run's existing artifact names so the agent can

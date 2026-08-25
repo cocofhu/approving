@@ -27,6 +27,9 @@ var HomeBaseDir string
 // ConfigHomeSpec describes how to assemble a per-node config home (e.g.
 // /root/.cursor, /root/.claude) for an ACP backend.
 type ConfigHomeSpec struct {
+	// BaseWorkDirSrc, when set, is copied first (project shared Agent workspace).
+	// Agent WorkDirSrc then overlays same-relative paths.
+	BaseWorkDirSrc string
 	// WorkDirSrc, when set, is the agent's working directory on the host
 	// (<ProfilesRoot>/<agent>/workspace); its whole tree (rules/, skills/,
 	// AGENTS.md, scripts, …) is copied verbatim into the config home.
@@ -83,9 +86,14 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 		return "", err
 	}
 
-	// First lay down the agent's authored working directory verbatim (rules/,
-	// skills/, AGENTS.md, scripts, …); platform base rules + mcp.json layer on
-	// top so the platform rules can't be silently dropped by the agent.
+	// First lay down project-shared workspace (extend), then agent workspace
+	// (overlay). Platform base rules + mcp.json layer on top so platform rules
+	// can't be silently dropped by the agent.
+	if spec.BaseWorkDirSrc != "" {
+		if err := copyTree(spec.BaseWorkDirSrc, dir); err != nil {
+			return "", err
+		}
+	}
 	if spec.WorkDirSrc != "" {
 		if err := copyTree(spec.WorkDirSrc, dir); err != nil {
 			return "", err

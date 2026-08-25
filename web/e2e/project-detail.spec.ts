@@ -4,7 +4,6 @@ const MOCK_PROJECT = {
   id: 'proj-1',
   name: 'Demo Project',
   description: 'Project for e2e',
-  sandboxEnv: [],
   variables: [],
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
@@ -119,6 +118,29 @@ async function gotoProjectDetail(
       contentType: 'application/json',
       body: JSON.stringify({ enabled: false }),
     })
+  })
+  await page.route('**/api/projects/proj-1/shared-agent-config', async (route) => {
+    const method = route.request().method()
+    if (method === 'GET' || method === 'PUT') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MOCK_SHARED_AGENT_EMPTY),
+      })
+      return
+    }
+    await route.continue()
+  })
+  await page.route('**/api/agents', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ name: 'demo-agent', projectId: 'proj-1' }]),
+      })
+      return
+    }
+    await route.continue()
   })
   await page.route('**/api/projects/*/token-stats**', async (route) => {
     if (route.request().method() === 'GET') {
@@ -236,7 +258,6 @@ test.describe('ProjectDetailView 流水线操作列', () => {
 
 const MOCK_PROJECT_WITH_VARS = {
   ...MOCK_PROJECT,
-  sandboxEnv: [{ key: 'API_URL', value: 'https://example.com', secret: false }],
   variables: [
     {
       name: 'region',
@@ -248,18 +269,21 @@ const MOCK_PROJECT_WITH_VARS = {
   ],
 }
 
-/** Legacy mock: no `enabled` field — UI must treat as On. */
-const MOCK_PROJECT_LEGACY_ENV = {
-  ...MOCK_PROJECT,
-  sandboxEnv: [{ key: 'LEGACY_FLAG', value: '1', secret: false }],
+const MOCK_SHARED_AGENT = {
+  projectId: 'proj-1',
+  acpBackend: 'cursor',
+  defaultProjectId: '',
+  gitCredentialType: '',
+  files: [],
+  mcp: [],
+  env: { API_URL: 'https://example.com' },
+  layout: { configRoot: '/root/.cursor', workspaceDir: '/root/workspace' },
+  prompts: {},
 }
 
-const MOCK_PROJECT_DISABLED_ENV = {
-  ...MOCK_PROJECT,
-  sandboxEnv: [
-    { key: 'API_URL', value: 'https://example.com', secret: false, enabled: true },
-    { key: 'DEBUG_TRACE', value: '1', secret: false, enabled: false },
-  ],
+const MOCK_SHARED_AGENT_EMPTY = {
+  ...MOCK_SHARED_AGENT,
+  env: {},
 }
 
 async function gotoProjectDetailWithProject(
@@ -341,105 +365,25 @@ async function gotoProjectDetailWithProject(
   await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
 }
 
-test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
+test.describe('ProjectDetailView 共享 Agent / 工作流变量面板布局', () => {
   test('页头无「合并规则」且无项目删除', async ({ page }) => {
     await gotoProjectDetailWithProject(page, MOCK_PROJECT)
 
-    // 页头右区仅保留 Token；项目级「删除」已迁入「项目信息」底栏（g1.1 / g3.1）
     const headerActions = page.getByTestId('project-detail-header-actions')
     await expect(headerActions.getByTestId('project-token-stat')).toBeVisible()
     await expect(headerActions.getByRole('button', { name: '删除' })).toHaveCount(0)
-    // 页头与沙箱 Tab 均无「合并规则」入口（hintRow 已整行删除）
     await expect(headerActions.getByRole('button', { name: '合并规则' })).toHaveCount(0)
   })
 
-  test('沙箱空态：同壳面板 + primary「添加一行」；无 hintRow / 合并规则', async ({ page }) => {
-    await gotoProjectDetailWithProject(page, MOCK_PROJECT)
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
-
-    // g1.1 / g1.2 / f1: Tabs 下直接 empty shell，无 envHint、无合并规则入口
-    await expect(page.getByText('注入流水线节点沙箱的 OS 环境变量。')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
-    await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
-    await expect(page.getByText('环境变量与工作流变量')).toHaveCount(0)
-
-    const shell = page.getByTestId('sandbox-env-empty-shell')
-    await expect(shell).toBeVisible()
-    const box = await shell.boundingBox()
-    expect(box?.height).toBeGreaterThanOrEqual(360)
-    expect(box?.width).toBeGreaterThan(900)
-    // 空态壳底贴近视口主区底，消除卡外页底空洞（g2.2 / 对齐 meta footerBox）
-    expect(box!.y + box!.height).toBeGreaterThan(800 - 80)
-
-    const addBtn = shell.getByRole('button', { name: '添加一行' })
-    await expect(addBtn).toBeVisible()
-    await expect(addBtn).toHaveClass(/bg-accent/)
-  })
-
-  test('沙箱有数据：五列表头 + 底栏 outline/primary + 明文/密钥文案', async ({ page }) => {
-    await gotoProjectDetailWithProject(page, MOCK_PROJECT_WITH_VARS)
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
-
-    const panel = page.getByTestId('sandbox-env-data-panel')
-    await expect(panel.getByText('KEY', { exact: true })).toBeVisible()
-    await expect(panel.getByText('VALUE', { exact: true })).toBeVisible()
-    await expect(panel.getByText('类型', { exact: true })).toBeVisible()
-    await expect(panel.getByText('启用', { exact: true })).toBeVisible()
-    await expect(panel.getByText('操作', { exact: true })).toBeVisible()
-
-    await expect(panel.getByRole('button', { name: '明文' })).toBeVisible()
-    await expect(panel.getByTestId('sandbox-env-enabled')).toBeVisible()
-    await expect(panel.getByText('开', { exact: true })).toBeVisible()
-
-    const foot = panel.getByTestId('sandbox-env-footer')
-    const addBtn = foot.getByRole('button', { name: '添加一行' })
-    const saveBtn = foot.getByRole('button', { name: '保存' })
-    await expect(addBtn).toBeVisible()
-    await expect(addBtn).toHaveClass(/border/)
-    await expect(saveBtn).toBeVisible()
-    await expect(saveBtn).toHaveClass(/bg-accent/)
-    // 有数据底栏贴近视口主区底（g2.2）
-    const footBox = await foot.boundingBox()
-    expect(footBox).toBeTruthy()
-    expect(footBox!.y + footBox!.height).toBeGreaterThan(800 - 80)
-  })
-
-  test('沙箱启用开关：旧 mock 无 enabled 时行显示为开', async ({ page }) => {
-    await gotoProjectDetailWithProject(page, MOCK_PROJECT_LEGACY_ENV)
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
-
-    const legacyRow = page.getByTestId('sandbox-env-row').first()
-    await expect(legacyRow).toHaveAttribute('data-env-enabled', 'true')
-    await expect(legacyRow.getByText('开', { exact: true })).toBeVisible()
-    await expect(legacyRow.getByText('· 旧')).toHaveCount(0)
-    // g1.1 / g3.1: legacy 数据态亦无 envHint / 合并规则入口
-    await expect(page.getByText('注入流水线节点沙箱的 OS 环境变量。')).toHaveCount(0)
-    await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
-    await expect(page.getByTestId('sandbox-env-data-panel')).toBeVisible()
-  })
-
-  test('沙箱启用开关：停用弱化 + 保存 payload 含 enabled:false', async ({ page }) => {
-    let saveBody: { sandboxEnv?: Array<{ key: string; enabled?: boolean }> } | null = null
+  test('共享 Agent：提示文案 + 子页签 + env 可编辑保存', async ({ page }) => {
+    let saveBody: Record<string, unknown> | null = null
     await page.setViewportSize({ width: 1280, height: 800 })
     await page.route('**/api/projects/proj-1', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify(MOCK_PROJECT_DISABLED_ENV),
-        })
-        return
-      }
-      if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
-        saveBody = route.request().postDataJSON()
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            ...MOCK_PROJECT_DISABLED_ENV,
-            sandboxEnv: saveBody?.sandboxEnv ?? MOCK_PROJECT_DISABLED_ENV.sandboxEnv,
-          }),
+          body: JSON.stringify(MOCK_PROJECT),
         })
         return
       }
@@ -474,6 +418,38 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
         body: JSON.stringify({ enabled: false }),
       })
     })
+    await page.route('**/api/agents', async (route) => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([{ name: 'demo-agent', projectId: 'proj-1' }]),
+        })
+        return
+      }
+      await route.continue()
+    })
+    await page.route('**/api/projects/proj-1/shared-agent-config', async (route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_SHARED_AGENT),
+        })
+        return
+      }
+      if (method === 'PUT') {
+        saveBody = route.request().postDataJSON()
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_SHARED_AGENT, ...(saveBody || {}) }),
+        })
+        return
+      }
+      await route.continue()
+    })
     await page.route('**/api/projects/*/token-stats**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -497,32 +473,30 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     })
     await page.goto('/project-detail.html')
     await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
 
-    const rows = page.getByTestId('sandbox-env-row')
-    await expect(rows).toHaveCount(2)
-    // Row order matches mock: API_URL (enabled), DEBUG_TRACE (disabled)
-    const onRow = rows.nth(0)
-    const disabledRow = rows.nth(1)
-    await expect(onRow.locator('input').first()).toHaveValue('API_URL')
-    await expect(disabledRow.locator('input').first()).toHaveValue('DEBUG_TRACE')
-    await expect(disabledRow).toHaveAttribute('data-env-enabled', 'false')
-    await expect(disabledRow.getByText('关', { exact: true })).toBeVisible()
-    await expect(disabledRow.locator('input').first()).toHaveClass(/opacity-45/)
-    await expect(disabledRow.getByTestId('sandbox-env-enabled')).toBeVisible()
-    await expect(disabledRow.getByRole('switch')).toBeEnabled()
+    await page.getByRole('button', { name: '项目共享 Agent 配置' }).click()
+    await expect(page).toHaveURL(/tab=sharedAgent/)
+    const panel = page.getByTestId('project-shared-agent-panel')
+    await expect(panel).toBeVisible()
+    await expect(page.getByTestId('shared-agent-hint')).toContainText(/extend/)
+    await expect(page.getByTestId('shared-agent-subtab-files')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-mcp')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-env')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-prompts')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-meta')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-test')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-data')).toHaveCount(0)
 
-    await onRow.getByRole('switch').click()
-    await expect(onRow).toHaveAttribute('data-env-enabled', 'false')
-    await expect(onRow.getByText('关', { exact: true })).toBeVisible()
-
-    const panel = page.getByTestId('sandbox-env-data-panel')
-    await panel.getByRole('button', { name: '保存' }).click()
+    await page.getByTestId('shared-agent-subtab-env').click()
+    await expect(page.getByPlaceholder('KEY').first()).toHaveValue('API_URL')
+    await page.getByRole('button', { name: /添加/ }).first().click()
+    const rows = page.locator('input[placeholder="KEY"]')
+    await rows.last().fill('NEW_KEY')
+    await page.locator('input[placeholder="value"]').last().fill('1')
+    await page.getByTestId('shared-agent-save').click()
     await expect.poll(() => saveBody).not.toBeNull()
-    const apiUrl = saveBody!.sandboxEnv?.find((e) => e.key === 'API_URL')
-    const debug = saveBody!.sandboxEnv?.find((e) => e.key === 'DEBUG_TRACE')
-    expect(apiUrl?.enabled).toBe(false)
-    expect(debug?.enabled).toBe(false)
+    expect((saveBody as { env?: Record<string, string> }).env?.API_URL).toBe('https://example.com')
+    expect((saveBody as { env?: Record<string, string> }).env?.NEW_KEY).toBe('1')
   })
 
   test('工作流变量空态同构面板', async ({ page }) => {
@@ -534,19 +508,16 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     const box = await shell.boundingBox()
     expect(box?.height).toBeGreaterThanOrEqual(360)
     expect(box?.width).toBeGreaterThan(900)
-    // 空态壳底贴近视口主区底（g2.2 / 与沙箱同构）
     expect(box!.y + box!.height).toBeGreaterThan(800 - 80)
 
     const addBtn = shell.getByRole('button', { name: '添加一行' })
     await expect(addBtn).toHaveClass(/bg-accent/)
-    // g2.1 / F1 / F4: Demo 改后态 — 该 Tab 无 varsHint、无「合并规则」（真删除 hint-row）
     await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
     await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
     await expect(page.getByText('启动运行时作为 ${vars.*} 默认值，不整表注入沙箱环境。')).toHaveCount(0)
     await expect(page.getByText(/\$\{vars\.\*\}/)).toHaveCount(0)
     await expect(page.getByText(/不整表注入沙箱环境/)).toHaveCount(0)
 
-    // g1.2 / F2: 空态加行后也不会重新出现说明行或「合并规则」
     await addBtn.click()
     await expect(page.getByText('暂无工作流变量')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
@@ -567,31 +538,15 @@ test.describe('ProjectDetailView 沙箱/工作流变量面板布局', () => {
     const foot = panel.getByTestId('workflow-vars-footer')
     await expect(foot.getByRole('button', { name: '添加一行' })).toHaveClass(/border/)
     await expect(foot.getByRole('button', { name: '保存' })).toHaveClass(/bg-accent/)
-    // 有数据底栏贴近视口主区底（g2.2）
     const footBox = await foot.boundingBox()
     expect(footBox).toBeTruthy()
     expect(footBox!.y + footBox!.height).toBeGreaterThan(800 - 80)
 
-    // g2.2 / F2: 有数据态同样无 varsHint、无「合并规则」
     await expect(page.getByRole('button', { name: '合并规则' })).toHaveCount(0)
     await expect(page.getByTestId('project-detail-merge-rules')).toHaveCount(0)
     await expect(page.getByText('启动运行时作为 ${vars.*} 默认值，不整表注入沙箱环境。')).toHaveCount(0)
     await expect(page.getByText(/\$\{vars\.\*\}/)).toHaveCount(0)
     await expect(page.getByText(/不整表注入沙箱环境/)).toHaveCount(0)
-  })
-
-  test('沙箱空态点击「添加一行」进入有数据面板', async ({ page }) => {
-    await gotoProjectDetailWithProject(page, MOCK_PROJECT)
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
-
-    const emptyShell = page.getByTestId('sandbox-env-empty-shell')
-    await emptyShell.getByRole('button', { name: '添加一行' }).click()
-
-    await expect(page.getByText('暂无沙箱环境变量')).toHaveCount(0)
-    const panel = page.getByTestId('sandbox-env-data-panel')
-    await expect(panel.getByText('KEY', { exact: true })).toBeVisible()
-    await expect(panel.getByRole('button', { name: '明文' })).toBeVisible()
-    await expect(panel.getByRole('button', { name: '保存' })).toBeVisible()
   })
 })
 
@@ -750,9 +705,9 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await page.getByTestId('project-meta-footer').getByRole('button', { name: '保存' }).click()
     await expect(page.getByRole('heading', { name: 'Renamed Project' })).toBeVisible({ timeout: 5_000 })
 
-    await page.getByRole('button', { name: '沙箱环境变量' }).click()
-    await expect(page.getByText('暂无沙箱环境变量')).toBeVisible()
-    await expect(page).toHaveURL(/tab=sandboxEnv/)
+    await page.getByRole('button', { name: '项目共享 Agent 配置' }).click()
+    await expect(page.getByTestId('project-shared-agent-panel')).toBeVisible()
+    await expect(page).toHaveURL(/tab=sharedAgent/)
     await page.getByRole('button', { name: '定时任务' }).click()
     await expect(page.getByText('暂无定时任务')).toBeVisible()
     await expect(page).toHaveURL(/tab=cronJobs/)

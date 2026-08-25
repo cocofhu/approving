@@ -473,13 +473,13 @@ type AgentGetter interface {
 }
 
 // ValidateSkillProfilesProject rejects non-empty skill_profile refs that are
-// missing, unbound, or not bound to projectID. Empty skill_profile is skipped.
-// Covers every node carrying a non-empty skill_profile (not only type=agent).
+// missing. Unbound / cross-project Agents are allowed: at Run time they extend
+// the current workflow project's shared Agent config. Empty skill_profile is skipped.
 func ValidateSkillProfilesProject(skills AgentGetter, projectID string, g models.Graph) error {
 	if skills == nil {
 		return nil
 	}
-	pid := strings.TrimSpace(projectID)
+	_ = projectID
 	var bad []string
 	for _, n := range g.Nodes {
 		if n.Config == nil {
@@ -490,27 +490,17 @@ func ValidateSkillProfilesProject(skills AgentGetter, projectID string, g models
 		if profile == "" {
 			continue
 		}
-		ag, ok := skills.Get(profile)
-		reason := ""
-		switch {
-		case !ok:
-			reason = "已删除"
-		case strings.TrimSpace(ag.ProjectID) == "":
-			reason = "未绑定"
-		case !AgentProjectMatches(ag, pid):
-			reason = "非本项目"
-		}
-		if reason == "" {
+		if _, ok := skills.Get(profile); ok {
 			continue
 		}
 		label := strings.TrimSpace(n.Label)
 		if label == "" {
 			label = n.ID
 		}
-		bad = append(bad, fmt.Sprintf("%s → %s（%s）", label, profile, reason))
+		bad = append(bad, fmt.Sprintf("%s → %s（已删除）", label, profile))
 	}
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("存在非法 skill_profile，请改选同项目 Agent 后再保存：%s", strings.Join(bad, "；"))
+	return fmt.Errorf("存在不可用 skill_profile，请改选有效 Agent 后再保存：%s", strings.Join(bad, "；"))
 }

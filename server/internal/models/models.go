@@ -42,15 +42,17 @@ type ProjectVariable struct {
 	Secret   bool   `json:"secret,omitempty"`
 }
 
-// Project is a workspace that owns workflows and holds project-scoped sandbox
-// env + workflow variable defaults. SandboxEnv and Variables are separate
-// namespaces (no automatic bidirectional mapping).
+// Project is a workspace that owns workflows and holds workflow variable
+// defaults. Project-level OS env lives in the shared Agent config (extend
+// layer); Run.SandboxEnv remains the per-run snapshot.
 type Project struct {
 	ID          string            `gorm:"primaryKey" json:"id"`
 	Name        string            `gorm:"uniqueIndex" json:"name"`
 	Description string            `json:"description"`
-	SandboxEnv  []EnvEntry        `gorm:"serializer:json" json:"sandboxEnv"`
-	Variables   []ProjectVariable `gorm:"serializer:json" json:"variables"`
+	// SandboxEnv is deprecated legacy storage cleared by MigrateProjectSandboxEnvOnce.
+	// Kept on the model so upgrades can read then wipe; API no longer exposes it.
+	SandboxEnv []EnvEntry        `gorm:"serializer:json" json:"-"`
+	Variables  []ProjectVariable `gorm:"serializer:json" json:"variables"`
 	// PmLeaderEnabled toggles the project-level PM Leader consult entry.
 	PmLeaderEnabled bool `json:"pmLeaderEnabled"`
 	// PmLeaderAgent is the bound Agent config name (skill_profile). Empty when
