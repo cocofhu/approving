@@ -23,7 +23,8 @@
       "missingRequired": "Fill required launch fields before starting",
       "cardFallback": "Approve pre-dev clarification",
       "scrollLeft": "Scroll left",
-      "scrollRight": "Scroll right"
+      "scrollRight": "Scroll right",
+      "draftRestored": "Draft restored"
     },
     "board": {
       "title": "Requirement progress board",

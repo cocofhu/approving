@@ -85,6 +85,7 @@
       "dialogueAcpDelivery.ts",
       "exportStructuredArtifact.ts",
       "homeApproveHandoff.ts",
+      "homeComposerDraft.ts",
       "isVisualHtmlCard.ts",
       "liveLogBootPhase.ts",
       "liveLogRehydrate.ts",
@@ -174,7 +175,7 @@
     "inbox": 20,
     "pm": 6,
     "project": 4,
-    "run": 51,
+    "run": 52,
     "shared": 37
   }
 }

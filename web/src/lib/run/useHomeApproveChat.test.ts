@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   toastWarn: vi.fn(),
   toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   listWorkflows: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
@@ -23,7 +24,11 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/lib/composables/useToast', () => ({
-  useToast: () => ({ warn: mocks.toastWarn, error: mocks.toastError, success: vi.fn() }),
+  useToast: () => ({
+    warn: mocks.toastWarn,
+    error: mocks.toastError,
+    success: mocks.toastSuccess,
+  }),
 }))
 
 vi.mock('@/lib/composables/useProjectContext', () => ({
@@ -44,7 +49,8 @@ vi.mock('@/lib/api/api', async () => {
   }
 })
 
-import { useHomeApproveChat, HOME_PIPELINE_MEMORY_KEY } from './useHomeApproveChat'
+import { useHomeApproveChat, HOME_PIPELINE_MEMORY_KEY, HOME_COMPOSER_DRAFT_DEBOUNCE_MS } from './useHomeApproveChat'
+import { HOME_COMPOSER_DRAFT_KEY, saveHomeComposerDraft, loadHomeComposerDraft } from './homeComposerDraft'
 
 const approveWf: Workflow = {
   id: 'wf-ap',
@@ -108,6 +114,7 @@ describe('useHomeApproveChat', () => {
     mocks.push.mockReset()
     mocks.toastWarn.mockReset()
     mocks.toastError.mockReset()
+    mocks.toastSuccess.mockReset()
     mocks.listWorkflows.mockReset()
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
@@ -123,11 +130,13 @@ describe('useHomeApproveChat', () => {
     })
     mocks.reactReply.mockResolvedValue({ status: 'ok' })
     localStorage.removeItem(HOME_PIPELINE_MEMORY_KEY)
+    localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
   })
 
   afterEach(() => {
     vi.useRealTimers()
     localStorage.removeItem(HOME_PIPELINE_MEMORY_KEY)
+    localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
   })
 
   it('filters to published approve-first pipelines', async () => {
@@ -273,5 +282,156 @@ describe('useHomeApproveChat', () => {
     expect(mocks.startRun).not.toHaveBeenCalled()
     expect(chat.launchOpen.value).toBe(true)
     expect(mocks.toastWarn).toHaveBeenCalled()
+  })
+
+  // plan g2.1 — silent restore + toast when non-empty draft exists
+  it('restores composer draft on mount and toasts once', async () => {
+    saveHomeComposerDraft('未发送草稿', [{ data: 'img', mimeType: 'image/png', name: 'a.png' }], 'wf-ap')
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.draft.value).toBe('未发送草稿')
+    expect(chat.attachments.value).toEqual([{ data: 'img', mimeType: 'image/png', name: 'a.png' }])
+    expect(chat.selectedId.value).toBe('wf-ap')
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('草稿已恢复')
+  })
+
+  // plan g2.1 — no toast when no draft
+  it('does not toast restore when there is no composer draft', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.draft.value).toBe('')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+  })
+
+  // plan g2.4 — draft pipeline beats lastPipeline memory
+  it('prefers draft pipeline over HOME_PIPELINE_MEMORY_KEY', async () => {
+    localStorage.setItem(HOME_PIPELINE_MEMORY_KEY, 'wf-lite')
+    saveHomeComposerDraft('草稿管道优先', [], 'wf-ap')
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.selectedId.value).toBe('wf-ap')
+    expect(chat.draft.value).toBe('草稿管道优先')
+  })
+
+  // plan g2.4 — unavailable draft pipeline still restores text/attachments
+  it('restores text when draft pipeline is unavailable', async () => {
+    saveHomeComposerDraft('管道已下线', [{ data: 'x', mimeType: 'image/png' }], 'wf-gone')
+    localStorage.setItem(HOME_PIPELINE_MEMORY_KEY, 'wf-lite')
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.draft.value).toBe('管道已下线')
+    expect(chat.attachments.value).toHaveLength(1)
+    expect(chat.selectedId.value).toBe('wf-lite')
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('草稿已恢复')
+  })
+
+  // plan g2.2 — debounced auto-save
+  it('debounces auto-save of text, attachments, and pipeline', async () => {
+    vi.useFakeTimers()
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    chat.draft.value = 'a'
+    chat.draft.value = 'ab'
+    chat.draft.value = 'abc'
+    expect(loadHomeComposerDraft()).toBeNull()
+    await vi.advanceTimersByTimeAsync(HOME_COMPOSER_DRAFT_DEBOUNCE_MS)
+    expect(loadHomeComposerDraft()?.text).toBe('abc')
+    chat.selectPipeline('wf-lite')
+    chat.attachments.value = [{ data: 'z', mimeType: 'image/png' }]
+    await vi.advanceTimersByTimeAsync(HOME_COMPOSER_DRAFT_DEBOUNCE_MS)
+    const saved = loadHomeComposerDraft()
+    expect(saved?.pipelineId).toBe('wf-lite')
+    expect(saved?.attachments).toEqual([{ data: 'z', mimeType: 'image/png' }])
+  })
+
+  // plan g2.2 — unmount flushes pending debounce so quick leave still persists
+  it('flushes pending composer draft save on unmount', async () => {
+    vi.useFakeTimers()
+    let result!: ReturnType<typeof useHomeApproveChat>
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const Comp = defineComponent({
+      setup() {
+        result = useHomeApproveChat()
+        return () => null
+      },
+    })
+    const app = createApp(Comp)
+    app.use(i18n)
+    app.mount(document.createElement('div'))
+    await result.load()
+    result.draft.value = '离开前未防抖落盘'
+    expect(loadHomeComposerDraft()).toBeNull()
+    app.unmount()
+    expect(loadHomeComposerDraft()?.text).toBe('离开前未防抖落盘')
+  })
+
+  // plan g2.4 — empty pipeline list must not drop draft preference before load
+  it('keeps draft pipeline preference while pipeline list is still empty', async () => {
+    saveHomeComposerDraft('等列表', [], 'wf-lite')
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    // Before load: preference from hydrate must survive empty pipelines watch.
+    expect(chat.draft.value).toBe('等列表')
+    await chat.load()
+    expect(chat.selectedId.value).toBe('wf-lite')
+  })
+
+  // plan g2.3 — clear draft after successful startRun
+  it('clears local composer draft after successful send', async () => {
+    saveHomeComposerDraft('will clear', [], 'wf-ap')
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.draft.value).toBe('will clear')
+    await chat.send()
+    await nextTick()
+    expect(loadHomeComposerDraft()).toBeNull()
+    expect(chat.draft.value).toBe('')
+  })
+
+  // plan g2.3 — keep draft when only opening launch modal (not started)
+  it('keeps composer draft when send opens launch modal without starting', async () => {
+    const missing = {
+      ...approveWf,
+      nodes: [
+        {
+          id: 'in',
+          type: 'input' as const,
+          label: '开始',
+          position: { x: 0, y: 0 },
+          config: {
+            variables: [{ name: 'repos', ask: true, required: true, type: 'repos', value: [] }],
+          },
+        },
+        approveWf.nodes[1],
+        approveWf.nodes[2],
+      ],
+    }
+    mocks.listWorkflows.mockResolvedValue([missing])
+    vi.useFakeTimers()
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    chat.draft.value = '仍要保留'
+    await vi.advanceTimersByTimeAsync(HOME_COMPOSER_DRAFT_DEBOUNCE_MS)
+    await chat.send()
+    expect(chat.launchOpen.value).toBe(true)
+    expect(loadHomeComposerDraft()?.text).toBe('仍要保留')
+  })
+
+  // plan g2.3 — clear on onLaunchStarted
+  it('clears composer draft when onLaunchStarted runs after RunLaunch', async () => {
+    saveHomeComposerDraft('launch clear', [], 'wf-ap')
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    await chat.onLaunchStarted('run-99')
+    expect(loadHomeComposerDraft()).toBeNull()
+    expect(chat.draft.value).toBe('')
   })
 })
