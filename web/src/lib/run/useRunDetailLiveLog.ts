@@ -120,7 +120,7 @@ export function useRunDetailLiveLog(opts: {
       })
       if (opts?.signal?.aborted) return false
       if (eventFetchGen[nodeId] !== gen) return false
-      if (isNodeEventsUnavailable(r)) return false
+      if (isNodeEventsUnavailable(r) && !(r.events?.length)) return false
       const prev = eventPages[nodeId]?.events || []
       const merged = mergeAcpEvents(prev, r.events || [], { live: !!r.live })
       if ('hasMore' in r) {

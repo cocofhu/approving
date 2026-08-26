@@ -103,6 +103,9 @@ type acpProvider struct {
 	// in sessions). AbortRun closes these so Cancel-during-agent unblocks
 	// streamChat instead of waiting out ChatTimeout.
 	inflightACP map[string]*sandbox.ACPClient
+	// timeline holds platform-side ACP event snapshots while a node sandbox is
+	// live. nodeEvents reads this first; cold FetchEventLog is fallback only.
+	timeline *acpTimelineStore
 }
 
 // streamChat runs one turn (prompt + optional image attachments), streaming
@@ -118,7 +121,11 @@ func (c *acpProvider) streamChat(ctx context.Context, acp *sandbox.ACPClient, re
 		if r.BusySet {
 			busy = r.Busy
 		}
-		c.emit(req.RunID, req.NodeID, chatResultToEvents(r), busy)
+		events := chatResultToEvents(r)
+		if c.timeline != nil {
+			c.timeline.upsert(req.RunID, req.NodeID, events)
+		}
+		c.emit(req.RunID, req.NodeID, events, busy)
 	})
 }
 
@@ -165,7 +172,7 @@ func newBaseACPProvider(host *mcp.Host, opts Options, backend AcpBackend) ExecPr
 		Str("bridge", AgentRuntimeLabel(backend)).Msg("sandbox exec provider ready")
 	return &acpProvider{host: host, opts: opts, mgr: mgr, backend: backend,
 		sessions: map[string]*reactSession{}, live: map[string]*sandbox.Sandbox{},
-		inflightACP: map[string]*sandbox.ACPClient{}}
+		inflightACP: map[string]*sandbox.ACPClient{}, timeline: newAcpTimelineStore()}
 }
 
 // resolveProviderImage picks the sandbox image for one acpBackend.
