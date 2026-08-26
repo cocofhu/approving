@@ -91,3 +91,163 @@ func TestGlobalTokenStatsAggregation(t *testing.T) {
 		t.Fatalf("expected top run run-g1, got %+v", res.TopRuns)
 	}
 }
+
+func TestGlobalTokenStatsModelRebucketByDefaultModel(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "global_token_rebucket.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	must := func(v any) {
+		t.Helper()
+		if err := db.Create(v).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ptr := func(tt time.Time) *time.Time { return &tt }
+
+	proj, err := s.Create("Approving", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Update(proj.ID, nil, nil, nil, nil, nil, aliasPtr("kimi-k3")); err != nil {
+		t.Fatal(err)
+	}
+	must(&models.WorkflowDef{ID: "wf-rb", ProjectID: proj.ID, Name: "main", Status: "draft", Version: 1})
+	dayIn := time.Date(2026, 7, 24, 10, 0, 0, 0, loc).UTC()
+	must(&models.Run{ID: "run-rb1", WorkflowID: "wf-rb", WorkflowName: "main", Status: "completed", StartedAt: dayIn, Title: "Rebucket Run"})
+	must(&models.StateRun{
+		RunID: "run-rb1", NodeID: "n1", NodeType: "agent", Status: "completed",
+		StartedAt: ptr(dayIn),
+		Usage:     &models.TokenUsage{InputTokens: 60, OutputTokens: 40},
+		UsageByModel: models.TokenUsageByModel{
+			models.TokenUsageModelUnknown: {InputTokens: 60, OutputTokens: 40, Source: models.TokenUsageSourceUnknown},
+		},
+	})
+	must(&models.StateRun{
+		RunID: "run-rb1", NodeID: "n2", NodeType: "agent", Status: "completed",
+		StartedAt: ptr(dayIn),
+		Usage:     &models.TokenUsage{InputTokens: 100, OutputTokens: 50},
+		UsageByModel: models.TokenUsageByModel{
+			"kimi-k3": {InputTokens: 100, OutputTokens: 50, Filled: true, Source: models.TokenUsageSourceUpstream},
+		},
+	})
+
+	res, err := s.GlobalTokenStats(context.Background(), GlobalTokenStatsQuery{
+		Window:   TokenStatsWindow7d,
+		Timezone: "Asia/Shanghai",
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kimiTotal int64
+	var hasUnknown bool
+	for _, m := range res.ModelRanking {
+		if m.ModelKey == "kimi-k3" {
+			kimiTotal = m.Total
+		}
+		if m.ModelKey == models.TokenUsageModelUnknown {
+			hasUnknown = true
+		}
+	}
+	if kimiTotal != 250 {
+		t.Fatalf("expected kimi-k3 total 250 after rebucket, got %d", kimiTotal)
+	}
+	if hasUnknown {
+		t.Fatal("expected no unknown bucket when default model is configured")
+	}
+	if res.KPI.Total != 250 {
+		t.Fatalf("expected KPI total unchanged at 250, got %d", res.KPI.Total)
+	}
+}
+
+func TestGlobalTokenStatsModelFilterAfterRebucket(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "global_token_rebucket_filter.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	must := func(v any) {
+		t.Helper()
+		if err := db.Create(v).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ptr := func(tt time.Time) *time.Time { return &tt }
+
+	proj, err := s.Create("Approving", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Update(proj.ID, nil, nil, nil, nil, nil, aliasPtr("kimi-k3")); err != nil {
+		t.Fatal(err)
+	}
+	must(&models.WorkflowDef{ID: "wf-rbf", ProjectID: proj.ID, Name: "main", Status: "draft", Version: 1})
+	dayIn := time.Date(2026, 7, 24, 10, 0, 0, 0, loc).UTC()
+	must(&models.Run{ID: "run-rbf1", WorkflowID: "wf-rbf", WorkflowName: "main", Status: "completed", StartedAt: dayIn, Title: "Rebucket Filter Run"})
+	must(&models.StateRun{
+		RunID: "run-rbf1", NodeID: "n1", NodeType: "agent", Status: "completed",
+		StartedAt: ptr(dayIn),
+		Usage:     &models.TokenUsage{InputTokens: 60, OutputTokens: 40},
+		UsageByModel: models.TokenUsageByModel{
+			models.TokenUsageModelUnknown: {InputTokens: 60, OutputTokens: 40, Source: models.TokenUsageSourceUnknown},
+		},
+	})
+	must(&models.StateRun{
+		RunID: "run-rbf1", NodeID: "n2", NodeType: "agent", Status: "completed",
+		StartedAt: ptr(dayIn),
+		Usage:     &models.TokenUsage{InputTokens: 100, OutputTokens: 50},
+		UsageByModel: models.TokenUsageByModel{
+			"kimi-k3": {InputTokens: 100, OutputTokens: 50, Filled: true, Source: models.TokenUsageSourceUpstream},
+		},
+	})
+
+	unfiltered, err := s.GlobalTokenStats(context.Background(), GlobalTokenStatsQuery{
+		Window:   TokenStatsWindow7d,
+		Timezone: "Asia/Shanghai",
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unfiltered.KPI.Total != 250 {
+		t.Fatalf("expected unfiltered KPI total 250, got %d", unfiltered.KPI.Total)
+	}
+
+	filtered, err := s.GlobalTokenStats(context.Background(), GlobalTokenStatsQuery{
+		Window:   TokenStatsWindow7d,
+		Timezone: "Asia/Shanghai",
+		ModelKey: "kimi-k3",
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filtered.KPI.Total != 250 {
+		t.Fatalf("expected filtered kimi-k3 KPI total 250, got %d", filtered.KPI.Total)
+	}
+	var kimiTotal int64
+	for _, m := range filtered.ModelRanking {
+		if m.ModelKey == "kimi-k3" {
+			kimiTotal = m.Total
+		}
+	}
+	if kimiTotal != 250 {
+		t.Fatalf("expected filtered kimi-k3 ranking total 250, got %d", kimiTotal)
+	}
+}
+
+func aliasPtr(s string) *string { return &s }

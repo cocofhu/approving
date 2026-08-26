@@ -27,10 +27,8 @@
       "draftRestored": "Draft restored"
     },
     "tokenAnalytics": {
-      "title": "Global Token analytics",
-      "subtitle": "Cross-project usage · line / pie / bar / area / heatmap · linked filters",
-      "sectionNav": "Stats navigation",
-      "sectionNote": "Changing window, source, project, or model refreshes all charts on this page.",
+      "title": "Token usage",
+      "subtitle": "View token usage trends and breakdown across projects",
       "loading": "Loading…",
       "loadFailed": "Load failed. Please retry.",
       "retry": "Retry",
@@ -43,47 +41,37 @@
       "projectAll": "Project: all",
       "modelAll": "Model: all",
       "kpiTotal": "Total tokens",
-      "kpiVsPrev": "vs previous window",
-      "kpiInOut": "Input / output",
-      "kpiCache": "Cache read / write",
-      "kpiCoverage": "Coverage",
+      "kpiInOutCache": "Input / output / cache",
+      "kpiInOutPair": "Input / output",
+      "kpiCachePair": "Cache read / write",
+      "kpiScope": "Scope",
       "kpiProjects": "{n} projects",
       "kpiRuns": "{n} reported runs",
       "kpiModels": "{n} models",
       "noPrev": "—",
-      "sections": {
-        "overview": "Overview KPI",
-        "lines": "Line charts",
-        "pies": "Pie / donut",
-        "bars": "Project comparison",
-        "area": "Stacked area",
-        "heat": "Model cross",
-        "nodeWf": "Workflow & nodes",
-        "tables": "Run details"
-      },
-      "linePrevWindow": "Previous window",
+      "linePrevWindow": "Previous period",
       "lineModes": {
-        "total": "Total vs previous",
-        "project": "Top projects",
-        "model": "Top models"
+        "total": "Total (vs previous period)",
+        "project": "By project",
+        "model": "By model"
       },
       "areaModes": {
         "source": "By source",
-        "comp": "By four components"
+        "comp": "By input/output/cache"
       },
       "charts": {
         "lines": "Line chart",
-        "linesHint": "Current vs previous · switch multi-line",
-        "pies": "Pie / donut",
+        "linesHint": "Compare the current range with the previous period; split by project or model",
+        "pies": "Share",
         "piesHint": "Click a slice to filter",
         "bars": "Bar chart",
-        "barsHint": "Stacked bars by project",
+        "barsHint": "Stacked usage by project",
         "area": "Stacked area",
-        "areaHint": "Daily · source or four components",
-        "heat": "Model × project heatmap",
+        "areaHint": "Daily by source, or input/output/cache",
+        "heat": "Models vs projects",
         "nodeWf": "Node type / workflow share",
         "sourcePie": "By source",
-        "compPie": "Four components",
+        "compPie": "Input/output/cache",
         "projPie": "By project",
         "modelPie": "By model",
         "nodePie": "Node type",
@@ -91,14 +79,14 @@
       },
       "tables": {
         "projects": "Projects",
-        "runs": "Top runs",
+        "runs": "Highest-usage runs",
         "colProject": "Project",
         "colRun": "Run",
         "colModel": "Model",
         "colTotal": "Total",
         "colInput": "Input",
         "colOutput": "Output",
-        "colDelta": "Δ"
+        "colDelta": "Change"
       },
       "filterApplied": "Filtered: {name}"
     },

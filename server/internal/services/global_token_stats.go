@@ -207,28 +207,21 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 		if err := ctx.Err(); err != nil {
 			return GlobalTokenStatsResult{}, ErrTokenStatsTimeout
 		}
-		u, ok := filterGlobalRowUsage(row, sourceFilter, projectFilter, modelFilter)
+		u, ok := filterGlobalRowUsage(row, sourceFilter, projectFilter, modelFilter, unknownAliases)
 		if !ok || u.Total() <= 0 {
 			continue
 		}
 		row.usage = u
-		if row.byModel != nil {
-			if modelFilter != "" {
-				if b, ok := row.byModel[modelFilter]; ok {
-					row.byModel = models.TokenUsageByModel{modelFilter: b}
-				}
-			}
+		if row.byModel != nil && modelFilter != "" {
+			narrowGlobalRowByModel(&row, modelFilter, unknownAliases)
 		}
 		filtered = append(filtered, row)
 		for mk := range row.byModel {
 			if mk == "" {
 				continue
 			}
-			name := mk
-			if mk == models.TokenUsageModelUnknown {
-				name = unknownAliases[row.projectID]
-			}
-			modelSeen[mk] = name
+			effective := rebucketGlobalModelKey(mk, row.projectID, unknownAliases)
+			modelSeen[effective] = effective
 		}
 		projSeen[row.projectID] = projOpt{id: row.projectID, name: row.projectName}
 	}
@@ -269,8 +262,8 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 		return out, nil
 	}
 
-	curAgg := aggregateGlobalRows(curRows, loc, bucketWidth, nowLocal, curWin)
-	prevAgg := aggregateGlobalRows(prevRows, loc, bucketWidth, nowLocal, prevWin)
+	curAgg := aggregateGlobalRows(curRows, loc, bucketWidth, nowLocal, curWin, unknownAliases)
+	prevAgg := aggregateGlobalRows(prevRows, loc, bucketWidth, nowLocal, prevWin, unknownAliases)
 
 	kpi := buildGlobalKPI(curAgg, prevAgg)
 	trend := bucketsFromAgg(curAgg.buckets, nowLocal, curWin, bucketWidth)
@@ -322,7 +315,53 @@ func buildPrevWindowSlice(cur windowSlice, days int) windowSlice {
 	return windowSlice{start: prevStart, end: prevEnd, hasStart: true}
 }
 
-func filterGlobalRowUsage(row globalTokenUsageRow, source, projectID, modelKey string) (models.TokenUsage, bool) {
+func globalModelFilterUsage(row globalTokenUsageRow, modelKey string, unknownAliases map[string]string) (models.TokenUsage, bool) {
+	if row.byModel == nil {
+		return models.TokenUsage{}, false
+	}
+	var usage models.TokenUsage
+	matched := false
+	if b, ok := row.byModel[modelKey]; ok {
+		usage.InputTokens += b.InputTokens
+		usage.OutputTokens += b.OutputTokens
+		usage.CacheReadTokens += b.CacheReadTokens
+		usage.CacheWriteTokens += b.CacheWriteTokens
+		matched = true
+	}
+	if b, ok := row.byModel[models.TokenUsageModelUnknown]; ok {
+		if rebucketGlobalModelKey(models.TokenUsageModelUnknown, row.projectID, unknownAliases) == modelKey {
+			usage.InputTokens += b.InputTokens
+			usage.OutputTokens += b.OutputTokens
+			usage.CacheReadTokens += b.CacheReadTokens
+			usage.CacheWriteTokens += b.CacheWriteTokens
+			matched = true
+		}
+	}
+	if !matched {
+		return models.TokenUsage{}, false
+	}
+	return usage, true
+}
+
+func narrowGlobalRowByModel(row *globalTokenUsageRow, modelKey string, unknownAliases map[string]string) {
+	u, ok := globalModelFilterUsage(*row, modelKey, unknownAliases)
+	if !ok {
+		return
+	}
+	var merged models.ModelTokenUsage
+	if b, ok := row.byModel[modelKey]; ok {
+		merged = b
+	} else if b, ok := row.byModel[models.TokenUsageModelUnknown]; ok {
+		merged = b
+	}
+	merged.InputTokens = u.InputTokens
+	merged.OutputTokens = u.OutputTokens
+	merged.CacheReadTokens = u.CacheReadTokens
+	merged.CacheWriteTokens = u.CacheWriteTokens
+	row.byModel = models.TokenUsageByModel{modelKey: merged}
+}
+
+func filterGlobalRowUsage(row globalTokenUsageRow, source, projectID, modelKey string, unknownAliases map[string]string) (models.TokenUsage, bool) {
 	if projectID != "" && row.projectID != projectID {
 		return models.TokenUsage{}, false
 	}
@@ -333,19 +372,7 @@ func filterGlobalRowUsage(row globalTokenUsageRow, source, projectID, modelKey s
 		return models.TokenUsage{}, false
 	}
 	if modelKey != "" {
-		if row.byModel == nil {
-			return models.TokenUsage{}, false
-		}
-		b, ok := row.byModel[modelKey]
-		if !ok {
-			return models.TokenUsage{}, false
-		}
-		return models.TokenUsage{
-			InputTokens:      b.InputTokens,
-			OutputTokens:     b.OutputTokens,
-			CacheReadTokens:  b.CacheReadTokens,
-			CacheWriteTokens: b.CacheWriteTokens,
-		}, true
+		return globalModelFilterUsage(row, modelKey, unknownAliases)
 	}
 	return row.usage, true
 }
@@ -400,7 +427,19 @@ type globalRunAgg struct {
 	topModelKey, topModelName                        string
 }
 
-func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketWidth string, nowLocal time.Time, win windowSlice) *globalAgg {
+// rebucketGlobalModelKey merges per-project unknown usage into the configured default model.
+func rebucketGlobalModelKey(mk, projectID string, unknownAliases map[string]string) string {
+	if mk != models.TokenUsageModelUnknown {
+		return mk
+	}
+	alias := strings.TrimSpace(unknownAliases[projectID])
+	if alias != "" && alias != models.TokenUsageModelUnknown {
+		return alias
+	}
+	return mk
+}
+
+func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketWidth string, nowLocal time.Time, win windowSlice, unknownAliases map[string]string) *globalAgg {
 	agg := &globalAgg{
 		buckets:      map[string]*tokenBucketAgg{},
 		projects:     map[string]*globalProjectAgg{},
@@ -496,10 +535,11 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 			if tot <= 0 {
 				continue
 			}
-			ma := agg.models[mk]
+			targetKey := rebucketGlobalModelKey(mk, row.projectID, unknownAliases)
+			ma := agg.models[targetKey]
 			if ma == nil {
 				ma = &tokenModelAgg{}
-				agg.models[mk] = ma
+				agg.models[targetKey] = ma
 			}
 			ma.total += tot
 			if bu.Filled {
@@ -509,10 +549,10 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 				ma.source = bu.Source
 			}
 
-			mb := agg.modelBuckets[mk]
+			mb := agg.modelBuckets[targetKey]
 			if mb == nil {
 				mb = map[string]*tokenBucketAgg{}
-				agg.modelBuckets[mk] = mb
+				agg.modelBuckets[targetKey] = mb
 			}
 			mbk := mb[key]
 			if mbk == nil {
@@ -525,17 +565,17 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 			mbk.cacheWrite += bu.CacheWriteTokens
 			mbk.workflow += tot
 
-			hm := agg.heat[mk]
+			hm := agg.heat[targetKey]
 			if hm == nil {
 				hm = map[string]int64{}
-				agg.heat[mk] = hm
+				agg.heat[targetKey] = hm
 			}
 			hm[row.projectID] += tot
 
 			if row.runID != "" {
 				ra := agg.runs[row.runID]
 				if ra != nil && tot >= ra.total/2 {
-					ra.topModelKey = mk
+					ra.topModelKey = targetKey
 				}
 			}
 		}

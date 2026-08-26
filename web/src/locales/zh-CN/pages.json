@@ -27,10 +27,8 @@
       "draftRestored": "草稿已恢复"
     },
     "tokenAnalytics": {
-      "title": "全局 Token 分析台",
-      "subtitle": "跨项目用量 · 折线 / 饼图 / 柱状 / 面积 / 热力 · 筛选联动",
-      "sectionNav": "统计导航",
-      "sectionNote": "切换时间窗、来源、项目或模型后，本页所有图表一起刷新。",
+      "title": "用量统计",
+      "subtitle": "查看各项目的 Token 用量趋势和构成",
       "loading": "正在加载…",
       "loadFailed": "加载失败，请重试",
       "retry": "重试",
@@ -43,47 +41,37 @@
       "projectAll": "项目：全部",
       "modelAll": "模型：全部",
       "kpiTotal": "总 Token",
-      "kpiVsPrev": "较上一窗",
-      "kpiInOut": "输入 / 输出",
-      "kpiCache": "缓存读 / 写",
-      "kpiCoverage": "覆盖面",
+      "kpiInOutCache": "输入 / 输出 / 缓存",
+      "kpiInOutPair": "输入 / 输出",
+      "kpiCachePair": "缓存读 / 写",
+      "kpiScope": "范围",
       "kpiProjects": "{n} 项目",
       "kpiRuns": "{n} 次已上报运行",
       "kpiModels": "{n} 个模型",
       "noPrev": "—",
-      "sections": {
-        "overview": "概览 KPI",
-        "lines": "折线图",
-        "pies": "饼图 / 环形图",
-        "bars": "项目对比",
-        "area": "堆叠面积",
-        "heat": "模型交叉",
-        "nodeWf": "工作流与节点",
-        "tables": "运行明细"
-      },
-      "linePrevWindow": "上一窗",
+      "linePrevWindow": "上一周期",
       "lineModes": {
-        "total": "总量 vs 上一窗",
-        "project": "Top 项目多折线",
-        "model": "Top 模型多折线"
+        "total": "总量（对比上一周期）",
+        "project": "按项目",
+        "model": "按模型"
       },
       "areaModes": {
         "source": "按来源",
-        "comp": "按四分量"
+        "comp": "按输入/输出/缓存"
       },
       "charts": {
         "lines": "折线图",
-        "linesHint": "本窗 vs 上一窗 · 可切多折线",
-        "pies": "饼图 / 环形图",
-        "piesHint": "点击扇区写入筛选",
+        "linesHint": "对比当前时间范围与上一周期，也可按项目或模型分开看",
+        "pies": "占比",
+        "piesHint": "点击扇区可筛选",
         "bars": "柱状图",
-        "barsHint": "项目垂直堆叠柱",
+        "barsHint": "各项目用量堆叠对比",
         "area": "堆叠面积",
-        "areaHint": "按日 · 来源或四分量",
-        "heat": "模型 × 项目热力",
+        "areaHint": "按天查看来源，或输入/输出/缓存",
+        "heat": "模型与项目对照",
         "nodeWf": "节点类型 / 工作流占比",
         "sourcePie": "来源构成",
-        "compPie": "四分量构成",
+        "compPie": "输入/输出/缓存构成",
         "projPie": "项目占比",
         "modelPie": "模型占比",
         "nodePie": "节点类型",
@@ -91,14 +79,14 @@
       },
       "tables": {
         "projects": "项目明细表",
-        "runs": "Top 消耗运行",
+        "runs": "消耗最多的运行",
         "colProject": "项目",
         "colRun": "运行",
         "colModel": "模型",
         "colTotal": "总量",
         "colInput": "输入",
         "colOutput": "输出",
-        "colDelta": "Δ"
+        "colDelta": "变化"
       },
       "filterApplied": "已筛选：{name}"
     },
