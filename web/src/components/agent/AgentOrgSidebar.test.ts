@@ -18,7 +18,7 @@ const sampleOrg: AgentOrg = {
   ],
   agents: {
     alice: { groupIds: ['g_dev'] },
-    bob: { groupIds: ['g_sub'], parentAgent: 'alice' },
+    bob: { groupIds: ['g_sub'] },
     // 10 members on g_qa → two-digit count
     ...Object.fromEntries(
       Array.from({ length: 10 }, (_, i) => [`qa${i}`, { groupIds: ['g_qa'] }]),
@@ -463,7 +463,7 @@ describe('AgentOrgSidebar agent name text color', () => {
     expect(unselectedName).not.toContain('text-txt3')
   })
 
-  it('分组名保持 text-txt2，有 parentAgent 时树内不渲染 reportsTo', () => {
+  it('分组名保持 text-txt2，树内不渲染 reportsTo', () => {
     const wrapper = mountSidebar(sampleOrg, false, { activeName: 'bob' })
 
     const group = wrapper

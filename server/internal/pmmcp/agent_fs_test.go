@@ -44,8 +44,8 @@ func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *se
 	if _, err := org.Put(services.AgentOrg{
 		Agents: map[string]services.OrgAgentMembership{
 			"leader":   {},
-			"alice":    {ParentAgent: "leader"},
-			"bob":      {ParentAgent: "alice"}, // indirect
+			"alice":    {},
+			"bob":      {},
 			"outsider": {},
 		},
 	}, 0); err != nil {
@@ -111,7 +111,7 @@ func TestPmGetOrgRelations(t *testing.T) {
 		m, _ := a.(map[string]any)
 		rel[m["name"].(string)] = m["relation"].(string)
 	}
-	if rel["leader"] != "self" || rel["alice"] != "direct" || rel["bob"] != "indirect" || rel["outsider"] != "other" {
+	if rel["leader"] != "self" || rel["alice"] != "direct" || rel["bob"] != "direct" || rel["outsider"] != "direct" {
 		t.Fatalf("relations=%v", rel)
 	}
 }
@@ -152,11 +152,8 @@ func TestPmFSRejectNonReportAndCrossProject(t *testing.T) {
 		"path":      "AGENTS.md",
 		"content":   "nope",
 	})
-	if !isErr {
-		t.Fatalf("outsider should be rejected: %v", result)
-	}
-	if !strings.Contains(result["error"].(string), "not self or a direct/indirect") {
-		t.Fatalf("error=%v", result["error"])
+	if isErr {
+		t.Fatalf("same-project outsider should be allowed: %v", result)
 	}
 	_, result, isErr, _ = callAgentFSTool(t, h, pid, tok, "pm_fs_read", map[string]any{
 		"agentName": "otherproj",

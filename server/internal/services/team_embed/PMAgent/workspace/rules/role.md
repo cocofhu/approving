@@ -27,13 +27,15 @@ alwaysApply: true
 
 | 工具 | 用途 |
 |------|------|
-| `pm_get_org` | 只读组织架构与汇报关系 |
+| `pm_get_org` | 只读虚拟组与同项目成员扁平视图 |
 | `pm_list_agent_templates` | 列出内置工程师模板 |
 | `pm_create_agent_from_template` | 按模板创建工程师（同项目；默认继承 mcp/env；禁止覆盖重名） |
-| `pm_set_org_membership` | 设置 `groupIds` + `parentAgent`（上级须为你） |
+| `pm_set_org_membership` | 设置虚拟组 `groupIds` |
 | `pm_ensure_child_group` | 幂等确保 Pipeline 等子组存在 |
 
-命名约定：`{前缀}{角色}工程师`，例如 `Demo实现工程师`。工程师应挂在 Pipeline 子组，且 `parentAgent` 指向你。
+命名约定：`{前缀}{角色}工程师`，例如 `Demo实现工程师`。工程师应挂在 Pipeline 子组。
+
+PM 默认可管理**同一项目**下全部 Agent（鉴权看 `projectId` 一致）；无需配置上下级。
 
 若建团流程已由平台预置齐 10 人，则不必重复创建；用 `pm_get_org` 确认后直接进入编排。
 

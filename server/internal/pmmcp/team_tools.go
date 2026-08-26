@@ -51,13 +51,6 @@ func (h *Host) callTeamTools(sess *Session, skill *services.SkillService, name s
 
 	case "pm_set_org_membership":
 		agentName := strings.TrimSpace(platformmcp.StrArg(args, "agentName"))
-		parent := strings.TrimSpace(platformmcp.StrArg(args, "parentAgent"))
-		if parent == "" {
-			parent = sess.AgentName
-		}
-		if parent != sess.AgentName {
-			return map[string]any{"error": "parentAgent must be the current PM leader"}, true
-		}
 		groupIDs := strSliceArg(args, "groupIds")
 		if agentName == "" || len(groupIDs) == 0 {
 			return map[string]any{"error": "agentName and groupIds are required"}, true
@@ -69,15 +62,13 @@ func (h *Host) callTeamTools(sess *Session, skill *services.SkillService, name s
 		if !services.AgentProjectMatches(ag, sess.ProjectID) {
 			return map[string]any{"error": "agent not in session project"}, true
 		}
-		// Scope: target must be self or (after create) will become a report; require same project only here.
 		if err := team.SetOrgMembership(services.SetOrgMembershipArgs{
-			AgentName:   agentName,
-			GroupIDs:    groupIDs,
-			ParentAgent: parent,
+			AgentName: agentName,
+			GroupIDs:  groupIDs,
 		}); err != nil {
 			return map[string]any{"error": err.Error()}, true
 		}
-		return map[string]any{"ok": true, "agentName": agentName, "groupIds": groupIDs, "parentAgent": parent}, false
+		return map[string]any{"ok": true, "agentName": agentName, "groupIds": groupIDs}, false
 
 	case "pm_ensure_child_group":
 		gName := strings.TrimSpace(platformmcp.StrArg(args, "name"))

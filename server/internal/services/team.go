@@ -385,12 +385,11 @@ func (s *TeamService) runBootstrap(ctx context.Context, sessionID string, req no
 			fail(err)
 			return
 		}
-		s.appendEvent(sessionID, "mcp", "pm_set_org_membership\nagent="+created.Name+"\ngroup="+req.PipelineGroup+"\nparent="+req.PMName+"\n✓ ok")
+		s.appendEvent(sessionID, "mcp", "pm_set_org_membership\nagent="+created.Name+"\ngroup="+req.PipelineGroup+"\n✓ ok")
 		if err := s.SetOrgMembership(SetOrgMembershipArgs{
-			SessionID:   sessionID,
-			AgentName:   created.Name,
-			GroupIDs:    []string{pipeID},
-			ParentAgent: req.PMName,
+			SessionID: sessionID,
+			AgentName: created.Name,
+			GroupIDs:  []string{pipeID},
 		}); err != nil {
 			fail(err)
 			return
@@ -457,10 +456,9 @@ func (s *TeamService) runRetry(ctx context.Context, sessionID string, req normal
 			return
 		}
 		if err := s.SetOrgMembership(SetOrgMembershipArgs{
-			SessionID:   sessionID,
-			AgentName:   created.Name,
-			GroupIDs:    []string{pipeID},
-			ParentAgent: pmName,
+			SessionID: sessionID,
+			AgentName: created.Name,
+			GroupIDs:  []string{pipeID},
 		}); err != nil {
 			fail(err)
 			return
@@ -618,12 +616,11 @@ func (s *TeamService) CreateAgentFromTemplate(args CreateFromTemplateArgs) (Agen
 	return tmpl, nil
 }
 
-// SetOrgMembershipArgs updates groupIds + parentAgent under scope.
+// SetOrgMembershipArgs updates groupIds under scope.
 type SetOrgMembershipArgs struct {
-	SessionID   string
-	AgentName   string
-	GroupIDs    []string
-	ParentAgent string
+	SessionID string
+	AgentName string
+	GroupIDs  []string
 }
 
 // SetOrgMembership sets membership for an agent (scoped when SessionID set).
@@ -636,7 +633,6 @@ func (s *TeamService) SetOrgMembership(args SetOrgMembershipArgs) error {
 	if !ok {
 		return fmt.Errorf("%w: agent not found: %s", ErrTeamValidation, agentName)
 	}
-	parent := strings.TrimSpace(args.ParentAgent)
 	groupIDs := uniqueNonEmptyStrings(args.GroupIDs)
 
 	if args.SessionID != "" {
@@ -647,9 +643,6 @@ func (s *TeamService) SetOrgMembership(args SetOrgMembershipArgs) error {
 		if !AgentProjectMatches(ag, sess.ProjectID) {
 			return fmt.Errorf("%w: agent not in session project", ErrTeamScopeDenied)
 		}
-		if parent != "" && parent != sess.PMAgent {
-			return fmt.Errorf("%w: parentAgent must be session PM", ErrTeamScopeDenied)
-		}
 		allowed := map[string]bool{}
 		for _, id := range sess.AllowedGroupIDs {
 			allowed[id] = true
@@ -658,9 +651,6 @@ func (s *TeamService) SetOrgMembership(args SetOrgMembershipArgs) error {
 			if !allowed[id] {
 				return fmt.Errorf("%w: group not in session allow-list: %s", ErrTeamScopeDenied, id)
 			}
-		}
-		if parent == "" {
-			parent = sess.PMAgent
 		}
 	}
 
@@ -671,7 +661,7 @@ func (s *TeamService) SetOrgMembership(args SetOrgMembershipArgs) error {
 	if org.Agents == nil {
 		org.Agents = map[string]OrgAgentMembership{}
 	}
-	org.Agents[agentName] = OrgAgentMembership{GroupIDs: groupIDs, ParentAgent: parent}
+	org.Agents[agentName] = OrgAgentMembership{GroupIDs: groupIDs}
 	_, err = s.Org.Put(org, org.Revision)
 	return err
 }
