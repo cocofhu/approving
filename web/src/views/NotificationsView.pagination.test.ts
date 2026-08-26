@@ -26,12 +26,46 @@ vi.mock('@/lib/composables/useAuth', () => ({
 
 vi.mock('@/lib/api/api', () => ({
   api: {
-    listNotifications: vi.fn(async () => ({ items: [] })),
+    listNotifications: vi.fn(async (opts?: {
+      page?: number
+      pageSize?: number
+      filter?: 'all' | 'unread' | 'read'
+      signal?: AbortSignal
+    }) => {
+      const all = listStore.value.map((x) => ({ ...x }))
+      const allCount = all.length
+      const unreadCount = all.filter((x) => x.unread).length
+      const readCount = allCount - unreadCount
+      const filter = opts?.filter ?? 'all'
+      let filtered = all
+      if (filter === 'unread') filtered = all.filter((x) => x.unread)
+      else if (filter === 'read') filtered = all.filter((x) => !x.unread)
+      const page = opts?.page ?? 1
+      const pageSize = opts?.pageSize ?? 20
+      const start = (page - 1) * pageSize
+      return {
+        items: filtered.slice(start, start + pageSize),
+        page,
+        pageSize,
+        total: filtered.length,
+        allCount,
+        unreadCount,
+        readCount,
+      }
+    }),
     getRun: vi.fn(),
     artifactContent: vi.fn(),
     artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
-    markNotificationRead: vi.fn(async () => ({ status: 'ok' })),
-    markAllNotificationsRead: vi.fn(async () => ({ status: 'ok' })),
+    markNotificationRead: vi.fn(async (runId: string) => {
+      listStore.value = listStore.value.map((x) =>
+        x.runId === runId ? { ...x, unread: false } : x,
+      )
+      return { status: 'ok' }
+    }),
+    markAllNotificationsRead: vi.fn(async () => {
+      listStore.value = listStore.value.map((x) => ({ ...x, unread: false }))
+      return { status: 'ok' }
+    }),
   },
 }))
 
@@ -39,11 +73,13 @@ import { api } from '@/lib/api/api'
 import {
   __resetRunTerminalNotificationsForTests,
   mapRunToNotification,
+  NOTIFICATION_PAGE_SIZE,
   RUN_TERMINAL_PANEL_LIMIT,
-  RUN_TERMINAL_POOL_SIZE,
   useRunTerminalNotifications,
 } from '@/lib/run/useRunTerminalNotifications'
 import type { RunTerminalNotificationItem } from '@/lib/run/useRunTerminalNotifications'
+
+const listStore = ref<RunTerminalNotificationItem[]>([])
 import NotificationsView from './NotificationsView.vue'
 
 const viewSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'NotificationsView.vue'), 'utf8')
@@ -84,7 +120,29 @@ function makeItems(n: number, unreadCount = n): RunTerminalNotificationItem[] {
 }
 
 async function mountView(items: RunTerminalNotificationItem[]) {
-  vi.mocked(api.listNotifications).mockResolvedValue({ items })
+  listStore.value = items.map((x) => ({ ...x }))
+  vi.mocked(api.listNotifications).mockImplementation(async (opts) => {
+    const all = listStore.value.map((x) => ({ ...x }))
+    const allCount = all.length
+    const unreadCount = all.filter((x) => x.unread).length
+    const readCount = allCount - unreadCount
+    const filter = opts?.filter ?? 'all'
+    let filtered = all
+    if (filter === 'unread') filtered = all.filter((x) => x.unread)
+    else if (filter === 'read') filtered = all.filter((x) => !x.unread)
+    const page = opts?.page ?? 1
+    const pageSize = opts?.pageSize ?? 20
+    const start = (page - 1) * pageSize
+    return {
+      items: filtered.slice(start, start + pageSize),
+      page,
+      pageSize,
+      total: filtered.length,
+      allCount,
+      unreadCount,
+      readCount,
+    }
+  })
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -112,10 +170,17 @@ async function mountView(items: RunTerminalNotificationItem[]) {
 describe('NotificationsView pagination (g1/g2/g4)', () => {
   beforeEach(() => {
     localStorage.clear()
+    listStore.value = []
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
     vi.mocked(api.listNotifications).mockReset()
-    vi.mocked(api.listNotifications).mockResolvedValue({ items: [] })
+    vi.mocked(api.listNotifications).mockResolvedValue({
+      items: [],
+      total: 0,
+      allCount: 0,
+      unreadCount: 0,
+      readCount: 0,
+    })
   })
 
   afterEach(() => {
@@ -151,9 +216,11 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const items = makeItems(21).map((item, i) => ({ ...item, unread: i >= 18 }))
     const { wrapper } = await mountView(items)
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
+    await flushPromises()
     await nextTick()
 
     await wrapper.find('[data-testid="notifications-filter-unread"]').trigger('click')
+    await flushPromises()
     await nextTick()
     expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
@@ -165,12 +232,17 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const items = makeItems(21)
     const { wrapper } = await mountView(items)
     await wrapper.find('[data-testid="notifications-filter-unread"]').trigger('click')
+    await flushPromises()
+    await nextTick()
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
+    await flushPromises()
     await nextTick()
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(1)
     const lastId = wrapper.find('[data-testid="notifications-item"]').attributes('data-run-id')!
     useRunTerminalNotifications().markRead(lastId)
+    await flushPromises()
     await nextTick()
+    await flushPromises()
     await nextTick()
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
@@ -195,18 +267,21 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
   it('paging does not change unread badge or preview slice / fetchPool (g1.5 / g4.1)', async () => {
     const items = makeItems(25)
     const { wrapper } = await mountView(items)
+    await flushPromises()
     const callsAfterMount = vi.mocked(api.listNotifications).mock.calls.length
     const n = useRunTerminalNotifications()
+    await n.refresh({ source: 'manual' })
     expect(n.unreadCount.value).toBe(25)
     expect(n.previewItems.value).toHaveLength(RUN_TERMINAL_PANEL_LIMIT)
     const previewIds = n.previewItems.value.map((x) => x.runId)
 
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
+    await flushPromises()
     await nextTick()
     expect(n.unreadCount.value).toBe(25)
     expect(wrapper.find('[data-testid="notifications-unread-count"]').text()).toContain('25')
     expect(n.previewItems.value.map((x) => x.runId)).toEqual(previewIds)
-    expect(vi.mocked(api.listNotifications).mock.calls.length).toBe(callsAfterMount)
+    expect(vi.mocked(api.listNotifications).mock.calls.length).toBeGreaterThan(callsAfterMount)
     expect(api.listNotifications).toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -257,16 +332,17 @@ describe('NotificationsView pagination conventions (g4.4 / g1.5)', () => {
   })
 
   it('gates Pagination on filteredTotal > PAGE_SIZE with shrink-0 and no pageSizeOptions', () => {
-    expect(viewSrc).toMatch(/const PAGE_SIZE = 20/)
+    expect(viewSrc).toMatch(/const PAGE_SIZE = NOTIFICATION_PAGE_SIZE/)
     expect(viewSrc).toMatch(/<Pagination[\s\S]*v-if="filteredTotal > PAGE_SIZE"/)
     expect(viewSrc).toMatch(/class="shrink-0"/)
     expect(viewSrc).not.toMatch(/page-size-options/)
     expect(viewSrc).not.toMatch(/pageSizeOptions/)
   })
 
-  it('loads the full pool from GET /notifications (server caps at 50)', () => {
+  it('loads paginated slices from GET /notifications with server counts', () => {
     expect(poolSrc).toMatch(/listNotifications/)
-    expect(poolSrc).toMatch(/export const RUN_TERMINAL_POOL_SIZE = 50/)
-    expect(RUN_TERMINAL_POOL_SIZE).toBe(50)
+    expect(poolSrc).toMatch(/export const NOTIFICATION_PAGE_SIZE = 20/)
+    expect(NOTIFICATION_PAGE_SIZE).toBe(20)
+    expect(poolSrc).not.toMatch(/RUN_TERMINAL_POOL_SIZE/)
   })
 })

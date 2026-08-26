@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -288,6 +289,124 @@ func TestMapRunToNotification(t *testing.T) {
 	gotFinish, err := time.Parse(time.RFC3339Nano, noisy.FinishedApprox)
 	if err != nil || !gotFinish.Equal(wantFinish) {
 		t.Fatalf("finishedApprox=%q want %v err=%v", noisy.FinishedApprox, wantFinish, err)
+	}
+}
+
+func TestNotificationListPageBeyondFifty(t *testing.T) {
+	db := setupNotificationDB(t)
+	svc := NewNotificationService(db, nil)
+	start := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 55; i++ {
+		seedTerminalRun(t, db, fmt.Sprintf("run-%02d", i), "completed", fmt.Sprintf("N%d", i),
+			start.Add(time.Duration(i)*time.Minute), 30)
+	}
+	if err := db.Create(&models.NotificationBaseline{
+		Username:  "alice",
+		EnabledAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		CreatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := svc.ListPage("alice", "all", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.AllCount != 55 || res.UnreadCount != 55 || res.ReadCount != 0 {
+		t.Fatalf("counts=%d/%d/%d", res.AllCount, res.UnreadCount, res.ReadCount)
+	}
+	if res.Total != 55 || len(res.Items) != 20 {
+		t.Fatalf("page1 total=%d items=%d", res.Total, len(res.Items))
+	}
+
+	page3, err := svc.ListPage("alice", "all", 3, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page3.Items) != 15 {
+		t.Fatalf("page3 items=%d", len(page3.Items))
+	}
+	// Oldest run should appear on the last page (finished desc).
+	last := page3.Items[len(page3.Items)-1]
+	if last.RunID != "run-00" {
+		t.Fatalf("expected oldest run-00 on page3 tail, got %s", last.RunID)
+	}
+}
+
+func TestNotificationListPageFilterAndCounts(t *testing.T) {
+	db := setupNotificationDB(t)
+	svc := NewNotificationService(db, nil)
+	start := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	seedTerminalRun(t, db, "a", "completed", "A", start, 1)
+	seedTerminalRun(t, db, "b", "failed", "B", start.Add(time.Minute), 1)
+	seedTerminalRun(t, db, "c", "completed", "C", start.Add(2*time.Minute), 1)
+	if err := db.Create(&models.NotificationBaseline{
+		Username:  "alice",
+		EnabledAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		CreatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.MarkRead("alice", "a"); err != nil {
+		t.Fatal(err)
+	}
+
+	unread, err := svc.ListPage("alice", "unread", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unread.AllCount != 3 || unread.UnreadCount != 2 || unread.ReadCount != 1 {
+		t.Fatalf("global counts=%d/%d/%d", unread.AllCount, unread.UnreadCount, unread.ReadCount)
+	}
+	if unread.Total != 2 || len(unread.Items) != 2 {
+		t.Fatalf("unread filter total=%d items=%d", unread.Total, len(unread.Items))
+	}
+	for _, it := range unread.Items {
+		if !it.Unread {
+			t.Fatalf("unread filter leaked read item %+v", it)
+		}
+	}
+}
+
+func TestNotificationMarkAllReadBeyondPool(t *testing.T) {
+	db := setupNotificationDB(t)
+	svc := NewNotificationService(db, nil)
+	start := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	for i := 0; i < 60; i++ {
+		seedTerminalRun(t, db, fmt.Sprintf("run-%02d", i), "completed", fmt.Sprintf("N%d", i),
+			start.Add(time.Duration(i)*time.Minute), 30)
+	}
+	if err := db.Create(&models.NotificationBaseline{
+		Username:  "alice",
+		EnabledAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		CreatedAt: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.MarkAllRead("alice"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.ListPage("alice", "all", 1, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.UnreadCount != 0 {
+		t.Fatalf("unread after mark-all=%d", res.UnreadCount)
+	}
+	page3, err := svc.ListPage("alice", "all", 3, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range page3.Items {
+		if it.Unread {
+			t.Fatalf("page3 still unread %+v", it)
+		}
+	}
+	var n int64
+	db.Model(&models.NotificationRead{}).Where("username = ?", "alice").Count(&n)
+	if n != 60 {
+		t.Fatalf("read rows=%d want 60", n)
 	}
 }
 

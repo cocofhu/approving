@@ -14,9 +14,33 @@ const serverItems = ref<NotificationListItem[]>([])
 
 vi.mock('@/lib/api/api', () => ({
   api: {
-    listNotifications: vi.fn(async () => ({
-      items: serverItems.value.map((x) => ({ ...x })),
-    })),
+    listNotifications: vi.fn(async (opts?: {
+      page?: number
+      pageSize?: number
+      filter?: 'all' | 'unread' | 'read'
+      signal?: AbortSignal
+    }) => {
+      const all = serverItems.value.map((x) => ({ ...x }))
+      const allCount = all.length
+      const unreadCount = all.filter((x) => x.unread).length
+      const readCount = allCount - unreadCount
+      const filter = opts?.filter ?? 'all'
+      let filtered = all
+      if (filter === 'unread') filtered = all.filter((x) => x.unread)
+      else if (filter === 'read') filtered = all.filter((x) => !x.unread)
+      const page = opts?.page ?? 1
+      const pageSize = opts?.pageSize ?? 20
+      const start = (page - 1) * pageSize
+      return {
+        items: filtered.slice(start, start + pageSize),
+        page,
+        pageSize,
+        total: filtered.length,
+        allCount,
+        unreadCount,
+        readCount,
+      }
+    }),
     markNotificationRead: vi.fn(async (runId: string) => {
       serverItems.value = serverItems.value.map((x) =>
         x.runId === runId ? { ...x, unread: false } : x,
@@ -45,8 +69,8 @@ import {
   isNoisyNotificationTitle,
   mapRunToNotification,
   isBeforeBaseline,
+  NOTIFICATION_PAGE_SIZE,
   RUN_TERMINAL_PANEL_LIMIT,
-  RUN_TERMINAL_POOL_SIZE,
   useRunTerminalNotifications,
 } from './useRunTerminalNotifications'
 import type { RunTerminalNotificationItem } from './useRunTerminalNotifications'
@@ -250,7 +274,20 @@ describe('useRunTerminalNotifications', () => {
     expect(RUN_TERMINAL_PANEL_LIMIT).toBe(5)
     expect(n.remainingCount.value).toBe(7)
     expect(n.poolTotal.value).toBe(12)
-    expect(RUN_TERMINAL_POOL_SIZE).toBe(50)
+    expect(NOTIFICATION_PAGE_SIZE).toBe(20)
+  })
+
+  it('refreshPage loads server-paginated list slice', async () => {
+    seedList(
+      Array.from({ length: 25 }, (_, i) =>
+        item(run({ id: `r${i}`, status: 'completed' })),
+      ),
+    )
+    const n = useRunTerminalNotifications()
+    await n.refreshPage({ page: 2, filter: 'all', source: 'page' })
+    expect(n.listItems.value).toHaveLength(5)
+    expect(n.listTotal.value).toBe(25)
+    expect(n.allCount.value).toBe(25)
   })
 
   it('marks post-baseline items without beforeBaseline and keeps them unread until read', async () => {
@@ -263,6 +300,7 @@ describe('useRunTerminalNotifications', () => {
     ])
     const n = useRunTerminalNotifications()
     await n.refresh({ source: 'mount' })
+    await n.refreshPage({ page: 1, filter: 'all', source: 'page' })
     const newer = n.listItems.value.find((x) => x.runId === 'new')
     const older = n.listItems.value.find((x) => x.runId === 'old')
     expect(newer?.beforeBaseline).toBe(false)

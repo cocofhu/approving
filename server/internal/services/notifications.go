@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-const NotificationPoolSize = 50
+const DefaultNotificationPageSize = 20
 
 var (
 	ErrNotificationUsernameRequired = errors.New("username required")
@@ -52,53 +52,110 @@ type NotificationItemDTO struct {
 	BeforeBaseline bool   `json:"beforeBaseline"`
 }
 
-// List returns the current user's notification pool (up to 50 terminal runs).
-// First access stamps EnabledAt=now so existing pool items are history (read).
-func (s *NotificationService) List(username string) ([]NotificationItemDTO, error) {
+// NotificationListResult is a paginated inbox slice plus global counts.
+type NotificationListResult struct {
+	Items       []NotificationItemDTO `json:"items"`
+	Page        int                   `json:"page"`
+	PageSize    int                   `json:"pageSize"`
+	Total       int64                 `json:"total"`
+	AllCount    int64                 `json:"allCount"`
+	UnreadCount int64                 `json:"unreadCount"`
+	ReadCount   int64                 `json:"readCount"`
+}
+
+type notificationEnriched struct {
+	item NotificationItemDTO
+}
+
+// ListPage returns one page of terminal-run notifications for filter=all|unread|read,
+// plus true totals for all/unread/read across the full inbox (not just the page).
+func (s *NotificationService) ListPage(username, filter string, page, pageSize int) (NotificationListResult, error) {
 	username, err := requireUsername(username)
 	if err != nil {
-		return nil, err
+		return NotificationListResult{}, err
 	}
 	baseline, err := s.ensureBaseline(username)
 	if err != nil {
-		return nil, err
+		return NotificationListResult{}, err
 	}
-	runs, _ := s.runs.ListPage(
-		[]string{"completed", "failed"},
-		"", "", 1, NotificationPoolSize,
-		"started_at", "desc",
-	)
-	items := make([]NotificationItemDTO, 0, len(runs))
-	ids := make([]string, 0, len(runs))
-	for _, r := range runs {
-		item, ok := MapRunToNotification(r)
-		if !ok {
-			continue
-		}
-		items = append(items, item)
-		ids = append(ids, item.RunID)
+
+	filter = strings.TrimSpace(strings.ToLower(filter))
+	if filter == "" {
+		filter = "all"
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		ti := parseMillis(items[i].FinishedApprox, items[i].StartedAt)
-		tj := parseMillis(items[j].FinishedApprox, items[j].StartedAt)
-		if ti != tj {
-			return ti > tj
+	switch filter {
+	case "all", "unread", "read":
+	default:
+		filter = "all"
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = DefaultNotificationPageSize
+	}
+
+	enriched, err := s.buildEnrichedList(username, baseline.EnabledAt)
+	if err != nil {
+		return NotificationListResult{}, err
+	}
+
+	var allCount, unreadCount, readCount int64
+	filtered := make([]notificationEnriched, 0, len(enriched))
+	for _, e := range enriched {
+		allCount++
+		if e.item.Unread {
+			unreadCount++
+		} else {
+			readCount++
 		}
-		return items[i].RunID > items[j].RunID
-	})
-	read, err := s.readSet(username, ids)
+		switch filter {
+		case "unread":
+			if e.item.Unread {
+				filtered = append(filtered, e)
+			}
+		case "read":
+			if !e.item.Unread {
+				filtered = append(filtered, e)
+			}
+		default:
+			filtered = append(filtered, e)
+		}
+	}
+
+	total := int64(len(filtered))
+	start := (page - 1) * pageSize
+	if start > len(filtered) {
+		start = len(filtered)
+	}
+	end := start + pageSize
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	items := make([]NotificationItemDTO, 0, end-start)
+	for _, e := range filtered[start:end] {
+		items = append(items, e.item)
+	}
+
+	return NotificationListResult{
+		Items:       items,
+		Page:        page,
+		PageSize:    pageSize,
+		Total:       total,
+		AllCount:    allCount,
+		UnreadCount: unreadCount,
+		ReadCount:   readCount,
+	}, nil
+}
+
+// List returns all terminal runs (legacy helper for tests); prefer ListPage in handlers.
+func (s *NotificationService) List(username string) ([]NotificationItemDTO, error) {
+	res, err := s.ListPage(username, "all", 1, 1<<31-1)
 	if err != nil {
 		return nil, err
 	}
-	enabledAt := baseline.EnabledAt
-	for i := range items {
-		finished := parseTime(items[i].FinishedApprox, items[i].StartedAt)
-		before := !finished.IsZero() && !enabledAt.IsZero() && !finished.After(enabledAt)
-		items[i].BeforeBaseline = before
-		_, marked := read[items[i].RunID]
-		items[i].Unread = !before && !marked && !finished.IsZero() && finished.After(enabledAt)
-	}
-	return items, nil
+	return res.Items, nil
 }
 
 // MarkRead inserts an ignore row for (username, runID). Idempotent.
@@ -117,34 +174,64 @@ func (s *NotificationService) MarkRead(username, runID string) error {
 	return s.insertRead(username, runID)
 }
 
-// MarkAllRead inserts a read row for every run currently in the terminal pool.
+// MarkAllRead inserts a read row for every unread terminal run for the user.
 // The client does not send an id list. Existing rows are left in place.
 func (s *NotificationService) MarkAllRead(username string) error {
 	username, err := requireUsername(username)
 	if err != nil {
 		return err
 	}
-	if _, err := s.ensureBaseline(username); err != nil {
+	baseline, err := s.ensureBaseline(username)
+	if err != nil {
 		return err
 	}
-	runs, _ := s.runs.ListPage(
-		[]string{"completed", "failed"},
-		"", "", 1, NotificationPoolSize,
-		"started_at", "desc",
-	)
-	for _, r := range runs {
-		if r.Status != "completed" && r.Status != "failed" {
+	enriched, err := s.buildEnrichedList(username, baseline.EnabledAt)
+	if err != nil {
+		return err
+	}
+	for _, e := range enriched {
+		if !e.item.Unread {
 			continue
 		}
-		id := strings.TrimSpace(r.ID)
-		if id == "" {
-			continue
-		}
-		if err := s.insertRead(username, id); err != nil {
+		if err := s.insertRead(username, e.item.RunID); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *NotificationService) buildEnrichedList(username string, enabledAt time.Time) ([]notificationEnriched, error) {
+	runs := s.runs.List([]string{"completed", "failed"}, "", "", "started_at", "desc")
+	ids := make([]string, 0, len(runs))
+	enriched := make([]notificationEnriched, 0, len(runs))
+	for _, r := range runs {
+		item, ok := MapRunToNotification(r)
+		if !ok {
+			continue
+		}
+		ids = append(ids, item.RunID)
+		enriched = append(enriched, notificationEnriched{item: item})
+	}
+	sort.SliceStable(enriched, func(i, j int) bool {
+		ti := parseMillis(enriched[i].item.FinishedApprox, enriched[i].item.StartedAt)
+		tj := parseMillis(enriched[j].item.FinishedApprox, enriched[j].item.StartedAt)
+		if ti != tj {
+			return ti > tj
+		}
+		return enriched[i].item.RunID > enriched[j].item.RunID
+	})
+	read, err := s.readSet(username, ids)
+	if err != nil {
+		return nil, err
+	}
+	for i := range enriched {
+		finished := parseTime(enriched[i].item.FinishedApprox, enriched[i].item.StartedAt)
+		before := !finished.IsZero() && !enabledAt.IsZero() && !finished.After(enabledAt)
+		enriched[i].item.BeforeBaseline = before
+		_, marked := read[enriched[i].item.RunID]
+		enriched[i].item.Unread = !before && !marked && !finished.IsZero() && finished.After(enabledAt)
+	}
+	return enriched, nil
 }
 
 func (s *NotificationService) insertRead(username, runID string) error {

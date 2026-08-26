@@ -7,11 +7,15 @@ import Pagination from '@/components/ui/Pagination.vue'
 import RunOutputPptModal from '@/components/shell/RunOutputPptModal.vue'
 import { useNotificationsPageEntry } from '@/lib/composables/useNotificationsPageEntry'
 import { relTime } from '@/lib/shared/format'
-import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
+import {
+  NOTIFICATION_PAGE_SIZE,
+  useRunTerminalNotifications,
+} from '@/lib/run/useRunTerminalNotifications'
+import type { NotificationReadFilter } from '@/lib/api/clients/notificationsClient'
 
-type ReadFilter = 'all' | 'unread' | 'read'
+type ReadFilter = NotificationReadFilter
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = NOTIFICATION_PAGE_SIZE
 
 const { t } = useI18n()
 const router = useRouter()
@@ -19,12 +23,16 @@ const { enterNonce } = useNotificationsPageEntry()
 
 const {
   listItems,
+  listTotal,
   unreadCount,
+  allCount,
+  readCount,
   markRead,
   markAllRead,
-  refresh,
+  refreshPage,
   ensureUsername,
   loading,
+  pageLoading,
 } = useRunTerminalNotifications()
 
 const filter = ref<ReadFilter>('all')
@@ -33,38 +41,34 @@ const outputOpen = ref(false)
 const outputRunId = ref<string | null>(null)
 const outputContext = ref('')
 
-const filteredItems = computed(() => {
-  const items = listItems.value
-  if (filter.value === 'unread') return items.filter((n) => n.unread)
-  if (filter.value === 'read') return items.filter((n) => !n.unread)
-  return items
-})
-
-const filteredTotal = computed(() => filteredItems.value.length)
-
 const filterCounts = computed<Record<ReadFilter, number>>(() => ({
-  all: listItems.value.length,
-  unread: listItems.value.filter((n) => n.unread).length,
-  read: listItems.value.filter((n) => !n.unread).length,
+  all: allCount.value,
+  unread: unreadCount.value,
+  read: readCount.value,
 }))
 
-const pagedItems = computed(() => {
-  const start = (page.value - 1) * PAGE_SIZE
-  return filteredItems.value.slice(start, start + PAGE_SIZE)
-})
+const pagedItems = computed(() => listItems.value)
+
+const filteredTotal = computed(() => listTotal.value)
 
 const pagerSummary = computed(() =>
   t('pages.notifications.pagerSummary', { total: filteredTotal.value, pageSize: PAGE_SIZE }),
 )
 
+const showLoading = computed(
+  () => (loading.value || pageLoading.value) && !listItems.value.length,
+)
+
 function setFilter(next: ReadFilter) {
   filter.value = next
   page.value = 1
+  void refreshPage({ page: 1, filter: next, source: 'page' })
 }
 
 function resetToAllFirstPage() {
   filter.value = 'all'
   page.value = 1
+  void refreshPage({ page: 1, filter: 'all', source: 'page' })
 }
 
 function clampPage() {
@@ -76,11 +80,17 @@ function clampPage() {
   const last = Math.ceil(n / PAGE_SIZE)
   if (page.value > last || pagedItems.value.length === 0) {
     page.value = last
+    void refreshPage({ page: last, filter: filter.value, source: 'page' })
   }
 }
 
 watch(enterNonce, () => {
   resetToAllFirstPage()
+})
+
+watch(page, (next, prev) => {
+  if (next === prev) return
+  void refreshPage({ page: next, filter: filter.value, source: 'page' })
 })
 
 watch(filteredTotal, () => {
@@ -142,7 +152,7 @@ function onOutputMarkRead() {
 
 onMounted(() => {
   ensureUsername()
-  void refresh({ source: 'manual' })
+  void refreshPage({ page: 1, filter: 'all', source: 'manual' })
 })
 
 defineExpose({
@@ -198,14 +208,14 @@ defineExpose({
     <div class="card flex min-h-0 flex-1 flex-col overflow-hidden">
       <div class="min-h-0 flex-1 overflow-y-auto">
         <div
-          v-if="loading && !listItems.length"
+          v-if="showLoading"
           class="flex h-full items-center justify-center px-6 py-14 text-center text-sm text-txt3"
           data-testid="notifications-loading"
         >
           {{ t('pages.notifications.loading') }}
         </div>
         <div
-          v-else-if="!filteredItems.length"
+          v-else-if="!pagedItems.length"
           class="flex h-full items-center justify-center px-6 py-14"
         >
           <EmptyState
