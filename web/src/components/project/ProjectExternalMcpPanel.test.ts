@@ -76,4 +76,12 @@ describe('ProjectExternalMcpPanel (plan g3.1/g3.2/g3.3)', () => {
     await flushPromises()
     expect(document.body.textContent).toContain('新建项目 MCP 密钥')
   })
+
+  it('interpolates {base} in urlPackSuffix (g3.2 review v3)', async () => {
+    const wrapper = mountPanel()
+    await flushPromises()
+    const text = wrapper.text()
+    expect(text).toContain('http://api.example.com/mcp/external/proj-1/pm-progress')
+    expect(text).not.toContain('{base}')
+  })
 })

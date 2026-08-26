@@ -98,7 +98,7 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 // authorizeAgentFSTarget allows PM to manage any agent bound to the same project (incl. self).
 func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.SkillService, _ *services.OrgService, target string) (errMsg string, deny bool) {
 	if strings.TrimSpace(sess.AgentName) == "" {
-		return "leader agent missing from session", true
+		return "pm leader not bound", true
 	}
 	ag, ok := skill.Get(target)
 	if !ok {

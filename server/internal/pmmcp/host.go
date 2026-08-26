@@ -145,11 +145,20 @@ func (h *Host) Restore(projectID, threadID, userID, agentName, token string) {
 
 // RestoreExternal binds or refreshes an external MCP session for a project API key.
 // enabledPacks must already be filtered; may be empty (no tools exposed).
+// AgentName is filled from the project's PmLeaderAgent so pm-agent-fs / team tools
+// authorize like an internal PM session; when unbound, AgentName stays empty and
+// those tools return "pm leader not bound" (not a silent empty name).
 func (h *Host) RestoreExternal(projectID, apiKeyID, apiKeyName string, enabledPacks []string) string {
 	projectID = strings.TrimSpace(projectID)
 	apiKeyID = strings.TrimSpace(apiKeyID)
 	if projectID == "" || apiKeyID == "" {
 		return ""
+	}
+	agentName := ""
+	if h.pm != nil {
+		if b, err := h.pm.GetBinding(projectID); err == nil {
+			agentName = strings.TrimSpace(b.AgentConfigRef)
+		}
 	}
 	threadID := "external|" + apiKeyID
 	token := "extmcp-" + apiKeyID
@@ -165,7 +174,7 @@ func (h *Host) RestoreExternal(projectID, apiKeyID, apiKeyName string, enabledPa
 		ProjectID:   projectID,
 		ThreadID:    threadID,
 		UserID:      "external-mcp",
-		AgentName:   "",
+		AgentName:   agentName,
 		AllowedMcps: allowed,
 		External:    true,
 		ApiKeyID:    apiKeyID,

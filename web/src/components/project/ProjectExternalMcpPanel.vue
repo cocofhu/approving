@@ -52,6 +52,10 @@ const packExampleUrl = computed(() => {
   return `${base}/pm-progress`
 })
 
+const mcpBaseForHint = computed(() =>
+  mcpBaseUrl.value || `${window.location.origin}/mcp/external/${props.projectId}`,
+)
+
 const mcpJsonExample = computed(() => JSON.stringify({
   mcpServers: {
     'project-pm': {
@@ -223,7 +227,7 @@ onMounted(async () => {
               {{ copied === 'url' ? t('pages.projectDetail.externalMcp.copied') : t('pages.projectDetail.externalMcp.copy') }}
             </button>
           </div>
-          <p class="text-xs text-txt3">{{ t('pages.projectDetail.externalMcp.urlPackSuffix') }}</p>
+          <p class="text-xs text-txt3">{{ t('pages.projectDetail.externalMcp.urlPackSuffix', { base: mcpBaseForHint }) }}</p>
         </div>
 
         <div class="card space-y-3 p-4">
