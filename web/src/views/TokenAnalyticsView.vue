@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { registerECharts } from '@/components/charts/echartsSetup'
-import { CHART_AXIS, CHART_GRID, fmtCompactAxis } from '@/components/charts/chartTheme'
+import { CHART_AXIS, fmtCompactAxis } from '@/components/charts/chartTheme'
 import { api } from '@/lib/api/api'
 import type { GlobalTokenStats, TokenStatsWindow } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
@@ -17,6 +17,7 @@ import {
   type TokenPartKey,
 } from '@/components/board/token-stats/tokenStatsShared'
 import { useToast } from '@/lib/composables/useToast'
+import { theme } from '@/lib/shared/theme'
 registerECharts()
 
 const { t } = useI18n()
@@ -31,7 +32,7 @@ const projectSel = ref('')
 const modelSel = ref('')
 const lineMode = ref<'total' | 'project' | 'model'>('total')
 const areaMode = ref<'source' | 'comp'>('source')
-const activeSection = ref('overview')
+const kpiDetailOpen = ref(false)
 
 const loading = ref(true)
 const failed = ref(false)
@@ -40,16 +41,46 @@ const data = ref<GlobalTokenStats | null>(null)
 let abort: AbortController | null = null
 let generation = 0
 
-const sections = computed(() => [
-  { id: 'overview', label: t('pages.tokenAnalytics.sections.overview') },
-  { id: 'lines', label: t('pages.tokenAnalytics.sections.lines') },
-  { id: 'pies', label: t('pages.tokenAnalytics.sections.pies') },
-  { id: 'bars', label: t('pages.tokenAnalytics.sections.bars') },
-  { id: 'area', label: t('pages.tokenAnalytics.sections.area') },
-  { id: 'heat', label: t('pages.tokenAnalytics.sections.heat') },
-  { id: 'nodeWf', label: t('pages.tokenAnalytics.sections.nodeWf') },
-  { id: 'tables', label: t('pages.tokenAnalytics.sections.tables') },
-])
+const STATS_CHART_GRID = {
+  left: 56,
+  right: 16,
+  top: 40,
+  bottom: 52,
+  containLabel: true,
+}
+
+const chartTone = computed(() => {
+  void theme.value
+  const dark = theme.value === 'dark'
+  return {
+    axisLabel: dark ? '#a1a1aa' : '#71717a',
+    splitLine: dark ? 'rgba(255,255,255,0.08)' : '#eef0f3',
+    legend: dark ? '#a1a1aa' : '#8b8b96',
+    pieLabel: dark ? '#d4d4d8' : '#52525b',
+    heatLow: dark ? '#1f1f36' : '#efeaff',
+    heatHigh: '#5b4dff',
+  }
+})
+
+function statsAxis() {
+  const tone = chartTone.value
+  return {
+    ...CHART_AXIS,
+    axisLabel: { ...CHART_AXIS.axisLabel, color: tone.axisLabel, hideOverlap: true },
+    splitLine: { lineStyle: { color: tone.splitLine } },
+  }
+}
+
+function statsLegend() {
+  return {
+    top: 0,
+    left: 0,
+    itemWidth: 12,
+    itemHeight: 8,
+    itemStyle: { borderRadius: 0 },
+    textStyle: { fontSize: 11, color: chartTone.value.legend },
+  }
+}
 
 const isEmpty = computed(() => !!data.value?.empty)
 
@@ -117,14 +148,20 @@ function lineChartOption() {
   }
 
   return {
-    grid: CHART_GRID,
+    grid: STATS_CHART_GRID,
     tooltip: { trigger: 'axis' },
-    legend: { bottom: 0, textStyle: { fontSize: 11, color: '#8b8b96' } },
-    xAxis: { type: 'category', data: labels, ...CHART_AXIS, splitLine: { show: false } },
+    legend: statsLegend(),
+    xAxis: {
+      type: 'category',
+      data: labels,
+      ...statsAxis(),
+      splitLine: { show: false },
+      axisLabel: { ...statsAxis().axisLabel, interval: 'auto' },
+    },
     yAxis: {
       type: 'value',
-      ...CHART_AXIS,
-      axisLabel: { ...CHART_AXIS.axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
+      ...statsAxis(),
+      axisLabel: { ...statsAxis().axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
     },
     series: series.map((s) => ({
       type: 'line',
@@ -156,7 +193,8 @@ function pieOption(
       show: true,
       bottom: 0,
       type: 'scroll',
-      textStyle: { fontSize: 10, color: '#8b8b96' },
+      itemStyle: { borderRadius: 0 },
+      textStyle: { fontSize: 10, color: chartTone.value.legend },
     },
     series: [
       {
@@ -170,7 +208,7 @@ function pieOption(
           show: true,
           formatter: '{b} {d}%',
           fontSize: 10,
-          color: '#52525b',
+          color: chartTone.value.pieLabel,
         },
         labelLayout: { hideOverlap: true },
       },
@@ -242,17 +280,23 @@ function barChartOption() {
     }),
   })
   return {
-    grid: CHART_GRID,
+    grid: STATS_CHART_GRID,
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     legend: {
+      ...statsLegend(),
       data: TOKEN_PART_KEYS.map((k) => partLabel(k)),
-      textStyle: { fontSize: 11 },
     },
-    xAxis: { type: 'category', data: projs.map((p) => p.name), ...CHART_AXIS, splitLine: { show: false } },
+    xAxis: {
+      type: 'category',
+      data: projs.map((p) => p.name),
+      ...statsAxis(),
+      splitLine: { show: false },
+      axisLabel: { ...statsAxis().axisLabel, interval: 0, rotate: projs.length > 6 ? 30 : 0 },
+    },
     yAxis: {
       type: 'value',
-      ...CHART_AXIS,
-      axisLabel: { ...CHART_AXIS.axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
+      ...statsAxis(),
+      axisLabel: { ...statsAxis().axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
     },
     series: TOKEN_PART_KEYS.map((k) => partSeries(k)),
   }
@@ -263,10 +307,21 @@ function areaChartOption() {
   const labels = bucketLabels(data.value.trend)
   if (areaMode.value === 'source') {
     return {
-      grid: CHART_GRID,
+      grid: STATS_CHART_GRID,
       tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: labels, ...CHART_AXIS, splitLine: { show: false } },
-      yAxis: { type: 'value', ...CHART_AXIS, axisLabel: { formatter: (v: number) => fmtCompactAxis(v) } },
+      legend: statsLegend(),
+      xAxis: {
+        type: 'category',
+        data: labels,
+        ...statsAxis(),
+        splitLine: { show: false },
+        axisLabel: { ...statsAxis().axisLabel, interval: 'auto' },
+      },
+      yAxis: {
+        type: 'value',
+        ...statsAxis(),
+        axisLabel: { ...statsAxis().axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
+      },
       series: [
         {
           type: 'line',
@@ -288,10 +343,21 @@ function areaChartOption() {
     }
   }
   return {
-    grid: CHART_GRID,
+    grid: STATS_CHART_GRID,
     tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: labels, ...CHART_AXIS, splitLine: { show: false } },
-    yAxis: { type: 'value', ...CHART_AXIS, axisLabel: { formatter: (v: number) => fmtCompactAxis(v) } },
+    legend: statsLegend(),
+    xAxis: {
+      type: 'category',
+      data: labels,
+      ...statsAxis(),
+      splitLine: { show: false },
+      axisLabel: { ...statsAxis().axisLabel, interval: 'auto' },
+    },
+    yAxis: {
+      type: 'value',
+      ...statsAxis(),
+      axisLabel: { ...statsAxis().axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
+    },
     series: TOKEN_PART_KEYS.map((partKey) => ({
       type: 'line',
       stack: 'a',
@@ -317,15 +383,42 @@ function heatmapOption() {
   })
   const max = Math.max(1, ...flat.map((f) => f[2]))
   return {
-    grid: { left: 72, right: 12, top: 12, bottom: 28 },
+    grid: { left: 176, right: 12, top: 12, bottom: 28, containLabel: false },
     tooltip: { position: 'top', formatter: (p: { data: [number, number, number] }) => {
       const [x, y, v] = p.data
       return `${hm.rows[y]} × ${hm.cols[x]}<br/>${fmtTokenCount(v)}`
     }},
-    xAxis: { type: 'category', data: hm.cols, splitArea: { show: true }, axisLabel: { fontSize: 10 } },
-    yAxis: { type: 'category', data: hm.rows, splitArea: { show: true }, axisLabel: { fontSize: 10 } },
-    visualMap: { min: 0, max, calculable: false, orient: 'horizontal', left: 'center', bottom: 0, show: false, inRange: { color: ['#efeaff', '#5b4dff'] } },
-    series: [{ type: 'heatmap', data: flat, label: { show: true, formatter: (p: { data: [number, number, number] }) => fmtCompactTokenCount(p.data[2]) } }],
+    xAxis: {
+      type: 'category',
+      data: hm.cols,
+      splitArea: { show: true },
+      axisLabel: { fontSize: 10, color: chartTone.value.axisLabel },
+    },
+    yAxis: {
+      type: 'category',
+      data: hm.rows,
+      splitArea: { show: true },
+      axisLabel: { fontSize: 10, color: chartTone.value.axisLabel, width: 160, overflow: 'truncate' },
+    },
+    visualMap: {
+      min: 0,
+      max,
+      calculable: false,
+      orient: 'horizontal',
+      left: 'center',
+      bottom: 0,
+      show: false,
+      inRange: { color: [chartTone.value.heatLow, chartTone.value.heatHigh] },
+    },
+    series: [{
+      type: 'heatmap',
+      data: flat,
+      label: {
+        show: true,
+        color: chartTone.value.pieLabel,
+        formatter: (p: { data: [number, number, number] }) => fmtCompactTokenCount(p.data[2]),
+      },
+    }],
   }
 }
 
@@ -411,63 +504,27 @@ function goRun(runId: string) {
   void router.push(`/runs/${runId}`)
 }
 
-function scrollToSection(id: string) {
-  activeSection.value = id
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-let observer: IntersectionObserver | null = null
-
 onMounted(() => {
   void load()
-  observer = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting && e.target.id) activeSection.value = e.target.id
-      }
-    },
-    { rootMargin: '-20% 0px -60% 0px' },
-  )
-  for (const s of sections.value) {
-    const el = document.getElementById(s.id)
-    if (el) observer.observe(el)
-  }
 })
 
 onBeforeUnmount(() => {
   abort?.abort()
-  observer?.disconnect()
 })
 
 watch([windowSel], () => void load())
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1" data-testid="token-analytics-page">
-    <div class="min-w-0 flex-1 overflow-auto px-5 py-4 pb-14">
-      <nav
-        class="sticky top-0 z-10 -mx-5 mb-3 flex gap-1 overflow-x-auto border-b border-line bg-surface px-5 py-2 xl:hidden"
-        data-testid="token-analytics-section-nav-mobile"
-      >
-        <button
-          v-for="s in sections"
-          :key="s.id"
-          type="button"
-          class="shrink-0 rounded-lg px-2 py-1 text-xs"
-          :class="activeSection === s.id ? 'bg-accent-dim font-semibold text-accent-2' : 'text-txt3'"
-          @click="scrollToSection(s.id)"
-        >
-          {{ s.label }}
-        </button>
-      </nav>
-
+  <div class="flex h-full min-h-0 flex-col" data-testid="token-analytics-page">
+    <div class="token-analytics-main min-h-0 flex-1 overflow-auto px-5 py-4 pb-14">
       <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="m-0 text-[22px] font-semibold">{{ t('pages.tokenAnalytics.title') }}</h1>
           <p class="mt-1 text-xs text-txt3">{{ t('pages.tokenAnalytics.subtitle') }}</p>
         </div>
         <div
-          class="flex gap-1 rounded-[10px] bg-elevated p-1"
+          class="flex gap-1 bg-elevated p-1"
           role="group"
           :aria-label="t('pages.board.tokenStats.windowAria')"
           data-testid="token-analytics-window"
@@ -476,7 +533,7 @@ watch([windowSel], () => void load())
             v-for="w in WINDOWS"
             :key="w"
             type="button"
-            class="rounded-lg px-2.5 py-1.5 text-xs"
+            class="px-2.5 py-1.5 text-xs"
             :class="windowSel === w ? 'bg-surface font-semibold text-txt shadow-sm' : 'text-txt3'"
             @click="windowSel = w"
           >
@@ -488,7 +545,7 @@ watch([windowSel], () => void load())
       <div class="mb-3 flex flex-wrap gap-2" data-testid="token-analytics-filters">
         <button
           type="button"
-          class="chip rounded-lg border px-2.5 py-1.5 text-xs"
+          class="chip border px-2.5 py-1.5 text-xs"
           :class="sourceSel === 'all' ? 'border-accent/40 bg-accent-dim font-semibold text-accent-2' : 'border-line bg-surface text-txt2'"
           @click="applySource('all')"
         >
@@ -496,7 +553,7 @@ watch([windowSel], () => void load())
         </button>
         <button
           type="button"
-          class="chip rounded-lg border px-2.5 py-1.5 text-xs"
+          class="chip border px-2.5 py-1.5 text-xs"
           :class="sourceSel === 'workflow' ? 'border-accent/40 bg-accent-dim font-semibold text-accent-2' : 'border-line bg-surface text-txt2'"
           @click="applySource('workflow')"
         >
@@ -504,21 +561,21 @@ watch([windowSel], () => void load())
         </button>
         <button
           type="button"
-          class="chip rounded-lg border px-2.5 py-1.5 text-xs"
+          class="chip border px-2.5 py-1.5 text-xs"
           :class="sourceSel === 'pm' ? 'border-accent/40 bg-accent-dim font-semibold text-accent-2' : 'border-line bg-surface text-txt2'"
           @click="applySource('pm')"
         >
           {{ t('pages.tokenAnalytics.sourcePm') }}
         </button>
-        <select v-model="projectSel" class="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
+        <select v-model="projectSel" class="border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
           <option value="">{{ t('pages.tokenAnalytics.projectAll') }}</option>
           <option v-for="p in data?.filterOptions.projects || []" :key="p.key" :value="p.key">{{ p.name }}</option>
         </select>
-        <select v-model="modelSel" class="rounded-lg border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
+        <select v-model="modelSel" class="border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
           <option value="">{{ t('pages.tokenAnalytics.modelAll') }}</option>
           <option v-for="m in data?.filterOptions.models || []" :key="m.key" :value="m.key">{{ m.name }}</option>
         </select>
-        <button type="button" class="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-xs text-txt2" @click="clearFilters">
+        <button type="button" class="border border-line bg-surface px-2.5 py-1.5 text-xs text-txt2" @click="clearFilters">
           {{ t('pages.tokenAnalytics.clearFilters') }}
         </button>
       </div>
@@ -535,29 +592,56 @@ watch([windowSel], () => void load())
         <p class="mt-1 text-sm text-txt3">{{ t('pages.tokenAnalytics.emptyHint') }}</p>
       </div>
       <template v-else-if="data">
-        <section id="overview" class="scroll-mt-3 mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
+        <section id="overview" class="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3" data-testid="token-analytics-kpis">
+          <div class="border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-total">
             <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiTotal') }}</div>
             <div class="mt-1 text-[22px] font-bold tabular-nums">{{ fmtCompactTokenCount(data.kpi.total) }}</div>
-            <div class="mt-1 text-[11px] text-txt3">
-              <span :class="deltaClass">{{ deltaLabel }}</span>
-              {{ t('pages.tokenAnalytics.kpiVsPrev') }}
+            <div class="mt-1 text-[11px]" :class="deltaClass">{{ deltaLabel }}</div>
+          </div>
+          <div
+            class="token-analytics-kpi-merge relative border border-line bg-surface p-3.5"
+            tabindex="0"
+            data-testid="token-analytics-kpi-merge"
+            @click="kpiDetailOpen = !kpiDetailOpen"
+          >
+            <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiInOutCache') }}</div>
+            <div class="mt-1.5 flex justify-between gap-3 text-[13px]">
+              <span class="text-txt2">{{ t('pages.tokenAnalytics.kpiInOutPair') }}</span>
+              <b class="text-base font-bold tabular-nums">
+                {{ fmtCompactTokenCount(data.kpi.inputTokens) }} / {{ fmtCompactTokenCount(data.kpi.outputTokens) }}
+              </b>
+            </div>
+            <div class="mt-1.5 flex justify-between gap-3 text-[13px]">
+              <span class="text-txt2">{{ t('pages.tokenAnalytics.kpiCachePair') }}</span>
+              <b class="text-base font-bold tabular-nums">
+                {{ fmtCompactTokenCount(data.kpi.cacheReadTokens) }} / {{ fmtCompactTokenCount(data.kpi.cacheWriteTokens) }}
+              </b>
+            </div>
+            <div
+              class="token-analytics-kpi-tip absolute left-3.5 top-[calc(100%-8px)] z-10 hidden min-w-[200px] border border-line bg-elevated p-2.5 text-xs shadow-md"
+              :class="{ '!block': kpiDetailOpen }"
+              data-testid="token-analytics-kpi-detail"
+            >
+              <div class="flex justify-between gap-4 py-0.5">
+                <span>{{ t('pages.executionTimeline.partInput') }}</span>
+                <span class="tabular-nums">{{ fmtTokenCount(data.kpi.inputTokens) }}</span>
+              </div>
+              <div class="flex justify-between gap-4 py-0.5">
+                <span>{{ t('pages.executionTimeline.partOutput') }}</span>
+                <span class="tabular-nums">{{ fmtTokenCount(data.kpi.outputTokens) }}</span>
+              </div>
+              <div class="flex justify-between gap-4 py-0.5">
+                <span>{{ t('pages.executionTimeline.partCacheRead') }}</span>
+                <span class="tabular-nums">{{ fmtTokenCount(data.kpi.cacheReadTokens) }}</span>
+              </div>
+              <div class="flex justify-between gap-4 py-0.5">
+                <span>{{ t('pages.executionTimeline.partCacheWrite') }}</span>
+                <span class="tabular-nums">{{ fmtTokenCount(data.kpi.cacheWriteTokens) }}</span>
+              </div>
             </div>
           </div>
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
-            <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiInOut') }}</div>
-            <div class="mt-1 text-[22px] font-bold tabular-nums">
-              {{ fmtCompactTokenCount(data.kpi.inputTokens) }} / {{ fmtCompactTokenCount(data.kpi.outputTokens) }}
-            </div>
-          </div>
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
-            <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiCache') }}</div>
-            <div class="mt-1 text-[22px] font-bold tabular-nums">
-              {{ fmtCompactTokenCount(data.kpi.cacheReadTokens) }} / {{ fmtCompactTokenCount(data.kpi.cacheWriteTokens) }}
-            </div>
-          </div>
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
-            <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiCoverage') }}</div>
+          <div class="border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-scope">
+            <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiScope') }}</div>
             <div class="mt-1 text-[22px] font-bold">{{ t('pages.tokenAnalytics.kpiProjects', { n: data.kpi.projectCount }) }}</div>
             <div class="mt-1 text-[11px] text-txt3">
               {{ t('pages.tokenAnalytics.kpiRuns', { n: data.kpi.runCount }) }} ·
@@ -566,7 +650,7 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="lines" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-lines">
+        <section id="lines" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-lines">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.lines') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.linesHint') }}</em>
@@ -576,17 +660,19 @@ watch([windowSel], () => void load())
               v-for="m in (['total', 'project', 'model'] as const)"
               :key="m"
               type="button"
-              class="rounded-lg px-2.5 py-1 text-xs"
+              class="px-2.5 py-1 text-xs"
               :class="lineMode === m ? 'bg-elevated font-semibold text-txt' : 'text-txt3'"
               @click="lineMode = m"
             >
               {{ t(`pages.tokenAnalytics.lineModes.${m}`) }}
             </button>
           </div>
-          <VChart v-if="lineChartOption()" :option="lineChartOption()!" autoresize class="mt-2 h-[220px] w-full" />
+          <div class="token-analytics-plot mt-2 h-[200px] overflow-hidden" data-testid="token-analytics-plot-lines">
+            <VChart v-if="lineChartOption()" :option="lineChartOption()!" autoresize class="h-full w-full" />
+          </div>
         </section>
 
-        <section id="pies" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-pies">
+        <section id="pies" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-pies">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.pies') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.piesHint') }}</em>
@@ -613,21 +699,23 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="bars" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
+        <section id="bars" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.bars') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.barsHint') }}</em>
           </h2>
-          <VChart
-            v-if="barChartOption()"
-            :option="barChartOption()!"
-            autoresize
-            class="mt-2 h-[220px] w-full"
-            @click="onBarClick"
-          />
+          <div class="token-analytics-plot mt-2 h-[200px] overflow-hidden" data-testid="token-analytics-plot-bars">
+            <VChart
+              v-if="barChartOption()"
+              :option="barChartOption()!"
+              autoresize
+              class="h-full w-full"
+              @click="onBarClick"
+            />
+          </div>
         </section>
 
-        <section id="area" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-area">
+        <section id="area" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-area">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.area') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.areaHint') }}</em>
@@ -637,22 +725,26 @@ watch([windowSel], () => void load())
               v-for="m in (['source', 'comp'] as const)"
               :key="m"
               type="button"
-              class="rounded-lg px-2.5 py-1 text-xs"
+              class="px-2.5 py-1 text-xs"
               :class="areaMode === m ? 'bg-elevated font-semibold' : 'text-txt3'"
               @click="areaMode = m"
             >
               {{ t(`pages.tokenAnalytics.areaModes.${m}`) }}
             </button>
           </div>
-          <VChart v-if="areaChartOption()" :option="areaChartOption()!" autoresize class="mt-2 h-[220px] w-full" />
+          <div class="token-analytics-plot mt-2 h-[200px] overflow-hidden" data-testid="token-analytics-plot-area">
+            <VChart v-if="areaChartOption()" :option="areaChartOption()!" autoresize class="h-full w-full" />
+          </div>
         </section>
 
-        <section id="heat" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
+        <section id="heat" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
           <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.heat') }}</h2>
-          <VChart v-if="heatmapOption()" :option="heatmapOption()!" autoresize class="mt-2 h-[240px] w-full" />
+          <div class="token-analytics-plot mt-2 h-[240px] overflow-hidden" data-testid="token-analytics-plot-heat">
+            <VChart v-if="heatmapOption()" :option="heatmapOption()!" autoresize class="h-full w-full" />
+          </div>
         </section>
 
-        <section id="nodeWf" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-node-wf">
+        <section id="nodeWf" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-node-wf">
           <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.nodeWf') }}</h2>
           <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
@@ -668,79 +760,88 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="tables" class="scroll-mt-3 grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
-            <h2 class="m-0 mb-2 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.projects') }}</h2>
-            <table class="w-full border-collapse text-xs">
-              <thead>
-                <tr class="text-txt3">
-                  <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colProject') }}</th>
-                  <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colTotal') }}</th>
-                  <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colInput') }}</th>
-                  <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colOutput') }}</th>
-                  <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colDelta') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in data.projects" :key="p.projectId" class="hover:bg-accent-dim/40">
-                  <td class="border-b border-line/60 py-1.5">
-                    <button type="button" class="text-accent-2" @click="goBoard(p.projectId)">{{ p.name }}</button>
-                  </td>
-                  <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(p.total) }}</td>
-                  <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(p.inputTokens) }}</td>
-                  <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(p.outputTokens) }}</td>
-                  <td class="border-b border-line/60 py-1.5 text-right tabular-nums">
-                    {{ p.deltaPct != null ? `${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct.toFixed(1)}%` : t('pages.tokenAnalytics.noPrev') }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <section id="tables" class="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+          <div class="flex max-h-[280px] min-h-0 flex-col border border-line bg-surface p-3.5">
+            <h2 class="m-0 mb-2 shrink-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.projects') }}</h2>
+            <div class="token-analytics-table-scroll min-h-0 flex-1 overflow-auto">
+              <table class="w-full border-collapse text-xs">
+                <thead>
+                  <tr class="text-txt3">
+                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colProject') }}</th>
+                    <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colTotal') }}</th>
+                    <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colInput') }}</th>
+                    <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colOutput') }}</th>
+                    <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colDelta') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="p in data.projects" :key="p.projectId" class="hover:bg-accent-dim/40">
+                    <td class="border-b border-line/60 py-1.5">
+                      <button type="button" class="text-accent-2" @click="goBoard(p.projectId)">{{ p.name }}</button>
+                    </td>
+                    <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(p.total) }}</td>
+                    <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(p.inputTokens) }}</td>
+                    <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(p.outputTokens) }}</td>
+                    <td class="border-b border-line/60 py-1.5 text-right tabular-nums">
+                      {{ p.deltaPct != null ? `${p.deltaPct >= 0 ? '+' : ''}${p.deltaPct.toFixed(1)}%` : t('pages.tokenAnalytics.noPrev') }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
-            <h2 class="m-0 mb-2 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.runs') }}</h2>
-            <table class="w-full border-collapse text-xs">
-              <thead>
-                <tr class="text-txt3">
-                  <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colRun') }}</th>
-                  <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colProject') }}</th>
-                  <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colModel') }}</th>
-                  <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colTotal') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="r in data.topRuns" :key="r.runId" class="hover:bg-accent-dim/40">
-                  <td class="border-b border-line/60 py-1.5">
-                    <button type="button" class="text-accent-2" @click="goRun(r.runId)">{{ r.title }}</button>
-                  </td>
-                  <td class="border-b border-line/60 py-1.5">{{ r.projectName }}</td>
-                  <td class="border-b border-line/60 py-1.5">{{ r.modelName || r.modelKey }}</td>
-                  <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(r.total) }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="flex max-h-[280px] min-h-0 flex-col border border-line bg-surface p-3.5" data-testid="token-analytics-runs-table">
+            <h2 class="m-0 mb-2 shrink-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.runs') }}</h2>
+            <div class="token-analytics-table-scroll min-h-0 flex-1 overflow-auto">
+              <table class="w-full border-collapse text-xs">
+                <thead>
+                  <tr class="text-txt3">
+                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colRun') }}</th>
+                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colProject') }}</th>
+                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colModel') }}</th>
+                    <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colTotal') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in data.topRuns" :key="r.runId" class="hover:bg-accent-dim/40">
+                    <td class="border-b border-line/60 py-1.5">
+                      <button type="button" class="text-accent-2" @click="goRun(r.runId)">{{ r.title }}</button>
+                    </td>
+                    <td class="border-b border-line/60 py-1.5">{{ r.projectName }}</td>
+                    <td class="border-b border-line/60 py-1.5">{{ r.modelName || r.modelKey }}</td>
+                    <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(r.total) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </template>
     </div>
-
-    <aside
-      class="hidden w-[196px] shrink-0 overflow-auto border-l border-line bg-surface px-2.5 py-4 xl:block"
-      data-testid="token-analytics-section-nav"
-    >
-      <h3 class="mx-2 mb-2 text-[11px] tracking-wide text-txt3">{{ t('pages.tokenAnalytics.sectionNav') }}</h3>
-      <a
-        v-for="s in sections"
-        :key="s.id"
-        href="#"
-        class="mb-0.5 block rounded-[9px] px-2.5 py-1.5 text-[12.5px] no-underline"
-        :class="activeSection === s.id ? 'bg-accent-dim font-semibold text-accent-2' : 'text-txt2 hover:bg-elevated'"
-        @click.prevent="scrollToSection(s.id)"
-      >
-        {{ s.label }}
-      </a>
-      <p class="mx-1.5 mt-3 rounded-[10px] bg-accent-dim p-2.5 text-[11px] leading-relaxed text-txt2">
-        {{ t('pages.tokenAnalytics.sectionNote') }}
-      </p>
-    </aside>
   </div>
 </template>
+
+<style scoped>
+.token-analytics-main,
+.token-analytics-table-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--c-line)) rgb(var(--c-base));
+}
+.token-analytics-main::-webkit-scrollbar,
+.token-analytics-table-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.token-analytics-main::-webkit-scrollbar-thumb,
+.token-analytics-table-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--c-line));
+}
+.token-analytics-main::-webkit-scrollbar-track,
+.token-analytics-table-scroll::-webkit-scrollbar-track {
+  background: rgb(var(--c-base));
+}
+.token-analytics-kpi-merge:hover .token-analytics-kpi-tip,
+.token-analytics-kpi-merge:focus-within .token-analytics-kpi-tip {
+  display: block;
+}
+</style>

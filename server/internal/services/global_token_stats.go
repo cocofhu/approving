@@ -224,11 +224,8 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 			if mk == "" {
 				continue
 			}
-			name := mk
-			if mk == models.TokenUsageModelUnknown {
-				name = unknownAliases[row.projectID]
-			}
-			modelSeen[mk] = name
+			effective := rebucketGlobalModelKey(mk, row.projectID, unknownAliases)
+			modelSeen[effective] = effective
 		}
 		projSeen[row.projectID] = projOpt{id: row.projectID, name: row.projectName}
 	}
@@ -269,8 +266,8 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 		return out, nil
 	}
 
-	curAgg := aggregateGlobalRows(curRows, loc, bucketWidth, nowLocal, curWin)
-	prevAgg := aggregateGlobalRows(prevRows, loc, bucketWidth, nowLocal, prevWin)
+	curAgg := aggregateGlobalRows(curRows, loc, bucketWidth, nowLocal, curWin, unknownAliases)
+	prevAgg := aggregateGlobalRows(prevRows, loc, bucketWidth, nowLocal, prevWin, unknownAliases)
 
 	kpi := buildGlobalKPI(curAgg, prevAgg)
 	trend := bucketsFromAgg(curAgg.buckets, nowLocal, curWin, bucketWidth)
@@ -400,7 +397,19 @@ type globalRunAgg struct {
 	topModelKey, topModelName                        string
 }
 
-func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketWidth string, nowLocal time.Time, win windowSlice) *globalAgg {
+// rebucketGlobalModelKey merges per-project unknown usage into the configured default model.
+func rebucketGlobalModelKey(mk, projectID string, unknownAliases map[string]string) string {
+	if mk != models.TokenUsageModelUnknown {
+		return mk
+	}
+	alias := strings.TrimSpace(unknownAliases[projectID])
+	if alias != "" && alias != models.TokenUsageModelUnknown {
+		return alias
+	}
+	return mk
+}
+
+func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketWidth string, nowLocal time.Time, win windowSlice, unknownAliases map[string]string) *globalAgg {
 	agg := &globalAgg{
 		buckets:      map[string]*tokenBucketAgg{},
 		projects:     map[string]*globalProjectAgg{},
@@ -496,10 +505,11 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 			if tot <= 0 {
 				continue
 			}
-			ma := agg.models[mk]
+			targetKey := rebucketGlobalModelKey(mk, row.projectID, unknownAliases)
+			ma := agg.models[targetKey]
 			if ma == nil {
 				ma = &tokenModelAgg{}
-				agg.models[mk] = ma
+				agg.models[targetKey] = ma
 			}
 			ma.total += tot
 			if bu.Filled {
@@ -509,10 +519,10 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 				ma.source = bu.Source
 			}
 
-			mb := agg.modelBuckets[mk]
+			mb := agg.modelBuckets[targetKey]
 			if mb == nil {
 				mb = map[string]*tokenBucketAgg{}
-				agg.modelBuckets[mk] = mb
+				agg.modelBuckets[targetKey] = mb
 			}
 			mbk := mb[key]
 			if mbk == nil {
@@ -525,17 +535,17 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 			mbk.cacheWrite += bu.CacheWriteTokens
 			mbk.workflow += tot
 
-			hm := agg.heat[mk]
+			hm := agg.heat[targetKey]
 			if hm == nil {
 				hm = map[string]int64{}
-				agg.heat[mk] = hm
+				agg.heat[targetKey] = hm
 			}
 			hm[row.projectID] += tot
 
 			if row.runID != "" {
 				ra := agg.runs[row.runID]
 				if ra != nil && tot >= ra.total/2 {
-					ra.topModelKey = mk
+					ra.topModelKey = targetKey
 				}
 			}
 		}
