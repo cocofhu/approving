@@ -288,7 +288,8 @@ function mapItems(raw: NotificationListItem[]): RunTerminalNotificationItem[] {
 function markReadLocal(runId: string) {
   if (!runId) return
   const pageHit = pageItems.value.find((n) => n.runId === runId)
-  const wasUnread = pageHit?.unread ?? false
+  const previewHit = previewPool.value.find((n) => n.runId === runId)
+  const wasUnread = Boolean(pageHit?.unread || previewHit?.unread)
   previewPool.value = previewPool.value.map((n) =>
     n.runId === runId && n.unread ? { ...n, unread: false } : n,
   )
