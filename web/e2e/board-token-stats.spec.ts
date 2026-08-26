@@ -222,7 +222,8 @@ test.describe('看板 Token 统计图', () => {
     // Regression: no non-uniform SVG stretch path for the trend chart
     await expect(page.getByTestId('token-trend-svg')).toHaveCount(0)
     await expect(page.locator('[data-testid="token-trend-wrap"] svg[preserveAspectRatio="none"]')).toHaveCount(0)
-    await expect(page.getByTestId('token-donut-svg')).toBeVisible()
+    await expect(page.getByTestId('token-donut-chart')).toBeVisible()
+    await expect(page.getByTestId('token-donut-chart').locator('canvas')).toBeVisible()
     await expect(page.getByTestId('token-stats-comp-card')).toContainText('用量构成')
     await expect(page.getByTestId('token-stats-comp-card')).not.toContainText('四分量')
     await expect(page.getByTestId('token-donut-legend')).toContainText('输入')
@@ -236,7 +237,22 @@ test.describe('看板 Token 统计图', () => {
     const trendLegend = page.getByTestId('token-trend-legend')
     await expect(trendLegend.locator('[data-kind="workflow"]')).toContainText('工作流')
     await expect(trendLegend.locator('[data-kind="pm"]')).toContainText('项目管理')
-    await page.getByTestId('token-trend-chart').locator('canvas').hover({ position: { x: 120, y: 80 } })
+    const canvas = page.getByTestId('token-trend-chart').locator('canvas')
+    await expect(canvas).toBeVisible()
+    await expect(async () => {
+      const box = await canvas.boundingBox()
+      expect(box).toBeTruthy()
+      const ys = [box!.height - 28, Math.floor(box!.height * 0.55), 80, 100]
+      const xs = [40, 48, 56, 64, 72, 84, 96, 120, 160, 200, 240]
+      for (const y of ys) {
+        for (const x of xs) {
+          if (x >= box!.width - 4 || y >= box!.height - 4) continue
+          await canvas.hover({ position: { x, y } })
+          if (await page.getByTestId('token-trend-tooltip').isVisible().catch(() => false)) return
+        }
+      }
+      throw new Error('trend tooltip not shown')
+    }).toPass({ timeout: 12_000 })
     const trendTip = page.getByTestId('token-trend-tooltip')
     await expect(trendTip).toBeVisible()
     await expect(trendTip.locator('[data-tip-row="workflow"]')).toContainText('工作流')
@@ -346,7 +362,7 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-stats-charts')).toHaveCount(0)
     await expect(page.getByTestId('token-trend-chart')).toHaveCount(0)
     await expect(page.getByTestId('token-trend-svg')).toHaveCount(0)
-    await expect(page.getByTestId('token-donut-svg')).toHaveCount(0)
+    await expect(page.getByTestId('token-donut-chart')).toHaveCount(0)
     await expect(page.getByTestId('token-stats-empty')).toContainText('未上报不会显示为 0')
     await expect(page.getByTestId('token-stats-empty')).toContainText('用量构成')
     await expect(page.getByTestId('token-stats-empty')).toContainText('暂无已上报的用量构成数据')

@@ -263,6 +263,7 @@ export default defineConfig({
         'notifications-center': fileURLToPath(
           new URL('./e2e/notifications-center.html', import.meta.url),
         ),
+        'token-analytics': fileURLToPath(new URL('./e2e/token-analytics.html', import.meta.url)),
       },
     },
   },
