@@ -82,6 +82,17 @@ function statsLegend() {
   }
 }
 
+function statsTooltip(extra: Record<string, unknown> = {}) {
+  const dark = theme.value === 'dark'
+  return {
+    borderRadius: 0,
+    backgroundColor: dark ? '#27272a' : '#ffffff',
+    borderColor: dark ? '#3f3f46' : '#e4e4e7',
+    textStyle: { color: dark ? '#e4e4e7' : '#27272a', fontSize: 12 },
+    ...extra,
+  }
+}
+
 const isEmpty = computed(() => !!data.value?.empty)
 
 const deltaLabel = computed(() => {
@@ -149,7 +160,7 @@ function lineChartOption() {
 
   return {
     grid: STATS_CHART_GRID,
-    tooltip: { trigger: 'axis' },
+    tooltip: statsTooltip({ trigger: 'axis' }),
     legend: statsLegend(),
     xAxis: {
       type: 'category',
@@ -188,7 +199,7 @@ function pieOption(
   if (!slices.length) return null
   const colors = slices.map((s, i) => s.color || ['#4f46e5', '#7c6dff', '#a99cff', '#94a3b8'][i % 4])
   return {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    tooltip: statsTooltip({ trigger: 'item', formatter: '{b}: {c} ({d}%)' }),
     legend: {
       show: true,
       bottom: 0,
@@ -281,7 +292,7 @@ function barChartOption() {
   })
   return {
     grid: STATS_CHART_GRID,
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    tooltip: statsTooltip({ trigger: 'axis', axisPointer: { type: 'shadow' } }),
     legend: {
       ...statsLegend(),
       data: TOKEN_PART_KEYS.map((k) => partLabel(k)),
@@ -308,7 +319,7 @@ function areaChartOption() {
   if (areaMode.value === 'source') {
     return {
       grid: STATS_CHART_GRID,
-      tooltip: { trigger: 'axis' },
+      tooltip: statsTooltip({ trigger: 'axis' }),
       legend: statsLegend(),
       xAxis: {
         type: 'category',
@@ -344,7 +355,7 @@ function areaChartOption() {
   }
   return {
     grid: STATS_CHART_GRID,
-    tooltip: { trigger: 'axis' },
+    tooltip: statsTooltip({ trigger: 'axis' }),
     legend: statsLegend(),
     xAxis: {
       type: 'category',
@@ -384,10 +395,12 @@ function heatmapOption() {
   const max = Math.max(1, ...flat.map((f) => f[2]))
   return {
     grid: { left: 176, right: 12, top: 12, bottom: 28, containLabel: false },
-    tooltip: { position: 'top', formatter: (p: { data: [number, number, number] }) => {
+    tooltip: statsTooltip({
+      position: 'top',
+      formatter: (p: { data: [number, number, number] }) => {
       const [x, y, v] = p.data
       return `${hm.rows[y]} × ${hm.cols[x]}<br/>${fmtTokenCount(v)}`
-    }},
+    }}),
     xAxis: {
       type: 'category',
       data: hm.cols,
@@ -398,7 +411,7 @@ function heatmapOption() {
       type: 'category',
       data: hm.rows,
       splitArea: { show: true },
-      axisLabel: { fontSize: 10, color: chartTone.value.axisLabel, width: 160, overflow: 'truncate' },
+      axisLabel: { fontSize: 10, color: chartTone.value.axisLabel, width: 160, overflow: 'break' },
     },
     visualMap: {
       min: 0,

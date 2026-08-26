@@ -207,17 +207,13 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 		if err := ctx.Err(); err != nil {
 			return GlobalTokenStatsResult{}, ErrTokenStatsTimeout
 		}
-		u, ok := filterGlobalRowUsage(row, sourceFilter, projectFilter, modelFilter)
+		u, ok := filterGlobalRowUsage(row, sourceFilter, projectFilter, modelFilter, unknownAliases)
 		if !ok || u.Total() <= 0 {
 			continue
 		}
 		row.usage = u
-		if row.byModel != nil {
-			if modelFilter != "" {
-				if b, ok := row.byModel[modelFilter]; ok {
-					row.byModel = models.TokenUsageByModel{modelFilter: b}
-				}
-			}
+		if row.byModel != nil && modelFilter != "" {
+			narrowGlobalRowByModel(&row, modelFilter, unknownAliases)
 		}
 		filtered = append(filtered, row)
 		for mk := range row.byModel {
@@ -319,7 +315,53 @@ func buildPrevWindowSlice(cur windowSlice, days int) windowSlice {
 	return windowSlice{start: prevStart, end: prevEnd, hasStart: true}
 }
 
-func filterGlobalRowUsage(row globalTokenUsageRow, source, projectID, modelKey string) (models.TokenUsage, bool) {
+func globalModelFilterUsage(row globalTokenUsageRow, modelKey string, unknownAliases map[string]string) (models.TokenUsage, bool) {
+	if row.byModel == nil {
+		return models.TokenUsage{}, false
+	}
+	var usage models.TokenUsage
+	matched := false
+	if b, ok := row.byModel[modelKey]; ok {
+		usage.InputTokens += b.InputTokens
+		usage.OutputTokens += b.OutputTokens
+		usage.CacheReadTokens += b.CacheReadTokens
+		usage.CacheWriteTokens += b.CacheWriteTokens
+		matched = true
+	}
+	if b, ok := row.byModel[models.TokenUsageModelUnknown]; ok {
+		if rebucketGlobalModelKey(models.TokenUsageModelUnknown, row.projectID, unknownAliases) == modelKey {
+			usage.InputTokens += b.InputTokens
+			usage.OutputTokens += b.OutputTokens
+			usage.CacheReadTokens += b.CacheReadTokens
+			usage.CacheWriteTokens += b.CacheWriteTokens
+			matched = true
+		}
+	}
+	if !matched {
+		return models.TokenUsage{}, false
+	}
+	return usage, true
+}
+
+func narrowGlobalRowByModel(row *globalTokenUsageRow, modelKey string, unknownAliases map[string]string) {
+	u, ok := globalModelFilterUsage(*row, modelKey, unknownAliases)
+	if !ok {
+		return
+	}
+	var merged models.ModelTokenUsage
+	if b, ok := row.byModel[modelKey]; ok {
+		merged = b
+	} else if b, ok := row.byModel[models.TokenUsageModelUnknown]; ok {
+		merged = b
+	}
+	merged.InputTokens = u.InputTokens
+	merged.OutputTokens = u.OutputTokens
+	merged.CacheReadTokens = u.CacheReadTokens
+	merged.CacheWriteTokens = u.CacheWriteTokens
+	row.byModel = models.TokenUsageByModel{modelKey: merged}
+}
+
+func filterGlobalRowUsage(row globalTokenUsageRow, source, projectID, modelKey string, unknownAliases map[string]string) (models.TokenUsage, bool) {
 	if projectID != "" && row.projectID != projectID {
 		return models.TokenUsage{}, false
 	}
@@ -330,19 +372,7 @@ func filterGlobalRowUsage(row globalTokenUsageRow, source, projectID, modelKey s
 		return models.TokenUsage{}, false
 	}
 	if modelKey != "" {
-		if row.byModel == nil {
-			return models.TokenUsage{}, false
-		}
-		b, ok := row.byModel[modelKey]
-		if !ok {
-			return models.TokenUsage{}, false
-		}
-		return models.TokenUsage{
-			InputTokens:      b.InputTokens,
-			OutputTokens:     b.OutputTokens,
-			CacheReadTokens:  b.CacheReadTokens,
-			CacheWriteTokens: b.CacheWriteTokens,
-		}, true
+		return globalModelFilterUsage(row, modelKey, unknownAliases)
 	}
 	return row.usage, true
 }
