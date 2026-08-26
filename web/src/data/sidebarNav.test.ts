@@ -5,6 +5,7 @@ describe('sidebarNav', () => {
   it('exposes dashboard and config groups', () => {
     expect(sidebarNavGroups.length).toBeGreaterThanOrEqual(2)
     expect(sidebarNavGroups[0].items.some((i) => i.to === '/dashboard')).toBe(true)
+    expect(sidebarNavGroups[0].items.some((i) => i.to === '/stats')).toBe(true)
     expect(sidebarNavGroups[1].titleKey).toBe('nav.groupConfig')
     expect(sidebarNavGroups[1].items.some((i) => i.to === '/settings')).toBe(true)
   })

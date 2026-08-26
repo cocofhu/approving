@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VChart from 'vue-echarts'
+import { registerECharts } from '@/components/charts/echartsSetup'
 import type { TokenStatsComposition } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
 import { TOKEN_PART_COLORS, TOKEN_PART_KEYS, type TokenPartKey } from './tokenStatsShared'
+
+registerECharts()
 
 const props = defineProps<{
   composition: TokenStatsComposition
@@ -12,7 +16,6 @@ const props = defineProps<{
 const { t } = useI18n()
 const active = ref<TokenPartKey | null>(null)
 
-/** Reuse executionTimeline part* as the authoritative UI labels (g2.1/g2.2). */
 const PART_LABEL_KEYS: Record<TokenPartKey, string> = {
   input: 'pages.executionTimeline.partInput',
   output: 'pages.executionTimeline.partOutput',
@@ -41,63 +44,26 @@ const parts = computed(() => {
   })).filter((p) => p.value > 0 || total === 0)
 })
 
-const visibleParts = computed(() => parts.value.filter((p) => p.value > 0))
-
-function polar(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
-}
-
-function arcPath(cx: number, cy: number, rOuter: number, rInner: number, start: number, end: number): string {
-  if (end - start >= 359.99) {
-    const mid = start + 180
-    const o0 = polar(cx, cy, rOuter, start)
-    const o1 = polar(cx, cy, rOuter, mid)
-    const o2 = polar(cx, cy, rOuter, end)
-    const i0 = polar(cx, cy, rInner, end)
-    const i1 = polar(cx, cy, rInner, mid)
-    const i2 = polar(cx, cy, rInner, start)
-    return [
-      `M ${o0.x} ${o0.y}`,
-      `A ${rOuter} ${rOuter} 0 1 1 ${o1.x} ${o1.y}`,
-      `A ${rOuter} ${rOuter} 0 1 1 ${o2.x} ${o2.y}`,
-      `L ${i0.x} ${i0.y}`,
-      `A ${rInner} ${rInner} 0 1 0 ${i1.x} ${i1.y}`,
-      `A ${rInner} ${rInner} 0 1 0 ${i2.x} ${i2.y}`,
-      'Z',
-    ].join(' ')
+const chartOption = computed(() => {
+  const visible = parts.value.filter((p) => p.value > 0)
+  if (!visible.length) return null
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    series: [
+      {
+        type: 'pie',
+        radius: ['32%', '52%'],
+        center: ['50%', '50%'],
+        data: visible.map((p) => ({ name: partLabel(p.key), value: p.value, key: p.key })),
+        color: visible.map((p) => p.color),
+        label: { show: false },
+        emphasis: {
+          scale: true,
+          itemStyle: { opacity: active.value && active.value !== undefined ? 0.45 : 0.95 },
+        },
+      },
+    ],
   }
-  const large = end - start > 180 ? 1 : 0
-  const oStart = polar(cx, cy, rOuter, start)
-  const oEnd = polar(cx, cy, rOuter, end)
-  const iEnd = polar(cx, cy, rInner, end)
-  const iStart = polar(cx, cy, rInner, start)
-  return [
-    `M ${oStart.x} ${oStart.y}`,
-    `A ${rOuter} ${rOuter} 0 ${large} 1 ${oEnd.x} ${oEnd.y}`,
-    `L ${iEnd.x} ${iEnd.y}`,
-    `A ${rInner} ${rInner} 0 ${large} 0 ${iStart.x} ${iStart.y}`,
-    'Z',
-  ].join(' ')
-}
-
-const slices = computed(() => {
-  const list = visibleParts.value
-  const total = list.reduce((s, p) => s + p.value, 0)
-  if (total <= 0) return [] as { key: TokenPartKey; d: string; color: string }[]
-  let angle = 0
-  const out: { key: TokenPartKey; d: string; color: string }[] = []
-  for (const p of list) {
-    const sweep = (p.value / total) * 360
-    if (sweep <= 0) continue
-    out.push({
-      key: p.key,
-      d: arcPath(60, 60, 52, 32, angle, angle + sweep),
-      color: p.color,
-    })
-    angle += sweep
-  }
-  return out
 })
 
 const tip = ref({ show: false, x: 0, y: 0, key: null as TokenPartKey | null })
@@ -129,32 +95,18 @@ const tipPart = computed(() => parts.value.find((p) => p.key === tip.value.key) 
     data-testid="token-donut-row"
     class="token-donut-row relative flex min-h-[180px] flex-col items-center gap-4 sm:flex-row sm:items-center"
   >
-    <svg
-      data-testid="token-donut-svg"
-      class="h-[120px] w-[120px] shrink-0 sm:h-[150px] sm:w-[150px]"
-      viewBox="0 0 120 120"
+    <div
+      data-testid="token-donut-chart"
+      class="relative h-[120px] w-[120px] shrink-0 sm:h-[150px] sm:w-[150px]"
       role="img"
       :aria-label="t('pages.board.tokenStats.compositionTitle')"
     >
-      <path
-        v-for="s in slices"
-        :key="s.key"
-        :d="s.d"
-        :fill="s.color"
-        class="cursor-pointer transition-opacity"
-        :opacity="active && active !== s.key ? 0.45 : 0.95"
-        @mouseenter="activate(s.key, $event)"
-        @mousemove="activate(s.key, $event)"
-        @mouseleave="deactivate"
-        @click="activate(s.key, $event)"
-      />
-      <text x="60" y="56" text-anchor="middle" class="fill-txt3" font-size="11">
-        {{ t('pages.board.tokenStats.donutCenter') }}
-      </text>
-      <text x="60" y="74" text-anchor="middle" class="fill-txt" font-size="15" font-weight="700">
-        {{ fmtCompactTokenCount(composition.total) }}
-      </text>
-    </svg>
+      <VChart v-if="chartOption" :option="chartOption" autoresize class="h-full w-full" />
+      <div class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span class="text-[11px] text-txt3">{{ t('pages.board.tokenStats.donutCenter') }}</span>
+        <span class="text-[15px] font-bold text-txt">{{ fmtCompactTokenCount(composition.total) }}</span>
+      </div>
+    </div>
     <ul data-testid="token-donut-legend" class="m-0 grid w-full min-w-0 list-none gap-2 p-0 sm:flex-1">
       <li
         v-for="p in parts"
@@ -163,7 +115,7 @@ const tipPart = computed(() => parts.value.find((p) => p.key === tip.value.key) 
         :class="active === p.key ? 'bg-elevated' : 'hover:bg-elevated/80'"
         @mouseenter="activate(p.key)"
         @mouseleave="deactivate"
-        @click="activate(p.key)"
+        @click="activate(p.key, $event)"
       >
         <i class="h-2 w-2 rounded-sm" :style="{ background: p.color }" />
         <span class="truncate text-txt">{{ partLabel(p.key) }}</span>

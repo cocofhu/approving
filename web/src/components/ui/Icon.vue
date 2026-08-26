@@ -3,6 +3,7 @@ const props = defineProps<{ name: string; size?: number | string }>()
 
 const paths: Record<string, string> = {
   dashboard: '<path d="M3 3h8v8H3zM13 3h8v5h-8zM13 12h8v9h-8zM3 13h8v8H3z"/>',
+  chart: '<path d="M4 19V5M4 19h16M8 17V9M12 17V7M16 17v-5"/>',
   board: '<rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="16"/><rect x="17" y="4" width="4" height="16"/>',
   workflow: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 6h4a3 3 0 0 1 3 3M9 18h4a3 3 0 0 0 3-3"/>',
   runs: '<circle cx="12" cy="12" r="9"/><path d="M10 9l5 3-5 3z"/>',

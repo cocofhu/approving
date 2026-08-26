@@ -257,6 +257,90 @@ export interface ProjectTokenStats {
   modelRanking?: TokenStatsModel[]
 }
 
+/** Response of GET /stats/token — global analytics page. */
+export interface GlobalTokenStatsKPI {
+  total: number
+  prevTotal?: number | null
+  deltaPct?: number | null
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  workflowTotal: number
+  pmTotal: number
+  projectCount: number
+  runCount: number
+  modelCount: number
+}
+
+export interface GlobalTokenStatsProjectRow {
+  projectId: string
+  name: string
+  total: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  deltaPct?: number | null
+}
+
+export interface GlobalTokenStatsRunRow {
+  runId: string
+  title: string
+  projectId: string
+  projectName: string
+  workflowName: string
+  modelKey: string
+  modelName: string
+  total: number
+}
+
+export interface GlobalTokenStatsNamedBucket {
+  name: string
+  total: number
+  other?: boolean
+}
+
+export interface GlobalTokenStatsHeatmap {
+  rows: string[]
+  cols: string[]
+  grid: number[][]
+}
+
+export interface GlobalTokenStatsSeries {
+  key: string
+  name: string
+  trend: TokenStatsBucket[]
+}
+
+export interface GlobalTokenStatsFilterOption {
+  key: string
+  name: string
+}
+
+export interface GlobalTokenStats {
+  window: TokenStatsWindow | string
+  bucketWidth: 'day' | 'week' | string
+  timezone: string
+  empty: boolean
+  kpi: GlobalTokenStatsKPI
+  trend: TokenStatsBucket[]
+  prevTrend: TokenStatsBucket[]
+  composition: TokenStatsComposition
+  projects: GlobalTokenStatsProjectRow[]
+  modelRanking: TokenStatsModel[]
+  nodeTypes: GlobalTokenStatsNamedBucket[]
+  workflows: TokenStatsWorkflow[]
+  heatmap: GlobalTokenStatsHeatmap
+  topRuns: GlobalTokenStatsRunRow[]
+  projectTrends: GlobalTokenStatsSeries[]
+  modelTrends: GlobalTokenStatsSeries[]
+  filterOptions: {
+    projects: GlobalTokenStatsFilterOption[]
+    models: GlobalTokenStatsFilterOption[]
+  }
+}
+
 export interface PmLeaderBinding {
   enabled: boolean
   agentConfigRef: string

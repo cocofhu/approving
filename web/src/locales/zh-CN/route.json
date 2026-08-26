@@ -1,6 +1,7 @@
 {
   "route": {
     "dashboard": "首页",
+    "stats": "全局 Token 分析台",
     "board": "看板",
     "projects": "项目",
     "projectDetail": "项目详情",

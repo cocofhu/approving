@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "Home",
+    "stats": "Statistics",
     "board": "Board",
     "projects": "Projects",
     "workflows": "Workflows",
