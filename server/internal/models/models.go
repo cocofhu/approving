@@ -542,6 +542,19 @@ func SelectRecommendedOptions(q ReactQuestion) ([]ReactOption, bool) {
 	return []ReactOption{q.Options[0]}, true
 }
 
+// Choice-summary prefixes emitted by the clarify UI (zh-CN + en) and
+// FormatChoiceReply. Used to recognize a structured "我的选择" human turn.
+const (
+	ChoiceReplyPrefixZH = "我的选择:"
+	ChoiceReplyPrefixEN = "My choices:"
+)
+
+// IsChoiceReply reports whether text is a structured choice-card summary
+// (not free-text). Prefix match is exact at the start — same as the UI.
+func IsChoiceReply(text string) bool {
+	return strings.HasPrefix(text, ChoiceReplyPrefixZH) || strings.HasPrefix(text, ChoiceReplyPrefixEN)
+}
+
 // FormatChoiceReply builds the human reply text an auto-select would submit,
 // matching the UI's "我的选择:\n- 问题 → 选项" format so the transcript reads the
 // same whether the choice came from a human click or an automatic pick. Each

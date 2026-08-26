@@ -339,6 +339,21 @@ func TestReactOptionDemoHtmlJSON(t *testing.T) {
 	}
 }
 
+func TestIsChoiceReply(t *testing.T) {
+	if !IsChoiceReply("我的选择:\n- q → a") {
+		t.Fatal("zh prefix")
+	}
+	if !IsChoiceReply("My choices:\n- q → a") {
+		t.Fatal("en prefix")
+	}
+	if IsChoiceReply("第一条自由文本") {
+		t.Fatal("free text must not match")
+	}
+	if IsChoiceReply(" 我的选择:\n- q → a") {
+		t.Fatal("leading space is not a choice prefix")
+	}
+}
+
 func TestFormatChoiceReply(t *testing.T) {
 	qs := []ReactQuestion{
 		{Prompt: "登录方式?", Options: []ReactOption{{Label: "密码"}, {Label: "验证码", Recommended: true}}},

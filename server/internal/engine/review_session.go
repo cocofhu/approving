@@ -258,7 +258,16 @@ func (e *Engine) enqueueReactTurn(runID, producerID, text string, images []model
 		GateNodeID:  gateNodeID,
 	}
 
+	choiceDup := models.IsChoiceReply(text)
+	if choiceDup && e.transcriptHasChoiceAfterLatestAsk(runID, producerID) {
+		return 0, errors.New("本轮选择题已提交,请等待回复")
+	}
+
 	s.mu.Lock()
+	if choiceDup && sessionHasChoiceLocked(s) {
+		s.mu.Unlock()
+		return 0, errors.New("本轮选择题已提交,请等待回复")
+	}
 	if s.waiting >= MaxReviewQueueItems {
 		s.mu.Unlock()
 		fullMsg := "复审消息队列已满,请稍候"
@@ -286,6 +295,44 @@ func (e *Engine) enqueueReactTurn(runID, producerID, text string, images []model
 		go e.pumpReviewSession(s)
 	}
 	return waiting, nil
+}
+
+func sessionHasChoiceLocked(s *reviewSession) bool {
+	if s.active != nil && models.IsChoiceReply(s.active.Text) {
+		return true
+	}
+	for _, it := range s.queue {
+		if models.IsChoiceReply(it.Text) {
+			return true
+		}
+	}
+	return false
+}
+
+// transcriptHasChoiceAfterLatestAsk reports whether the persisted dialogue
+// already has a choice-summary human after the newest ask_question turn.
+func (e *Engine) transcriptHasChoiceAfterLatestAsk(runID, nodeID string) bool {
+	var conv models.ReactConversation
+	if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
+		Order("iteration desc, id desc").First(&conv).Error; err != nil {
+		return false
+	}
+	qIdx := -1
+	for i := len(conv.Messages) - 1; i >= 0; i-- {
+		if conv.Messages[i].Role == "agent" && len(conv.Messages[i].Questions) > 0 {
+			qIdx = i
+			break
+		}
+	}
+	if qIdx < 0 {
+		return false
+	}
+	for i := qIdx + 1; i < len(conv.Messages); i++ {
+		if conv.Messages[i].Role == "human" && models.IsChoiceReply(conv.Messages[i].Text) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *reviewSession) queueSnapshot() []map[string]any {
