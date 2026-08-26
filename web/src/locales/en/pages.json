@@ -55,10 +55,13 @@
         "overview": "Overview KPI",
         "lines": "Line charts",
         "pies": "Pie / donut",
-        "bars": "Bar / area",
-        "heat": "Heatmap / nodes",
-        "tables": "Detail tables"
+        "bars": "Project comparison",
+        "area": "Stacked area",
+        "heat": "Model cross",
+        "nodeWf": "Workflow & nodes",
+        "tables": "Run details"
       },
+      "linePrevWindow": "Previous window",
       "lineModes": {
         "total": "Total vs previous",
         "project": "Top projects",

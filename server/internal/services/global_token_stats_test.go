@@ -84,6 +84,9 @@ func TestGlobalTokenStatsAggregation(t *testing.T) {
 	if len(res.Projects) == 0 {
 		t.Fatal("expected project rows")
 	}
+	if res.Projects[0].CacheReadTokens != 10 || res.Projects[0].CacheWriteTokens != 5 {
+		t.Fatalf("expected project cache tokens 10/5, got %d/%d", res.Projects[0].CacheReadTokens, res.Projects[0].CacheWriteTokens)
+	}
 	if len(res.TopRuns) == 0 || res.TopRuns[0].RunID != "run-g1" {
 		t.Fatalf("expected top run run-g1, got %+v", res.TopRuns)
 	}

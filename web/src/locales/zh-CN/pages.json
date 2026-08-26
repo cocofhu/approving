@@ -55,10 +55,13 @@
         "overview": "概览 KPI",
         "lines": "折线图",
         "pies": "饼图 / 环形图",
-        "bars": "柱状 / 面积",
-        "heat": "热力 / 节点",
-        "tables": "明细表"
+        "bars": "项目对比",
+        "area": "堆叠面积",
+        "heat": "模型交叉",
+        "nodeWf": "工作流与节点",
+        "tables": "运行明细"
       },
+      "linePrevWindow": "上一窗",
       "lineModes": {
         "total": "总量 vs 上一窗",
         "project": "Top 项目多折线",

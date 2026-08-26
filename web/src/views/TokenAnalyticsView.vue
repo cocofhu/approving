@@ -17,14 +17,11 @@ import {
   type TokenPartKey,
 } from '@/components/board/token-stats/tokenStatsShared'
 import { useToast } from '@/lib/composables/useToast'
-import { useBreakpoint } from '@/lib/composables/useBreakpoint'
-
 registerECharts()
 
 const { t } = useI18n()
 const router = useRouter()
 const toast = useToast()
-const { isMobile } = useBreakpoint()
 
 const WINDOWS: TokenStatsWindow[] = ['7d', '30d', '90d', 'all']
 
@@ -48,7 +45,9 @@ const sections = computed(() => [
   { id: 'lines', label: t('pages.tokenAnalytics.sections.lines') },
   { id: 'pies', label: t('pages.tokenAnalytics.sections.pies') },
   { id: 'bars', label: t('pages.tokenAnalytics.sections.bars') },
+  { id: 'area', label: t('pages.tokenAnalytics.sections.area') },
   { id: 'heat', label: t('pages.tokenAnalytics.sections.heat') },
+  { id: 'nodeWf', label: t('pages.tokenAnalytics.sections.nodeWf') },
   { id: 'tables', label: t('pages.tokenAnalytics.sections.tables') },
 ])
 
@@ -97,7 +96,7 @@ function lineChartOption() {
         color: TOKEN_SOURCE_COLORS.workflow,
       },
       {
-        name: t('pages.board.tokenStats.windows.' + data.value.window),
+        name: t('pages.tokenAnalytics.linePrevWindow'),
         data: data.value.prevTrend.map((b) => b.total || 0),
         color: '#c4b5fd',
         lineStyle: { type: 'dashed' },
@@ -153,19 +152,36 @@ function pieOption(
   const colors = slices.map((s, i) => s.color || ['#4f46e5', '#7c6dff', '#a99cff', '#94a3b8'][i % 4])
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { show: false },
+    legend: {
+      show: true,
+      bottom: 0,
+      type: 'scroll',
+      textStyle: { fontSize: 10, color: '#8b8b96' },
+    },
     series: [
       {
         type: 'pie',
         radius: donut ? ['42%', '68%'] : '68%',
-        center: ['50%', '50%'],
+        center: ['50%', '46%'],
         data: slices.map((s) => ({ name: s.name, value: s.value, key: s.key })),
         itemStyle: { borderWidth: 0 },
         color: colors,
-        label: { show: false },
+        label: {
+          show: true,
+          formatter: '{b} {d}%',
+          fontSize: 10,
+          color: '#52525b',
+        },
+        labelLayout: { hideOverlap: true },
       },
     ],
   }
+}
+
+function pieCaption(slices: { name: string; value: number }[]): string {
+  const sum = slices.reduce((s, x) => s + x.value, 0)
+  if (sum <= 0) return ''
+  return slices.map((s) => `${s.name} ${Math.round((s.value / sum) * 100)}%`).join(' · ')
 }
 
 function buildPieSlices() {
@@ -213,11 +229,23 @@ const pieSlices = computed(() => buildPieSlices())
 function barChartOption() {
   if (!data.value?.projects.length) return null
   const projs = data.value.projects.slice(0, 10)
+  const partSeries = (key: TokenPartKey) => ({
+    type: 'bar' as const,
+    stack: 'total',
+    name: partLabel(key),
+    itemStyle: { color: TOKEN_PART_COLORS[key] },
+    data: projs.map((p) => {
+      if (key === 'input') return p.inputTokens
+      if (key === 'output') return p.outputTokens
+      if (key === 'cacheRead') return p.cacheReadTokens || 0
+      return p.cacheWriteTokens || 0
+    }),
+  })
   return {
     grid: CHART_GRID,
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     legend: {
-      data: [partLabel('input'), partLabel('output')],
+      data: TOKEN_PART_KEYS.map((k) => partLabel(k)),
       textStyle: { fontSize: 11 },
     },
     xAxis: { type: 'category', data: projs.map((p) => p.name), ...CHART_AXIS, splitLine: { show: false } },
@@ -226,22 +254,7 @@ function barChartOption() {
       ...CHART_AXIS,
       axisLabel: { ...CHART_AXIS.axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
     },
-    series: [
-      {
-        type: 'bar',
-        stack: 'total',
-        name: partLabel('input'),
-        itemStyle: { color: TOKEN_PART_COLORS.input },
-        data: projs.map((p) => p.inputTokens),
-      },
-      {
-        type: 'bar',
-        stack: 'total',
-        name: partLabel('output'),
-        itemStyle: { color: TOKEN_PART_COLORS.output },
-        data: projs.map((p) => p.outputTokens),
-      },
-    ],
+    series: TOKEN_PART_KEYS.map((k) => partSeries(k)),
   }
 }
 
@@ -365,6 +378,16 @@ function applySource(s: 'all' | 'workflow' | 'pm') {
   void load()
 }
 
+function onBarClick(params: unknown) {
+  const ev = params as { name?: string; componentType?: string }
+  if (ev.componentType !== 'series' || !ev.name) return
+  const proj = data.value?.projects.find((p) => p.name === ev.name)
+  if (!proj) return
+  projectSel.value = proj.projectId
+  toast.show(t('pages.tokenAnalytics.filterApplied', { name: proj.name }))
+  void load()
+}
+
 function onPieClick(kind: 'source' | 'project' | 'model', params: unknown) {
   const ev = params as { data?: { key?: string; name?: string } }
   const key = ev.data?.key
@@ -381,7 +404,7 @@ function onPieClick(kind: 'source' | 'project' | 'model', params: unknown) {
 }
 
 function goBoard(projectId: string) {
-  void router.push(`/board?project=${encodeURIComponent(projectId)}`)
+  void router.push({ path: `/projects/${projectId}`, query: { tab: 'board' } })
 }
 
 function goRun(runId: string) {
@@ -422,6 +445,22 @@ watch([windowSel], () => void load())
 <template>
   <div class="flex min-h-0 flex-1" data-testid="token-analytics-page">
     <div class="min-w-0 flex-1 overflow-auto px-5 py-4 pb-14">
+      <nav
+        class="sticky top-0 z-10 -mx-5 mb-3 flex gap-1 overflow-x-auto border-b border-line bg-surface px-5 py-2 xl:hidden"
+        data-testid="token-analytics-section-nav-mobile"
+      >
+        <button
+          v-for="s in sections"
+          :key="s.id"
+          type="button"
+          class="shrink-0 rounded-lg px-2 py-1 text-xs"
+          :class="activeSection === s.id ? 'bg-accent-dim font-semibold text-accent-2' : 'text-txt3'"
+          @click="scrollToSection(s.id)"
+        >
+          {{ s.label }}
+        </button>
+      </nav>
+
       <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="m-0 text-[22px] font-semibold">{{ t('pages.tokenAnalytics.title') }}</h1>
@@ -567,49 +606,64 @@ watch([windowSel], () => void load())
                 @click="cfg.kind ? onPieClick(cfg.kind as 'source' | 'project' | 'model', $event) : undefined"
               />
               <p class="m-0 mt-1.5 text-[13px] font-semibold">{{ t(`pages.tokenAnalytics.charts.${cfg.label}`) }}</p>
+              <p v-if="pieSlices[cfg.key as keyof typeof pieSlices].length" class="m-0 mt-0.5 text-[11px] text-txt3">
+                {{ pieCaption(pieSlices[cfg.key as keyof typeof pieSlices]) }}
+              </p>
             </div>
           </div>
         </section>
 
-        <section id="bars" class="scroll-mt-3 mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-[1.2fr_0.8fr]">
-          <div class="rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
-            <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.bars') }}</h2>
-            <VChart v-if="barChartOption()" :option="barChartOption()!" autoresize class="mt-2 h-[220px] w-full" />
-          </div>
-          <div class="rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-area">
-            <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.area') }}</h2>
-            <div class="mt-2 flex gap-1.5">
-              <button
-                v-for="m in (['source', 'comp'] as const)"
-                :key="m"
-                type="button"
-                class="rounded-lg px-2.5 py-1 text-xs"
-                :class="areaMode === m ? 'bg-elevated font-semibold' : 'text-txt3'"
-                @click="areaMode = m"
-              >
-                {{ t(`pages.tokenAnalytics.areaModes.${m}`) }}
-              </button>
-            </div>
-            <VChart v-if="areaChartOption()" :option="areaChartOption()!" autoresize class="mt-2 h-[220px] w-full" />
-          </div>
+        <section id="bars" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
+          <h2 class="m-0 text-sm font-semibold">
+            {{ t('pages.tokenAnalytics.charts.bars') }}
+            <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.barsHint') }}</em>
+          </h2>
+          <VChart
+            v-if="barChartOption()"
+            :option="barChartOption()!"
+            autoresize
+            class="mt-2 h-[220px] w-full"
+            @click="onBarClick"
+          />
         </section>
 
-        <section id="heat" class="scroll-mt-3 mb-3 grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-          <div class="rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
-            <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.heat') }}</h2>
-            <VChart v-if="heatmapOption()" :option="heatmapOption()!" autoresize class="mt-2 h-[240px] w-full" />
+        <section id="area" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-area">
+          <h2 class="m-0 text-sm font-semibold">
+            {{ t('pages.tokenAnalytics.charts.area') }}
+            <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.areaHint') }}</em>
+          </h2>
+          <div class="mt-2 flex gap-1.5">
+            <button
+              v-for="m in (['source', 'comp'] as const)"
+              :key="m"
+              type="button"
+              class="rounded-lg px-2.5 py-1 text-xs"
+              :class="areaMode === m ? 'bg-elevated font-semibold' : 'text-txt3'"
+              @click="areaMode = m"
+            >
+              {{ t(`pages.tokenAnalytics.areaModes.${m}`) }}
+            </button>
           </div>
-          <div class="rounded-[14px] border border-line bg-surface p-3.5">
-            <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.nodeWf') }}</h2>
-            <div class="mt-2 grid grid-cols-2 gap-2">
-              <div>
-                <VChart v-if="pieOption(pieSlices.node, true)" :option="pieOption(pieSlices.node, true)!" autoresize class="h-[168px] w-full" />
-                <p class="text-center text-[13px] font-semibold">{{ t('pages.tokenAnalytics.charts.nodePie') }}</p>
-              </div>
-              <div>
-                <VChart v-if="pieOption(pieSlices.wf, false)" :option="pieOption(pieSlices.wf, false)!" autoresize class="h-[168px] w-full" />
-                <p class="text-center text-[13px] font-semibold">{{ t('pages.tokenAnalytics.charts.wfPie') }}</p>
-              </div>
+          <VChart v-if="areaChartOption()" :option="areaChartOption()!" autoresize class="mt-2 h-[220px] w-full" />
+        </section>
+
+        <section id="heat" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
+          <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.heat') }}</h2>
+          <VChart v-if="heatmapOption()" :option="heatmapOption()!" autoresize class="mt-2 h-[240px] w-full" />
+        </section>
+
+        <section id="nodeWf" class="scroll-mt-3 mb-3 rounded-[14px] border border-line bg-surface p-3.5" data-testid="token-analytics-node-wf">
+          <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.nodeWf') }}</h2>
+          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div>
+              <VChart v-if="pieOption(pieSlices.node, true)" :option="pieOption(pieSlices.node, true)!" autoresize class="h-[168px] w-full" />
+              <p class="text-center text-[13px] font-semibold">{{ t('pages.tokenAnalytics.charts.nodePie') }}</p>
+              <p v-if="pieSlices.node.length" class="m-0 text-center text-[11px] text-txt3">{{ pieCaption(pieSlices.node) }}</p>
+            </div>
+            <div>
+              <VChart v-if="pieOption(pieSlices.wf, false)" :option="pieOption(pieSlices.wf, false)!" autoresize class="h-[168px] w-full" />
+              <p class="text-center text-[13px] font-semibold">{{ t('pages.tokenAnalytics.charts.wfPie') }}</p>
+              <p v-if="pieSlices.wf.length" class="m-0 text-center text-[11px] text-txt3">{{ pieCaption(pieSlices.wf) }}</p>
             </div>
           </div>
         </section>
@@ -670,7 +724,6 @@ watch([windowSel], () => void load())
     </div>
 
     <aside
-      v-if="!isMobile"
       class="hidden w-[196px] shrink-0 overflow-auto border-l border-line bg-surface px-2.5 py-4 xl:block"
       data-testid="token-analytics-section-nav"
     >
@@ -689,22 +742,5 @@ watch([windowSel], () => void load())
         {{ t('pages.tokenAnalytics.sectionNote') }}
       </p>
     </aside>
-
-    <nav
-      v-if="isMobile"
-      class="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-line bg-surface px-2 py-2 xl:hidden"
-      data-testid="token-analytics-section-nav-mobile"
-    >
-      <button
-        v-for="s in sections"
-        :key="s.id"
-        type="button"
-        class="shrink-0 rounded-lg px-2 py-1 text-xs"
-        :class="activeSection === s.id ? 'bg-accent-dim font-semibold text-accent-2' : 'text-txt3'"
-        @click="scrollToSection(s.id)"
-      >
-        {{ s.label }}
-      </button>
-    </nav>
   </div>
 </template>

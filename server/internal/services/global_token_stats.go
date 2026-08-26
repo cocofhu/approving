@@ -50,12 +50,14 @@ type GlobalTokenStatsKPI struct {
 
 // GlobalTokenStatsProjectRow is one project breakdown row.
 type GlobalTokenStatsProjectRow struct {
-	ProjectID    string   `json:"projectId"`
-	Name         string   `json:"name"`
-	Total        int64    `json:"total"`
-	InputTokens  int64    `json:"inputTokens"`
-	OutputTokens int64    `json:"outputTokens"`
-	DeltaPct     *float64 `json:"deltaPct,omitempty"`
+	ProjectID        string   `json:"projectId"`
+	Name             string   `json:"name"`
+	Total            int64    `json:"total"`
+	InputTokens      int64    `json:"inputTokens"`
+	OutputTokens     int64    `json:"outputTokens"`
+	CacheReadTokens  int64    `json:"cacheReadTokens"`
+	CacheWriteTokens int64    `json:"cacheWriteTokens"`
+	DeltaPct         *float64 `json:"deltaPct,omitempty"`
 }
 
 // GlobalTokenStatsRunRow is a Top-N run consumption row.
@@ -386,9 +388,10 @@ type globalAgg struct {
 }
 
 type globalProjectAgg struct {
-	name         string
-	total        int64
-	input, output int64
+	name                    string
+	total                   int64
+	input, output           int64
+	cacheRead, cacheWrite   int64
 }
 
 type globalRunAgg struct {
@@ -444,6 +447,8 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 		pa.total += row.usage.Total()
 		pa.input += row.usage.InputTokens
 		pa.output += row.usage.OutputTokens
+		pa.cacheRead += row.usage.CacheReadTokens
+		pa.cacheWrite += row.usage.CacheWriteTokens
 
 		pb := agg.projBuckets[row.projectID]
 		if pb == nil {
@@ -611,14 +616,19 @@ func buildGlobalKPI(cur, prev *globalAgg) GlobalTokenStatsKPI {
 
 func buildProjectStats(cur, prev *globalAgg, topN int) ([]GlobalTokenStatsProjectRow, []GlobalTokenStatsSeries) {
 	type item struct {
-		id    string
-		name  string
-		total int64
-		in, out int64
+		id              string
+		name            string
+		total           int64
+		in, out         int64
+		cacheRead, cacheWrite int64
 	}
 	list := make([]item, 0, len(cur.projects))
 	for id, p := range cur.projects {
-		list = append(list, item{id: id, name: p.name, total: p.total, in: p.input, out: p.output})
+		list = append(list, item{
+			id: id, name: p.name, total: p.total,
+			in: p.input, out: p.output,
+			cacheRead: p.cacheRead, cacheWrite: p.cacheWrite,
+		})
 	}
 	sort.Slice(list, func(i, j int) bool {
 		if list[i].total != list[j].total {
@@ -633,6 +643,7 @@ func buildProjectStats(cur, prev *globalAgg, topN int) ([]GlobalTokenStatsProjec
 		row := GlobalTokenStatsProjectRow{
 			ProjectID: it.id, Name: it.name, Total: it.total,
 			InputTokens: it.in, OutputTokens: it.out,
+			CacheReadTokens: it.cacheRead, CacheWriteTokens: it.cacheWrite,
 		}
 		if prev != nil {
 			if pp, ok := prev.projects[it.id]; ok && pp.total > 0 {

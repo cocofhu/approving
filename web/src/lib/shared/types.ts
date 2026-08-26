@@ -279,6 +279,8 @@ export interface GlobalTokenStatsProjectRow {
   total: number
   inputTokens: number
   outputTokens: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
   deltaPct?: number | null
 }
 

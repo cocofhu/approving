@@ -51,7 +51,7 @@ const MOCK_STATS = {
     cacheReadTokens: 800,
     cacheWriteTokens: 200,
   },
-  projects: [{ projectId: 'p1', name: 'Demo', total: 9000, inputTokens: 5000, outputTokens: 3000 }],
+  projects: [{ projectId: 'p1', name: 'Demo', total: 9000, inputTokens: 5000, outputTokens: 3000, cacheReadTokens: 800, cacheWriteTokens: 200 }],
   modelRanking: [{ modelKey: 'm1', name: 'Model', total: 9000 }],
   nodeTypes: [{ name: 'agent', total: 9000 }],
   workflows: [{ name: 'wf', total: 9000, kind: 'workflow' }],
@@ -137,6 +137,20 @@ async function bootstrap() {
     },
   })
 
+  const ProjectBoardPage = defineComponent({
+    props: { id: { type: String, required: true } },
+    setup(props) {
+      return () => h('div', { 'data-testid': 'project-board-page' }, `board:${props.id}`)
+    },
+  })
+
+  const RunDetailPage = defineComponent({
+    props: { id: { type: String, required: true } },
+    setup(props) {
+      return () => h('div', { 'data-testid': 'run-detail-page' }, `run:${props.id}`)
+    },
+  })
+
   const LoginPage = defineComponent({
     setup() {
       return () => h('div', { 'data-testid': 'login-page' }, '登录')
@@ -174,6 +188,20 @@ async function bootstrap() {
         name: 'stats',
         component: TokenAnalyticsView,
         meta: { titleKey: 'route.stats' },
+      },
+      {
+        path: '/projects/:id',
+        name: 'project-detail',
+        component: ProjectBoardPage,
+        props: true,
+        meta: { titleKey: 'route.projectDetail' },
+      },
+      {
+        path: '/runs/:id',
+        name: 'run-detail',
+        component: RunDetailPage,
+        props: true,
+        meta: { titleKey: 'route.runDetail' },
       },
       ...extraRoutes,
     ],
