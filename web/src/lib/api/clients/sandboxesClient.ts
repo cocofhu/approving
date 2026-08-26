@@ -1,13 +1,8 @@
 import { origin, req, wsUrl } from '../httpCore'
-import type { CreateAgentTestPayload, SandboxView } from '../apiTypes'
+import type { SandboxView } from '../apiTypes'
 
 export const sandboxesClient = {
   // sandboxes (interactive Agent chat-test containers)
-  createAgentTest: (profile: string, payload: CreateAgentTestPayload = {}) =>
-    req<SandboxView>(`/agents/${encodeURIComponent(profile)}/test`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
   listSandboxes: () => req<SandboxView[]>('/sandboxes'),
   getSandbox: (id: number) => req<SandboxView>(`/sandboxes/${id}`),
   stopSandbox: (id: number) => req<{ status: string }>(`/sandboxes/${id}/stop`, { method: 'POST' }),

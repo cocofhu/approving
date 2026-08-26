@@ -768,15 +768,16 @@
       "varsEmptyTitle": "No workflow variables yet",
       "varsEmptyDesc": "Add a row to configure project-level defaults.",
       "sharedAgent": {
-        "extendHint": "Project Runs and project-context chat tests extend this shared config first, then the chosen Agent overlays same-named keys (Agent wins). Agent Studio’s own chat test does not use this merge.",
+        "extendHint": "Project Runs and project-context chat tests extend this shared config first, then the chosen Agent overlays same-named keys (Agent wins). Chat tests start only from this panel.",
         "discard": "Discard",
         "defaultProjectId": "Default project ID",
         "defaultProjectIdDesc": "Stored as defaultProjectId; may fill in when an Agent has no home project.",
         "testTab": "Chat test",
         "pickAgent": "Pick Agent",
         "pickAgentPlaceholder": "Select an Agent to overlay",
-        "testHint": "Starts a chat test with this project’s shared baseline, then overlays the selected Agent.",
-        "noAgents": "No Agents yet — create one in Agent Studio first."
+        "testHint": "Only Agents bound to this project are listed. Starts with the shared baseline, then overlays the selected Agent.",
+        "noAgents": "No Agents yet — create one in Agent Studio first.",
+        "noProjectAgents": "No Agents are bound to this project yet. Open Agent management and bind this project in the Agent’s meta tab, then try again."
       },
       "varName": "Name",
       "varValue": "Default",
@@ -1453,7 +1454,7 @@
     "sandboxes": {
       "title": "Sandboxes",
       "errorPrefix": "Error:",
-      "empty": "No sandboxes. Created on workflow runs or from Agent Studio → Chat test.",
+      "empty": "No sandboxes. Created on workflow runs or from Project detail → Shared Agent config → Chat test.",
       "copyId": "Copy ID",
       "copied": "Copied",
       "destroy": "Destroy",
@@ -2317,7 +2318,7 @@
       "data": {
         "title": "Agent data",
         "hint": "Data belongs to home project \"{project}\". Manage memories, threads, and jobs here.",
-        "unsavedBinding": "Home project binding is unsaved; data panel and chat test still use the saved binding.",
+        "unsavedBinding": "Home project binding is unsaved; the data panel still uses the saved binding.",
         "emptyTitle": "No home project",
         "emptyDesc": "Please bind a home project under Metadata on desktop before managing memories, threads, or jobs.",
         "goBind": "Bind home project",
@@ -3235,6 +3236,7 @@
       "destroy": "End & destroy",
       "acpSession": "ACP session",
       "idleHint": "Start a sandbox bound to “{profile}” (workspace / MCP / env) for multi-turn chat testing.",
+      "missingCreateTest": "Chat test launcher not configured. Open Project shared Agent config.",
       "mode": {
         "sectionLabel": "Workspace mode",
         "empty": {

@@ -211,7 +211,6 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PUT("/agents/:name", h.SaveAgent)
 		api.PATCH("/agents/:name/project", h.PatchAgentProject)
 		api.POST("/agents/:name/rename", h.RenameAgent)
-		api.POST("/agents/:name/test", h.CreateAgentTest)
 		api.DELETE("/agents/:name", h.DeleteAgent)
 		// Agent-scoped data (Studio). Project resolved from agent.projectId.
 		api.GET("/agents/:name/memories", h.ListAgentMemories)
