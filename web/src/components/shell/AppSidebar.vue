@@ -49,11 +49,14 @@ async function onHideNav() {
     :inert="sidebarHidden"
   >
     <div class="flex h-full w-[232px] min-w-[232px] flex-col">
-      <div class="flex h-14 items-center justify-between gap-2 px-3">
+      <div
+        class="app-sidebar-brand-row flex h-[72px] items-center justify-between gap-2 pl-3.5 pr-2"
+        data-testid="sidebar-brand-row"
+      >
         <BrandLogo size="md" align="start" show-mark />
         <button
           type="button"
-          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
+          class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt3 hover:text-txt2"
           data-testid="desktop-nav-hide"
           :aria-label="t('shell.aria.hideNav')"
           :title="t('shell.aria.hideNav')"
@@ -63,6 +66,9 @@ async function onHideNav() {
         >
           <Icon name="panel-left" :size="18" />
         </button>
+      </div>
+      <div class="app-sidebar-brand-rail" aria-hidden="true" data-testid="sidebar-brand-rail">
+        <span /><span /><span /><span />
       </div>
 
       <AppSidebarNav />
