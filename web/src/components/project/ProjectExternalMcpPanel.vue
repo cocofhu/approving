@@ -6,6 +6,7 @@ import AppModal from '@/components/ui/AppModal.vue'
 import AppSwitch from '@/components/ui/AppSwitch.vue'
 import { api } from '@/lib/api/api'
 import { useToast } from '@/lib/composables/useToast'
+import { copyToClipboard } from '@/lib/shared/copyToClipboard'
 import { fmtTime } from '@/lib/shared/format'
 
 const props = defineProps<{ projectId: string }>()
@@ -145,12 +146,15 @@ async function revokeKey(id: string) {
   }
 }
 
-function copyText(text: string, label = '') {
-  navigator.clipboard.writeText(text).then(() => {
+async function copyText(text: string, label = '') {
+  const ok = await copyToClipboard(text)
+  if (ok) {
     copied.value = label
     toast.success(t('pages.projectDetail.externalMcp.copySuccess'))
     setTimeout(() => { copied.value = '' }, 2000)
-  }).catch(() => toast.error(t('pages.projectDetail.externalMcp.copyFailed')))
+  } else {
+    toast.error(t('pages.projectDetail.externalMcp.copyFailed'))
+  }
 }
 
 onMounted(async () => {

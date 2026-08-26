@@ -96,14 +96,16 @@ watch(
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
     <div class="flex items-center gap-2 border-b border-line px-4 py-2">
-      <button
+      <AppButton
         type="button"
-        class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        size="sm"
+        variant="outline"
+        icon="help"
         data-test="env-help-inject"
         @click="openEnvHelp('inject')"
       >
         {{ t('pages.agentStudio.envHelp.link') }}
-      </button>
+      </AppButton>
       <span class="flex-1" />
       <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleEnvRaw">{{ envRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
     </div>
@@ -137,14 +139,16 @@ watch(
       <div class="mb-3 rounded-lg border border-line bg-base/50 p-3 text-[11px] leading-6 text-txt3">
         <div class="mb-1 flex items-center justify-between gap-2">
           <div class="font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
-          <button
+          <AppButton
             type="button"
-            class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            size="sm"
+            variant="outline"
+            icon="help"
             data-test="env-help-acp"
             @click="openEnvHelp('acp')"
           >
             {{ t('pages.agentStudio.envHelp.link') }}
-          </button>
+          </AppButton>
         </div>
         <p class="font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
       </div>

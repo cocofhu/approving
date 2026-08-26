@@ -119,14 +119,16 @@ defineExpose({ isGitEnvKey })
         <div class="mt-0.5 text-[11px] text-txt3">{{ t('pages.agentStudio.git.subtitle') }}</div>
       </div>
       <div class="flex shrink-0 items-center gap-3">
-        <button
+        <AppButton
           type="button"
-          class="bg-transparent p-0 text-[12px] text-accent-2 underline underline-offset-[3px] hover:text-[#c4b5fd] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          size="sm"
+          variant="outline"
+          icon="help"
           data-test="git-help-link"
           @click="emit('help', 'git')"
         >
           {{ t('pages.agentStudio.envHelp.link') }}
-        </button>
+        </AppButton>
         <AppButton size="sm" variant="outline" @click="openChooser">
           {{ t('pages.agentStudio.git.adjustType') }}
         </AppButton>

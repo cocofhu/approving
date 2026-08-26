@@ -56,15 +56,36 @@ const run = ref<Run>(emptyRun(runId.value))
 const wf = ref<Workflow>(emptyWorkflow())
 /** Project alias for 「未知/未分桶」display on Run token table. */
 const unknownModelDisplayName = ref('')
+/** projectId for which unknownModelDisplayName was last successfully loaded. */
+let unknownAliasLoadedForProjectId: string | null = null
 
 async function loadUnknownModelDisplayName(projectId?: string | null) {
-  unknownModelDisplayName.value = ''
-  if (!projectId) return
+  const pid = projectId ?? null
+  if (!pid) {
+    unknownModelDisplayName.value = ''
+    unknownAliasLoadedForProjectId = null
+    return
+  }
+
+  const projectChanged =
+    unknownAliasLoadedForProjectId !== null && unknownAliasLoadedForProjectId !== pid
+  if (projectChanged) {
+    unknownModelDisplayName.value = ''
+    unknownAliasLoadedForProjectId = null
+  }
+
+  // Soft refresh: keep the cached alias and skip redundant getProject polls.
+  if (unknownAliasLoadedForProjectId === pid) return
+
   try {
-    const p = await api.getProject(projectId)
+    const p = await api.getProject(pid)
     unknownModelDisplayName.value = p.unknownModelDisplayName || ''
+    unknownAliasLoadedForProjectId = pid
   } catch {
-    // Keep default label when project cannot be loaded.
+    // Keep the last successful alias when refresh fails; only clear on first load miss.
+    if (unknownAliasLoadedForProjectId !== pid) {
+      unknownModelDisplayName.value = ''
+    }
   }
 }
 const runLoading = ref(false)
@@ -370,6 +391,8 @@ function resetRunState(id: string) {
   resetLiveLogState(id)
   run.value = emptyRun(id)
   wf.value = emptyWorkflow()
+  unknownModelDisplayName.value = ''
+  unknownAliasLoadedForProjectId = null
   selected.value = null
   manual.value = false
   gateError.value = null
