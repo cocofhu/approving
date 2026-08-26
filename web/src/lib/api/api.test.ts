@@ -55,18 +55,19 @@ describe('notifications client', () => {
     await expect(api.listNotifications()).resolves.toMatchObject({
       items: [{ runId: 'r1', unread: true }],
     })
-    expect(String(fetchMock.mock.calls.at(-1)?.[0])).toMatch(/\/notifications$/)
+    const lastCall = () => fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    expect(String(lastCall()?.[0])).toMatch(/\/notifications$/)
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
     await expect(api.markNotificationRead('r1')).resolves.toEqual({ status: 'ok' })
-    const readCall = fetchMock.mock.calls.at(-1)
+    const readCall = lastCall()
     expect(String(readCall?.[0])).toMatch(/\/notifications\/read$/)
     expect(readCall?.[1]).toMatchObject({ method: 'POST' })
     expect(JSON.parse(String(readCall?.[1]?.body))).toEqual({ runId: 'r1' })
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
     await expect(api.markAllNotificationsRead()).resolves.toEqual({ status: 'ok' })
-    const allCall = fetchMock.mock.calls.at(-1)
+    const allCall = lastCall()
     expect(String(allCall?.[0])).toMatch(/\/notifications\/read-all$/)
     expect(allCall?.[1]).toMatchObject({ method: 'POST' })
     expect(allCall?.[1]?.body).toBeUndefined()
