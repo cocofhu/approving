@@ -400,25 +400,6 @@ html.light .app-sidebar-brand-row {
   background: linear-gradient(105deg, #efe8ff 0%, #e8eeff 55%, #e8faf3 100%);
 }
 
-.app-sidebar-brand-rail {
-  display: grid;
-  grid-template-columns: 1.4fr 1.1fr 0.9fr 0.7fr;
-  height: 3px;
-  flex-shrink: 0;
-}
-.app-sidebar-brand-rail span:nth-child(1) {
-  background: rgb(var(--c-accent));
-}
-.app-sidebar-brand-rail span:nth-child(2) {
-  background: #6366f1;
-}
-.app-sidebar-brand-rail span:nth-child(3) {
-  background: rgb(var(--c-ok));
-}
-.app-sidebar-brand-rail span:nth-child(4) {
-  background: rgb(var(--c-warn));
-}
-
 @media (prefers-reduced-motion: reduce) {
   .brand-logo__name {
     animation: none;

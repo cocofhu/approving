@@ -74,12 +74,9 @@ describe('AppSidebar', () => {
     wrapper.unmount()
   })
 
-  it('renders four-color brand rail below brand row (g2.3)', () => {
+  it('does not render brand rail below brand row (g2.3)', () => {
     const wrapper = mountSidebar()
-    const rail = wrapper.find('[data-testid="sidebar-brand-rail"]')
-    expect(rail.exists()).toBe(true)
-    expect(rail.classes()).toContain('app-sidebar-brand-rail')
-    expect(rail.findAll('span')).toHaveLength(4)
+    expect(wrapper.find('[data-testid="sidebar-brand-rail"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

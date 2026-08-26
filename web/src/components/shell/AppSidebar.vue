@@ -67,9 +67,6 @@ async function onHideNav() {
           <Icon name="panel-left" :size="18" />
         </button>
       </div>
-      <div class="app-sidebar-brand-rail" aria-hidden="true" data-testid="sidebar-brand-rail">
-        <span /><span /><span /><span />
-      </div>
 
       <AppSidebarNav />
 
