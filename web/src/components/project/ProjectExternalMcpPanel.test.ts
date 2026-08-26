@@ -62,7 +62,7 @@ describe('ProjectExternalMcpPanel (plan g3.1/g3.2/g3.3)', () => {
     const wrapper = mountPanel()
     await flushPromises()
     expect(apiMocks.getProjectExternalMcp).toHaveBeenCalledWith('proj-1')
-    expect(wrapper.get('[data-testid="external-mcp-enabled"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="external-mcp-enabled"]').exists()).toBe(true)
 
     await wrapper.get('[data-testid="external-mcp-save"]').trigger('click')
     await flushPromises()
