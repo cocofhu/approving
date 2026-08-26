@@ -376,4 +376,10 @@ export interface NotificationListItem {
 
 export interface NotificationListResponse {
   items: NotificationListItem[]
+  page?: number
+  pageSize?: number
+  total?: number
+  allCount?: number
+  unreadCount?: number
+  readCount?: number
 }

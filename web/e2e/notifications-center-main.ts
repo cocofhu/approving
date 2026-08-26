@@ -369,6 +369,32 @@ function notificationItemsForScene() {
   return mapped
 }
 
+function notificationListResponse(url: string) {
+  const u = new URL(url, 'http://e2e.local')
+  const page = Math.max(1, Number(u.searchParams.get('page') || '1') || 1)
+  const pageSize = Math.max(1, Number(u.searchParams.get('pageSize') || '20') || 20)
+  const filter = (u.searchParams.get('filter') || 'all').toLowerCase()
+  const all = notificationItemsForScene()
+  const allCount = all.length
+  const unreadCount = all.filter((x) => x.unread).length
+  const readCount = allCount - unreadCount
+  let filtered = all
+  if (filter === 'unread') filtered = all.filter((x) => x.unread)
+  else if (filter === 'read') filtered = all.filter((x) => !x.unread)
+  const total = filtered.length
+  const start = (page - 1) * pageSize
+  const items = filtered.slice(start, start + pageSize)
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    allCount,
+    unreadCount,
+    readCount,
+  }
+}
+
 function requestPath(url: string): string {
   try {
     return new URL(url, 'http://e2e.local').pathname
@@ -391,7 +417,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const prefs = getOrInitHarnessPrefs()
     const next = new Set(prefs.readIds)
     for (const item of notificationItemsForScene()) {
-      next.add(item.runId)
+      if (item.unread) next.add(item.runId)
     }
     prefs.readIds = [...next]
     saveHarnessPrefs(prefs)
@@ -418,7 +444,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     })
   }
   if ((path === '/api/notifications' || path.endsWith('/notifications')) && method === 'GET') {
-    return new Response(JSON.stringify({ items: notificationItemsForScene() }), {
+    return new Response(JSON.stringify(notificationListResponse(url)), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
