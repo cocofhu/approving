@@ -29,7 +29,15 @@ vi.mock('@/lib/composables/useAuth', () => ({
 vi.mock('@/lib/api/api', () => ({
   api: {
     listRuns: vi.fn(),
-    listNotifications: vi.fn(async () => ({ items: [] })),
+    listNotifications: vi.fn(async () => ({
+      items: [],
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      allCount: 0,
+      unreadCount: 0,
+      readCount: 0,
+    })),
     getRun: vi.fn(),
     artifactContent: vi.fn(),
     artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
@@ -77,7 +85,23 @@ function asItem(r: Run, extra: Partial<RunTerminalNotificationItem> = {}): RunTe
 }
 
 function seedList(items: RunTerminalNotificationItem[]) {
-  vi.mocked(api.listNotifications).mockResolvedValue({ items })
+  const allCount = items.length
+  const unreadCount = items.filter((x) => x.unread).length
+  const readCount = allCount - unreadCount
+  vi.mocked(api.listNotifications).mockImplementation(async (opts?: { page?: number; pageSize?: number }) => {
+    const page = opts?.page && opts.page > 0 ? opts.page : 1
+    const pageSize = opts?.pageSize && opts.pageSize > 0 ? opts.pageSize : 20
+    const start = (page - 1) * pageSize
+    return {
+      items: items.slice(start, start + pageSize),
+      page,
+      pageSize,
+      total: allCount,
+      allCount,
+      unreadCount,
+      readCount,
+    }
+  })
 }
 
 function mountChrome(layout: 'bar' | 'sidebar' = 'sidebar') {
@@ -113,7 +137,15 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     vi.mocked(api.artifactContent).mockReset()
     vi.mocked(api.markNotificationRead).mockReset()
     vi.mocked(api.markAllNotificationsRead).mockReset()
-    vi.mocked(api.listNotifications).mockResolvedValue({ items: [] })
+    vi.mocked(api.listNotifications).mockResolvedValue({
+      items: [],
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      allCount: 0,
+      unreadCount: 0,
+      readCount: 0,
+    })
     vi.mocked(api.markNotificationRead).mockResolvedValue({ status: 'ok' })
     vi.mocked(api.markAllNotificationsRead).mockResolvedValue({ status: 'ok' })
     vi.mocked(api.getRun).mockResolvedValue(run({ id: 'r1', status: 'completed', artifacts: [] }))
