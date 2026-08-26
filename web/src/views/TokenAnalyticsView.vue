@@ -32,8 +32,6 @@ const projectSel = ref('')
 const modelSel = ref('')
 const lineMode = ref<'total' | 'project' | 'model'>('total')
 const areaMode = ref<'source' | 'comp'>('source')
-const kpiDetailOpen = ref(false)
-
 const loading = ref(true)
 const failed = ref(false)
 const data = ref<GlobalTokenStats | null>(null)
@@ -225,12 +223,6 @@ function pieOption(
       },
     ],
   }
-}
-
-function pieCaption(slices: { name: string; value: number }[]): string {
-  const sum = slices.reduce((s, x) => s + x.value, 0)
-  if (sum <= 0) return ''
-  return slices.map((s) => `${s.name} ${Math.round((s.value / sum) * 100)}%`).join(' · ')
 }
 
 function buildPieSlices() {
@@ -612,27 +604,21 @@ watch([windowSel], () => void load())
             <div class="mt-1 text-[11px]" :class="deltaClass">{{ deltaLabel }}</div>
           </div>
           <div
-            class="token-analytics-kpi-merge relative border border-line bg-surface p-3.5"
+            class="token-analytics-kpi-merge relative border border-line bg-surface p-3.5 outline-none"
             tabindex="0"
             data-testid="token-analytics-kpi-merge"
-            @click="kpiDetailOpen = !kpiDetailOpen"
           >
             <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiInOutCache') }}</div>
-            <div class="mt-1.5 flex justify-between gap-3 text-[13px]">
-              <span class="text-txt2">{{ t('pages.tokenAnalytics.kpiInOutPair') }}</span>
-              <b class="text-base font-bold tabular-nums">
-                {{ fmtCompactTokenCount(data.kpi.inputTokens) }} / {{ fmtCompactTokenCount(data.kpi.outputTokens) }}
-              </b>
+            <div class="mt-2.5 flex justify-between gap-3 text-[13px] text-txt2">
+              <span>{{ t('pages.executionTimeline.partInput') }}</span>
+              <b class="text-base font-bold tabular-nums text-txt">{{ fmtCompactTokenCount(data.kpi.inputTokens) }}</b>
             </div>
-            <div class="mt-1.5 flex justify-between gap-3 text-[13px]">
-              <span class="text-txt2">{{ t('pages.tokenAnalytics.kpiCachePair') }}</span>
-              <b class="text-base font-bold tabular-nums">
-                {{ fmtCompactTokenCount(data.kpi.cacheReadTokens) }} / {{ fmtCompactTokenCount(data.kpi.cacheWriteTokens) }}
-              </b>
+            <div class="mt-2.5 flex justify-between gap-3 text-[13px] text-txt2">
+              <span>{{ t('pages.executionTimeline.partOutput') }}</span>
+              <b class="text-base font-bold tabular-nums text-txt">{{ fmtCompactTokenCount(data.kpi.outputTokens) }}</b>
             </div>
             <div
               class="token-analytics-kpi-tip absolute left-3.5 top-[calc(100%-8px)] z-10 hidden min-w-[200px] border border-line bg-elevated p-2.5 text-xs shadow-md"
-              :class="{ '!block': kpiDetailOpen }"
               data-testid="token-analytics-kpi-detail"
             >
               <div class="flex justify-between gap-4 py-0.5">
@@ -705,9 +691,6 @@ watch([windowSel], () => void load())
                 @click="cfg.kind ? onPieClick(cfg.kind as 'source' | 'project' | 'model', $event) : undefined"
               />
               <p class="m-0 mt-1.5 text-[13px] font-semibold">{{ t(`pages.tokenAnalytics.charts.${cfg.label}`) }}</p>
-              <p v-if="pieSlices[cfg.key as keyof typeof pieSlices].length" class="m-0 mt-0.5 text-[11px] text-txt3">
-                {{ pieCaption(pieSlices[cfg.key as keyof typeof pieSlices]) }}
-              </p>
             </div>
           </div>
         </section>
@@ -763,12 +746,10 @@ watch([windowSel], () => void load())
             <div>
               <VChart v-if="pieOption(pieSlices.node, true)" :option="pieOption(pieSlices.node, true)!" autoresize class="h-[168px] w-full" />
               <p class="text-center text-[13px] font-semibold">{{ t('pages.tokenAnalytics.charts.nodePie') }}</p>
-              <p v-if="pieSlices.node.length" class="m-0 text-center text-[11px] text-txt3">{{ pieCaption(pieSlices.node) }}</p>
             </div>
             <div>
               <VChart v-if="pieOption(pieSlices.wf, false)" :option="pieOption(pieSlices.wf, false)!" autoresize class="h-[168px] w-full" />
               <p class="text-center text-[13px] font-semibold">{{ t('pages.tokenAnalytics.charts.wfPie') }}</p>
-              <p v-if="pieSlices.wf.length" class="m-0 text-center text-[11px] text-txt3">{{ pieCaption(pieSlices.wf) }}</p>
             </div>
           </div>
         </section>
@@ -853,7 +834,12 @@ watch([windowSel], () => void load())
 .token-analytics-table-scroll::-webkit-scrollbar-track {
   background: rgb(var(--c-base));
 }
+.token-analytics-kpi-merge:hover,
+.token-analytics-kpi-merge:focus-within {
+  border-color: #a1a1aa;
+}
 .token-analytics-kpi-merge:hover .token-analytics-kpi-tip,
+.token-analytics-kpi-merge:focus .token-analytics-kpi-tip,
 .token-analytics-kpi-merge:focus-within .token-analytics-kpi-tip {
   display: block;
 }
