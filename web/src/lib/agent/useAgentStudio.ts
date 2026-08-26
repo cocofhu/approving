@@ -82,6 +82,9 @@ const cardGridStyle = computed(() => {
 
 const filesStep = ref<'list' | 'edit'>('list')
 const justSaved = ref(false)
+const showSaveReasonModal = ref(false)
+const saveReason = ref('')
+const historyRefreshKey = ref(0)
 const filesPanelRef = ref<InstanceType<typeof AgentFilesPanel> | null>(null)
 
 const TAB_FADE_THRESHOLD = 4
@@ -935,29 +938,58 @@ function openManageFromSheet() {
   openAgentManage()
 }
 
-async function save() {
+async function save(reason?: string) {
   if (!dirty.value) return false
   saving.value = true
   error.value = ''
   try {
     if (draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value) {
       const payload = fromDraft(draft.value)
-      await api.saveAgent(payload)
+      const why = (reason ?? saveReason.value).trim() || t('pages.agentStudio.workspaceHistory.defaultSaveReason')
+      await api.saveAgent(payload, { reason: why })
       const i = agents.value.findIndex((x) => x.name === payload.name)
       if (i >= 0) agents.value[i] = payload
       originalJson.value = JSON.stringify(payload)
+      historyRefreshKey.value++
     }
     if (orgSnapshot(org.value) !== orgBaseline.value) {
       const ok = await persistOrg(org.value)
       if (!ok) return false
     }
     justSaved.value = true
+    showSaveReasonModal.value = false
     return true
   } catch (e: any) {
     error.value = String(e?.message || e)
     return false
   } finally {
     saving.value = false
+  }
+}
+
+function promptSave() {
+  if (!dirty.value || saving.value) return
+  saveReason.value = t('pages.agentStudio.workspaceHistory.defaultSaveReason')
+  showSaveReasonModal.value = true
+}
+
+async function confirmSaveWithReason() {
+  return save(saveReason.value)
+}
+
+async function reloadAgentFromServer(name: string) {
+  try {
+    const fresh = await api.getAgent(name)
+    const i = agents.value.findIndex((x) => x.name === name)
+    if (i >= 0) agents.value[i] = fresh
+    if (activeName.value === name) {
+      draft.value = toDraft(fresh)
+      originalJson.value = JSON.stringify(fromDraft(draft.value))
+      justSaved.value = false
+    }
+    historyRefreshKey.value++
+  } catch (e: any) {
+    error.value = String(e?.message || e)
   }
 }
 
@@ -1359,6 +1391,12 @@ onBeforeUnmount(() => {
   cardGridStyle,
   filesStep,
   justSaved,
+  showSaveReasonModal,
+  saveReason,
+  historyRefreshKey,
+  promptSave,
+  confirmSaveWithReason,
+  reloadAgentFromServer,
   filesPanelRef,
   TAB_FADE_THRESHOLD,
   agentNameEl,

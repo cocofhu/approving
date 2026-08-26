@@ -5,6 +5,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import CodeEditor from '@/components/ui/CodeEditor.vue'
 import MarkdownSplitEditor from '@/components/agent/MarkdownSplitEditor.vue'
 import ExplorerContextMenu, { type CtxTarget } from '@/components/agent/ExplorerContextMenu.vue'
+import AgentWorkspaceHistoryPanel from '@/components/agent/AgentWorkspaceHistoryPanel.vue'
 export type { FilesStep, FilesOpenSnapshot } from '@/lib/agent/useAgentFilesPanel'
 import { useAgentFilesPanel } from '@/lib/agent/useAgentFilesPanel'
 import type { AgentFilesPanelProps, AgentFilesPanelEmit } from '@/lib/agent/useAgentFilesPanel'
@@ -452,5 +453,12 @@ defineExpose({
       @close="hideCtxMenu"
       @action="onCtxAction"
     />
+        <AgentWorkspaceHistoryPanel
+          v-if="!isMobile"
+          :agent-name="agentName"
+          :is-mobile="isMobile"
+          :refresh-key="historyRefreshKey"
+          @restored="emit('restored')"
+        />
   </div>
 </template>

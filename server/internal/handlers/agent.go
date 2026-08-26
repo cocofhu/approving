@@ -34,6 +34,7 @@ type agentBody struct {
 	Env               map[string]string    `json:"env"`
 	Layout            services.AgentLayout `json:"layout"`
 	Prompts           *models.AgentPrompts `json:"prompts"`
+	Reason            string               `json:"reason,omitempty"`
 }
 
 // toAgent builds an Agent. When projectId is omitted (nil), prevProjectID is kept
@@ -174,7 +175,11 @@ func (h *Handlers) SaveAgent(c *gin.Context) {
 			return
 		}
 	}
-	if err := h.Skill.Save(agent); err != nil {
+	reason := strings.TrimSpace(b.Reason)
+	if reason == "" {
+		reason = "Studio 保存"
+	}
+	if _, err := h.Skill.SaveAgentWithVcs(agent, sessionUsername(c), reason, true); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -947,23 +947,39 @@ func toolSchemas(mcpID string) []map[string]any {
 				"agentName": map[string]any{"type": "string"},
 				"path":      map[string]any{"type": "string"},
 			}),
-			platformmcp.Tool("pm_fs_write", "写入/创建授权 Agent workspace 内文件（覆盖已存在；自动创建父目录；单文件硬上限 1MiB）。不改 agent.json / Run 沙箱。Studio 刷新或重开后可见；若 Studio 有未保存草稿再 Save 可能覆盖 MCP 写入。", map[string]any{
+			platformmcp.Tool("pm_fs_write", "写入/创建授权 Agent workspace 内文件（覆盖已存在；自动创建父目录；单文件硬上限 1MiB）。必填 reason（非空变更原因）；成功后自动记一条版本。不改 agent.json / Run 沙箱。Studio 刷新或重开后可见；若 Studio 有未保存草稿再 Save 可能覆盖 MCP 写入。", map[string]any{
 				"agentName": map[string]any{"type": "string"},
 				"path":      map[string]any{"type": "string"},
 				"content":   map[string]any{"type": "string"},
+				"reason":    map[string]any{"type": "string", "description": "必填：本次变更原因（非空）"},
 			}),
-			platformmcp.Tool("pm_fs_delete", "删除授权 Agent workspace 内文件，或递归删除目录。", map[string]any{
+			platformmcp.Tool("pm_fs_delete", "删除授权 Agent workspace 内文件，或递归删除目录。必填 reason。", map[string]any{
 				"agentName": map[string]any{"type": "string"},
 				"path":      map[string]any{"type": "string"},
+				"reason":    map[string]any{"type": "string", "description": "必填：本次变更原因（非空）"},
 			}),
-			platformmcp.Tool("pm_fs_mkdir", "在授权 Agent workspace 内创建目录（含缺失父目录）。空目录可能不在 Studio 树显示；写入文件后刷新可见。", map[string]any{
+			platformmcp.Tool("pm_fs_mkdir", "在授权 Agent workspace 内创建目录（含缺失父目录）。必填 reason。空目录用内部占位跟踪。", map[string]any{
 				"agentName": map[string]any{"type": "string"},
 				"path":      map[string]any{"type": "string"},
+				"reason":    map[string]any{"type": "string", "description": "必填：本次变更原因（非空）"},
 			}),
-			platformmcp.Tool("pm_fs_rename", "在同一 Agent workspace 内重命名/移动路径。", map[string]any{
+			platformmcp.Tool("pm_fs_rename", "在同一 Agent workspace 内重命名/移动路径。必填 reason。", map[string]any{
 				"agentName": map[string]any{"type": "string"},
 				"path":      map[string]any{"type": "string", "description": "源相对路径"},
 				"toPath":    map[string]any{"type": "string", "description": "目标相对路径"},
+				"reason":    map[string]any{"type": "string", "description": "必填：本次变更原因（非空）"},
+			}),
+			platformmcp.Tool("pm_fs_history", "列出授权 Agent workspace 的版本历史（作者/时间/来源/原因/路径），按时间倒序。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+			}),
+			platformmcp.Tool("pm_fs_diff", "查看某次 workspace 版本相对父版本的 unified diff。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"sha":       map[string]any{"type": "string", "description": "版本标识（完整或短 sha）"},
+			}),
+			platformmcp.Tool("pm_fs_restore", "将 workspace 整树恢复到指定版本，并追加一条 restore 记录（不删旧历史）。必填 reason。", map[string]any{
+				"agentName": map[string]any{"type": "string"},
+				"sha":       map[string]any{"type": "string"},
+				"reason":    map[string]any{"type": "string", "description": "必填：回滚原因（非空）"},
 			}),
 		}
 	case MCPWorkflowRead:

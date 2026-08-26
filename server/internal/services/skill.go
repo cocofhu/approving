@@ -30,12 +30,13 @@ import (
 type SkillService struct {
 	root string
 	mu   sync.Mutex
+	Vcs  *WorkspaceVcsService
 }
 
 // NewSkillService builds the service. It ships no preset agents (users create
 // their own); it only migrates any existing agents to the current on-disk layout.
 func NewSkillService(root string) *SkillService {
-	s := &SkillService{root: root}
+	s := &SkillService{root: root, Vcs: NewWorkspaceVcsService(root)}
 	s.seed()
 	return s
 }
@@ -377,6 +378,9 @@ func readTree(dir string) []AgentFile {
 		if err != nil || d.IsDir() {
 			return nil
 		}
+		if isWorkspacePlaceholder(d.Name()) {
+			return nil
+		}
 		rel, err := filepath.Rel(dir, p)
 		if err != nil {
 			return nil
@@ -547,6 +551,9 @@ func (s *SkillService) deleteUnlocked(name string) error {
 	if n == "" {
 		return fmt.Errorf("invalid agent name")
 	}
+	if s.Vcs != nil {
+		_ = s.Vcs.DeleteAgent(n)
+	}
 	return os.RemoveAll(filepath.Join(s.root, n))
 }
 
@@ -569,7 +576,15 @@ func (s *SkillService) Rename(old, newName string) error {
 	if s.Exists(n) {
 		return fmt.Errorf("agent %q already exists", newName)
 	}
-	return os.Rename(filepath.Join(s.root, o), filepath.Join(s.root, n))
+	if err := os.Rename(filepath.Join(s.root, o), filepath.Join(s.root, n)); err != nil {
+		return err
+	}
+	if s.Vcs != nil {
+		if err := s.Vcs.RenameAgent(o, n); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Exists reports whether an agent directory is present.

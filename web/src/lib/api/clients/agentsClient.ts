@@ -34,6 +34,7 @@ export const agentsClient = {
   // agents (reusable, user-defined Agent identities referenced by skill_profile:
   // skill/rules + MCP servers + environment variables)
   listAgents: () => req<Agent[]>('/agents'),
+  getAgent: (name: string) => req<Agent>(`/agents/${encodeURIComponent(name)}`),
   bootstrapProjectOnboarding: (
     projectId: string,
     body: {
@@ -74,10 +75,10 @@ export const agentsClient = {
     req<AgentOrg>('/agents/org', { method: 'PUT', body: JSON.stringify(org) }),
   createAgent: (agent: Agent) =>
     req<Agent>('/agents', { method: 'POST', body: JSON.stringify(agent) }),
-  saveAgent: (agent: Agent) =>
+  saveAgent: (agent: Agent, opts?: { reason?: string }) =>
     req<{ status: string }>(`/agents/${encodeURIComponent(agent.name)}`, {
       method: 'PUT',
-      body: JSON.stringify(agent),
+      body: JSON.stringify({ ...agent, reason: opts?.reason }),
     }),
   /** Group-level assign: only changes projectId; does not rewrite workspace. Unbind is not allowed. */
   patchAgentProject: (name: string, projectId: string) =>
@@ -92,6 +93,19 @@ export const agentsClient = {
     }),
   deleteAgent: (name: string) =>
     req<{ status: string }>(`/agents/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  listAgentWorkspaceRevisions: (name: string) =>
+    req<{ revisions: import('../apiTypes').WorkspaceRevision[] }>(
+      `/agents/${encodeURIComponent(name)}/workspace/revisions`,
+    ),
+  getAgentWorkspaceRevisionDiff: (name: string, sha: string) =>
+    req<{ sha: string; diff: string }>(
+      `/agents/${encodeURIComponent(name)}/workspace/revisions/${encodeURIComponent(sha)}/diff`,
+    ),
+  restoreAgentWorkspaceRevision: (name: string, sha: string, reason?: string) =>
+    req<{ status: string; sha: string; agent: Agent }>(
+      `/agents/${encodeURIComponent(name)}/workspace/revisions/${encodeURIComponent(sha)}/restore`,
+      { method: 'POST', body: JSON.stringify({ reason: reason || '' }) },
+    ),
 
   // Agent-scoped data (Studio). Project resolved server-side from agent.projectId.
   listAgentMemories: (name: string) =>

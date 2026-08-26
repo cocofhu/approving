@@ -15,7 +15,9 @@ export interface AgentFilesPanelProps {
   draft: AgentStudioDraft
   dirty: boolean
   isMobile: boolean
-  save: () => Promise<boolean>
+  agentName: string
+  historyRefreshKey?: number
+  save: (reason?: string) => Promise<boolean>
 }
 
 export type AgentFilesPanelEmit = {
@@ -23,6 +25,7 @@ export type AgentFilesPanelEmit = {
   (e: 'toast', message: string): void
   (e: 'update:just-saved', value: boolean): void
   (e: 'discard'): void
+  (e: 'restored'): void
 }
 
 
@@ -60,7 +63,7 @@ function toggleExplorerCollapsed() {
 const workspaceGridStyle = computed(() => {
   if (props.isMobile) return { gridTemplateColumns: '1fr' }
   return {
-    gridTemplateColumns: `${explorerCollapsed.value ? SIDEBAR_COLLAPSED_W : SIDEBAR_EXPANDED_W} 1fr`,
+    gridTemplateColumns: `${explorerCollapsed.value ? SIDEBAR_COLLAPSED_W : SIDEBAR_EXPANDED_W} 1fr 300px`,
   }
 })
 

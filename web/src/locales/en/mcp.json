@@ -369,20 +369,32 @@
           "desc": "Read workspace file (≤1MiB)"
         },
         "pm_fs_write": {
-          "signature": "pm_fs_write(agentName, path, content)",
-          "desc": "Write/create file (auto parent dirs, ≤1MiB)"
+          "signature": "pm_fs_write(agentName, path, content, reason)",
+          "desc": "Write/create file (reason required; auto parent dirs, ≤1MiB; one revision per success)"
         },
         "pm_fs_delete": {
-          "signature": "pm_fs_delete(agentName, path)",
-          "desc": "Delete file or recursively delete directory"
+          "signature": "pm_fs_delete(agentName, path, reason)",
+          "desc": "Delete file or recursively delete directory (reason required)"
         },
         "pm_fs_mkdir": {
-          "signature": "pm_fs_mkdir(agentName, path)",
-          "desc": "Create directory"
+          "signature": "pm_fs_mkdir(agentName, path, reason)",
+          "desc": "Create directory (reason required)"
         },
         "pm_fs_rename": {
-          "signature": "pm_fs_rename(agentName, path, toPath)",
-          "desc": "Rename/move within the same workspace"
+          "signature": "pm_fs_rename(agentName, path, toPath, reason)",
+          "desc": "Rename/move within the same workspace (reason required)"
+        },
+        "pm_fs_history": {
+          "signature": "pm_fs_history(agentName)",
+          "desc": "List workspace revisions (author/time/source/reason/paths)"
+        },
+        "pm_fs_diff": {
+          "signature": "pm_fs_diff(agentName, sha)",
+          "desc": "Unified diff vs parent for one revision"
+        },
+        "pm_fs_restore": {
+          "signature": "pm_fs_restore(agentName, sha, reason)",
+          "desc": "Restore full tree to a revision and append restore entry (reason required)"
         }
       }
     },

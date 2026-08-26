@@ -1734,6 +1734,31 @@
         "newFolderInFolder": "New folder here",
         "more": "More"
       },
+      "workspaceHistory": {
+        "title": "Version history",
+        "empty": "No revisions yet. They appear after the first Studio save or MCP write.",
+        "diffTitle": "diff · {sha} · vs parent",
+        "noDiff": "(no file diff)",
+        "restore": "Restore this version",
+        "restoreConfirmTitle": "Restore this version?",
+        "restoreConfirmBody": "The workspace tree will match that snapshot. Files added later will be removed. Old history stays; a new restore entry is appended.",
+        "restoreReason": "Restore reason",
+        "restoreConfirm": "Confirm restore",
+        "restoreDefault": "Restore to {sha}: undo mistaken edit",
+        "restorePath": "full-tree restore",
+        "baselinePath": "full-tree snapshot (baseline)",
+        "saveTitle": "Save workspace",
+        "saveHint": "If this save touches multiple files, each path gets its own revision with the same reason.",
+        "saveReasonLabel": "Change reason",
+        "defaultSaveReason": "Studio save",
+        "source": {
+          "system": "baseline",
+          "studio": "Studio",
+          "pm-mcp": "PM MCP",
+          "external-mcp": "External MCP",
+          "restore": "restore"
+        }
+      },
       "mcp": {
         "hint": "Full mcp.json written to {configRoot}/mcp.json and injected in ACP. New agents include artifact-store by default. Project Management MCP must be added manually and stays separate from artifact-store — do not merge them.",
         "formEdit": "Form editor",

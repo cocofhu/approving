@@ -369,20 +369,32 @@
           "desc": "读取 workspace 文件（≤1MiB）"
         },
         "pm_fs_write": {
-          "signature": "pm_fs_write(agentName, path, content)",
-          "desc": "写入/创建文件（自动建父目录，≤1MiB）"
+          "signature": "pm_fs_write(agentName, path, content, reason)",
+          "desc": "写入/创建文件（必填 reason；自动建父目录，≤1MiB；成功后记一条版本）"
         },
         "pm_fs_delete": {
-          "signature": "pm_fs_delete(agentName, path)",
-          "desc": "删除文件或递归删目录"
+          "signature": "pm_fs_delete(agentName, path, reason)",
+          "desc": "删除文件或递归删目录（必填 reason）"
         },
         "pm_fs_mkdir": {
-          "signature": "pm_fs_mkdir(agentName, path)",
-          "desc": "创建目录"
+          "signature": "pm_fs_mkdir(agentName, path, reason)",
+          "desc": "创建目录（必填 reason）"
         },
         "pm_fs_rename": {
-          "signature": "pm_fs_rename(agentName, path, toPath)",
-          "desc": "同 workspace 内重命名/移动"
+          "signature": "pm_fs_rename(agentName, path, toPath, reason)",
+          "desc": "同 workspace 内重命名/移动（必填 reason）"
+        },
+        "pm_fs_history": {
+          "signature": "pm_fs_history(agentName)",
+          "desc": "列出 workspace 版本历史（作者/时间/来源/原因/路径）"
+        },
+        "pm_fs_diff": {
+          "signature": "pm_fs_diff(agentName, sha)",
+          "desc": "查看某次版本相对父版本的 unified diff"
+        },
+        "pm_fs_restore": {
+          "signature": "pm_fs_restore(agentName, sha, reason)",
+          "desc": "整树恢复到指定版本并追加 restore 记录（必填 reason）"
         }
       }
     },
