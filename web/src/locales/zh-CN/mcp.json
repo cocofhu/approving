@@ -15,6 +15,7 @@
       "scopeProject": "scope: project / pm-session",
       "entryPathLabel": "使用入口：",
       "entryPath": "项目详情 → 项目管理 → 设置",
+      "entryPathExternal": "项目详情 → 外部 MCP",
       "entryPathAgent": "Agent Studio → MCP",
       "toolCount": "{n} 个工具 · 点击查看详细说明",
       "openDetail": "打开详述",
@@ -404,6 +405,13 @@
           "desc": "创建 open 需求草稿；缺省标题为「未命名需求」"
         }
       }
+    },
+    "externalProjectMcp": {
+      "name": "external-project-mcp",
+      "desc": "项目级外部 MCP · Bearer 项目 API Key · 独立于内部 PM Leader",
+      "overview": "在项目详情 → 外部 MCP 开启总开关、勾选能力包并创建项目 API Key 后，外部 AI（Cursor/Claude 等）可通过 HTTP MCP 调用与内部 PM 同名的五包工具面。默认关闭；未授权或包未启用时拒绝 list/call。",
+      "convention": "配置入口：项目详情 → 外部 MCP。写范围：pm-workflow-write（工作流/Run/门禁）、pm-agent-fs（组织与 Agent workspace FS）、pm-prd-manager（仅创建草稿）；pm-progress 与 pm-workflow-read 为只读。不含 PM Leader 绑定、人类协作者或 Run 沙箱内文件。",
+      "entryPath": "项目详情 → 外部 MCP"
     }
   }
 }

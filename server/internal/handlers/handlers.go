@@ -54,6 +54,8 @@ type Handlers struct {
 	RunNotify             *services.RunNotifyService
 	Browser               *browser.Service
 	Audit                 *services.ProjectAuditService
+	ExternalMcp           *services.ProjectExternalMcpService
+	ProjectMcpKeys        *services.ProjectMcpApiKeyService
 	Onboarding            *services.OnboardingService
 	GateShare             *gateshare.Service
 	GateShareNonces       *gateshare.NonceStore

@@ -725,6 +725,8 @@ func AllModels() []any {
 		&GateSharePreviewTicket{},
 		&RequirementDraft{},
 		&NotificationReadPrefs{},
+		&ProjectExternalMcpSettings{},
+		&ProjectMcpApiKey{},
 	}
 }
 

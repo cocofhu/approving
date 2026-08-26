@@ -46,6 +46,10 @@ type Session struct {
 	// AllowedMcps, when non-nil, overrides Project.PmEnabledMcps for ServeRPC
 	// authorization (channel turns). nil keeps the Web/gate project binding check.
 	AllowedMcps []string
+	// External marks sessions created for project external MCP (Bearer API key).
+	External   bool
+	ApiKeyID   string
+	ApiKeyName string
 }
 
 // Host manages project-scoped PM MCP sessions and tool dispatch.
@@ -137,6 +141,38 @@ func (h *Host) Restore(projectID, threadID, userID, agentName, token string) {
 		return
 	}
 	_ = h.restore(projectID, threadID, userID, agentName, token, nil)
+}
+
+// RestoreExternal binds or refreshes an external MCP session for a project API key.
+// enabledPacks must already be filtered; may be empty (no tools exposed).
+func (h *Host) RestoreExternal(projectID, apiKeyID, apiKeyName string, enabledPacks []string) string {
+	projectID = strings.TrimSpace(projectID)
+	apiKeyID = strings.TrimSpace(apiKeyID)
+	if projectID == "" || apiKeyID == "" {
+		return ""
+	}
+	threadID := "external|" + apiKeyID
+	token := "extmcp-" + apiKeyID
+	allowed := append([]string{}, enabledPacks...)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	key := projectID + "|" + threadID
+	if old, ok := h.byKey[key]; ok && old != token {
+		delete(h.sessions, old)
+	}
+	h.sessions[token] = &Session{
+		Token:       token,
+		ProjectID:   projectID,
+		ThreadID:    threadID,
+		UserID:      "external-mcp",
+		AgentName:   "",
+		AllowedMcps: allowed,
+		External:    true,
+		ApiKeyID:    apiKeyID,
+		ApiKeyName:  strings.TrimSpace(apiKeyName),
+	}
+	h.byKey[key] = token
+	return token
 }
 
 // RestoreWithMcps re-binds a token with an explicit AllowedMcps override.
@@ -340,8 +376,16 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 		return
 	}
 	actor := services.SystemActor()
+	callerKind := ""
+	summary := "mcp " + mcpID + "/" + tool
 	if sess, ok := h.SessionFor(projectID, token); ok {
-		actor = services.ActorFromUsername(sess.UserID)
+		if sess.External {
+			callerKind = models.CallerKindExternal
+			actor = services.AuditActor{Username: "external-mcp:" + sess.ApiKeyName, Unattributable: false}
+			summary = "external mcp " + mcpID + "/" + tool
+		} else {
+			actor = services.ActorFromUsername(sess.UserID)
+		}
 	}
 	outcome := models.AuditOutcomeOK
 	if isErr {
@@ -351,21 +395,28 @@ func (h *Host) auditToolCall(projectID, token, mcpID, tool string, args map[stri
 	if s, ok := result.(string); ok && len(s) > 2000 {
 		resultPayload = s[:2000] + "…"
 	}
+	payload := map[string]any{
+		"mcp":       mcpID,
+		"tool":      tool,
+		"arguments": args,
+		"result":    resultPayload,
+		"isError":   isErr,
+	}
+	if sess, ok := h.SessionFor(projectID, token); ok && sess.External {
+		payload["external"] = true
+		payload["apiKeyId"] = sess.ApiKeyID
+		payload["apiKeyName"] = sess.ApiKeyName
+	}
 	h.recordAudit(services.AuditRecord{
 		ProjectID:    projectID,
 		Actor:        actor,
+		CallerKind:   callerKind,
 		Action:       models.AuditActionMCPCall,
 		ResourceType: "mcp",
 		ResourceID:   tool,
 		Outcome:      outcome,
-		Summary:      "mcp " + mcpID + "/" + tool,
-		Payload: map[string]any{
-			"mcp":       mcpID,
-			"tool":      tool,
-			"arguments": args,
-			"result":    resultPayload,
-			"isError":   isErr,
-		},
+		Summary:      summary,
+		Payload:      payload,
 	})
 }
 
