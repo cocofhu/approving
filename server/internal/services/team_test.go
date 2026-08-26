@@ -99,10 +99,7 @@ func TestTeamBootstrap_CreatesRoster(t *testing.T) {
 		t.Fatal(err)
 	}
 	mem := doc.Agents[impl]
-	if mem.ParentAgent != "Demo项目经理" {
-		t.Fatalf("parent=%s", mem.ParentAgent)
-	}
-	if len(mem.GroupIDs) != 1 || mem.GroupIDs[0] != cur.PipelineGroupID {
+	if _, ok := doc.Agents[impl]; !ok || len(mem.GroupIDs) != 1 || mem.GroupIDs[0] != cur.PipelineGroupID {
 		t.Fatalf("groups=%v want pipeline %s", mem.GroupIDs, cur.PipelineGroupID)
 	}
 }
@@ -234,23 +231,21 @@ func TestSetOrgMembership_ScopeDenied(t *testing.T) {
 	}
 
 	err = team.SetOrgMembership(SetOrgMembershipArgs{
-		SessionID:   cur.ID,
-		AgentName:   "Sc实现工程师",
-		GroupIDs:    []string{"grp_foreign"},
-		ParentAgent: cur.PMAgent,
+		SessionID: cur.ID,
+		AgentName: "Sc实现工程师",
+		GroupIDs:  []string{"grp_foreign"},
 	})
 	if !errors.Is(err, ErrTeamScopeDenied) {
 		t.Fatalf("want scope denied, got %v", err)
 	}
 
 	err = team.SetOrgMembership(SetOrgMembershipArgs{
-		SessionID:   cur.ID,
-		AgentName:   "Sc实现工程师",
-		GroupIDs:    []string{cur.PipelineGroupID},
-		ParentAgent: "someone-else",
+		SessionID: cur.ID,
+		AgentName: "Sc实现工程师",
+		GroupIDs:  []string{cur.PipelineGroupID},
 	})
-	if !errors.Is(err, ErrTeamScopeDenied) {
-		t.Fatalf("want parent denied, got %v", err)
+	if err != nil {
+		t.Fatalf("valid membership: %v", err)
 	}
 
 	_, err = team.CreateAgentFromTemplate(CreateFromTemplateArgs{

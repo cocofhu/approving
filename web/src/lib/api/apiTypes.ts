@@ -135,7 +135,6 @@ export interface OrgGroup {
 /** Per-agent organization membership (orthogonal to skill_profile identity). */
 export interface OrgAgentMembership {
   groupIds?: string[]
-  parentAgent?: string
 }
 
 /** Central organization index (GET/PUT /agents/org). */

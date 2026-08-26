@@ -8,9 +8,7 @@ import type { AgentOrg } from '@/lib/api/api'
 import {
   groupIdsOf,
   groupPath,
-  parentOf,
   setAgentMembership,
-  wouldCreateReportingCycle,
 } from '@/lib/agent/agentOrg'
 import {
   ACP_BACKENDS,
@@ -45,7 +43,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const parentDropdownOpen = ref(false)
 let configRootTouched = false
 
 const pendingProjectId = ref<string | null>(null)
@@ -55,7 +52,6 @@ watch(
   () => props.agentName,
   () => {
     configRootTouched = false
-    parentDropdownOpen.value = false
   },
 )
 
@@ -105,33 +101,11 @@ const metaGroupTiles = computed(() => {
   }))
 })
 
-const metaParentOptions = computed(() => props.agentNames.filter((n) => n !== props.agentName))
-
-const metaParentAgent = computed(() => (props.agentName ? parentOf(props.org, props.agentName) : ''))
-
 function toggleMetaGroup(groupId: string) {
   if (!props.agentName) return
   const cur = groupIdsOf(props.org, props.agentName)
   const next = cur.includes(groupId) ? cur.filter((id) => id !== groupId) : [...cur, groupId]
-  emit(
-    'update:org',
-    setAgentMembership(props.org, props.agentName, next, parentOf(props.org, props.agentName)),
-  )
-}
-
-function setMetaParent(parent: string) {
-  if (!props.agentName) return
-  if (parent && wouldCreateReportingCycle(props.org, props.agentName, parent)) {
-    emit('error', t('pages.agentStudio.org.reportingCycle'))
-    parentDropdownOpen.value = false
-    return
-  }
-  emit('error', '')
-  emit(
-    'update:org',
-    setAgentMembership(props.org, props.agentName, groupIdsOf(props.org, props.agentName), parent),
-  )
-  parentDropdownOpen.value = false
+  emit('update:org', setAgentMembership(props.org, props.agentName, next))
 }
 
 function selectAcpBackend(id: BackendId) {
@@ -239,51 +213,6 @@ const derivedPaths = computed(() => {
         <p v-else class="border border-dashed border-line px-3 py-3 text-[12px] text-txt3">
           {{ t('pages.agentStudio.org.noGroups') }}
         </p>
-      </div>
-
-      <div>
-        <div class="mb-1 flex items-center justify-between gap-2 text-[12px] font-medium text-txt2">
-          <span>{{ t('pages.agentStudio.org.parentLabel') }}</span>
-          <span class="text-[11px] font-normal text-txt3">{{ t('pages.agentStudio.org.parentMeta') }}</span>
-        </div>
-        <p class="mb-2.5 text-[11px] leading-5 text-txt3">{{ t('pages.agentStudio.org.parentHint') }}</p>
-        <div class="relative max-w-sm">
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 border border-line bg-base px-3 py-2.5 text-left text-[12.5px] text-txt transition hover:border-line-strong"
-            :class="parentDropdownOpen ? 'border-accent shadow-[0_0_0_1px_rgba(99,102,241,0.25)]' : ''"
-            @click="parentDropdownOpen = !parentDropdownOpen"
-          >
-            <span class="min-w-0 flex-1 truncate" :class="metaParentAgent ? '' : 'text-txt3'">
-              {{ metaParentAgent || t('pages.agentStudio.org.parentNone') }}
-            </span>
-            <Icon name="chevron-right" :size="14" class="shrink-0 text-txt3 transition" :class="parentDropdownOpen ? 'rotate-90' : 'rotate-90'" />
-          </button>
-          <div
-            v-if="parentDropdownOpen"
-            class="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-56 overflow-auto border border-line-strong bg-elevated p-1 shadow-card"
-          >
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[12.5px] transition"
-              :class="!metaParentAgent ? 'bg-accent-dim text-txt' : 'text-txt2 hover:bg-overlay hover:text-txt'"
-              @click="setMetaParent('')"
-            >
-              {{ t('pages.agentStudio.org.parentNone') }}
-            </button>
-            <button
-              v-for="opt in metaParentOptions"
-              :key="opt"
-              type="button"
-              class="flex w-full items-center gap-2 px-2.5 py-2 text-left text-[12.5px] transition"
-              :class="metaParentAgent === opt ? 'bg-accent-dim text-txt' : 'text-txt2 hover:bg-overlay hover:text-txt'"
-              @click="setMetaParent(opt)"
-            >
-              <Icon name="robot" :size="13" class="shrink-0 text-accent-2" />
-              <span class="truncate">{{ opt }}</span>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 

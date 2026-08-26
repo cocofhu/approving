@@ -1576,7 +1576,7 @@
       "errorPrefix": "出错:",
       "empty": "暂无 Agent。可「创建 Agent 团队」一键拉起项目与流水线角色，或「新建 Agent」创建单个。",
       "emptyTeamTitle": "用一个入口拉起整支团队",
-      "emptyTeamDesc": "填写项目背景与运行配置后自动起沙箱：创建项目、根组、项目经理与 9 名工程师，并挂好上下级。",
+      "emptyTeamDesc": "填写项目背景与运行配置后自动起沙箱：创建项目、根组、项目经理与 9 名工程师，并挂好虚拟组。",
       "emptyTeamCta": "创建 Agent 团队",
       "emptyTeamOrSingle": "或新建单个 Agent",
       "createTeam": "创建 Agent 团队",
@@ -1653,7 +1653,7 @@
         "renameBlockedHint": "请打开「管理」→ Agent 管理，在列表中使用 Rename。",
         "noSelection": "未选中 Agent。从左侧树选择，或打开 Agent 管理。",
         "metaTitle": "组织关系",
-        "metaIntro": "配置本 Agent 的虚拟组归属与汇报上级。仅用于 Studio 展示与管理，不改变 skill_profile 运行时行为。与项目的项目管理咨询通道无关。",
+        "metaIntro": "配置本 Agent 的虚拟组归属。仅用于 Studio 展示与管理，不改变 skill_profile 运行时行为。与项目的项目管理咨询通道无关。",
         "metaRenameHint": "名称请在 Agent 管理中重命名。此处不可编辑身份名称。",
         "groupsLabel": "所属虚拟组",
         "groupsMeta": "可多选",
@@ -2084,7 +2084,7 @@
           "pmName": "PM Agent 名称",
           "background": "项目背景",
           "backgroundPlaceholder": "描述项目目标、技术栈、仓库形态、流水线诉求等。将作为沙箱建团 Prompt。",
-          "backgroundHint": "类似 Prompt：确认后注入沙箱，据此生成根组、上下级与工程师团队。"
+          "backgroundHint": "类似 Prompt：确认后注入沙箱，据此生成根组与工程师团队。"
         },
         "acp": {
           "meta": "该配置用于 PM 及后续工程师的默认 ACP。"

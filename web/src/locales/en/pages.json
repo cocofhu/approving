@@ -1576,7 +1576,7 @@
       "errorPrefix": "Error:",
       "empty": "No agents yet. Use \"Create Agent team\" for a full roster, or \"New Agent\" for a single one.",
       "emptyTeamTitle": "Launch a full team from one entry",
-      "emptyTeamDesc": "After you fill project background and runtime config, a sandbox creates the project, root group, PM, and 9 engineers with reporting lines.",
+      "emptyTeamDesc": "After you fill project background and runtime config, a sandbox creates the project, root group, PM, and 9 engineers with virtual groups.",
       "emptyTeamCta": "Create Agent team",
       "emptyTeamOrSingle": "or create a single Agent",
       "createTeam": "Create Agent team",
@@ -1653,7 +1653,7 @@
         "renameBlockedHint": "Open Manage → Agent management, then use Rename on the list row.",
         "noSelection": "No agent selected. Pick one from the tree, or open Agent management.",
         "metaTitle": "Organization",
-        "metaIntro": "Configure this agent's virtual group and reporting line. Studio display only; does not change skill_profile runtime. Unrelated to the project's Project Management consult channel.",
+        "metaIntro": "Configure this agent's virtual group memberships. Studio display only; does not change skill_profile runtime. Unrelated to the project's Project Management consult channel.",
         "metaRenameHint": "Rename this agent in Agent management. The identity name is not editable here.",
         "groupsLabel": "Virtual groups",
         "groupsMeta": "Multi-select",
@@ -2084,7 +2084,7 @@
           "pmName": "PM Agent name",
           "background": "Project background",
           "backgroundPlaceholder": "Goals, stack, repos, pipeline needs… Used as the sandbox team-build prompt.",
-          "backgroundHint": "Like a prompt: injected into the sandbox to generate groups, reporting lines, and engineers."
+          "backgroundHint": "Like a prompt: injected into the sandbox to generate groups and engineers."
         },
         "acp": {
           "meta": "Used as the default ACP for the PM and engineers."

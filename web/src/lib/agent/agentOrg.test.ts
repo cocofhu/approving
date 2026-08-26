@@ -16,7 +16,6 @@ import {
   shouldSyncDraftAfterAssign,
   unifiedProjectId,
   wouldCreateGroupCycle,
-  wouldCreateReportingCycle,
   setAgentMembership,
   UNGROUPED_ID,
 } from './agentOrg'
@@ -31,8 +30,8 @@ const sample: AgentOrg = {
     { id: 'des2', name: '设计组', parentGroupId: 'prod' },
   ],
   agents: {
-    alice: { groupIds: ['eng', 'des'], parentAgent: '' },
-    bob: { groupIds: ['des'], parentAgent: 'alice' },
+    alice: { groupIds: ['eng', 'des'] },
+    bob: { groupIds: ['des'] },
     carol: {},
   },
 }
@@ -48,11 +47,6 @@ describe('agentOrg helpers', () => {
     expect(wouldCreateGroupCycle(sample, 'des', 'prod')).toBe(false)
   })
 
-  it('detects reporting cycles', () => {
-    const o = setAgentMembership(sample, 'alice', ['eng'], 'bob')
-    expect(wouldCreateReportingCycle(o, 'alice', 'bob')).toBe(true)
-  })
-
   it('applies move semantics and ungrouped clear', () => {
     let o = applyMoveAgent(sample, 'alice', 'eng', 'prod')
     expect(o.agents.alice.groupIds?.sort()).toEqual(['des', 'prod'])
@@ -60,15 +54,11 @@ describe('agentOrg helpers', () => {
     expect(o.agents.alice).toBeUndefined()
   })
 
-  it('removes from one group only and preserves parentAgent', () => {
-    // MULTI: peel eng only → still in des
+  it('removes from one group only', () => {
     let o = applyRemoveAgentFromGroup(sample, 'alice', 'eng')
     expect(o.agents.alice.groupIds).toEqual(['des'])
-    // last group → Ungrouped, keep parentAgent
     o = applyRemoveAgentFromGroup(sample, 'bob', 'des')
-    expect(o.agents.bob.groupIds).toBeUndefined()
-    expect(o.agents.bob.parentAgent).toBe('alice')
-    // Ungrouped / empty source is a no-op
+    expect(o.agents.bob).toBeUndefined()
     expect(applyRemoveAgentFromGroup(sample, 'carol', '__ungrouped__')).toBe(sample)
   })
 
@@ -217,7 +207,7 @@ describe('recursive members + unique project label', () => {
     const pipe = rows.find((r) => r.kind === 'group' && r.id === 'pipe')
     const des = rows.find((r) => r.kind === 'group' && r.id === 'des')
     const empty = rows.find((r) => r.kind === 'group' && r.id === 'empty')
-    expect(root?.kind === 'group' && root.count).toBe(2) // pm + alice direct
+    expect(root?.kind === 'group' && root.count).toBe(2)
     expect(pipe?.kind === 'group' && pipe.count).toBe(2)
     expect(pipe?.kind === 'group' && pipe.projectLabel).toBe('GitHub')
     expect(des?.kind === 'group' && des.projectLabel).toBe('')

@@ -47,7 +47,7 @@ func applyDeleteGroup(org AgentOrg, groupID string) (AgentOrg, error) {
 			gids = append(gids, parentID)
 		}
 		m.GroupIDs = uniqueNonEmpty(gids)
-		if len(m.GroupIDs) == 0 && m.ParentAgent == "" {
+		if len(m.GroupIDs) == 0 {
 			continue
 		}
 		agents[name] = m
@@ -86,7 +86,7 @@ func applyMoveAgent(org AgentOrg, agentName, sourceGroupID, targetGroupID string
 		gids = append(gids, target)
 		m.GroupIDs = uniqueNonEmpty(gids)
 	}
-	if len(m.GroupIDs) == 0 && m.ParentAgent == "" {
+	if len(m.GroupIDs) == 0 {
 		delete(org.Agents, agentName)
 	} else {
 		org.Agents[agentName] = m
