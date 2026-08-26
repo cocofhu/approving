@@ -1,6 +1,7 @@
 {
   "route": {
     "dashboard": "Home",
+    "stats": "Global Token analytics",
     "board": "Board",
     "projects": "Projects",
     "projectDetail": "Project detail",

@@ -13,6 +13,7 @@ import { agentsClient } from './clients/agentsClient'
 import { sandboxesClient } from './clients/sandboxesClient'
 import { artifactsClient } from './clients/artifactsClient'
 import { settingsClient } from './clients/settingsClient'
+import { statsClient } from './clients/statsClient'
 import { notificationsClient } from './clients/notificationsClient'
 
 export function isPaginated<T>(data: T[] | PaginatedResponse<T>): data is PaginatedResponse<T> {
@@ -28,6 +29,7 @@ export const api = {
   ...sandboxesClient,
   ...artifactsClient,
   ...settingsClient,
+  ...statsClient,
   ...notificationsClient,
 }
 

@@ -1,24 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  type ChartOptions,
-  type TooltipModel,
-  type Chart,
-} from 'chart.js'
-import { Line } from 'vue-chartjs'
+import VChart from 'vue-echarts'
+import type { ECElementEvent } from 'echarts/core'
+import { registerECharts } from '@/components/charts/echartsSetup'
+import { CHART_AXIS, CHART_GRID, fmtCompactAxis } from '@/components/charts/chartTheme'
 import type { TokenStatsBucket } from '@/lib/shared/types'
 import { fmtTokenCount } from '@/lib/run/tokenUsage'
 import { TOKEN_SOURCE_COLORS, formatBucketLabel, placeTrendTooltipAfter } from './tokenStatsShared'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip)
+registerECharts()
 
 const props = defineProps<{
   trend: TokenStatsBucket[]
@@ -35,148 +26,109 @@ const tip = ref({ show: false, x: 0, y: 0, idx: -1 })
 const tipEl = ref<HTMLElement | null>(null)
 const tipBucket = computed(() => (tip.value.idx >= 0 ? props.trend[tip.value.idx] : null))
 
-type LastCaret = { canvas: HTMLCanvasElement; caretX: number; caretY: number }
-let lastCaret: LastCaret | null = null
-
-function fmtCompact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
-  return String(n)
-}
-
 function hideTip() {
-  lastCaret = null
   tip.value = { ...tip.value, show: false, idx: -1 }
 }
 
-function repositionTip() {
-  const el = tipEl.value
-  if (!tip.value.show || !lastCaret || !el) return
-  const { canvas, caretX, caretY } = lastCaret
-  const canvasRect = canvas.getBoundingClientRect()
+function onChartMouseMove(params: ECElementEvent) {
+  if (params.componentType !== 'series' || params.dataIndex == null) return
+  const idx = params.dataIndex
+  tip.value = { show: true, x: tip.value.x, y: tip.value.y, idx }
+  const ev = params.event?.event as MouseEvent | undefined
+  if (!ev || !tipEl.value) return
   const pos = placeTrendTooltipAfter({
-    caretX: canvasRect.left + caretX,
-    caretY: canvasRect.top + caretY,
-    tipW: el.offsetWidth,
-    tipH: el.offsetHeight,
+    caretX: ev.clientX,
+    caretY: ev.clientY,
+    tipW: tipEl.value.offsetWidth || 168,
+    tipH: tipEl.value.offsetHeight || 72,
   })
-  if (tip.value.x !== pos.left || tip.value.y !== pos.top) {
-    tip.value = { ...tip.value, x: pos.left, y: pos.top }
-  }
+  tip.value = { ...tip.value, x: pos.left, y: pos.top }
 }
 
-async function schedulePlaceTip() {
-  await nextTick()
-  repositionTip()
-  if (tipEl.value && (tipEl.value.offsetWidth === 0 || tipEl.value.offsetHeight === 0)) {
-    requestAnimationFrame(() => repositionTip())
-  }
-}
-
-function externalTooltip(context: { chart: Chart; tooltip: TooltipModel<'line'> }) {
-  const { chart, tooltip } = context
-
-  if (tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
-    hideTip()
-    return
-  }
-
-  const idx = tooltip.dataPoints[0]!.dataIndex
-  lastCaret = { canvas: chart.canvas, caretX: tooltip.caretX, caretY: tooltip.caretY }
-  tip.value = {
-    show: true,
-    x: tip.value.show ? tip.value.x : 0,
-    y: tip.value.show ? tip.value.y : 0,
-    idx,
-  }
-  return schedulePlaceTip()
-}
-
-function onViewportChange() {
-  if (tip.value.show) repositionTip()
-}
-
-const chartData = computed(() => {
+const chartOption = computed(() => {
   const labels = props.trend.map((b) => formatBucketLabel(b.bucket, props.bucketWidth))
   const workflow = props.trend.map((b) => b.workflowTotal || 0)
   const pm = props.trend.map((b) => b.pmTotal || 0)
   return {
-    labels,
-    datasets: [
+    grid: CHART_GRID,
+    tooltip: { show: false },
+    xAxis: {
+      type: 'category',
+      data: labels,
+      ...CHART_AXIS,
+      splitLine: { show: false },
+      axisLabel: { ...CHART_AXIS.axisLabel, maxInterval: Math.ceil(labels.length / 8) },
+    },
+    yAxis: {
+      type: 'value',
+      ...CHART_AXIS,
+      axisLabel: { ...CHART_AXIS.axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
+    },
+    series: [
       {
-        label: 'workflow',
-        data: workflow,
-        borderColor: WF_COLOR,
-        backgroundColor: 'rgba(109, 92, 255, 0.28)',
-        borderWidth: 1.8,
-        fill: true,
-        tension: 0.15,
-        pointRadius: 0,
-        pointHoverRadius: 0,
+        type: 'line',
+        name: 'workflow',
         stack: 'source',
+        data: workflow,
+        lineStyle: { color: WF_COLOR, width: 1.8 },
+        areaStyle: { color: 'rgba(109, 92, 255, 0.28)' },
+        showSymbol: false,
+        smooth: true,
       },
       {
-        label: 'pm',
-        data: pm,
-        borderColor: PM_COLOR,
-        backgroundColor: 'rgba(109, 92, 255, 0.14)',
-        borderWidth: 1.8,
-        borderDash: [5, 4],
-        fill: true,
-        tension: 0.15,
-        pointRadius: 3.5,
-        pointHoverRadius: 5,
-        pointBackgroundColor: '#fff',
-        pointBorderColor: PM_COLOR,
-        pointBorderWidth: 2,
-        pointHoverBackgroundColor: '#fff',
-        pointHoverBorderColor: PM_COLOR,
-        pointHoverBorderWidth: 2,
+        type: 'line',
+        name: 'pm',
         stack: 'source',
+        data: pm,
+        lineStyle: { color: PM_COLOR, width: 1.8, type: [5, 4] as unknown as 'dashed' },
+        areaStyle: { color: 'rgba(109, 92, 255, 0.14)' },
+        symbol: 'circle',
+        symbolSize: 7,
+        itemStyle: { color: '#fff', borderColor: PM_COLOR, borderWidth: 2 },
+        smooth: true,
       },
     ],
   }
 })
 
-const chartOptions = computed<ChartOptions<'line'>>(() => ({
-  responsive: true,
+/** Legacy expose for unit tests (ECharts option shape). */
+const chartOptions = computed(() => ({
   maintainAspectRatio: false,
-  interaction: { mode: 'index', intersect: false },
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      enabled: false,
-      external: externalTooltip,
-    },
-  },
-  scales: {
-    x: {
-      stacked: true,
-      grid: { display: false },
-      ticks: {
-        maxTicksLimit: 8,
-        autoSkip: true,
-        maxRotation: 0,
-        minRotation: 0,
-        color: '#9aa1ad',
-        font: { size: 10 },
-      },
-      border: { display: false },
-    },
-    y: {
-      stacked: true,
-      beginAtZero: true,
-      grid: { color: '#eef0f3' },
-      ticks: {
-        maxTicksLimit: 4,
-        color: '#9aa1ad',
-        font: { size: 10 },
-        callback: (value) => fmtCompact(Number(value)),
-      },
-      border: { display: false },
-    },
-  },
+  scales: { x: { ticks: { maxTicksLimit: 8, autoSkip: true } } },
+  plugins: { tooltip: { enabled: false, external: externalTooltip } },
 }))
+
+const chartData = computed(() => ({
+  labels: props.trend.map((b) => formatBucketLabel(b.bucket, props.bucketWidth)),
+  datasets: [
+    { label: 'workflow', data: props.trend.map((b) => b.workflowTotal || 0), borderColor: WF_COLOR },
+    {
+      label: 'pm',
+      data: props.trend.map((b) => b.pmTotal || 0),
+      borderColor: PM_COLOR,
+      borderDash: [5, 4],
+    },
+  ],
+}))
+
+function externalTooltip(context: {
+  chart: { canvas: HTMLCanvasElement }
+  tooltip: { opacity: number; caretX: number; caretY: number; dataPoints?: { dataIndex: number }[] }
+}) {
+  const { tooltip } = context
+  if (tooltip.opacity === 0 || !tooltip.dataPoints?.length) {
+    hideTip()
+    return
+  }
+  const idx = tooltip.dataPoints[0]!.dataIndex
+  tip.value = { show: true, x: tooltip.caretX, y: tooltip.caretY, idx }
+}
+
+function onViewportChange() {
+  if (tip.value.show && tipEl.value) {
+    // reposition handled on next mousemove
+  }
+}
 
 watch(
   () => props.trend,
@@ -194,7 +146,6 @@ onBeforeUnmount(() => {
   hideTip()
 })
 
-/** Exposed for unit tests: option mapping + external tooltip trigger. */
 defineExpose({ chartOptions, chartData, externalTooltip, hideTip })
 </script>
 
@@ -225,7 +176,7 @@ defineExpose({ chartOptions, chartData, externalTooltip, hideTip })
       </span>
     </div>
     <div data-testid="token-trend-chart" class="h-[calc(100%-22px)] w-full">
-      <Line :data="chartData" :options="chartOptions" />
+      <VChart :option="chartOption" autoresize class="h-full w-full" @mousemove="onChartMouseMove" @globalout="hideTip" />
     </div>
   </div>
   <Teleport to="body">

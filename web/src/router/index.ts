@@ -15,6 +15,7 @@ const routes: RouteRecordRaw[] = [
   },
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { titleKey: 'route.dashboard' } },
+  { path: '/stats', name: 'stats', component: () => import('@/views/TokenAnalyticsView.vue'), meta: { titleKey: 'route.stats' } },
   { path: '/board', name: 'board', component: () => import('@/views/BoardRedirectView.vue'), meta: { titleKey: 'route.board' } },
   { path: '/projects', name: 'projects', component: () => import('@/views/ProjectListView.vue'), meta: { titleKey: 'route.projects' } },
   { path: '/projects/:id', name: 'project-detail', component: () => import('@/views/ProjectDetailView.vue'), meta: { titleKey: 'route.projectDetail' } },

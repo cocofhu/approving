@@ -10,6 +10,19 @@ import TokenDonutChart from './TokenDonutChart.vue'
 import TokenWorkflowRank from './TokenWorkflowRank.vue'
 import { TOKEN_SOURCE_COLORS } from './tokenStatsShared'
 
+vi.mock('vue-echarts', () => ({
+  default: {
+    name: 'VChart',
+    template: '<div data-testid="mock-vchart" class="h-full w-full"><canvas /></div>',
+    props: ['option'],
+    emits: ['mousemove', 'globalout', 'click'],
+  },
+}))
+
+vi.mock('@/components/charts/echartsSetup', () => ({
+  registerECharts: () => {},
+}))
+
 const i18n = () =>
   createI18n({
     legacy: false,
@@ -36,7 +49,7 @@ function sampleTrend(n: number) {
 }
 
 describe('Token charts (g2.3/g2.4)', () => {
-  it('renders trend chart.js canvas from buckets including a zero day (g2.1)', () => {
+  it('renders ECharts trend from buckets including a zero day (g2.1)', () => {
     const wrapper = mount(TokenTrendChart, {
       props: {
         bucketWidth: 'day',
@@ -72,8 +85,8 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(legend.find('[data-kind="pm"]').text()).toContain('项目管理')
     expect(legend.find('[data-kind="workflow"]').text()).not.toMatch(/^\s*workflow\s*$/i)
     expect(legend.find('[data-kind="pm"]').text()).not.toMatch(/^\s*pm\s*$/i)
-    expect(wrapper.find('canvas').exists()).toBe(true)
-    // Chart.js Canvas path — no legacy non-uniform SVG stretch host
+    // ECharts renders canvas inside the chart host
+    expect(wrapper.find('[data-testid="token-trend-chart"] canvas').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-trend-svg"]').exists()).toBe(false)
     expect(wrapper.html()).not.toMatch(/preserveAspectRatio\s*=\s*["']none["']/)
     const exposed = wrapper.vm as unknown as {
@@ -150,13 +163,13 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect((wrap.element as HTMLElement).style.height).toBe('200px')
     expect(wrapper.find('svg[preserveAspectRatio="none"]').exists()).toBe(false)
     expect(wrapper.html()).not.toContain('preserveAspectRatio="none"')
-    // Wide container must still host canvas (aspect handled by Chart.js, not SVG none)
+    // Wide container must still host ECharts canvas
     ;(wrap.element as HTMLElement).style.width = '1280px'
     expect(wrapper.find('[data-testid="token-trend-chart"] canvas').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('trend wrap uses min-w-0 + overflow-x-clip to prevent Chart.js flex overflow (g3.1)', () => {
+  it('trend wrap uses min-w-0 + overflow-x-clip to prevent ECharts flex overflow (g3.1)', () => {
     const wrapper = mount(TokenTrendChart, {
       props: {
         bucketWidth: 'day',
@@ -210,7 +223,7 @@ describe('Token charts (g2.3/g2.4)', () => {
       },
       global: { plugins: [i18n()] },
     })
-    expect(wrapper.find('[data-testid="token-donut-svg"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="token-donut-chart"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('输入')
     expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('输出')
     expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('缓存读')
@@ -222,9 +235,8 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('19.4%')
     expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('11.1%')
     expect(wrapper.text()).toContain('总量')
-    // g3.3: center total stays compact-formatted composition.total (180 → 180)
-    expect(wrapper.find('[data-testid="token-donut-svg"]').text()).toContain('180')
-    expect(wrapper.find('[data-testid="token-donut-svg"]').attributes('aria-label')).toBe('用量构成')
+    expect(wrapper.find('[data-testid="token-donut-chart"]').text()).toContain('180')
+    expect(wrapper.find('[data-testid="token-donut-chart"]').attributes('aria-label')).toBe('用量构成')
     wrapper.unmount()
   })
 
@@ -241,13 +253,9 @@ describe('Token charts (g2.3/g2.4)', () => {
       },
       global: { plugins: [i18n()] },
     })
-    const slice = wrapper.find('[data-testid="token-donut-svg"] path')
-    expect(slice.exists()).toBe(true)
-    // Provide a MouseEvent so activate() can position/show the tip (legend hover skips tip).
-    await slice.trigger('mouseenter', {
-      clientX: 40,
-      clientY: 40,
-    })
+    const legend = wrapper.find('[data-testid="token-donut-legend"]')
+    expect(legend.find('li').exists()).toBe(true)
+    await legend.find('li').trigger('click', { clientX: 40, clientY: 40 })
     const tip = wrapper.find('[data-testid="token-donut-tooltip"]')
     expect(tip.exists()).toBe(true)
     expect(tip.text()).toContain('输入')
@@ -271,8 +279,8 @@ describe('Token charts (g2.3/g2.4)', () => {
     })
     const row = wrapper.find('[data-testid="token-donut-row"]')
     expect(row.classes()).toEqual(expect.arrayContaining(['flex-col', 'sm:flex-row']))
-    const svg = wrapper.find('[data-testid="token-donut-svg"]')
-    expect(svg.classes()).toEqual(expect.arrayContaining(['h-[120px]', 'w-[120px]', 'sm:h-[150px]', 'sm:w-[150px]']))
+    const chart = wrapper.find('[data-testid="token-donut-chart"]')
+    expect(chart.classes()).toEqual(expect.arrayContaining(['h-[120px]', 'w-[120px]', 'sm:h-[150px]', 'sm:w-[150px]']))
     const legend = wrapper.find('[data-testid="token-donut-legend"]')
     expect(legend.classes()).toEqual(expect.arrayContaining(['w-full']))
     wrapper.unmount()

@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "首页",
+    "stats": "统计",
     "board": "看板",
     "projects": "项目",
     "workflows": "工作流",

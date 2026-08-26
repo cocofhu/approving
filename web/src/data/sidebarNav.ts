@@ -5,6 +5,7 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
   {
     items: [
       { to: '/dashboard', icon: 'dashboard', labelKey: 'nav.dashboard' },
+      { to: '/stats', icon: 'chart', labelKey: 'nav.stats' },
       { to: '/projects', icon: 'folder', labelKey: 'nav.projects' },
       { to: '/runs', icon: 'runs', labelKey: 'nav.runs' },
       { to: '/gates', icon: 'gate', labelKey: 'nav.gates' },
