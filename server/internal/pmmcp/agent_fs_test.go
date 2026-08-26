@@ -123,6 +123,7 @@ func TestPmFSDirectIndirectSelfWrite(t *testing.T) {
 			"agentName": agent,
 			"path":      "AGENTS.md",
 			"content":   "edited-by-leader:" + agent,
+			"reason":    "test write",
 		})
 		if st != 200 || isErr {
 			t.Fatalf("%s write failed: %s result=%v", agent, raw, result)
@@ -151,6 +152,7 @@ func TestPmFSRejectNonReportAndCrossProject(t *testing.T) {
 		"agentName": "outsider",
 		"path":      "AGENTS.md",
 		"content":   "nope",
+		"reason":    "test",
 	})
 	if isErr {
 		t.Fatalf("same-project outsider should be allowed: %v", result)
@@ -170,6 +172,7 @@ func TestPmFSPathEscapeRejected(t *testing.T) {
 		"agentName": "alice",
 		"path":      "../escape.md",
 		"content":   "x",
+		"reason":    "test",
 	})
 	if !isErr || !strings.Contains(result["error"].(string), "invalid workspace path") {
 		t.Fatalf("escape: %v", result)
@@ -210,6 +213,7 @@ func TestPmFSTooLargeRejected(t *testing.T) {
 		"agentName": "alice",
 		"path":      "big.md",
 		"content":   big,
+		"reason":    "test",
 	})
 	if !isErr || !strings.Contains(result["error"].(string), "1MiB") {
 		t.Fatalf("size: %v", result)
@@ -218,9 +222,9 @@ func TestPmFSTooLargeRejected(t *testing.T) {
 
 func TestPmFSListDeleteMkdirRename(t *testing.T) {
 	pid, tok, h, skill, _ := setupAgentFSHost(t)
-	callAgentFSTool(t, h, pid, tok, "pm_fs_mkdir", map[string]any{"agentName": "bob", "path": "rules"})
+	callAgentFSTool(t, h, pid, tok, "pm_fs_mkdir", map[string]any{"agentName": "bob", "path": "rules", "reason": "mkdir test"})
 	_, _, isErr, raw := callAgentFSTool(t, h, pid, tok, "pm_fs_write", map[string]any{
-		"agentName": "bob", "path": "rules/a.md", "content": "rule-a",
+		"agentName": "bob", "path": "rules/a.md", "content": "rule-a", "reason": "write rule",
 	})
 	if isErr {
 		t.Fatal(raw)
@@ -236,7 +240,7 @@ func TestPmFSListDeleteMkdirRename(t *testing.T) {
 		t.Fatalf("entries=%v", result)
 	}
 	_, _, isErr, raw = callAgentFSTool(t, h, pid, tok, "pm_fs_rename", map[string]any{
-		"agentName": "bob", "path": "rules/a.md", "toPath": "rules/b.md",
+		"agentName": "bob", "path": "rules/a.md", "toPath": "rules/b.md", "reason": "rename",
 	})
 	if isErr {
 		t.Fatal(raw)
@@ -246,13 +250,66 @@ func TestPmFSListDeleteMkdirRename(t *testing.T) {
 		t.Fatalf("rename disk=%q err=%v", got, err)
 	}
 	_, _, isErr, raw = callAgentFSTool(t, h, pid, tok, "pm_fs_delete", map[string]any{
-		"agentName": "bob", "path": "rules",
+		"agentName": "bob", "path": "rules", "reason": "cleanup",
 	})
 	if isErr {
 		t.Fatal(raw)
 	}
 	if _, err := skill.ReadWorkspaceFile("bob", "rules/b.md"); err == nil {
 		t.Fatal("expected deleted")
+	}
+}
+
+func TestPmFSReasonRequired(t *testing.T) {
+	pid, tok, h, skill, _ := setupAgentFSHost(t)
+	_, result, isErr, _ := callAgentFSTool(t, h, pid, tok, "pm_fs_write", map[string]any{
+		"agentName": "alice",
+		"path":      "AGENTS.md",
+		"content":   "x",
+	})
+	if !isErr || !strings.Contains(result["error"].(string), "reason") {
+		t.Fatalf("want reason error: %v", result)
+	}
+	if _, err := skill.ReadWorkspaceFile("alice", "AGENTS.md"); err == nil {
+		t.Fatal("write without reason must not persist")
+	}
+}
+
+func TestPmFSHistoryDiffRestore(t *testing.T) {
+	pid, tok, h, skill, _ := setupAgentFSHost(t)
+	_, result, isErr, _ := callAgentFSTool(t, h, pid, tok, "pm_fs_write", map[string]any{
+		"agentName": "alice",
+		"path":      "AGENTS.md",
+		"content":   "v1",
+		"reason":    "seed",
+	})
+	if isErr {
+		t.Fatalf("write: %v", result)
+	}
+	sha, _ := result["sha"].(string)
+	if sha == "" {
+		t.Fatal("missing sha")
+	}
+	_, result, isErr, _ = callAgentFSTool(t, h, pid, tok, "pm_fs_history", map[string]any{"agentName": "alice"})
+	if isErr || result["revisions"] == nil {
+		t.Fatalf("history: %v", result)
+	}
+	_, result, isErr, _ = callAgentFSTool(t, h, pid, tok, "pm_fs_diff", map[string]any{"agentName": "alice", "sha": sha})
+	if isErr {
+		t.Fatalf("diff: %v", result)
+	}
+	_, _, isErr, _ = callAgentFSTool(t, h, pid, tok, "pm_fs_write", map[string]any{
+		"agentName": "alice", "path": "AGENTS.md", "content": "v2", "reason": "update",
+	})
+	_, result, isErr, _ = callAgentFSTool(t, h, pid, tok, "pm_fs_restore", map[string]any{
+		"agentName": "alice", "sha": sha, "reason": "rollback test",
+	})
+	if isErr {
+		t.Fatalf("restore: %v", result)
+	}
+	got, _ := skill.ReadWorkspaceFile("alice", "AGENTS.md")
+	if got != "v1" {
+		t.Fatalf("restored=%q", got)
 	}
 }
 
@@ -273,7 +330,10 @@ func TestPmAgentFSToolsList(t *testing.T) {
 	for _, tool := range listResp.Result.Tools {
 		names[tool["name"].(string)] = true
 	}
-	for _, want := range []string{"pm_get_org", "pm_fs_list", "pm_fs_read", "pm_fs_write", "pm_fs_delete", "pm_fs_mkdir", "pm_fs_rename"} {
+	for _, want := range []string{
+		"pm_get_org", "pm_fs_list", "pm_fs_read", "pm_fs_write", "pm_fs_delete", "pm_fs_mkdir", "pm_fs_rename",
+		"pm_fs_history", "pm_fs_diff", "pm_fs_restore",
+	} {
 		if !names[want] {
 			t.Fatalf("missing tool %s in %v", want, names)
 		}

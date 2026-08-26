@@ -34,7 +34,8 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 	case "pm_list_agent_templates", "pm_create_agent_from_template", "pm_set_org_membership", "pm_ensure_child_group":
 		return h.callTeamTools(sess, skill, name, args)
 
-	case "pm_fs_list", "pm_fs_read", "pm_fs_write", "pm_fs_delete", "pm_fs_mkdir", "pm_fs_rename":
+	case "pm_fs_list", "pm_fs_read", "pm_fs_write", "pm_fs_delete", "pm_fs_mkdir", "pm_fs_rename",
+		"pm_fs_history", "pm_fs_diff", "pm_fs_restore":
 		agentName := strings.TrimSpace(platformmcp.StrArg(args, "agentName"))
 		if agentName == "" {
 			return map[string]any{"error": "agentName is required"}, true
@@ -56,12 +57,43 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 				return map[string]any{"error": workspaceFSError(err)}, true
 			}
 			return map[string]any{"agentName": agentName, "path": path, "content": content}, false
+		case "pm_fs_history":
+			revs, err := skill.Vcs.ListRevisions(agentName, 100)
+			if err != nil {
+				return map[string]any{"error": err.Error()}, true
+			}
+			return map[string]any{"agentName": agentName, "revisions": revs}, false
+		case "pm_fs_diff":
+			sha := strings.TrimSpace(platformmcp.StrArg(args, "sha"))
+			if sha == "" {
+				return map[string]any{"error": "sha is required"}, true
+			}
+			diff, err := skill.Vcs.DiffRevision(agentName, sha)
+			if err != nil {
+				return map[string]any{"error": workspaceFSError(err)}, true
+			}
+			return map[string]any{"agentName": agentName, "sha": sha, "diff": diff}, false
+		case "pm_fs_restore":
+			sha := strings.TrimSpace(platformmcp.StrArg(args, "sha"))
+			if sha == "" {
+				return map[string]any{"error": "sha is required"}, true
+			}
+			reason := strings.TrimSpace(platformmcp.StrArg(args, "reason"))
+			opts := h.workspaceWriteOpts(sess)
+			newSha, err := skill.RestoreWorkspaceVcs(agentName, sha, opts.Author, reason)
+			if err != nil {
+				return map[string]any{"error": workspaceFSError(err)}, true
+			}
+			return map[string]any{"ok": true, "agentName": agentName, "sha": newSha, "restoredTo": sha}, false
 		case "pm_fs_write":
 			content, _ := args["content"].(string)
 			if _, has := args["content"]; !has {
 				return map[string]any{"error": "content is required"}, true
 			}
-			if err := skill.WriteWorkspaceFile(agentName, path, content); err != nil {
+			opts := h.workspaceWriteOpts(sess)
+			opts.Reason = strings.TrimSpace(platformmcp.StrArg(args, "reason"))
+			commitSha, err := skill.WriteWorkspaceFileVcs(agentName, path, content, opts)
+			if err != nil {
 				return map[string]any{"error": workspaceFSError(err)}, true
 			}
 			return map[string]any{
@@ -69,30 +101,57 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 				"agentName": agentName,
 				"path":      path,
 				"bytes":     len(content),
+				"sha":       commitSha,
 				"note":      "persisted to host workspace; refresh or reopen Agent Studio to see changes; unsaved Studio drafts may overwrite on Save",
 			}, false
 		case "pm_fs_delete":
-			if err := skill.DeleteWorkspacePath(agentName, path); err != nil {
+			opts := h.workspaceWriteOpts(sess)
+			opts.Reason = strings.TrimSpace(platformmcp.StrArg(args, "reason"))
+			commitSha, err := skill.DeleteWorkspacePathVcs(agentName, path, opts)
+			if err != nil {
 				return map[string]any{"error": workspaceFSError(err)}, true
 			}
-			return map[string]any{"ok": true, "agentName": agentName, "path": path}, false
+			return map[string]any{"ok": true, "agentName": agentName, "path": path, "sha": commitSha}, false
 		case "pm_fs_mkdir":
-			if err := skill.MkdirWorkspace(agentName, path); err != nil {
+			opts := h.workspaceWriteOpts(sess)
+			opts.Reason = strings.TrimSpace(platformmcp.StrArg(args, "reason"))
+			commitSha, err := skill.MkdirWorkspaceVcs(agentName, path, opts)
+			if err != nil {
 				return map[string]any{"error": workspaceFSError(err)}, true
 			}
-			return map[string]any{"ok": true, "agentName": agentName, "path": path}, false
+			return map[string]any{"ok": true, "agentName": agentName, "path": path, "sha": commitSha}, false
 		case "pm_fs_rename":
 			toPath := platformmcp.StrArg(args, "toPath")
 			if strings.TrimSpace(toPath) == "" {
 				return map[string]any{"error": "toPath is required"}, true
 			}
-			if err := skill.RenameWorkspace(agentName, path, toPath); err != nil {
+			opts := h.workspaceWriteOpts(sess)
+			opts.Reason = strings.TrimSpace(platformmcp.StrArg(args, "reason"))
+			commitSha, err := skill.RenameWorkspaceVcs(agentName, path, toPath, opts)
+			if err != nil {
 				return map[string]any{"error": workspaceFSError(err)}, true
 			}
-			return map[string]any{"ok": true, "agentName": agentName, "path": path, "toPath": toPath}, false
+			return map[string]any{"ok": true, "agentName": agentName, "path": path, "toPath": toPath, "sha": commitSha}, false
 		}
 	}
 	return map[string]any{"error": "unknown tool: " + name}, true
+}
+
+func (h *Host) workspaceWriteOpts(sess *Session) services.WorkspaceWriteOpts {
+	author := strings.TrimSpace(sess.AgentName)
+	source := services.VcsSourcePmMCP
+	if sess.External {
+		source = services.VcsSourceExternalMCP
+		if name := strings.TrimSpace(sess.ApiKeyName); name != "" {
+			author = name
+		} else {
+			author = "external-mcp"
+		}
+	}
+	if author == "" {
+		author = "pm-mcp"
+	}
+	return services.WorkspaceWriteOpts{Author: author, Source: source}
 }
 
 // authorizeAgentFSTarget allows PM to manage any agent bound to the same project (incl. self).
@@ -112,6 +171,10 @@ func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.SkillServic
 
 func workspaceFSError(err error) string {
 	switch {
+	case errors.Is(err, services.ErrVcsReasonRequired):
+		return "reason is required and must be non-empty"
+	case errors.Is(err, services.ErrVcsRevisionMiss):
+		return "revision not found"
 	case errors.Is(err, services.ErrWorkspacePathInvalid):
 		return "invalid workspace path (escape/symlink rejected): " + err.Error()
 	case errors.Is(err, services.ErrWorkspaceFileTooLarge):
@@ -127,6 +190,9 @@ func workspaceFSError(err error) string {
 	case errors.Is(err, services.ErrWorkspaceExists):
 		return "destination already exists"
 	default:
+		if strings.Contains(err.Error(), "版本记录失败") {
+			return err.Error()
+		}
 		return err.Error()
 	}
 }

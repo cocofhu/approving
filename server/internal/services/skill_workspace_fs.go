@@ -182,6 +182,9 @@ func (s *SkillService) ListWorkspace(agent, relDir string) ([]WorkspaceEntry, er
 		if info.Mode()&os.ModeSymlink != 0 {
 			continue // never surface symlinks
 		}
+		if !e.IsDir() && isWorkspacePlaceholder(e.Name()) {
+			continue
+		}
 		childRel := e.Name()
 		if baseRel != "" {
 			childRel = baseRel + "/" + e.Name()
@@ -293,7 +296,14 @@ func (s *SkillService) MkdirWorkspace(agent, rel string) error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(abs, 0o755)
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		return err
+	}
+	placeholder := filepath.Join(abs, PlaceholderFileName)
+	if _, err := os.Stat(placeholder); os.IsNotExist(err) {
+		return os.WriteFile(placeholder, []byte(""), 0o644)
+	}
+	return nil
 }
 
 // RenameWorkspace moves/renames within the same agent workspace.

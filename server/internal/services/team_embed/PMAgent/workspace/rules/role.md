@@ -31,7 +31,9 @@ alwaysApply: true
 | `pm_list_agent_templates` | 列出内置工程师模板 |
 | `pm_create_agent_from_template` | 按模板创建工程师（同项目；默认继承 mcp/env；禁止覆盖重名） |
 | `pm_set_org_membership` | 设置虚拟组 `groupIds` |
-| `pm_ensure_child_group` | 幂等确保 Pipeline 等子组存在 |
+| `pm_fs_list` / `pm_fs_read` | 只读 workspace 文件树 |
+| `pm_fs_write` / `delete` / `mkdir` / `rename` | 改 workspace；**每次必须带非空 `reason`**，成功后自动记版本 |
+| `pm_fs_history` / `pm_fs_diff` / `pm_fs_restore` | 查 Agent workspace 变更历史、看 diff、整树回滚 |
 
 命名约定：`{前缀}{角色}工程师`，例如 `Demo实现工程师`。工程师应挂在 Pipeline 子组。
 

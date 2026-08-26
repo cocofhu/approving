@@ -1734,6 +1734,31 @@
         "newFolderInFolder": "在此新建文件夹",
         "more": "更多"
       },
+      "workspaceHistory": {
+        "title": "版本历史",
+        "empty": "尚无版本记录。首次保存或通过 MCP 写入后会出现在这里。",
+        "diffTitle": "diff · {sha} · 相对上一次",
+        "noDiff": "（无文件差异）",
+        "restore": "回滚到此版本",
+        "restoreConfirmTitle": "回滚到此版本？",
+        "restoreConfirmBody": "工作目录会恢复成该版本的整棵树。之后新建的文件会被删除。旧历史仍在，最上面会多一条 restore 记录。",
+        "restoreReason": "回滚原因",
+        "restoreConfirm": "确认回滚",
+        "restoreDefault": "回滚到 {sha}：撤销误改",
+        "restorePath": "整树恢复",
+        "baselinePath": "整树快照（基线）",
+        "saveTitle": "保存工作目录",
+        "saveHint": "若本次保存改了多个文件，会按路径拆成多条历史，原因相同。",
+        "saveReasonLabel": "变更原因",
+        "defaultSaveReason": "Studio 保存",
+        "source": {
+          "system": "基线",
+          "studio": "Studio",
+          "pm-mcp": "PM MCP",
+          "external-mcp": "外部 MCP",
+          "restore": "回滚"
+        }
+      },
       "mcp": {
         "hint": "整份 mcp.json 由你配置,写入 {configRoot}/mcp.json 并在 ACP session 注入。新建 Agent 默认带平台 artifact-store,可自行增删。项目管理 MCP 需手动添加,与 artifact-store 并列、互不合并。",
         "formEdit": "表单编辑",

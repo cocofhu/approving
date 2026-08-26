@@ -174,6 +174,12 @@ const {
   chooseAgentFromSheet,
   openManageFromSheet,
   save,
+  promptSave,
+  confirmSaveWithReason,
+  showSaveReasonModal,
+  saveReason,
+  historyRefreshKey,
+  reloadAgentFromServer,
   doExport,
   triggerExport,
   cancelUnsavedExport,
@@ -430,7 +436,7 @@ const {
               variant="primary"
               class="min-h-11"
               :disabled="saving"
-              @click="save"
+              @click="() => save()"
             >
               {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
             </AppButton>
@@ -464,7 +470,7 @@ const {
               size="sm"
               variant="primary"
               :disabled="!dirty || saving"
-              @click="save"
+              @click="() => save()"
             >
               {{ saving ? t('common.buttons.saving') : dirty ? t('common.buttons.save') : t('pages.agentStudio.saved') }}
             </AppButton>
@@ -514,11 +520,14 @@ const {
           :draft="draft"
           :dirty="dirty"
           :is-mobile="isMobile"
+          :agent-name="activeName"
+          :history-refresh-key="historyRefreshKey"
           :save="save"
           @error="error = $event"
           @toast="showToast"
           @update:just-saved="justSaved = $event"
           @discard="discardUnsavedChanges"
+          @restored="reloadAgentFromServer(activeName)"
         />
 
         <!-- narrow-screen: non-whitelist tabs show desktop-only tip (files+data allowed) -->
@@ -1173,6 +1182,26 @@ const {
           :disabled="assignApplying"
           @click="applyAssign(true)"
         >{{ t('pages.agentStudio.project.assignDraftOverwrite') }}</AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="showSaveReasonModal"
+      :title="t('pages.agentStudio.workspaceHistory.saveTitle')"
+      :width="420"
+      @close="showSaveReasonModal = false"
+    >
+      <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.workspaceHistory.saveHint') }}</p>
+      <label class="mb-1 mt-2 block text-[12px] text-txt2">{{ t('pages.agentStudio.workspaceHistory.saveReasonLabel') }}</label>
+      <input
+        v-model="saveReason"
+        class="w-full rounded border border-line bg-surface px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+      />
+      <template #footer>
+        <AppButton size="sm" variant="ghost" @click="showSaveReasonModal = false">{{ t('common.buttons.cancel') }}</AppButton>
+        <AppButton size="sm" variant="primary" :disabled="saving" @click="confirmSaveWithReason">
+          {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
+        </AppButton>
       </template>
     </AppModal>
 

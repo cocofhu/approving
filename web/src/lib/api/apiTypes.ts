@@ -77,6 +77,22 @@ export interface AgentFile {
   content: string
 }
 
+export interface WorkspaceRevisionChange {
+  path: string
+  op: string
+  fromPath?: string
+}
+
+export interface WorkspaceRevision {
+  sha: string
+  parentSha?: string
+  createdAt?: string
+  author: string
+  source: string
+  reason: string
+  changes?: WorkspaceRevisionChange[]
+}
+
 export interface AgentLayout {
   configRoot?: string
   workspaceDir?: string
