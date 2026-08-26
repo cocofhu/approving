@@ -17,10 +17,10 @@ describe('workspaceHistoryDiff', () => {
   })
 
   it('matches revisions by path or fromPath', () => {
-    const changes = [{ path: 'rules/role.md', op: 'write' }]
+    const changes = [{ path: 'rules/role.md' }]
     expect(revisionMatchesFile(changes, 'rules/role.md')).toBe(true)
     expect(revisionMatchesFile(changes, 'AGENTS.md')).toBe(false)
-    expect(revisionMatchesFile([{ path: 'new.md', op: 'rename', fromPath: 'old.md' }], 'old.md')).toBe(true)
+    expect(revisionMatchesFile([{ path: 'new.md', fromPath: 'old.md' }], 'old.md')).toBe(true)
     expect(revisionMatchesFile(undefined, 'x')).toBe(false)
     expect(revisionMatchesFile(changes, '')).toBe(false)
   })
