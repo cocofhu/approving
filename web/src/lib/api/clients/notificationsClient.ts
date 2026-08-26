@@ -1,17 +1,19 @@
 import { req } from '../httpCore'
-import type { NotificationReadPrefs } from '../apiTypes'
+import type { NotificationListResponse } from '../apiTypes'
 
 export const notificationsClient = {
-  getNotificationReadPrefs: (opts?: { signal?: AbortSignal }) =>
-    req<NotificationReadPrefs>('/notifications/prefs', opts?.signal ? { signal: opts.signal } : undefined),
+  listNotifications: (opts?: { signal?: AbortSignal }) =>
+    req<NotificationListResponse>(
+      '/notifications',
+      opts?.signal ? { signal: opts.signal } : undefined,
+    ),
   markNotificationRead: (runId: string) =>
-    req<NotificationReadPrefs>('/notifications/prefs/read', {
+    req<{ status: string }>('/notifications/read', {
       method: 'POST',
       body: JSON.stringify({ runId }),
     }),
-  markAllNotificationsRead: (runIds: string[]) =>
-    req<NotificationReadPrefs>('/notifications/prefs/read-all', {
+  markAllNotificationsRead: () =>
+    req<{ status: string }>('/notifications/read-all', {
       method: 'POST',
-      body: JSON.stringify({ runIds }),
     }),
 }

@@ -156,6 +156,7 @@ func finalize(db *gorm.DB) (*gorm.DB, error) {
 	if err := db.AutoMigrate(models.AllModels()...); err != nil {
 		return nil, err
 	}
+	dropNotificationReadPrefs(db)
 	migrateProjectMemoryIndexes(db)
 	migrateChannelMultiPerProject(db)
 	backfillChannelPrimaryAndAgent(db)
@@ -165,6 +166,12 @@ func finalize(db *gorm.DB) (*gorm.DB, error) {
 	backfillGateShareLinkKind(db)
 	ensureDefaultProject(db)
 	return db, nil
+}
+
+// dropNotificationReadPrefs removes the #427 one-row-per-user JSON array table.
+// AutoMigrate will not drop leftover tables; this is a hard cut (no JSON→row migrate).
+func dropNotificationReadPrefs(db *gorm.DB) {
+	_ = db.Exec("DROP TABLE IF EXISTS notification_read_prefs").Error
 }
 
 func backfillGateShareLinkKind(db *gorm.DB) {

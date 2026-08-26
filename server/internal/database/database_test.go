@@ -35,6 +35,26 @@ func TestOpenSQLiteTestClonesMigratedSchema(t *testing.T) {
 	if err := db.Create(&models.Run{ID: "r-clone", WorkflowID: "w", Status: "running"}).Error; err != nil {
 		t.Fatalf("insert into cloned schema: %v", err)
 	}
+	if db.Migrator().HasTable("notification_read_prefs") {
+		t.Fatal("legacy notification_read_prefs should not exist after migrate")
+	}
+}
+
+func TestDropLegacyNotificationReadPrefs(t *testing.T) {
+	db, err := OpenSQLiteTest(filepath.Join(t.TempDir(), "drop-prefs.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := db.Exec("CREATE TABLE notification_read_prefs (username TEXT PRIMARY KEY)").Error; err != nil {
+		t.Fatal(err)
+	}
+	if !db.Migrator().HasTable("notification_read_prefs") {
+		t.Fatal("setup leftover table")
+	}
+	dropNotificationReadPrefs(db)
+	if db.Migrator().HasTable("notification_read_prefs") {
+		t.Fatal("notification_read_prefs was not dropped")
+	}
 }
 
 func TestOpenMemory(t *testing.T) {
