@@ -98,11 +98,18 @@ describe('mobile scroll contract — list B ProjectDetail tabs (plan g2.1 / g3.1
     expect(block).toMatch(/data-testid="project-board-panel"/)
   })
 
-  it('requirementDrafts tab: overflow-y-auto scroll exit', () => {
+  it('requirementDrafts tab: flex-1 min-h-0 host for panel fill-height (like board)', () => {
     const block = tabBlock("tab === 'requirementDrafts'", ["tab === 'pmLeader'"])
-    expect(block).toMatch(SCROLL_EXIT)
-    expect(block).toMatch(/min-h-0 flex-1/)
+    expect(block).toMatch(/flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden/)
     expect(block).toMatch(/data-testid="project-requirement-drafts-panel"/)
+    expect(block).toMatch(/RequirementDraftsPanel[\s\S]*?class="min-h-0 flex-1"/)
+    const panelSrc = readFileSync(
+      join(dir, '../components/project/RequirementDraftsPanel.vue'),
+      'utf8',
+    )
+    expect(panelSrc).toMatch(/data-testid="requirement-drafts-panel"/)
+    expect(panelSrc).toMatch(/flex h-full min-h-0 min-w-0 flex-1 flex-col/)
+    expect(panelSrc).toMatch(/overflow-(auto|y-auto)/)
   })
 
   it('cronJobs / notify tabs: drop 420 floor; use overflow-y-auto', () => {
