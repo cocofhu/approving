@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/pmmcp"
 	"github.com/cocofhu/approving/internal/services"
 )
@@ -24,6 +26,7 @@ func setupExternalMcpHarness(t *testing.T) (*harness, string) {
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, hn.h.WF, hn.h.Runs, hn.h.Arts, nil)
+	hn.h.PMMCP.SetAuditRecorder(hn.h.Audit.Record)
 	hn.h.ExternalMcp = services.NewProjectExternalMcpService(hn.db, "")
 	hn.h.ProjectMcpKeys = services.NewProjectMcpApiKeyService(hn.db)
 
@@ -45,6 +48,7 @@ func postExternalMcpRPC(hn *harness, pid, mcpID, bearer string, body []byte) *ht
 	return w
 }
 
+// plan_coverage leaves: g1.3 REST CRUD, g2.1 route+auth, g4.1 revoke immediate 401.
 func TestExternalMcpSettingsAndKeysREST(t *testing.T) {
 	hn, pid := setupExternalMcpHarness(t)
 
@@ -100,6 +104,7 @@ func TestExternalMcpSettingsAndKeysREST(t *testing.T) {
 	}
 }
 
+// plan_coverage leaves: g2.1 disabled 403, g2.2 unenabled pack 404.
 func TestExternalMcpDisabledAndPackFilter(t *testing.T) {
 	hn, pid := setupExternalMcpHarness(t)
 
@@ -134,5 +139,83 @@ func TestExternalMcpDisabledAndPackFilter(t *testing.T) {
 	_ = json.Unmarshal(resp.Body.Bytes(), &rpc)
 	if rpc["error"] == nil {
 		t.Fatalf("expected disabled pack error, got %v", rpc)
+	}
+}
+
+// plan_coverage: g4.1 — project A key must not authorize project B external MCP.
+func TestExternalMcpCrossProjectKeyRejected(t *testing.T) {
+	hn, pidA := setupExternalMcpHarness(t)
+
+	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "Other"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("create project B: %d %s", w.Code, w.Body.String())
+	}
+	var projB map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &projB)
+	pidB := projB["id"].(string)
+
+	for _, pid := range []string{pidA, pidB} {
+		w = hn.do(http.MethodPut, "/api/projects/"+pid+"/external-mcp", map[string]any{
+			"enabled": true, "enabledPacks": []string{"pm-progress"},
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("enable %s: %d %s", pid, w.Code, w.Body.String())
+		}
+	}
+
+	w = hn.do(http.MethodPost, "/api/projects/"+pidA+"/external-mcp/keys", map[string]any{"name": "a-key"})
+	var created map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+	plain := created["key"].(string)
+
+	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+	resp := postExternalMcpRPC(hn, pidB, "pm-progress", plain, body)
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("cross-project key want 401 got %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+// plan_coverage: g2.3 — external MCP tool calls audit with CallerKind=external.
+func TestExternalMcpAuditExternalCallerKind(t *testing.T) {
+	hn, pid := setupExternalMcpHarness(t)
+
+	w := hn.do(http.MethodPut, "/api/projects/"+pid+"/external-mcp", map[string]any{
+		"enabled": true, "enabledPacks": []string{"pm-progress"},
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("enable: %d %s", w.Code, w.Body.String())
+	}
+	w = hn.do(http.MethodPost, "/api/projects/"+pid+"/external-mcp/keys", map[string]any{"name": "audit-key"})
+	var created map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+	plain := created["key"].(string)
+
+	body, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+		"params": map[string]any{"name": "pm_get_progress", "arguments": map[string]any{}},
+	})
+	resp := postExternalMcpRPC(hn, pid, "pm-progress", plain, body)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("tools/list: %d %s", resp.Code, resp.Body.String())
+	}
+
+	items, total, err := hn.h.Audit.ListPage(services.AuditListFilter{ProjectID: pid, Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawExternal bool
+	for _, ev := range items {
+		if ev.Action == models.AuditActionMCPCall && ev.CallerKind == models.CallerKindExternal {
+			sawExternal = true
+			if ev.Actor != "external-mcp:audit-key" {
+				t.Fatalf("actor = %q, want external-mcp:audit-key", ev.Actor)
+			}
+			if !strings.Contains(ev.Summary, "external mcp") {
+				t.Fatalf("summary = %q", ev.Summary)
+			}
+		}
+	}
+	if total == 0 || !sawExternal {
+		t.Fatalf("expected external mcp audit event, total=%d saw=%v", total, sawExternal)
 	}
 }

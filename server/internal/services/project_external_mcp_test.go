@@ -9,6 +9,7 @@ import (
 	"github.com/cocofhu/approving/internal/models"
 )
 
+// plan_coverage: g1.1/g1.2 — defaults enabled=false, bogus pack filtered.
 func TestProjectExternalMcpServiceDefaultsAndUpdate(t *testing.T) {
 	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: "http://api.example.com"}})
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "extmcp.db"))
@@ -47,6 +48,7 @@ func TestProjectExternalMcpServiceDefaultsAndUpdate(t *testing.T) {
 	}
 }
 
+// plan_coverage: g1.2/g4.1 — create plaintext once, validate, list, revoke immediate fail.
 func TestProjectMcpApiKeyServiceLifecycle(t *testing.T) {
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "pmkey.db"))
 	if err != nil {

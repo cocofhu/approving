@@ -35,7 +35,7 @@ function mountPanel() {
   })
 }
 
-describe('ProjectExternalMcpPanel', () => {
+describe('ProjectExternalMcpPanel (plan g3.1/g3.2/g3.3)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.getProjectExternalMcp.mockResolvedValue({
@@ -58,7 +58,7 @@ describe('ProjectExternalMcpPanel', () => {
     })
   })
 
-  it('loads settings and saves enabled packs', async () => {
+  it('loads settings and saves enabled packs (g3.1)', async () => {
     const wrapper = mountPanel()
     await flushPromises()
     expect(apiMocks.getProjectExternalMcp).toHaveBeenCalledWith('proj-1')
@@ -69,7 +69,7 @@ describe('ProjectExternalMcpPanel', () => {
     expect(apiMocks.updateProjectExternalMcp).toHaveBeenCalled()
   })
 
-  it('opens create-key modal', async () => {
+  it('opens create-key modal (g3.2)', async () => {
     const wrapper = mountPanel()
     await flushPromises()
     await wrapper.get('[data-testid="external-mcp-create-key"]').trigger('click')
