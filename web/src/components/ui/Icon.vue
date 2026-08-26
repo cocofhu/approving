@@ -67,6 +67,7 @@ const paths: Record<string, string> = {
   tag: '<path d="M20.6 13.4 12 22l-8.6-8.6a5 5 0 0 1 0-7.1l.7-.7a5 5 0 0 1 7.1 0L12 6l.8-.8a5 5 0 0 1 7.1 0l.7.7a5 5 0 0 1 0 7.1z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
   star: '<path d="m12 3.6 2.5 5.1 5.6.8-4 3.9.9 5.6L12 16.3 7 19l.9-5.6-4-3.9 5.6-.8z"/>',
   'star-filled': '<path d="m12 3.6 2.5 5.1 5.6.8-4 3.9.9 5.6L12 16.3 7 19l.9-5.6-4-3.9 5.6-.8z"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.8.3-1.2.8-1.2 1.6V14"/><circle cx="12" cy="17" r="1"/>',
 }
 
 /** Icons that render with solid fill (favorited star). */
