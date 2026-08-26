@@ -46,9 +46,9 @@ type ProjectVariable struct {
 // defaults. Project-level OS env lives in the shared Agent config (extend
 // layer); Run.SandboxEnv remains the per-run snapshot.
 type Project struct {
-	ID          string            `gorm:"primaryKey" json:"id"`
-	Name        string            `gorm:"uniqueIndex" json:"name"`
-	Description string            `json:"description"`
+	ID          string `gorm:"primaryKey" json:"id"`
+	Name        string `gorm:"uniqueIndex" json:"name"`
+	Description string `json:"description"`
 	// SandboxEnv is deprecated legacy storage cleared by MigrateProjectSandboxEnvOnce.
 	// Kept on the model so upgrades can read then wipe; API no longer exposes it.
 	SandboxEnv []EnvEntry        `gorm:"serializer:json" json:"-"`
@@ -724,7 +724,8 @@ func AllModels() []any {
 		&GateShareNonce{},
 		&GateSharePreviewTicket{},
 		&RequirementDraft{},
-		&NotificationReadPrefs{},
+		&NotificationRead{},
+		&NotificationBaseline{},
 		&ProjectExternalMcpSettings{},
 		&ProjectMcpApiKey{},
 	}

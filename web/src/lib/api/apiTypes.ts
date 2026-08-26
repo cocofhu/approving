@@ -361,8 +361,19 @@ export interface AuthLoginResponse {
   redirect?: string
 }
 
-/** Server-authoritative run-terminal notification read prefs. */
-export interface NotificationReadPrefs {
-  enabledAt: string
-  readIds: string[]
+/** One inbox row from GET /api/notifications. Unread is computed on the server. */
+export interface NotificationListItem {
+  runId: string
+  status: 'completed' | 'failed' | string
+  title: string
+  titleNeutral: boolean
+  workflowName: string
+  startedAt: string
+  finishedApprox: string
+  unread: boolean
+  beforeBaseline: boolean
+}
+
+export interface NotificationListResponse {
+  items: NotificationListItem[]
 }

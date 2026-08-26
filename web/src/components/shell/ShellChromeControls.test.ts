@@ -29,6 +29,7 @@ vi.mock('@/lib/composables/useAuth', () => ({
 vi.mock('@/lib/api/api', () => ({
   api: {
     listRuns: vi.fn(),
+    listNotifications: vi.fn(async () => ({ items: [] })),
     getRun: vi.fn(),
     artifactContent: vi.fn(),
     artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
@@ -41,30 +42,19 @@ vi.mock('@/lib/api/api', () => ({
       asOf: '2026-08-12T00:00:00Z',
       timezone: 'UTC',
     }),
-    getNotificationReadPrefs: vi.fn(async () => ({
-      enabledAt: '2020-01-01T00:00:00Z',
-      readIds: [] as string[],
-    })),
-    markNotificationRead: vi.fn(async (runId: string) => ({
-      enabledAt: '2020-01-01T00:00:00Z',
-      readIds: [runId],
-    })),
-    markAllNotificationsRead: vi.fn(async (runIds: string[]) => ({
-      enabledAt: '2020-01-01T00:00:00Z',
-      readIds: runIds,
-    })),
+    markNotificationRead: vi.fn(async () => ({ status: 'ok' })),
+    markAllNotificationsRead: vi.fn(async () => ({ status: 'ok' })),
   },
-  isPaginated: (data: unknown): data is { items: unknown[]; total: number } =>
-    data != null && typeof data === 'object' && !Array.isArray(data) && 'items' in data,
 }))
 
 import { api } from '@/lib/api/api'
 import { __resetNotificationsPageEntryForTests } from '@/lib/composables/useNotificationsPageEntry'
 import {
   __resetRunTerminalNotificationsForTests,
+  mapRunToNotification,
   RUN_TERMINAL_PANEL_LIMIT,
-  RUN_TERMINAL_POOL_SIZE,
 } from '@/lib/run/useRunTerminalNotifications'
+import type { RunTerminalNotificationItem } from '@/lib/run/useRunTerminalNotifications'
 import ShellChromeControls from './ShellChromeControls.vue'
 
 function run(partial: Partial<Run> & Pick<Run, 'id' | 'status'>): Run {
@@ -82,15 +72,12 @@ function run(partial: Partial<Run> & Pick<Run, 'id' | 'status'>): Run {
   }
 }
 
-function paged(items: Run[], total = items.length) {
-  return { items, total, page: 1, pageSize: RUN_TERMINAL_POOL_SIZE, hasMore: false }
+function asItem(r: Run, extra: Partial<RunTerminalNotificationItem> = {}): RunTerminalNotificationItem {
+  return { ...mapRunToNotification(r)!, unread: true, beforeBaseline: false, ...extra }
 }
 
-function seedBaseline(_enabledAt = '2020-01-01T00:00:00Z', readIds: string[] = []) {
-  vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
-    enabledAt: '2020-01-01T00:00:00Z',
-    readIds: [...readIds],
-  })
+function seedList(items: RunTerminalNotificationItem[]) {
+  vi.mocked(api.listNotifications).mockResolvedValue({ items })
 }
 
 function mountChrome(layout: 'bar' | 'sidebar' = 'sidebar') {
@@ -121,25 +108,14 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
     push.mockReset()
-    vi.mocked(api.listRuns).mockReset()
+    vi.mocked(api.listNotifications).mockReset()
     vi.mocked(api.getRun).mockReset()
     vi.mocked(api.artifactContent).mockReset()
-    vi.mocked(api.getNotificationReadPrefs).mockReset()
     vi.mocked(api.markNotificationRead).mockReset()
     vi.mocked(api.markAllNotificationsRead).mockReset()
-    vi.mocked(api.listRuns).mockResolvedValue(paged([]))
-    vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
-      enabledAt: '2020-01-01T00:00:00Z',
-      readIds: [],
-    })
-    vi.mocked(api.markNotificationRead).mockImplementation(async (runId: string) => ({
-      enabledAt: '2020-01-01T00:00:00Z',
-      readIds: [runId],
-    }))
-    vi.mocked(api.markAllNotificationsRead).mockImplementation(async (runIds: string[]) => ({
-      enabledAt: '2020-01-01T00:00:00Z',
-      readIds: runIds,
-    }))
+    vi.mocked(api.listNotifications).mockResolvedValue({ items: [] })
+    vi.mocked(api.markNotificationRead).mockResolvedValue({ status: 'ok' })
+    vi.mocked(api.markAllNotificationsRead).mockResolvedValue({ status: 'ok' })
     vi.mocked(api.getRun).mockResolvedValue(run({ id: 'r1', status: 'completed', artifacts: [] }))
     vi.mocked(api.artifactContent).mockImplementation(async (id: string) => ({
       id,
@@ -193,15 +169,17 @@ describe('ShellChromeControls notifications (g1.2)', () => {
   })
 
   it('caps dropdown at 5 items; view-all goes to /notifications; mark-all clears badge', async () => {
-    seedBaseline()
-    const items = Array.from({ length: 12 }, (_, i) =>
-      run({
-        id: `r${i}`,
-        status: i === 0 ? 'failed' : 'completed',
-        startedAt: `2026-08-10T${String(12 + (i % 10)).padStart(2, '0')}:${String(i).padStart(2, '0')}:00Z`,
-      }),
+    seedList(
+      Array.from({ length: 12 }, (_, i) =>
+        asItem(
+          run({
+            id: `r${i}`,
+            status: i === 0 ? 'failed' : 'completed',
+            startedAt: `2026-08-10T${String(12 + (i % 10)).padStart(2, '0')}:${String(i).padStart(2, '0')}:00Z`,
+          }),
+        ),
+      ),
     )
-    vi.mocked(api.listRuns).mockResolvedValue(paged(items, 12))
     const wrapper = mountChrome()
     await flushPromises()
 
@@ -237,13 +215,12 @@ describe('ShellChromeControls notifications (g1.2)', () => {
   })
 
   it('shows before-baseline label on history items without counting them unread', async () => {
-    vi.mocked(api.getNotificationReadPrefs).mockResolvedValue({
-      enabledAt: new Date().toISOString(),
-      readIds: [],
-    })
-    vi.mocked(api.listRuns).mockResolvedValue(
-      paged([run({ id: 'hist', status: 'completed', startedAt: '2026-08-01T12:00:00Z' })]),
-    )
+    seedList([
+      asItem(run({ id: 'hist', status: 'completed', startedAt: '2026-08-01T12:00:00Z' }), {
+        unread: false,
+        beforeBaseline: true,
+      }),
+    ])
     const wrapper = mountChrome()
     await flushPromises()
     expect(wrapper.find('[data-testid="run-notifications-badge"]').exists()).toBe(false)
@@ -257,10 +234,7 @@ describe('ShellChromeControls notifications (g1.2)', () => {
   })
 
   it('clicking a preview item enters /notifications page 1 without locating', async () => {
-    seedBaseline()
-    vi.mocked(api.listRuns).mockResolvedValue(
-      paged([run({ id: 'fail-1', status: 'failed', title: 'boom' })]),
-    )
+    seedList([asItem(run({ id: 'fail-1', status: 'failed', title: 'boom' }))])
     const wrapper = mountChrome()
     await flushPromises()
     expect(wrapper.find('[data-testid="run-notifications-badge"]').text()).toBe('1')
@@ -275,10 +249,7 @@ describe('ShellChromeControls notifications (g1.2)', () => {
   })
 
   it('clicking completed preview also goes to /notifications', async () => {
-    seedBaseline()
-    vi.mocked(api.listRuns).mockResolvedValue(
-      paged([run({ id: 'ok-1', status: 'completed', title: 'done' })]),
-    )
+    seedList([asItem(run({ id: 'ok-1', status: 'completed', title: 'done' }))])
     const wrapper = mountChrome()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')
@@ -292,17 +263,16 @@ describe('ShellChromeControls notifications (g1.2)', () => {
   })
 
   it('cleans noisy progress titles in the panel', async () => {
-    seedBaseline()
-    vi.mocked(api.listRuns).mockResolvedValue(
-      paged([
+    seedList([
+      asItem(
         run({
           id: 'noisy',
           status: 'completed',
           title: '运行中 3 / 等待 1',
           workflowName: '自我迭代',
         }),
-      ]),
-    )
+      ),
+    ])
     const wrapper = mountChrome()
     await flushPromises()
     await wrapper.find('[data-testid="run-notifications-bell"]').trigger('click')

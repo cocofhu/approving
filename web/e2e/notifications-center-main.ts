@@ -11,8 +11,8 @@ import { installAuthGuard } from '../src/lib/shared/authGuard'
 import NotificationsView from '../src/views/NotificationsView.vue'
 import { sidebarNavGroups } from '../src/data/sidebarNav'
 import {
-  prefsKeyForUser,
-  storageKeyForUser,
+  isBeforeBaseline,
+  mapRunToNotification,
 } from '../src/lib/run/useRunTerminalNotifications'
 
 installIdleScrollbar()
@@ -48,8 +48,8 @@ let harnessPrefs: { enabledAt: string; readIds: string[] } | null = loadHarnessP
 
 function initHarnessPrefs() {
   // Clear legacy app localStorage keys so tests prove they are not the authority.
-  localStorage.removeItem(prefsKeyForUser('e2e'))
-  localStorage.removeItem(storageKeyForUser('e2e'))
+  localStorage.removeItem('approving.notifications.prefs.e2e')
+  localStorage.removeItem('approving.runTerminalNotifications.readIds.e2e')
   if (harnessPrefs) return
   if (
     scene === 'post-enable' ||
@@ -347,35 +347,60 @@ function poolForScene() {
   return postEnableItems
 }
 
+function notificationItemsForScene() {
+  const prefs = getOrInitHarnessPrefs()
+  const mapped = []
+  for (const run of poolForScene()) {
+    const n = mapRunToNotification(run as never)
+    if (!n) continue
+    const before = isBeforeBaseline(n, prefs.enabledAt)
+    mapped.push({
+      ...n,
+      beforeBaseline: before,
+      unread: !before && !prefs.readIds.includes(n.runId),
+    })
+  }
+  mapped.sort((a, b) => {
+    const ta = Date.parse(a.finishedApprox || a.startedAt || '') || 0
+    const tb = Date.parse(b.finishedApprox || b.startedAt || '') || 0
+    if (tb !== ta) return tb - ta
+    return b.runId.localeCompare(a.runId)
+  })
+  return mapped
+}
+
+function requestPath(url: string): string {
+  try {
+    return new URL(url, 'http://e2e.local').pathname
+  } catch {
+    return url
+  }
+}
+
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
   const method = (init?.method || (typeof input !== 'string' && !(input instanceof URL) ? input.method : 'GET') || 'GET').toUpperCase()
+  const path = requestPath(url)
   if (url.includes('/auth/me')) {
     return new Response(
       JSON.stringify({ username: 'e2e', expires_at: '2099-01-01T00:00:00Z', is_admin: true }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
   }
-  if (url.includes('/notifications/prefs/read-all') && method === 'POST') {
+  if ((path === '/api/notifications/read-all' || path.endsWith('/notifications/read-all')) && method === 'POST') {
     const prefs = getOrInitHarnessPrefs()
-    let body: { runIds?: string[] } = {}
-    try {
-      body = JSON.parse(String(init?.body || '{}')) as { runIds?: string[] }
-    } catch {
-      body = {}
-    }
     const next = new Set(prefs.readIds)
-    for (const id of body.runIds || []) {
-      if (typeof id === 'string' && id) next.add(id)
+    for (const item of notificationItemsForScene()) {
+      next.add(item.runId)
     }
     prefs.readIds = [...next]
     saveHarnessPrefs(prefs)
-    return new Response(JSON.stringify(prefs), {
+    return new Response(JSON.stringify({ status: 'ok' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
   }
-  if (url.includes('/notifications/prefs/read') && method === 'POST') {
+  if ((path === '/api/notifications/read' || path.endsWith('/notifications/read')) && method === 'POST') {
     const prefs = getOrInitHarnessPrefs()
     let body: { runId?: string } = {}
     try {
@@ -387,13 +412,13 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       prefs.readIds = [...prefs.readIds, body.runId]
     }
     saveHarnessPrefs(prefs)
-    return new Response(JSON.stringify(prefs), {
+    return new Response(JSON.stringify({ status: 'ok' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
   }
-  if (url.includes('/notifications/prefs')) {
-    return new Response(JSON.stringify(getOrInitHarnessPrefs()), {
+  if ((path === '/api/notifications' || path.endsWith('/notifications')) && method === 'GET') {
+    return new Response(JSON.stringify({ items: notificationItemsForScene() }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })
