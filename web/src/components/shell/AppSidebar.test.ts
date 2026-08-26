@@ -57,17 +57,29 @@ describe('AppSidebar', () => {
     wrapper.unmount()
   })
 
-  it('puts a 44px hide-nav control on the brand row (g2.1)', () => {
+  it('puts a 44px hide-nav control on the 72px brand row (g2.1 / g2.2)', () => {
     const wrapper = mountSidebar()
-    const row = wrapper.find('.h-14')
+    const row = wrapper.find('[data-testid="sidebar-brand-row"]')
+    expect(row.exists()).toBe(true)
+    expect(row.classes()).toContain('h-[72px]')
     expect(row.classes()).toContain('justify-between')
     const hide = wrapper.find('[data-testid="desktop-nav-hide"]')
     expect(hide.exists()).toBe(true)
     expect(hide.classes()).toContain('h-11')
     expect(hide.classes()).toContain('w-11')
+    expect(hide.classes()).toContain('text-txt3')
     expect(hide.attributes('aria-label')).toBe('隐藏导航')
     expect(hide.attributes('aria-expanded')).toBe('true')
     expect(hide.attributes('aria-controls')).toBe('app-desktop-sidebar')
+    wrapper.unmount()
+  })
+
+  it('renders four-color brand rail below brand row (g2.3)', () => {
+    const wrapper = mountSidebar()
+    const rail = wrapper.find('[data-testid="sidebar-brand-rail"]')
+    expect(rail.exists()).toBe(true)
+    expect(rail.classes()).toContain('app-sidebar-brand-rail')
+    expect(rail.findAll('span')).toHaveLength(4)
     wrapper.unmount()
   })
 

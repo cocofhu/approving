@@ -26,7 +26,7 @@ describe('BrandLogo', () => {
     wrapper.unmount()
   })
 
-  it('shows 28px square A mark only when showMark is true (g1.1 / g1.3)', () => {
+  it('shows 32px checkmark square only when showMark is true (g1.1)', () => {
     const i18n = createI18n({
       legacy: false,
       locale: 'zh-CN',
@@ -38,9 +38,11 @@ describe('BrandLogo', () => {
     })
     const mark = withMark.find('.brand-logo__mark')
     expect(mark.exists()).toBe(true)
-    expect(mark.text()).toBe('A')
-    expect(mark.classes()).toContain('brand-logo__mark')
+    expect(mark.text()).not.toMatch(/A/)
+    expect(mark.find('.brand-logo__check').exists()).toBe(true)
+    expect(mark.find('path').exists()).toBe(true)
     expect(withMark.classes()).toContain('brand-logo--with-mark')
+    expect(withMark.find('.brand-logo__tagline').exists()).toBe(false)
     withMark.unmount()
 
     const without = mount(BrandLogo, {
@@ -51,7 +53,23 @@ describe('BrandLogo', () => {
     without.unmount()
   })
 
-  it('does not leak mark to login, boot shell, or mobile drawer (g1.3)', () => {
+  it('uses static sidebar wordmark without tagline when showMark (g1.2)', () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(BrandLogo, {
+      props: { size: 'md', showMark: true },
+      global: { plugins: [i18n] },
+    })
+    const name = wrapper.find('.brand-logo__name')
+    expect(name.text()).toBe('Approving')
+    expect(name.classes()).not.toContain('brand-logo__tagline')
+    wrapper.unmount()
+  })
+
+  it('does not leak mark to login, boot shell, or mobile drawer (g3.1)', () => {
     const dir = dirname(fileURLToPath(import.meta.url))
     const sidebar = readFileSync(join(dir, 'AppSidebar.vue'), 'utf8')
     const shell = readFileSync(join(dir, 'AppShell.vue'), 'utf8')
