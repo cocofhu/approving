@@ -13,7 +13,8 @@
       "useAgentCreateWizard.ts",
       "useAgentFilesPanel.ts",
       "useAgentImport.ts",
-      "useAgentStudio.ts"
+      "useAgentStudio.ts",
+      "workspaceHistoryDiff.ts"
     ],
     "api": [
       "api.ts",
@@ -169,7 +170,7 @@
     ]
   },
   "totals": {
-    "agent": 12,
+    "agent": 13,
     "api": 3,
     "composables": 16,
     "inbox": 20,

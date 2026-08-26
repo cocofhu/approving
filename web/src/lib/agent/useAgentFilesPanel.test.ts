@@ -76,6 +76,22 @@ describe('useAgentFilesPanel', () => {
     app.unmount()
   })
 
+  it('uses three-column grid when agentName is set on desktop', async () => {
+    const { panel, app } = withFilesPanel()
+    await nextTick()
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toContain('300px')
+    app.unmount()
+  })
+
+  it('collapses history column to rail width', async () => {
+    const { panel, app } = withFilesPanel()
+    await nextTick()
+    panel.toggleHistoryCollapsed()
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toContain('28px')
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).not.toContain('300px')
+    app.unmount()
+  })
+
   it('switches to edit step on mobile when a file is active', async () => {
     const { panel, app } = withFilesPanel(true)
     await nextTick()

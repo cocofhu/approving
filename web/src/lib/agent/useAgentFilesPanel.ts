@@ -34,8 +34,11 @@ export function useAgentFilesPanel(props: AgentFilesPanelProps, emit: AgentFiles
 const { t } = useI18n()
 
 const EXPLORER_COLLAPSED_KEY = 'agent-studio-explorer-collapsed'
+const HISTORY_COLLAPSED_KEY = 'agent-studio-history-collapsed'
 const SIDEBAR_EXPANDED_W = '240px'
 const SIDEBAR_COLLAPSED_W = '28px'
+const HISTORY_EXPANDED_W = '300px'
+const HISTORY_COLLAPSED_W = '28px'
 
 function readCollapsedState(key: string): boolean {
   try {
@@ -61,11 +64,18 @@ function toggleExplorerCollapsed() {
   writeCollapsedState(EXPLORER_COLLAPSED_KEY, explorerCollapsed.value)
 }
 
+const historyCollapsed = ref(false)
+function toggleHistoryCollapsed() {
+  historyCollapsed.value = !historyCollapsed.value
+  writeCollapsedState(HISTORY_COLLAPSED_KEY, historyCollapsed.value)
+}
+
 const workspaceGridStyle = computed(() => {
   if (props.isMobile) return { gridTemplateColumns: '1fr' }
   const explorer = explorerCollapsed.value ? SIDEBAR_COLLAPSED_W : SIDEBAR_EXPANDED_W
   if (props.agentName) {
-    return { gridTemplateColumns: `${explorer} 1fr 300px` }
+    const history = historyCollapsed.value ? HISTORY_COLLAPSED_W : HISTORY_EXPANDED_W
+    return { gridTemplateColumns: `${explorer} 1fr ${history}` }
   }
   return { gridTemplateColumns: `${explorer} 1fr` }
 })
@@ -626,6 +636,7 @@ watch(
 
 onMounted(() => {
   explorerCollapsed.value = readCollapsedState(EXPLORER_COLLAPSED_KEY)
+  historyCollapsed.value = readCollapsedState(HISTORY_COLLAPSED_KEY)
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onExplorerKeydown)
   document.addEventListener('keydown', onChromeKeydown)
@@ -645,12 +656,17 @@ onBeforeUnmount(() => {
   return {
   t,
   EXPLORER_COLLAPSED_KEY,
+  HISTORY_COLLAPSED_KEY,
   SIDEBAR_EXPANDED_W,
   SIDEBAR_COLLAPSED_W,
+  HISTORY_EXPANDED_W,
+  HISTORY_COLLAPSED_W,
   readCollapsedState,
   writeCollapsedState,
   explorerCollapsed,
   toggleExplorerCollapsed,
+  historyCollapsed,
+  toggleHistoryCollapsed,
   workspaceGridStyle,
   collapseBtnClass,
   filesStep,
