@@ -83,22 +83,27 @@ test.describe('Global token analytics', () => {
     await openStatsPage(page)
     await expect(page.getByTestId('token-analytics-lines')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('token-analytics-pies')).toBeVisible()
-    await expect(page.getByTestId('token-analytics-section-nav')).toBeVisible()
+    await expect(page.getByTestId('token-analytics-kpis')).toBeVisible()
+    await expect(page.getByTestId('token-analytics-section-nav')).toHaveCount(0)
+    await expect(page.getByText('用量统计')).toBeVisible()
   })
 
-  test('tablet viewport shows top section nav instead of right rail', async ({ page }) => {
+  test('tablet viewport has no section nav and shows main chart sections', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 })
     await openStatsPage(page)
-    await expect(page.getByTestId('token-analytics-section-nav-mobile')).toBeVisible()
-    await expect(page.getByTestId('token-analytics-section-nav')).toBeHidden()
+    await expect(page.getByTestId('token-analytics-section-nav-mobile')).toHaveCount(0)
+    await expect(page.getByTestId('token-analytics-section-nav')).toHaveCount(0)
+    await expect(page.getByTestId('token-analytics-lines')).toBeVisible()
   })
 
   test('line mode tabs switch visible labels', async ({ page }) => {
     await openStatsPage(page)
-    await page.getByRole('button', { name: 'Top 项目多折线' }).click()
-    await expect(page.getByRole('button', { name: 'Top 项目多折线' })).toHaveClass(/font-semibold/)
-    await page.getByRole('button', { name: 'Top 模型多折线' }).click()
-    await expect(page.getByRole('button', { name: 'Top 模型多折线' })).toHaveClass(/font-semibold/)
+    await page.getByRole('button', { name: '按项目' }).click()
+    await expect(page.getByRole('button', { name: '按项目' })).toHaveClass(/font-semibold/)
+    await page.getByRole('button', { name: '按模型' }).click()
+    await expect(page.getByRole('button', { name: '按模型' })).toHaveClass(/font-semibold/)
+    await page.getByRole('button', { name: '总量（对比上一周期）' }).click()
+    await expect(page.getByRole('button', { name: '总量（对比上一周期）' })).toHaveClass(/font-semibold/)
   })
 
   test('project table link navigates to project board tab', async ({ page }) => {
