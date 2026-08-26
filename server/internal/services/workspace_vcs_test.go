@@ -3,6 +3,7 @@ package services
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -108,6 +109,29 @@ func TestWorkspaceVcsRenameAgent(t *testing.T) {
 	revs, err := s.Vcs.ListRevisions("new", 5)
 	if err != nil || len(revs) == 0 {
 		t.Fatalf("history after rename=%v err=%v", revs, err)
+	}
+}
+
+func TestWorkspaceVcsDiffRevision(t *testing.T) {
+	s := NewSkillService(t.TempDir())
+	if err := s.Save(Agent{Name: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	sha, err := s.WriteWorkspaceFileVcs("a", "a.md", "hello", WorkspaceWriteOpts{
+		Author: "u", Source: VcsSourcePmMCP, Reason: "seed",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	diff, err := s.Vcs.DiffRevision("a", sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(diff, "hello") {
+		t.Fatalf("diff missing content: %q", diff)
+	}
+	if _, err := s.Vcs.DiffRevision("a", "not-a-sha"); err != ErrVcsRevisionMiss {
+		t.Fatalf("want miss, got %v", err)
 	}
 }
 
