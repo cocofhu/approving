@@ -22,6 +22,8 @@ const {
   writeCollapsedState,
   explorerCollapsed,
   toggleExplorerCollapsed,
+  historyCollapsed,
+  toggleHistoryCollapsed,
   workspaceGridStyle,
   collapseBtnClass,
   filesStep,
@@ -368,6 +370,17 @@ defineExpose({
             {{ t('pages.agentStudio.explorer.selectOrCreate') }}
           </div>
         </div>
+
+        <AgentWorkspaceHistoryPanel
+          v-if="!isMobile && agentName"
+          :agent-name="agentName"
+          :is-mobile="isMobile"
+          :file-path="activePath"
+          :collapsed="historyCollapsed"
+          :refresh-key="historyRefreshKey"
+          @toggle-collapse="toggleHistoryCollapsed"
+          @restored="emit('restored')"
+        />
   </div>
 
     <AppModal
@@ -453,12 +466,5 @@ defineExpose({
       @close="hideCtxMenu"
       @action="onCtxAction"
     />
-        <AgentWorkspaceHistoryPanel
-          v-if="!isMobile && agentName"
-          :agent-name="agentName"
-          :is-mobile="isMobile"
-          :refresh-key="historyRefreshKey"
-          @restored="emit('restored')"
-        />
   </div>
 </template>
