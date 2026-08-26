@@ -7,7 +7,7 @@ import pages from '@/locales/zh-CN/pages.json'
 import AgentEnvPanel from './AgentEnvPanel.vue'
 import AgentGitGuide from './AgentGitGuide.vue'
 import AgentMcpPanel from './AgentMcpPanel.vue'
-import type { AgentStudioDraft } from '@/lib/agent/agentStudioDraft'
+import { emptyPrompts, type AgentStudioDraft } from '@/lib/agent/agentStudioDraft'
 
 function createI18nPlugin() {
   return createI18n({
@@ -28,8 +28,11 @@ function expectOutlineHelpButton(wrapper: ReturnType<typeof mount>, selector: st
 
 const baseDraft: AgentStudioDraft = {
   name: 'test-agent',
+  projectId: '',
   env: [],
   mcp: [],
+  files: [],
+  prompts: emptyPrompts(),
   gitCredentialType: undefined,
   acpBackend: 'codebuddy',
   layout: { configRoot: '/tmp/agent', workspaceDir: '/tmp/workspace' },
