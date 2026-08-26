@@ -135,3 +135,65 @@ func TestClarifyReactReplyEnqueues(t *testing.T) {
 		t.Fatalf("wait: %v", err)
 	}
 }
+
+func TestClarifyChoiceReplyDedupedPerRound(t *testing.T) {
+	eng, db, provider := setupEngineGraphP(t, reactOnlyGraph())
+	hold := make(chan struct{})
+	provider.reactHold = hold
+	provider.reactPending = 10
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+
+	choice := "我的选择:\n- 请补充关键信息。 → 选项A"
+	if _, err := eng.EnqueueClarifyTurn(run.ID, "clarify", choice, nil, nil); err != nil {
+		t.Fatalf("first choice: %v", err)
+	}
+	if _, err := eng.EnqueueClarifyTurn(run.ID, "clarify", choice, nil, nil); err == nil {
+		t.Fatal("second choice in the same round must be rejected")
+	} else if !strings.Contains(err.Error(), "本轮选择题已提交") {
+		t.Fatalf("reject message: %v", err)
+	}
+	if _, err := eng.EnqueueClarifyTurn(run.ID, "clarify", "第一条", nil, nil); err != nil {
+		t.Fatalf("free text 1: %v", err)
+	}
+	if _, err := eng.EnqueueClarifyTurn(run.ID, "clarify", "第二条", nil, nil); err != nil {
+		t.Fatalf("free text 2: %v", err)
+	}
+
+	provider.mu.Lock()
+	provider.reactHold = nil
+	provider.mu.Unlock()
+	close(hold)
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+}
+
+func TestClarifyChoiceReplyAllowedAfterNewAsk(t *testing.T) {
+	eng, db, provider := setupEngineGraphP(t, reactOnlyGraph())
+	provider.reactPending = 1
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+
+	if _, err := eng.EnqueueClarifyTurn(run.ID, "clarify", "我的选择:\n- 请补充关键信息。 → 选项A", nil, nil); err != nil {
+		t.Fatalf("round1 choice: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait round1: %v", err)
+	}
+
+	if _, err := eng.EnqueueClarifyTurn(run.ID, "clarify", "我的选择:\n- 还需要一点信息。 → 继续", nil, nil); err != nil {
+		t.Fatalf("round2 choice after new ask_question: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait round2: %v", err)
+	}
+}

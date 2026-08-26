@@ -1586,4 +1586,113 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
   })
+
+  describe('choice card answered from transcript not sessionStorage', () => {
+    const deployQ: ClarifyTurn = {
+      role: 'agent',
+      text: '',
+      at: '2026-07-18T00:00:00Z',
+      questions: [
+        {
+          id: 'q1',
+          prompt: '选择部署方式',
+          options: [
+            { id: 'k8s', label: 'Kubernetes', recommended: true },
+            { id: 'vm', label: '虚拟机' },
+          ],
+        },
+      ],
+    }
+
+    function submitChoices(wrapper: ReturnType<typeof mountChat>) {
+      return wrapper.findAll('button').find((b) => b.text().includes('确认选择'))
+    }
+
+    async function pickAndSubmit(wrapper: ReturnType<typeof mountChat>, label: string) {
+      const optionBtn = wrapper.findAll('button').find((b) => b.text().includes(label))
+      expect(optionBtn).toBeTruthy()
+      await optionBtn!.trigger('click')
+      await flushPromises()
+      const submitBtn = submitChoices(wrapper)
+      expect(submitBtn).toBeTruthy()
+      await submitBtn!.trigger('click')
+      await flushPromises()
+    }
+
+    it('stale sessionStorage key does not hide a new prompt with reused q1', () => {
+      sessionStorage.setItem(
+        'clarify.submitted.run-1.react-1.1.q1',
+        JSON.stringify({ text: '我的选择:\n- 旧题面 → 旧答案' }),
+      )
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'agent',
+            text: '',
+            at: '2026-08-26T00:00:00Z',
+            questions: [
+              {
+                id: 'q1',
+                prompt: '片段如何落地为模板?',
+                options: [
+                  { id: 'a', label: '6 个独立模板', recommended: true },
+                  { id: 'b', label: '合并模板' },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+      expect(wrapper.text()).toContain('片段如何落地为模板?')
+      expect(submitChoices(wrapper)?.exists()).toBe(true)
+      expect(wrapper.text()).not.toContain('旧答案')
+      expect(wrapper.text()).not.toContain('我的选择')
+      wrapper.unmount()
+    })
+
+    it('persisted choice after this round hides the interactive card', () => {
+      const wrapper = mountChat({
+        turns: [
+          deployQ,
+          { role: 'human', text: '我的选择:\n- 选择部署方式 → Kubernetes', at: '2026-07-18T00:01:00Z' },
+        ],
+      })
+      expect(submitChoices(wrapper)).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('turn_begin then turn_done without persisted catch-up does not flash the card', async () => {
+      const wrapper = mountChat({ turns: [deployQ] })
+      await pickAndSubmit(wrapper, 'Kubernetes')
+      expect(wrapper.emitted('send')).toBeTruthy()
+      expect(submitChoices(wrapper)).toBeUndefined()
+
+      const sent = String(wrapper.emitted('send')![0][0])
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        discardLastQueued: () => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { id: 'srv-choice', text: sent },
+      })
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1' })
+      await flushPromises()
+      expect(submitChoices(wrapper)).toBeUndefined()
+      wrapper.unmount()
+    })
+
+    it('discardLastQueued after failed send restores the card', async () => {
+      const wrapper = mountChat({ turns: [deployQ] })
+      await pickAndSubmit(wrapper, 'Kubernetes')
+      expect(submitChoices(wrapper)).toBeUndefined()
+
+      const vm = wrapper.vm as unknown as { discardLastQueued: () => void }
+      vm.discardLastQueued()
+      await flushPromises()
+      expect(submitChoices(wrapper)?.exists()).toBe(true)
+      wrapper.unmount()
+    })
+  })
 })

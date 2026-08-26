@@ -274,10 +274,6 @@ function onTextInput() {
   autoGrow()
 }
 
-// Optimistically show choice-card session replies until backend catches up.
-// Authoritative send path uses queue + liveTurns (no pending human bubble).
-const pending = ref<{ text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] } | null>(null)
-
 onBeforeUnmount(() => {
   unsubStream()
   unsubThought()
@@ -287,7 +283,7 @@ onBeforeUnmount(() => {
   thoughtPreview.reset()
 })
 
-/** Legacy zh-CN prefix for messages persisted before i18n or in sessionStorage. */
+/** Legacy zh-CN prefix for messages persisted before i18n. */
 const LEGACY_CHOICE_PREFIX = '我的选择:'
 const choicePrefix = computed(() => translate('pages.clarify.choicePrefix'))
 
@@ -299,40 +295,6 @@ function stripChoicePrefix(text: string): string {
   if (text.startsWith(choicePrefix.value)) return text.slice(choicePrefix.value.length)
   if (text.startsWith(LEGACY_CHOICE_PREFIX)) return text.slice(LEGACY_CHOICE_PREFIX.length)
   return text
-}
-
-function questionKey(questions: ReactQuestion[]): string {
-  return questions.map((q) => q.id).join('|')
-}
-
-function sessionStorageKey(questions: ReactQuestion[]): string {
-  return `clarify.submitted.${props.runId}.${props.nodeId}.${props.iteration}.${questionKey(questions)}`
-}
-
-function readSessionChoice(questions: ReactQuestion[]): string | null {
-  if (!questions.length) return null
-  try {
-    const raw = sessionStorage.getItem(sessionStorageKey(questions))
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { text?: string }
-    return parsed.text && textHasChoicePrefix(parsed.text) ? parsed.text : null
-  } catch {
-    return null
-  }
-}
-
-function writeSessionChoice(questions: ReactQuestion[], text: string) {
-  if (!questions.length) return
-  try {
-    sessionStorage.setItem(sessionStorageKey(questions), JSON.stringify({ text }))
-  } catch {}
-}
-
-function clearSessionChoice(questions: ReactQuestion[]) {
-  if (!questions.length) return
-  try {
-    sessionStorage.removeItem(sessionStorageKey(questions))
-  } catch {}
 }
 
 function isChoiceReply(text: string): boolean {
@@ -363,41 +325,28 @@ const latestQuestions = computed<ReactQuestion[]>(() => {
   return persistedTurns.value[idx].questions ?? []
 })
 
+/** Persisted transcript plus in-flight live bubbles (no sessionStorage echo). */
+function answerTranscript(): ClarifyTurn[] {
+  if (liveTurns.value.length) {
+    return mergePersistedAndLiveTurns(persistedTurns.value, liveTurns.value)
+  }
+  return persistedTurns.value
+}
+
 const latestQuestionAnswered = computed(() => {
-  const qs = latestQuestions.value
-  if (!qs.length) return true
-  if (hasHumanReplyAfter(persistedTurns.value, latestQuestionIdx.value)) return true
-  return !!readSessionChoice(qs)
+  const list = answerTranscript()
+  const qIdx = latestQuestionTurnIndex(list)
+  if (qIdx < 0) return latestQuestions.value.length === 0
+  if (hasHumanReplyAfter(list, qIdx)) return true
+  return queued.value.some((q) => isChoiceReply(q.text))
 })
 
 const displayTurns = computed<ClarifyTurn[]>(() => {
-  let list = persistedTurns.value
+  const list = persistedTurns.value
   // Session UX: live in-flight bubbles until persisted transcript catches up.
   // Dedupe against persisted turns so mid-stream softRefresh/loadRun human does not double-render.
   if (liveTurns.value.length) {
     return prependSeedHuman(mergePersistedAndLiveTurns(list, liveTurns.value))
-  }
-  // Choice-card sessionStorage echo only (not used for free-text send).
-  if (pending.value) {
-    list = [
-      ...list,
-      {
-        role: 'human',
-        text: pending.value.text,
-        at: new Date().toISOString(),
-        images: pending.value.images,
-        annotations: pending.value.annotations,
-      },
-    ]
-  } else {
-    const qIdx = latestQuestionIdx.value
-    const qs = latestQuestions.value
-    if (qIdx >= 0 && qs.length && !hasHumanReplyAfter(persistedTurns.value, qIdx)) {
-      const sessionText = readSessionChoice(qs)
-      if (sessionText) {
-        list = [...list, { role: 'human', text: sessionText, at: new Date().toISOString() }]
-      }
-    }
   }
   return prependSeedHuman(list)
 })
@@ -509,7 +458,6 @@ watch(
   (key, prevKey) => {
     if (prevKey !== undefined && key === prevKey) return
     const turnList = persistedTurns.value
-    pending.value = null
     const liveHumanText = liveTurns.value[0]?.role === 'human' ? liveTurns.value[0].text || '' : ''
     const persistedCaughtUp = persistedCompletedLiveHuman(turnList, liveHumanText)
     // Clear live bubbles once persisted transcript includes them (not while streaming).
@@ -525,11 +473,6 @@ watch(
       streamPreview.reset()
       thoughtPreview.reset()
       if (queued.value.length === 0) thinking.value = false
-    }
-    const qIdx = latestQuestionTurnIndex(turnList)
-    if (qIdx >= 0) {
-      const qs = turnList[qIdx].questions ?? []
-      if (qs.length && hasHumanReplyAfter(turnList, qIdx)) clearSessionChoice(qs)
     }
     void scrollBottom()
   },
@@ -709,7 +652,7 @@ const otherChecked = ref<Record<string, boolean>>({})
 // The interactive choice card is only shown for the latest unanswered agent
 // question turn while the dialogue is live (not done / not mid-send).
 const activeQuestions = computed<ReactQuestion[]>(() => {
-  if (props.done || !props.active || thinking.value || pending.value) return []
+  if (props.done || !props.active || thinking.value) return []
   if (latestQuestionAnswered.value) return []
   return latestQuestions.value
 })
@@ -814,7 +757,6 @@ function submitChoices() {
     return `- ${q.prompt} → ${picked.join('、')}`
   })
   const text = choicePrefix.value + '\n' + lines.join('\n')
-  writeSessionChoice(qs, text)
   sel.value = {}
   other.value = {}
   otherChecked.value = {}
@@ -1276,11 +1218,6 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     onTextInput,
     textHasChoicePrefix,
     stripChoicePrefix,
-    questionKey,
-    sessionStorageKey,
-    readSessionChoice,
-    writeSessionChoice,
-    clearSessionChoice,
     isChoiceReply,
     latestQuestionTurnIndex,
     hasHumanReplyAfter,
@@ -1358,7 +1295,6 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     sessionBusy,
     AUTO_GROW_MIN,
     AUTO_GROW_MAX,
-    pending,
     LEGACY_CHOICE_PREFIX,
     choicePrefix,
     latestQuestionIdx,
