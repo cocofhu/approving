@@ -29,6 +29,7 @@ function withFilesPanel(isMobile = false) {
     draft: baseDraft(),
     dirty: false,
     isMobile,
+    agentName: 'agent-a',
     save,
   }
   const i18n = createI18n({

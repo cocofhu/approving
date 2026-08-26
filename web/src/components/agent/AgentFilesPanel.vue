@@ -454,7 +454,7 @@ defineExpose({
       @action="onCtxAction"
     />
         <AgentWorkspaceHistoryPanel
-          v-if="!isMobile"
+          v-if="!isMobile && agentName"
           :agent-name="agentName"
           :is-mobile="isMobile"
           :refresh-key="historyRefreshKey"
