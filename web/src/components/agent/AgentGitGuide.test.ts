@@ -34,7 +34,6 @@ function mountGuide(env: { k: string; v: string }[], credentialType?: 'github_ht
       plugins: [i18n],
       stubs: {
         AppModal: AppModalStub,
-        AppButton: { template: '<button><slot /></button>' },
       },
     },
   })
