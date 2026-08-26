@@ -357,10 +357,10 @@ const {
 
       <div
         v-else-if="tab === 'requirementDrafts'"
-        class="scroll-area min-h-0 flex-1 overflow-y-auto"
+        class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         data-testid="project-requirement-drafts-panel"
       >
-        <RequirementDraftsPanel ref="draftsPanelRef" :project-id="projectId" />
+        <RequirementDraftsPanel ref="draftsPanelRef" :project-id="projectId" class="min-h-0 flex-1" />
       </div>
 
       <div

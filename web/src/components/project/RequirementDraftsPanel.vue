@@ -146,11 +146,11 @@ defineExpose({
 
 <template>
   <div
-    class="requirement-drafts flex min-h-[520px] flex-col border border-line bg-base"
+    class="requirement-drafts flex h-full min-h-0 min-w-0 flex-1 flex-col border border-line bg-base"
     data-testid="requirement-drafts-panel"
   >
     <!-- Top toolbar -->
-    <div class="flex flex-wrap items-center gap-2 border-b border-line p-3">
+    <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line p-3">
       <div class="seg" data-testid="requirement-drafts-view-segment">
         <button
           type="button"
@@ -228,9 +228,9 @@ defineExpose({
     <!-- Edit view -->
     <div
       v-if="viewMode === 'edit'"
-      class="draft-layout grid min-h-[480px] flex-1 grid-cols-1 md:grid-cols-[280px_1fr]"
+      class="draft-layout grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[280px_1fr]"
     >
-      <aside class="flex min-h-[480px] flex-col border-b border-line md:border-b-0 md:border-r">
+      <aside class="flex min-h-0 flex-col border-b border-line md:border-b-0 md:border-r">
         <div
           class="min-h-0 flex-1 space-y-1.5 overflow-auto p-2"
           data-testid="requirement-drafts-list"
@@ -287,7 +287,7 @@ defineExpose({
       </aside>
 
       <div
-        class="flex min-h-[480px] min-w-0 flex-col"
+        class="flex min-h-0 min-w-0 flex-col"
         data-testid="requirement-drafts-detail"
         @keydown="onDetailKeydown"
       >
@@ -754,7 +754,7 @@ defineExpose({
     <!-- Gantt view -->
     <div
       v-else-if="viewMode === 'gantt'"
-      class="flex min-h-[480px] flex-1 flex-col lg:flex-row"
+      class="flex min-h-0 flex-1 flex-col lg:flex-row"
     >
       <div
         class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
@@ -912,16 +912,16 @@ defineExpose({
 
       <!-- Inspector -->
       <aside
-        class="flex w-full shrink-0 flex-col border-t border-line bg-surface lg:w-[300px] lg:border-l lg:border-t-0"
+        class="flex min-h-0 w-full shrink-0 flex-col border-t border-line bg-surface lg:w-[300px] lg:border-l lg:border-t-0"
         data-testid="requirement-drafts-inspector"
       >
         <div class="border-b border-line px-3 py-2.5 text-[13px] font-medium text-txt">
           {{ t('pages.projectDetail.requirementDrafts.inspectorTitle') }}
         </div>
-        <div v-if="!hasSelection" class="flex-1 px-3 py-6 text-[13px] text-txt3">
+        <div v-if="!hasSelection" class="min-h-0 flex-1 overflow-auto px-3 py-6 text-[13px] text-txt3">
           {{ t('pages.projectDetail.requirementDrafts.inspectorEmpty') }}
         </div>
-        <div v-else class="flex flex-1 flex-col gap-3 overflow-auto p-3">
+        <div v-else class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
           <div class="text-[13px] font-medium text-txt">{{ selectedDraft?.title }}</div>
           <div class="grid gap-3">
             <label class="block text-xs text-txt2">
@@ -1010,7 +1010,7 @@ defineExpose({
     </div>
 
     <!-- Milestones view -->
-    <div v-else class="min-h-[480px] flex-1 overflow-auto p-4">
+    <div v-else class="min-h-0 flex-1 overflow-auto p-4">
       <div v-if="loading && !items.length" class="px-5 py-8 text-center text-[13px] text-txt3">
         {{ t('common.loading.label') }}
       </div>
