@@ -14,8 +14,11 @@ func (h *Host) callTeamTools(sess *Session, skill *services.SkillService, name s
 	if team == nil {
 		return map[string]any{"error": "team service unavailable"}, true
 	}
-	if strings.TrimSpace(sess.ProjectID) == "" || strings.TrimSpace(sess.AgentName) == "" {
-		return map[string]any{"error": "session missing project or agent"}, true
+	if strings.TrimSpace(sess.ProjectID) == "" {
+		return map[string]any{"error": "session missing project"}, true
+	}
+	if strings.TrimSpace(sess.AgentName) == "" {
+		return map[string]any{"error": "pm leader not bound"}, true
 	}
 
 	switch name {

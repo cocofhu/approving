@@ -16,6 +16,7 @@ import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
 import ProjectSharedAgentPanel from '@/components/project/ProjectSharedAgentPanel.vue'
 import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.vue'
+import ProjectExternalMcpPanel from '@/components/project/ProjectExternalMcpPanel.vue'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import { useProjectDetail } from '@/lib/project/useProjectDetail'
 
@@ -413,6 +414,14 @@ const {
       </div>
 
       <!-- plan g2.1: cronJobs/notify fill + scroll exit (drop 420px hard floor) -->
+      <div
+        v-else-if="tab === 'externalMcp'"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+        data-testid="project-external-mcp-view"
+      >
+        <ProjectExternalMcpPanel :project-id="projectId" />
+      </div>
+
       <div
         v-else-if="tab === 'cronJobs'"
         class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto"

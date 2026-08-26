@@ -156,6 +156,8 @@ func main() {
 
 	projectSvc := services.NewProjectService(db)
 	auditSvc := services.NewProjectAuditService(db)
+	externalMcpSvc := services.NewProjectExternalMcpService(db, cfg.Server.MCPAdvertise)
+	projectMcpKeySvc := services.NewProjectMcpApiKeyService(db)
 	services.BackfillAuditElevatedFields(db)
 	sharedAgentSvc := services.NewSharedAgentService(services.DefaultSharedAgentRoot(cfg.Engine.ProfilesRoot))
 	services.MigrateProjectSandboxEnvOnce(db, projectSvc, sharedAgentSvc)
@@ -458,6 +460,8 @@ func main() {
 		RunNotify:             runNotifySvc,
 		Browser:               browserSvc,
 		Audit:                 auditSvc,
+		ExternalMcp:           externalMcpSvc,
+		ProjectMcpKeys:        projectMcpKeySvc,
 		GateShare:             gateShareSvc,
 		GateShareNonces:       gateshare.NewNonceStore(db),
 		GateShareTickets:      gateShareTickets,

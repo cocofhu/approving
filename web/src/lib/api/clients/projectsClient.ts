@@ -112,6 +112,33 @@ export const projectsClient = {
       { method: 'DELETE' },
     ),
 
+  getProjectExternalMcp: (projectId: string) =>
+    req<{ enabled: boolean; enabledPacks: string[]; mcpBaseUrl: string; updatedAt?: string }>(
+      `/projects/${encodeURIComponent(projectId)}/external-mcp`,
+    ),
+  updateProjectExternalMcp: (
+    projectId: string,
+    body: { enabled: boolean; enabledPacks: string[] },
+  ) =>
+    req<{ enabled: boolean; enabledPacks: string[]; mcpBaseUrl: string; updatedAt?: string }>(
+      `/projects/${encodeURIComponent(projectId)}/external-mcp`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  listProjectMcpKeys: (projectId: string) =>
+    req<{ id: string; name: string; key_prefix: string; created_at: string }[]>(
+      `/projects/${encodeURIComponent(projectId)}/external-mcp/keys`,
+    ),
+  createProjectMcpKey: (projectId: string, name: string) =>
+    req<{ id: string; name: string; key: string; key_prefix: string; created_at: string }>(
+      `/projects/${encodeURIComponent(projectId)}/external-mcp/keys`,
+      { method: 'POST', body: JSON.stringify({ name }) },
+    ),
+  revokeProjectMcpKey: (projectId: string, keyId: string) =>
+    req<{ status: string }>(
+      `/projects/${encodeURIComponent(projectId)}/external-mcp/keys/${encodeURIComponent(keyId)}`,
+      { method: 'DELETE' },
+    ),
+
   /** Project audit timeline (paginated). Default time window: 24h. */
   listProjectAudit: (
     id: string,

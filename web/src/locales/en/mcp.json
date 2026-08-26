@@ -15,6 +15,7 @@
       "scopeProject": "scope: project / pm-session",
       "entryPathLabel": "Where to use:",
       "entryPath": "Project detail → Project Management → Settings",
+      "entryPathExternal": "Project detail → External MCP",
       "entryPathAgent": "Agent Studio → MCP",
       "toolCount": "{n} tools · Click for details",
       "openDetail": "Open details",
@@ -404,6 +405,13 @@
           "desc": "Create an open requirement draft; blank title uses the default unnamed title"
         }
       }
+    },
+    "externalProjectMcp": {
+      "name": "external-project-mcp",
+      "desc": "Project external MCP · Bearer project API key · separate from internal PM Leader",
+      "overview": "After enabling external MCP, selecting packs, and creating a project API key under Project detail → External MCP, external AI tools (Cursor/Claude, etc.) can call the same five PM pack tool surfaces over HTTP MCP. Off by default; unauthorized or disabled packs are rejected for list/call.",
+      "convention": "Configure at Project detail → External MCP. Write scope: pm-workflow-write (workflows/runs/gates), pm-agent-fs (org + agent workspace FS), pm-prd-manager (create draft only); pm-progress and pm-workflow-read are read-only. Does not cover PM Leader binding, human collaborators, or Run sandbox files.",
+      "entryPath": "Project detail → External MCP"
     }
   }
 }
