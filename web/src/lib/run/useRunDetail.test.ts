@@ -245,4 +245,112 @@ describe('useRunDetail', () => {
 
     app.unmount()
   })
+
+  it('keeps unknown model alias stable during soft refresh while getProject is pending', async () => {
+    let resolveProject: ((value: { id: string; unknownModelDisplayName: string }) => void) | null = null
+    mocks.getProject.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveProject = resolve
+        }),
+    )
+
+    const { detail, app } = await withRunDetail()
+    await flushPromises()
+    await nextTick()
+
+    // First load: alias resolves to Auto.
+    resolveProject!({ id: 'proj-1', unknownModelDisplayName: 'Auto' })
+    await flushPromises()
+    expect(detail.unknownModelDisplayName.value).toBe('Auto')
+    expect(mocks.getProject).toHaveBeenCalledTimes(1)
+
+    // Soft refresh while getProject would be slow: alias must not clear.
+    mocks.getProject.mockClear()
+    mocks.getProject.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveProject = resolve
+        }),
+    )
+    await detail.loadRun(false)
+    expect(detail.unknownModelDisplayName.value).toBe('Auto')
+    expect(mocks.getProject).not.toHaveBeenCalled()
+
+    resolveProject!({ id: 'proj-1', unknownModelDisplayName: 'Auto' })
+    await flushPromises()
+    expect(detail.unknownModelDisplayName.value).toBe('Auto')
+    expect(mocks.getProject).not.toHaveBeenCalled()
+
+    app.unmount()
+  })
+
+  it('reloads unknown model alias when projectId changes on hard refresh', async () => {
+    mocks.getProject
+      .mockResolvedValueOnce({ id: 'proj-1', unknownModelDisplayName: 'Auto' })
+      .mockResolvedValueOnce({ id: 'proj-2', unknownModelDisplayName: 'gpt-5' })
+
+    const { detail, app, router } = await withRunDetail()
+    await flushPromises()
+    expect(detail.unknownModelDisplayName.value).toBe('Auto')
+
+    mocks.getRun.mockResolvedValue({
+      ...sampleRun(),
+      id: 'run-2',
+      workflowId: 'wf-2',
+    })
+    mocks.getWorkflow.mockResolvedValue({
+      ...sampleWorkflow(),
+      id: 'wf-2',
+      projectId: 'proj-2',
+    })
+
+    await router.push('/runs/run-2')
+    await flushPromises()
+    await nextTick()
+
+    expect(detail.unknownModelDisplayName.value).toBe('gpt-5')
+    expect(mocks.getProject).toHaveBeenLastCalledWith('proj-2')
+
+    app.unmount()
+  })
+
+  it('retains last successful alias when getProject fails after project switch on hard refresh', async () => {
+    mocks.getProject.mockResolvedValueOnce({ id: 'proj-1', unknownModelDisplayName: 'Auto' })
+
+    const { detail, app, router } = await withRunDetail()
+    await flushPromises()
+    expect(detail.unknownModelDisplayName.value).toBe('Auto')
+
+    mocks.getRun.mockResolvedValue({
+      ...sampleRun(),
+      id: 'run-2',
+      workflowId: 'wf-2',
+    })
+    mocks.getWorkflow.mockResolvedValue({
+      ...sampleWorkflow(),
+      id: 'wf-2',
+      projectId: 'proj-2',
+    })
+    mocks.getProject.mockRejectedValueOnce(new Error('network down'))
+
+    await router.push('/runs/run-2')
+    await flushPromises()
+    await nextTick()
+
+    // Hard refresh to new project failed to load alias → empty until success.
+    expect(detail.unknownModelDisplayName.value).toBe('')
+
+    mocks.getProject.mockResolvedValueOnce({ id: 'proj-2', unknownModelDisplayName: 'gpt-5' })
+    await detail.loadRun(false)
+    await flushPromises()
+    expect(detail.unknownModelDisplayName.value).toBe('gpt-5')
+
+    mocks.getProject.mockRejectedValueOnce(new Error('network down'))
+    await detail.loadRun(false)
+    await flushPromises()
+    expect(detail.unknownModelDisplayName.value).toBe('gpt-5')
+
+    app.unmount()
+  })
 })
