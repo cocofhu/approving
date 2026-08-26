@@ -603,6 +603,22 @@ func TestLiveNodeEventsPageSuccessPath(t *testing.T) {
 	}
 }
 
+// TestLiveNodeEventsPageSnapshotFirst confirms platform timeline snapshots are
+// returned even when the live bridge is unreachable (cold dial is fallback).
+func TestLiveNodeEventsPageSnapshotFirst(t *testing.T) {
+	p := newACPProvider(mcp.NewHost(newMemStore()), Options{}).(*acpProvider)
+	p.registerLive(NodeReq{RunID: "run1", NodeID: "node1"}, &sandbox.Sandbox{Host: "127.0.0.1", Port: 1}, nil)
+	p.timeline.upsert("run1", "node1", []models.AcpEvent{{T: 1, Kind: "message", Text: "from-snapshot"}})
+
+	ev, _, more, ok, err := p.LiveNodeEventsPage(context.Background(), "run1", "node1", "", 20)
+	if err != nil || !ok {
+		t.Fatalf("snapshot page want ok err=nil, got ok=%v err=%v", ok, err)
+	}
+	if more || len(ev) != 1 || ev[0].Text != "from-snapshot" {
+		t.Fatalf("unexpected snapshot page: more=%v ev=%+v", more, ev)
+	}
+}
+
 // profilesRoot writes a minimal agent.json so agentConfig/resolvedMCPSpecs/etc.
 // have something to read.
 func writeAgent(t *testing.T, profile, agentJSON string) string {

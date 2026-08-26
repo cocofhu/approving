@@ -23,7 +23,14 @@ func (c *acpProvider) registerLive(req NodeReq, sb *sandbox.Sandbox, acp *sandbo
 	if acp != nil {
 		c.inflightACP[key] = acp
 	}
+	host, port := "", 0
+	if sb != nil {
+		host, port = sb.Host, sb.Port
+	}
 	c.mu.Unlock()
+	if c.timeline != nil && sb != nil {
+		c.timeline.startIngest(req.RunID, req.NodeID, host, port)
+	}
 }
 
 func (c *acpProvider) deregisterLive(req NodeReq) {
@@ -32,6 +39,9 @@ func (c *acpProvider) deregisterLive(req NodeReq) {
 	delete(c.live, key)
 	delete(c.inflightACP, key)
 	c.mu.Unlock()
+	if c.timeline != nil {
+		c.timeline.stop(req.RunID, req.NodeID)
+	}
 }
 
 // LiveNodeEvents reads the in-flight sandbox's full event log directly and
@@ -41,6 +51,11 @@ func (c *acpProvider) deregisterLive(req NodeReq) {
 // registered but the bridge read fails, ok=false with a non-nil err so
 // callers can surface a distinguishable failure (never pretend live+empty).
 func (c *acpProvider) LiveNodeEvents(ctx context.Context, runID, nodeID string) ([]models.AcpEvent, bool, error) {
+	if c.timeline != nil {
+		if e, ok := c.timeline.get(runID, nodeID); ok {
+			return append([]models.AcpEvent(nil), e.events...), e.live, nil
+		}
+	}
 	c.mu.Lock()
 	sb := c.live[runID+"|"+nodeID]
 	c.mu.Unlock()
@@ -54,13 +69,22 @@ func (c *acpProvider) LiveNodeEvents(ctx context.Context, runID, nodeID string) 
 	if res == nil {
 		return nil, false, fmt.Errorf("event log unavailable")
 	}
-	return res.AcpEvents(), true, nil
+	events := res.AcpEvents()
+	if c.timeline != nil {
+		c.timeline.upsert(runID, nodeID, events)
+	}
+	return events, true, nil
 }
 
 // LiveNodeEventsPage reads a page of events from the in-flight sandbox.
 // Fetch failures return ok=false with a non-nil err (aligned with
 // LiveNodeEvents) — never live=true with an empty page that masks the error.
 func (c *acpProvider) LiveNodeEventsPage(ctx context.Context, runID, nodeID, cursor string, limit int) ([]models.AcpEvent, string, bool, bool, error) {
+	if c.timeline != nil {
+		if ev, next, more, live, ok := c.timeline.page(runID, nodeID, cursor, limit); ok {
+			return ev, next, more, live, nil
+		}
+	}
 	c.mu.Lock()
 	sb := c.live[runID+"|"+nodeID]
 	c.mu.Unlock()
@@ -74,7 +98,11 @@ func (c *acpProvider) LiveNodeEventsPage(ctx context.Context, runID, nodeID, cur
 	if page == nil {
 		return nil, "", false, false, fmt.Errorf("event log page unavailable")
 	}
-	return sandbox.AggregateFrames(page.Events), page.NextCursor, page.HasMore, true, nil
+	events := sandbox.AggregateFrames(page.Events)
+	if c.timeline != nil {
+		c.timeline.upsert(runID, nodeID, events)
+	}
+	return events, page.NextCursor, page.HasMore, true, nil
 }
 
 // snapshotEvents captures the full agent event log straight from the sandbox so

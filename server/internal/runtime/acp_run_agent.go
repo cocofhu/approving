@@ -550,6 +550,13 @@ func (c *acpProvider) AbortRun(runID string) {
 	for _, k := range agentKeys {
 		delete(c.inflightACP, k)
 		delete(c.live, k)
+		if c.timeline != nil {
+			nodeID := k
+			if i := strings.IndexByte(k, '|'); i >= 0 {
+				nodeID = k[i+1:]
+			}
+			c.timeline.stop(runID, nodeID)
+		}
 	}
 	c.mu.Unlock()
 	for _, k := range sessionKeys {
@@ -579,7 +586,14 @@ func (c *acpProvider) closeSession(key string) {
 	sess := c.sessions[key]
 	delete(c.sessions, key)
 	delete(c.live, key)
+	runID, nodeID := "", ""
+	if i := strings.IndexByte(key, '|'); i >= 0 {
+		runID, nodeID = key[:i], key[i+1:]
+	}
 	c.mu.Unlock()
+	if c.timeline != nil && runID != "" && nodeID != "" {
+		c.timeline.stop(runID, nodeID)
+	}
 	if sess != nil {
 
 		c.retireRunSandbox(sess.sb, sess.acp, sess.home)

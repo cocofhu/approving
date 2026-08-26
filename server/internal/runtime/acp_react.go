@@ -491,7 +491,14 @@ func (c *acpProvider) parkReactSession(req NodeReq, sb *sandbox.Sandbox, acp *sa
 	c.mu.Lock()
 	c.sessions[key] = sess
 	c.live[key] = sb
+	host, port := "", 0
+	if sb != nil {
+		host, port = sb.Host, sb.Port
+	}
 	c.mu.Unlock()
+	if c.timeline != nil && sb != nil {
+		c.timeline.startIngest(req.RunID, req.NodeID, host, port)
+	}
 	return sess
 }
 
