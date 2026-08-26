@@ -144,9 +144,15 @@ test.describe('项目外部 MCP 面板（无引导遮罩）', () => {
     await expect(page.getByTestId('external-mcp-save')).toBeVisible()
     await expect(page.getByTestId('external-mcp-create-key')).toBeVisible()
     await expect(page.getByTestId('external-mcp-key-row')).toBeVisible()
-    await expect(page.getByText('http://api.example.com/mcp/external/proj-1')).toBeVisible()
+    // URL appears in code block, hint paragraph, and JSON example — assert exact code text
+    await expect(page.getByText('http://api.example.com/mcp/external/proj-1', { exact: true })).toBeVisible()
     // g3.2 review v3: {base} must be interpolated, not shown literally
     await expect(page.getByText(/完整 URL 形如：http:\/\/api\.example\.com\/mcp\/external\/proj-1\/pm-progress/)).toBeVisible()
     await expect(page.getByText('{base}')).toHaveCount(0)
+
+    await page.screenshot({
+      path: '/tmp/external-mcp-panel.png',
+      fullPage: true,
+    })
   })
 })
