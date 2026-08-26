@@ -336,12 +336,12 @@
     "pmAgentFs": {
       "name": "pm-agent-fs",
       "desc": "项目管理专用 · 读组织架构与编辑下属 Agent 工作目录",
-      "overview": "读取 _org.json 汇报树（self/direct/indirect/other），并对自身与汇报闭包内 Agent 的 host 侧 workspace/ 做 list/read/write/delete/mkdir/rename。不触及 Run 沙箱，不改 agent.json 元配置。",
+      "overview": "读取 _org.json 虚拟组与同项目成员扁平视图（self/direct/other），并对同项目任意 Agent 的 host 侧 workspace/ 做 list/read/write/delete/mkdir/rename。不触及 Run 沙箱，不改 agent.json 元配置。",
       "convention": "项目详情 → 项目管理设置中启用 pm-agent-fs（新项目默认启用；旧项目若已显式保存 EnabledMcps 需手动勾选）。变更在 Agent Studio「Agent 工作目录」刷新或重开后可见（非热更新）。注意：若 Studio 打开同一 Agent 且存在未保存草稿，随后 Save 可能覆盖 MCP 已写入内容——Demo/使用时请刷新并避免并行脏写。",
       "tools": {
         "pm_get_org": {
           "signature": "pm_get_org()",
-          "desc": "读组织架构与下属关系"
+          "desc": "读组织架构与同项目成员"
         },
         "pm_list_agent_templates": {
           "signature": "pm_list_agent_templates()",
@@ -352,8 +352,8 @@
           "desc": "从模板创建工程师 Agent（同项目，禁止覆盖重名）"
         },
         "pm_set_org_membership": {
-          "signature": "pm_set_org_membership(agentName, groupIds, parentAgent?)",
-          "desc": "设置组成员与汇报上级（parent 须为当前 PM）"
+          "signature": "pm_set_org_membership(agentName, groupIds)",
+          "desc": "设置虚拟组成员（groupIds 须在授权范围内）"
         },
         "pm_ensure_child_group": {
           "signature": "pm_ensure_child_group(name, parentGroupId?)",

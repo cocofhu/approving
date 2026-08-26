@@ -33,8 +33,8 @@ func setupFolderOrg(t *testing.T) (*SkillService, *OrgService) {
 	if _, err := orgSvc.Put(AgentOrg{
 		Groups: []OrgGroup{gRoot, gSub, gEmpty, gOther},
 		Agents: map[string]OrgAgentMembership{
-			"alice":   {GroupIDs: []string{"g_root", "g_other"}, ParentAgent: "outside"},
-			"bob":     {GroupIDs: []string{"g_pipe", "g_root"}, ParentAgent: "alice"},
+			"alice":   {GroupIDs: []string{"g_root", "g_other"}},
+			"bob":     {GroupIDs: []string{"g_pipe", "g_root"}},
 			"carol":   {GroupIDs: []string{"g_pipe"}},
 			"outside": {GroupIDs: []string{"g_other"}},
 		},
@@ -73,12 +73,6 @@ func TestCollectGroupSubtree_emptyGroupsDedupAndClip(t *testing.T) {
 	alice := sub.Memberships["alice"]
 	if len(alice.GroupIDs) != 1 || alice.GroupIDs[0] != "g_root" {
 		t.Fatalf("alice groupIds clipped: %+v", alice.GroupIDs)
-	}
-	if alice.ParentAgent != "" {
-		t.Fatalf("outside parentAgent must be dropped, got %q", alice.ParentAgent)
-	}
-	if sub.Memberships["bob"].ParentAgent != "alice" {
-		t.Fatalf("in-subtree parentAgent kept: %+v", sub.Memberships["bob"])
 	}
 }
 
@@ -185,9 +179,6 @@ func TestExportImportFolder_remapMountRenameOverwriteRollback(t *testing.T) {
 		t.Fatalf("new root missing: %+v", renamed.Org.Groups)
 	}
 	importedAlice := renamed.Org.Agents["alice_v2"]
-	if importedAlice.ParentAgent != "" {
-		t.Fatalf("outside parentAgent restored: %+v", importedAlice)
-	}
 	if !containsString(importedAlice.GroupIDs, newRoot.ID) {
 		t.Fatalf("alice_v2 not in new root: %+v", importedAlice.GroupIDs)
 	}

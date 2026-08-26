@@ -27,11 +27,8 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 		if err != nil {
 			return map[string]any{"error": "failed to load org: " + err.Error()}, true
 		}
-		allNames := make([]string, 0)
-		for _, a := range skill.List() {
-			allNames = append(allNames, a.Name)
-		}
-		view := services.BuildOrgLeaderView(doc, sess.AgentName, allNames)
+		allAgents := skill.List()
+		view := services.BuildOrgLeaderView(doc, sess.AgentName, allAgents)
 		return view, false
 
 	case "pm_list_agent_templates", "pm_create_agent_from_template", "pm_set_org_membership", "pm_ensure_child_group":
@@ -98,10 +95,9 @@ func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (
 	return map[string]any{"error": "unknown tool: " + name}, true
 }
 
-// authorizeAgentFSTarget enforces reporting closure (incl. self) + same home project.
-func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.SkillService, org *services.OrgService, target string) (errMsg string, deny bool) {
-	leader := strings.TrimSpace(sess.AgentName)
-	if leader == "" {
+// authorizeAgentFSTarget allows PM to manage any agent bound to the same project (incl. self).
+func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.SkillService, _ *services.OrgService, target string) (errMsg string, deny bool) {
+	if strings.TrimSpace(sess.AgentName) == "" {
 		return "leader agent missing from session", true
 	}
 	ag, ok := skill.Get(target)
@@ -110,13 +106,6 @@ func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.SkillServic
 	}
 	if !services.AgentProjectMatches(ag, sess.ProjectID) {
 		return "agent not in project / not home-project bound: " + target, true
-	}
-	doc, err := org.Get()
-	if err != nil {
-		return "failed to load org: " + err.Error(), true
-	}
-	if !services.IsInReportingClosure(doc, leader, target) {
-		return "agent is not self or a direct/indirect report of the leader: " + target, true
 	}
 	return "", false
 }

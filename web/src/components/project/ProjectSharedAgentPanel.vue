@@ -8,6 +8,7 @@ import AgentMcpPanel from '@/components/agent/AgentMcpPanel.vue'
 import AgentEnvPanel from '@/components/agent/AgentEnvPanel.vue'
 import AgentPromptsPanel from '@/components/agent/AgentPromptsPanel.vue'
 import AgentChatTester from '@/components/agent/AgentChatTester.vue'
+import ProjectAgentSelect from '@/components/project/ProjectAgentSelect.vue'
 import { api, type CreateAgentTestPayload, type ProjectSharedAgentConfig, type SandboxView } from '@/lib/api/api'
 import {
   DEFAULT_CONFIG_ROOT,
@@ -55,6 +56,20 @@ let configRootTouched = false
 
 const agents = ref<{ name: string; projectId?: string }[]>([])
 const testAgentName = ref('')
+
+const projectAgents = computed(() =>
+  agents.value.filter((a) => a.projectId === props.projectId),
+)
+
+function syncTestAgentSelection() {
+  const candidates = projectAgents.value
+  if (!candidates.length) {
+    testAgentName.value = ''
+    return
+  }
+  if (candidates.some((a) => a.name === testAgentName.value)) return
+  testAgentName.value = candidates[0]!.name
+}
 
 const dirty = computed(() => {
   if (!draft.value) return false
@@ -180,10 +195,7 @@ async function load() {
     ])
     applyLoaded(cfg)
     agents.value = agentList.map((a) => ({ name: a.name, projectId: a.projectId }))
-    if (!testAgentName.value && agents.value.length) {
-      const bound = agents.value.find((a) => a.projectId === props.projectId)
-      testAgentName.value = bound?.name || agents.value[0]!.name
-    }
+    syncTestAgentSelection()
   } catch (e: unknown) {
     loadError.value = String((e as { message?: string })?.message || e)
     draft.value = null
@@ -268,6 +280,10 @@ watch(
     void load()
   },
 )
+
+watch(projectAgents, () => {
+  syncTestAgentSelection()
+})
 
 onMounted(() => {
   void load()
@@ -505,26 +521,31 @@ onMounted(() => {
         class="flex min-h-0 flex-1 flex-col overflow-hidden"
         data-testid="shared-agent-test"
       >
-        <div class="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-          <label class="flex min-w-0 flex-1 items-center gap-2 text-[12px] text-txt2">
-            <span class="shrink-0">{{ t('pages.projectDetail.sharedAgent.pickAgent') }}</span>
-            <select
+        <div
+          class="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-2 border-b border-line px-3 py-2"
+          data-testid="shared-agent-test-toolbar"
+        >
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="shrink-0 text-[12px] text-txt2">
+              {{ t('pages.projectDetail.sharedAgent.pickAgent') }}
+            </span>
+            <ProjectAgentSelect
               v-model="testAgentName"
-              class="input min-w-0 flex-1 px-2 py-1.5 text-[12px]"
+              :agents="projectAgents"
               data-testid="shared-agent-test-pick"
-            >
-              <option value="" disabled>
-                {{ t('pages.projectDetail.sharedAgent.pickAgentPlaceholder') }}
-              </option>
-              <option v-for="a in agents" :key="a.name" :value="a.name">{{ a.name }}</option>
-            </select>
-          </label>
+            />
+          </div>
           <p class="w-full text-[11px] leading-5 text-txt3">
             {{ t('pages.projectDetail.sharedAgent.testHint') }}
           </p>
         </div>
-        <div v-if="!agents.length" class="flex flex-1 items-center justify-center text-[13px] text-txt3">
-          {{ t('pages.projectDetail.sharedAgent.noAgents') }}
+        <div
+          v-if="!projectAgents.length"
+          class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[13px] text-txt3"
+          data-testid="shared-agent-test-empty"
+        >
+          <Icon name="robot" :size="20" />
+          <p>{{ t('pages.projectDetail.sharedAgent.noProjectAgents') }}</p>
         </div>
         <AgentChatTester
           v-else-if="testAgentName"
@@ -533,10 +554,6 @@ onMounted(() => {
           :home-project-id="projectId"
           :create-test="createProjectContextTest"
         />
-        <div v-else class="flex flex-1 items-center justify-center gap-2 text-[13px] text-txt3">
-          <Icon name="robot" :size="16" />
-          {{ t('pages.projectDetail.sharedAgent.pickAgentPlaceholder') }}
-        </div>
       </div>
     </template>
   </div>

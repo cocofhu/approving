@@ -22,10 +22,6 @@ export function groupIdsOf(org: AgentOrg, agentName: string): string[] {
   return [...(membershipOf(org, agentName).groupIds || [])]
 }
 
-export function parentOf(org: AgentOrg, agentName: string): string {
-  return membershipOf(org, agentName).parentAgent || ''
-}
-
 function groupById(org: AgentOrg): Map<string, OrgGroup> {
   const m = new Map<string, OrgGroup>()
   for (const g of org.groups || []) m.set(g.id, g)
@@ -80,8 +76,8 @@ function groupSubtreeIds(org: AgentOrg, rootId: string): Set<string> {
 }
 
 /** Agent names that belong to any group in the subtree. */
-function agentNamesInSubtree(org: AgentOrg, rootId: string, agentNames: string[]): string[] {
-  const gids = groupSubtreeIds(org, rootId)
+function agentNamesInSubtree(org: AgentOrg, rootGroupId: string, agentNames: string[]): string[] {
+  const gids = groupSubtreeIds(org, rootGroupId)
   return agentNames.filter((n) => groupIdsOf(org, n).some((id) => gids.has(id)))
 }
 
@@ -105,24 +101,6 @@ export function wouldCreateGroupCycle(org: AgentOrg, childId: string, newParentI
   return false
 }
 
-/** Would setting parentAgent create a reporting cycle? */
-export function wouldCreateReportingCycle(
-  org: AgentOrg,
-  agentName: string,
-  parentAgent: string,
-): boolean {
-  if (!parentAgent) return false
-  if (parentAgent === agentName) return true
-  let cur = parentAgent
-  const seen = new Set<string>([agentName])
-  while (cur) {
-    if (seen.has(cur)) return true
-    seen.add(cur)
-    cur = parentOf(org, cur)
-  }
-  return false
-}
-
 export function applyDeleteGroup(org: AgentOrg, groupId: string): AgentOrg {
   const deleted = (org.groups || []).find((g) => g.id === groupId)
   if (!deleted) return org
@@ -139,8 +117,7 @@ export function applyDeleteGroup(org: AgentOrg, groupId: string): AgentOrg {
     gids = [...new Set(gids)]
     const next: OrgAgentMembership = { ...m, groupIds: gids }
     if (!next.groupIds?.length) delete next.groupIds
-    if (!next.parentAgent) delete next.parentAgent
-    if (next.groupIds?.length || next.parentAgent) agents[name] = next
+    if (next.groupIds?.length) agents[name] = next
   }
   return { ...org, groups, agents }
 }
@@ -162,8 +139,7 @@ export function applyMoveAgent(
   }
   const next: OrgAgentMembership = { ...prev, groupIds: gids }
   if (!next.groupIds?.length) delete next.groupIds
-  if (!next.parentAgent) delete next.parentAgent
-  if (next.groupIds?.length || next.parentAgent) agents[agentName] = next
+  if (next.groupIds?.length) agents[agentName] = next
   else delete agents[agentName]
   return { ...org, agents }
 }
@@ -171,7 +147,7 @@ export function applyMoveAgent(
 /**
  * Remove an agent from a single virtual group only (sidebar「移出本组」).
  * Unlike applyMoveAgent(..., target=''), this does not clear all groups.
- * parentAgent is preserved; empty groupIds → Ungrouped.
+ * Empty groupIds → Ungrouped.
  */
 export function applyRemoveAgentFromGroup(
   org: AgentOrg,
@@ -184,24 +160,17 @@ export function applyRemoveAgentFromGroup(
   const gids = [...(prev.groupIds || [])].filter((id) => id !== sourceGroupId)
   const next: OrgAgentMembership = { ...prev, groupIds: gids }
   if (!next.groupIds?.length) delete next.groupIds
-  if (!next.parentAgent) delete next.parentAgent
-  if (next.groupIds?.length || next.parentAgent) agents[agentName] = next
+  if (next.groupIds?.length) agents[agentName] = next
   else delete agents[agentName]
   return { ...org, agents }
 }
 
-export function setAgentMembership(
-  org: AgentOrg,
-  agentName: string,
-  groupIds: string[],
-  parentAgent: string,
-): AgentOrg {
+export function setAgentMembership(org: AgentOrg, agentName: string, groupIds: string[]): AgentOrg {
   const agents = { ...(org.agents || {}) }
   const next: OrgAgentMembership = {}
   const gids = [...new Set(groupIds.filter(Boolean))]
   if (gids.length) next.groupIds = gids
-  if (parentAgent) next.parentAgent = parentAgent
-  if (next.groupIds?.length || next.parentAgent) agents[agentName] = next
+  if (next.groupIds?.length) agents[agentName] = next
   else delete agents[agentName]
   return { ...org, agents }
 }
@@ -209,7 +178,7 @@ export function setAgentMembership(
 export type AgentProjectRef = { name: string; projectId?: string }
 export type ProjectNameRef = { id: string; name: string }
 
-/** This group + all descendant group ids (BFS). Not reporting-line org_closure. */
+/** This group + all descendant group ids (BFS). */
 function descendantGroupIds(org: AgentOrg, groupId: string): string[] {
   const byParent = new Map<string, string[]>()
   for (const g of org.groups || []) {
@@ -339,7 +308,6 @@ export type OrgTreeRow =
       groupId: string
       depth: number
       multi: boolean
-      parentAgent: string
     }
   | {
       kind: 'ungrouped-header'
@@ -474,13 +442,11 @@ export function buildOrgTreeRows(
         groupId: g.id,
         depth: depth + 1,
         multi: gids.length >= 2,
-        parentAgent: parentOf(org, name),
       })
     }
   }
 
   for (const root of children.get('') || []) walkGroup(root, 0)
-  // Orphan groups whose parent is missing — treat as roots.
   for (const g of org.groups || []) {
     if (g.parentGroupId && !byId.has(g.parentGroupId)) walkGroup(g, 0)
   }
@@ -503,7 +469,6 @@ export function buildOrgTreeRows(
         groupId: UNGROUPED_ID,
         depth: 1,
         multi: false,
-        parentAgent: parentOf(org, name),
       })
     }
   }

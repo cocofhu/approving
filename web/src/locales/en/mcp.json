@@ -336,12 +336,12 @@
     "pmAgentFs": {
       "name": "pm-agent-fs",
       "desc": "Project Management only · read org and edit report Agent workspaces",
-      "overview": "Read the reporting tree (self/direct/indirect/other) and list/read/write/delete/mkdir/rename host-side workspace/ for self and reporting-closure agents. Does not touch Run sandboxes or agent.json metadata.",
+      "overview": "Read virtual groups and flat same-project member view (self/direct/other); list/read/write/delete/mkdir/rename host-side workspace/ for any same-project agent. Does not touch Run sandboxes or agent.json metadata.",
       "convention": "Enable under Project → Project Management settings (on by default for new projects; older projects with an explicit EnabledMcps list must opt in). Changes appear in Agent Studio「Agent workspace」after refresh/reopen (not live hot-reload). Warning: if Studio has an unsaved dirty draft for the same Agent, a later Save may overwrite MCP writes — refresh and avoid concurrent dirty edits.",
       "tools": {
         "pm_get_org": {
           "signature": "pm_get_org()",
-          "desc": "Read org and reporting relations"
+          "desc": "Read org and same-project members"
         },
         "pm_list_agent_templates": {
           "signature": "pm_list_agent_templates()",
@@ -352,8 +352,8 @@
           "desc": "Create an engineer Agent from a template (same project; no overwrite)"
         },
         "pm_set_org_membership": {
-          "signature": "pm_set_org_membership(agentName, groupIds, parentAgent?)",
-          "desc": "Set group membership and reporting parent (parent must be current PM)"
+          "signature": "pm_set_org_membership(agentName, groupIds)",
+          "desc": "Set virtual group membership (groupIds must be in allow-list)"
         },
         "pm_ensure_child_group": {
           "signature": "pm_ensure_child_group(name, parentGroupId?)",

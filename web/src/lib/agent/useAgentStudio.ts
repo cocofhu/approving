@@ -26,8 +26,8 @@ import {
   type AgentStudioDraft as Draft,
 } from '@/lib/agent/agentStudioDraft'
 
-export type StudioTab = 'files' | 'mcp' | 'env' | 'prompts' | 'platform-rules' | 'test' | 'meta' | 'data'
-const STUDIO_TABS: StudioTab[] = ['files', 'mcp', 'env', 'prompts', 'platform-rules', 'test', 'meta', 'data']
+export type StudioTab = 'files' | 'mcp' | 'env' | 'prompts' | 'platform-rules' | 'meta' | 'data'
+const STUDIO_TABS: StudioTab[] = ['files', 'mcp', 'env', 'prompts', 'platform-rules', 'meta', 'data']
 
 function isStudioTab(q: unknown): q is StudioTab {
   return typeof q === 'string' && (STUDIO_TABS as readonly string[]).includes(q)
@@ -703,7 +703,6 @@ const studioTabs = computed(() => {
     { k: 'env' as const, l: t('pages.agentStudio.tabs.env', { n: d.env.filter((e) => !isManagedRegionKey(e.k)).length }) },
     { k: 'prompts' as const, l: pc ? t('pages.agentStudio.tabs.promptsCount', { n: pc }) : t('pages.agentStudio.tabs.prompts') },
     { k: 'platform-rules' as const, l: t('pages.agentStudio.tabs.platformRules') },
-    { k: 'test' as const, l: t('pages.agentStudio.tabs.test') },
     { k: 'data' as const, l: t('pages.agentStudio.tabs.data') },
     { k: 'meta' as const, l: t('pages.agentStudio.tabs.meta') },
   ]

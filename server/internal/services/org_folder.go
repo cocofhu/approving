@@ -70,8 +70,7 @@ type ImportFolderResult struct {
 }
 
 // CollectGroupSubtree returns the target group + descendants + deduped agents.
-// Empty groups are kept. Membership is clipped to the subtree; parentAgent
-// outside the agent set is dropped.
+// Empty groups are kept. Membership is clipped to the subtree.
 func CollectGroupSubtree(org AgentOrg, rootGroupID string) (GroupSubtree, error) {
 	rootGroupID = strings.TrimSpace(rootGroupID)
 	if rootGroupID == "" {
@@ -136,16 +135,7 @@ func CollectGroupSubtree(org AgentOrg, rootGroupID string) (GroupSubtree, error)
 		}
 		agentSet[name] = struct{}{}
 		memberships[name] = OrgAgentMembership{
-			GroupIDs:    uniqueNonEmpty(gids),
-			ParentAgent: strings.TrimSpace(m.ParentAgent),
-		}
-	}
-	for name, m := range memberships {
-		if m.ParentAgent != "" {
-			if _, ok := agentSet[m.ParentAgent]; !ok {
-				m.ParentAgent = ""
-				memberships[name] = m
-			}
+			GroupIDs: uniqueNonEmpty(gids),
 		}
 	}
 	names := make([]string, 0, len(agentSet))
@@ -171,7 +161,7 @@ func (o *OrgService) ExportFolderZIP(groupID string) ([]byte, string, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	org, err := o.loadLocked()
+	org, _, err := o.loadLocked()
 	if err != nil {
 		return nil, "", err
 	}
@@ -182,21 +172,11 @@ func (o *OrgService) ExportFolderZIP(groupID string) ([]byte, string, error) {
 
 	// Only export agents that still exist on disk.
 	alive := make([]string, 0, len(sub.AgentNames))
-	aliveSet := map[string]struct{}{}
 	for _, name := range sub.AgentNames {
 		if o.skill.Exists(name) {
 			alive = append(alive, name)
-			aliveSet[name] = struct{}{}
 		} else {
 			delete(sub.Memberships, name)
-		}
-	}
-	for name, m := range sub.Memberships {
-		if m.ParentAgent != "" {
-			if _, ok := aliveSet[m.ParentAgent]; !ok {
-				m.ParentAgent = ""
-				sub.Memberships[name] = m
-			}
 		}
 	}
 	sub.AgentNames = alive
@@ -315,7 +295,7 @@ func (o *OrgService) ImportFolderZIP(raw []byte, targetGroupID string, mode Impo
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	org, err := o.loadLocked()
+	org, _, err := o.loadLocked()
 	if err != nil {
 		return ImportFolderResult{}, err
 	}
@@ -470,16 +450,8 @@ func (o *OrgService) ImportFolderZIP(raw []byte, targetGroupID string, mode Impo
 				gids = append(gids, nid)
 			}
 		}
-		parent := strings.TrimSpace(m.ParentAgent)
-		if parent != "" {
-			if mapped, ok := nameMap[parent]; ok {
-				parent = mapped
-			} else {
-				parent = ""
-			}
-		}
-		nm := OrgAgentMembership{GroupIDs: uniqueNonEmpty(gids), ParentAgent: parent}
-		if len(nm.GroupIDs) == 0 && nm.ParentAgent == "" {
+		nm := OrgAgentMembership{GroupIDs: uniqueNonEmpty(gids)}
+		if len(nm.GroupIDs) == 0 {
 			if mode == ImportFolderOverwrite && containsString(overwritten, finalName) {
 				delete(merged.Agents, finalName)
 			}

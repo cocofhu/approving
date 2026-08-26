@@ -29,11 +29,9 @@ type OrgGroup struct {
 	ParentGroupID string `json:"parentGroupId,omitempty"`
 }
 
-// OrgAgentMembership holds an Agent's group memberships and optional reporting parent.
-// ParentAgent is the other Agent's name (skill_profile identity), not a group id.
+// OrgAgentMembership holds an Agent's virtual-group memberships.
 type OrgAgentMembership struct {
-	GroupIDs    []string `json:"groupIds,omitempty"`
-	ParentAgent string   `json:"parentAgent,omitempty"`
+	GroupIDs []string `json:"groupIds,omitempty"`
 }
 
 // AgentOrg is the central organization index stored at <profilesRoot>/_org.json.
@@ -60,17 +58,20 @@ func (o *OrgService) path() string {
 	return filepath.Join(o.root, orgFileName)
 }
 
-// Get returns the organization document, pruning memberships for deleted agents
-// and normalizing dangling parentAgent references. Repairs are written back so
-// subsequent Put validation does not fail on stale parents.
+// Get returns the organization document, pruning memberships for deleted agents.
+// Legacy parentAgent keys in _org.json are stripped on load (idempotent write-back).
 func (o *OrgService) Get() (AgentOrg, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	org, err := o.loadLocked()
+	org, legacy, err := o.loadLocked()
 	if err != nil {
 		return AgentOrg{}, err
 	}
+	changed := legacy
 	if o.pruneAgentsLocked(&org) {
+		changed = true
+	}
+	if changed {
 		org.Revision++
 		if err := o.saveLocked(org); err != nil {
 			return AgentOrg{}, err
@@ -86,7 +87,7 @@ func (o *OrgService) Put(incoming AgentOrg, expectedRevision int) (AgentOrg, err
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	cur, err := o.loadLocked()
+	cur, _, err := o.loadLocked()
 	if err != nil {
 		return AgentOrg{}, err
 	}
@@ -105,7 +106,7 @@ func (o *OrgService) Put(incoming AgentOrg, expectedRevision int) (AgentOrg, err
 	return normalized, nil
 }
 
-// OnRenameAgent cascades membership map keys and parentAgent references.
+// OnRenameAgent cascades membership map keys when an agent is renamed.
 func (o *OrgService) OnRenameAgent(oldName, newName string) error {
 	oldName = strings.TrimSpace(oldName)
 	newName = strings.TrimSpace(newName)
@@ -115,32 +116,21 @@ func (o *OrgService) OnRenameAgent(oldName, newName string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	org, err := o.loadLocked()
+	org, _, err := o.loadLocked()
 	if err != nil {
 		return err
 	}
-	changed := false
-	if m, ok := org.Agents[oldName]; ok {
-		delete(org.Agents, oldName)
-		org.Agents[newName] = m
-		changed = true
-	}
-	for name, m := range org.Agents {
-		if m.ParentAgent == oldName {
-			m.ParentAgent = newName
-			org.Agents[name] = m
-			changed = true
-		}
-	}
-	if !changed {
+	m, ok := org.Agents[oldName]
+	if !ok {
 		return nil
 	}
+	delete(org.Agents, oldName)
+	org.Agents[newName] = m
 	org.Revision++
 	return o.saveLocked(org)
 }
 
-// OnDeleteAgent reparents direct reports to the deleted agent's parent (or clears),
-// then removes the deleted agent's organization membership.
+// OnDeleteAgent removes the deleted agent's organization membership.
 func (o *OrgService) OnDeleteAgent(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -149,32 +139,14 @@ func (o *OrgService) OnDeleteAgent(name string) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	org, err := o.loadLocked()
+	org, _, err := o.loadLocked()
 	if err != nil {
 		return err
 	}
-	deletedParent := ""
-	if m, ok := org.Agents[name]; ok {
-		deletedParent = m.ParentAgent
-	}
-	changed := false
-	for n, m := range org.Agents {
-		if n == name {
-			continue
-		}
-		if m.ParentAgent == name {
-			m.ParentAgent = deletedParent
-			org.Agents[n] = m
-			changed = true
-		}
-	}
-	if _, ok := org.Agents[name]; ok {
-		delete(org.Agents, name)
-		changed = true
-	}
-	if !changed {
+	if _, ok := org.Agents[name]; !ok {
 		return nil
 	}
+	delete(org.Agents, name)
 	org.Revision++
 	return o.saveLocked(org)
 }
@@ -184,21 +156,22 @@ func NewGroupID() string {
 	return "g_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 }
 
-func (o *OrgService) loadLocked() (AgentOrg, error) {
+func (o *OrgService) loadLocked() (AgentOrg, bool, error) {
 	p := o.path()
 	b, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return emptyOrg(), nil
+			return emptyOrg(), false, nil
 		}
-		return AgentOrg{}, err
+		return AgentOrg{}, false, err
 	}
 	if len(strings.TrimSpace(string(b))) == 0 {
-		return emptyOrg(), nil
+		return emptyOrg(), false, nil
 	}
+	hadLegacyParent := strings.Contains(string(b), "parentAgent")
 	var org AgentOrg
 	if err := json.Unmarshal(b, &org); err != nil {
-		return AgentOrg{}, fmt.Errorf("parse %s: %w", orgFileName, err)
+		return AgentOrg{}, false, fmt.Errorf("parse %s: %w", orgFileName, err)
 	}
 	if org.Agents == nil {
 		org.Agents = map[string]OrgAgentMembership{}
@@ -206,7 +179,7 @@ func (o *OrgService) loadLocked() (AgentOrg, error) {
 	if org.Groups == nil {
 		org.Groups = []OrgGroup{}
 	}
-	return org, nil
+	return org, hadLegacyParent, nil
 }
 
 func emptyOrg() AgentOrg {
@@ -243,8 +216,7 @@ func (o *OrgService) saveLocked(org AgentOrg) error {
 	return nil
 }
 
-// pruneAgentsLocked removes memberships for agents missing on disk and
-// reparents/clears dangling parentAgent refs (same rules as OnDeleteAgent).
+// pruneAgentsLocked removes memberships for agents missing on disk.
 // Returns true when org was mutated.
 func (o *OrgService) pruneAgentsLocked(org *AgentOrg) bool {
 	if org.Agents == nil {
@@ -255,42 +227,11 @@ func (o *OrgService) pruneAgentsLocked(org *AgentOrg) bool {
 		return false
 	}
 	changed := false
-	for {
-		var missing string
-		var deletedParent string
-		for name, m := range org.Agents {
-			if !o.skill.Exists(name) {
-				missing = name
-				deletedParent = m.ParentAgent
-				break
-			}
-		}
-		if missing == "" {
-			break
-		}
-		for n, m := range org.Agents {
-			if n == missing {
-				continue
-			}
-			if m.ParentAgent == missing {
-				m.ParentAgent = deletedParent
-				org.Agents[n] = m
-			}
-		}
-		delete(org.Agents, missing)
-		changed = true
-	}
-	for name, m := range org.Agents {
-		if m.ParentAgent == "" || o.skill.Exists(m.ParentAgent) {
-			continue
-		}
-		m.ParentAgent = ""
-		if len(m.GroupIDs) == 0 {
+	for name := range org.Agents {
+		if !o.skill.Exists(name) {
 			delete(org.Agents, name)
-		} else {
-			org.Agents[name] = m
+			changed = true
 		}
-		changed = true
 	}
 	return changed
 }
@@ -334,7 +275,6 @@ func (o *OrgService) validateAndNormalize(incoming AgentOrg) (AgentOrg, error) {
 		return AgentOrg{}, err
 	}
 
-	// Stable group order: roots first by name, then DFS.
 	sort.SliceStable(out.Groups, func(i, j int) bool {
 		return out.Groups[i].ID < out.Groups[j].ID
 	})
@@ -353,17 +293,7 @@ func (o *OrgService) validateAndNormalize(incoming AgentOrg) (AgentOrg, error) {
 		}
 		if o.skill != nil {
 			if _, ok := existingAgents[name]; !ok {
-				// Ignore memberships for agents that no longer exist (import/cleanup).
 				continue
-			}
-		}
-		parent := strings.TrimSpace(m.ParentAgent)
-		if parent == name {
-			return AgentOrg{}, fmt.Errorf("%w: agent %q cannot be its own parent", ErrOrgValidation, name)
-		}
-		if parent != "" && o.skill != nil {
-			if _, ok := existingAgents[parent]; !ok {
-				return AgentOrg{}, fmt.Errorf("%w: parent agent %q does not exist", ErrOrgValidation, parent)
 			}
 		}
 		gids := uniqueNonEmpty(m.GroupIDs)
@@ -372,17 +302,13 @@ func (o *OrgService) validateAndNormalize(incoming AgentOrg) (AgentOrg, error) {
 				return AgentOrg{}, fmt.Errorf("%w: agent %q references unknown group %q", ErrOrgValidation, name, gid)
 			}
 		}
-		nm := OrgAgentMembership{GroupIDs: gids, ParentAgent: parent}
-		if len(nm.GroupIDs) == 0 && nm.ParentAgent == "" {
-			// No org data — omit to keep file compact (ungrouped + no parent).
+		nm := OrgAgentMembership{GroupIDs: gids}
+		if len(nm.GroupIDs) == 0 {
 			continue
 		}
 		out.Agents[name] = nm
 	}
 
-	if err := detectReportingCycles(out.Agents); err != nil {
-		return AgentOrg{}, err
-	}
 	return out, nil
 }
 
@@ -431,38 +357,6 @@ func detectGroupCycles(byID map[string]OrgGroup) error {
 	}
 	for id := range byID {
 		if err := visit(id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func detectReportingCycles(agents map[string]OrgAgentMembership) error {
-	const (
-		white = 0
-		gray  = 1
-		black = 2
-	)
-	color := map[string]int{}
-	var visit func(name string) error
-	visit = func(name string) error {
-		switch color[name] {
-		case gray:
-			return fmt.Errorf("%w: reporting cycle involving %q", ErrOrgValidation, name)
-		case black:
-			return nil
-		}
-		color[name] = gray
-		if m, ok := agents[name]; ok && m.ParentAgent != "" {
-			if err := visit(m.ParentAgent); err != nil {
-				return err
-			}
-		}
-		color[name] = black
-		return nil
-	}
-	for name := range agents {
-		if err := visit(name); err != nil {
 			return err
 		}
 	}
