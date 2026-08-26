@@ -32,7 +32,7 @@ const baseDraft: AgentStudioDraft = {
   mcp: [],
   gitCredentialType: undefined,
   acpBackend: 'codebuddy',
-  layout: { configRoot: '/tmp/agent' },
+  layout: { configRoot: '/tmp/agent', workspaceDir: '/tmp/workspace' },
 }
 
 describe('Agent Studio help buttons', () => {
