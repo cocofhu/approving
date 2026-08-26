@@ -763,48 +763,6 @@ func TestAgentEndpoints(t *testing.T) {
 	if w := h.do("DELETE", "/api/agents/a2", nil); w.Code != 200 {
 		t.Fatalf("delete: %d", w.Code)
 	}
-	// CreateAgentTest for unknown agent -> 400.
-	if w := h.do("POST", "/api/agents/ghost/test", map[string]any{}); w.Code != 400 {
-		t.Fatalf("agent test unknown: %d", w.Code)
-	}
-	// A test sandbox's data ownership follows the Agent's home project, not the
-	// UI-selected projectId. Bind the agent first, then start the test.
-	wProj := h.do("POST", "/api/projects", map[string]any{"name": "TesterHome"})
-	if wProj.Code != 200 {
-		t.Fatalf("create project: %d %s", wProj.Code, wProj.Body)
-	}
-	var proj map[string]any
-	if err := json.Unmarshal(wProj.Body.Bytes(), &proj); err != nil {
-		t.Fatal(err)
-	}
-	pid, _ := proj["id"].(string)
-	if w := h.do("POST", "/api/agents", map[string]any{"name": "tester", "projectId": pid}); w.Code != 201 {
-		t.Fatalf("create tester agent: %d %s", w.Code, w.Body)
-	}
-	// CreateAgentTest accepts repos[]; UI-passed projectId is ignored in favor of agent home.
-	wRepos := h.do("POST", "/api/agents/tester/test", map[string]any{
-		"projectId": "ignored-client-project",
-		"repos": []map[string]string{
-			{"name": "web", "url": "https://h/web.git", "branch": "main"},
-		},
-	})
-	if wRepos.Code != 201 {
-		t.Fatalf("agent test repos: %d %s", wRepos.Code, wRepos.Body)
-	}
-	var sb map[string]any
-	if err := json.Unmarshal(wRepos.Body.Bytes(), &sb); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got, _ := sb["repoUrl"].(string); got != "https://h/web.git" {
-		t.Fatalf("repoUrl = %q, want first clone URL", got)
-	}
-	if got, _ := sb["projectId"].(string); got != pid {
-		t.Fatalf("projectId = %q, want agent home project %q", got, pid)
-	}
-	// repoUrl backward compat still works.
-	if w := h.do("POST", "/api/agents/tester/test", map[string]any{"repoUrl": "https://h/legacy.git"}); w.Code != 201 {
-		t.Fatalf("agent test repoUrl: %d %s", w.Code, w.Body)
-	}
 }
 
 func TestSandboxEndpoints(t *testing.T) {

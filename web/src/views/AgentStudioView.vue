@@ -3,7 +3,6 @@ import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import AgentOrgSidebar from '@/components/agent/AgentOrgSidebar.vue'
-import AgentChatTester from '@/components/agent/AgentChatTester.vue'
 import AgentDataPanel, { type DataSubTab } from '@/components/agent/AgentDataPanel.vue'
 import AgentFilesPanel from '@/components/agent/AgentFilesPanel.vue'
 import AgentMcpPanel from '@/components/agent/AgentMcpPanel.vue'
@@ -596,11 +595,6 @@ const {
               </button>
             </div>
           </div>
-        </div>
-
-        <!-- chat test (kept mounted via v-show so the session survives tab switches) -->
-        <div v-show="tab === 'test' && !isMobile" class="flex min-h-0 flex-1 flex-col">
-          <AgentChatTester :profile="activeName" :home-project-id="savedProjectId" />
         </div>
 
         <AgentMetaPanel

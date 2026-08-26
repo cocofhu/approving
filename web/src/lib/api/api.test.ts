@@ -177,7 +177,6 @@ describe('api req helpers', () => {
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
       .mockResolvedValueOnce(new Response('zip', { status: 200 }))
       .mockResolvedValueOnce(jsonResponse(agent))
-      .mockResolvedValueOnce(jsonResponse({ id: 1, name: 's', profile: 'a1', purpose: 'test', status: 'running', createdAt: 't', updatedAt: 't', containerStatus: 'up', busy: false, connected: true, hasCodeServer: true, hasAcp: true }))
       .mockResolvedValueOnce(jsonResponse([]))
       .mockResolvedValueOnce(jsonResponse({ id: 1, name: 's', profile: 'a1', purpose: 'test', status: 'running', createdAt: 't', updatedAt: 't', containerStatus: 'up', busy: false, connected: true, hasCodeServer: true, hasAcp: true }))
       .mockResolvedValueOnce(jsonResponse({ status: 'ok' }))
@@ -234,7 +233,6 @@ describe('api req helpers', () => {
       api.importAgent(new File(['z'], 'a.zip'), { targetName: 'a1', mode: 'create' }),
     ).resolves.toEqual(agent)
 
-    await expect(api.createAgentTest('a1', { repoUrl: 'https://x' })).resolves.toMatchObject({ id: 1 })
     await expect(api.listSandboxes()).resolves.toEqual([])
     await expect(api.getSandbox(1)).resolves.toMatchObject({ id: 1 })
     await expect(api.stopSandbox(1)).resolves.toEqual({ status: 'ok' })
