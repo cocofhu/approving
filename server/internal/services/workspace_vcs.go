@@ -1,15 +1,23 @@
 package services
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/osfs"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/cache"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
 const (
@@ -31,13 +39,13 @@ var (
 
 // VcsCommitMeta is metadata stored in each workspace revision.
 type VcsCommitMeta struct {
-	SHA       string           `json:"sha"`
-	ParentSHA string           `json:"parentSha,omitempty"`
-	CreatedAt time.Time        `json:"createdAt"`
-	Author    string           `json:"author"`
-	Source    string           `json:"source"`
-	Reason    string           `json:"reason"`
-	Changes   []VcsPathChange  `json:"changes"`
+	SHA       string          `json:"sha"`
+	ParentSHA string          `json:"parentSha,omitempty"`
+	CreatedAt time.Time       `json:"createdAt"`
+	Author    string          `json:"author"`
+	Source    string          `json:"source"`
+	Reason    string          `json:"reason"`
+	Changes   []VcsPathChange `json:"changes"`
 }
 
 // VcsPathChange describes one path operation in a revision.
@@ -47,7 +55,7 @@ type VcsPathChange struct {
 	FromPath string `json:"fromPath,omitempty"`
 }
 
-// WorkspaceVcsService manages sidecar Git repos for agent workspace trees.
+// WorkspaceVcsService manages sidecar Git repos for agent workspace trees via go-git.
 type WorkspaceVcsService struct {
 	agentsRoot string
 }
@@ -66,119 +74,122 @@ func (v *WorkspaceVcsService) workTree(agent string) (string, error) {
 	return s.ensureWorkspaceRoot(agent)
 }
 
-// vcsRestoreRef is a constant ref used so restore never puts a user SHA on argv.
-const vcsRestoreRef = "refs/approving-restore"
-
-// git runs git with a fixed argv list. User-controlled values must go through
-// stdin (commit -F -, pathspec-from-file, rev-parse/log --stdin), never args.
-func (v *WorkspaceVcsService) git(agent, stdin string, args ...string) (string, error) {
-	gitDir := v.gitDir(agent)
-	workTree, err := v.workTree(agent)
-	if err != nil {
-		return "", err
-	}
-	cmd := exec.Command("git", args...)
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
-	}
-	cmd.Env = append(os.Environ(),
-		"GIT_DIR="+gitDir,
-		"GIT_WORK_TREE="+workTree,
-	)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if stdout.Len() > 0 {
-			msg = strings.TrimSpace(msg + " " + stdout.String())
-		}
-		if msg == "" {
-			msg = err.Error()
-		}
-		return "", fmt.Errorf("%w: %s", ErrVcsGitFailed, msg)
-	}
-	return strings.TrimSpace(stdout.String()), nil
-}
-
-func parseCatFileCommit(out string) (string, bool) {
-	out = strings.TrimSpace(out)
-	if out == "" || strings.HasSuffix(out, " missing") {
-		return "", false
-	}
-	fields := strings.Fields(out)
-	if len(fields) < 2 || fields[1] != "commit" {
-		return "", false
-	}
-	return fields[0], true
-}
-
-func (v *WorkspaceVcsService) resolveCommit(agent, rev string) (string, error) {
-	rev = strings.TrimSpace(rev)
-	if rev == "" {
-		return "", ErrVcsRevisionMiss
-	}
-	out, err := v.git(agent, rev+"\n", "cat-file", "--batch-check=%(objectname) %(objecttype)")
-	if err != nil {
-		return "", ErrVcsRevisionMiss
-	}
-	sha, ok := parseCatFileCommit(out)
-	if !ok {
-		return "", ErrVcsRevisionMiss
-	}
-	return sha, nil
-}
-
-func (v *WorkspaceVcsService) ensureRepo(agent string) error {
-	gitDir := v.gitDir(agent)
-	if fi, err := os.Stat(filepath.Join(gitDir, "HEAD")); err == nil && !fi.IsDir() {
+func wrapVcs(err error) error {
+	if err == nil {
 		return nil
 	}
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
-		return err
-	}
-	if _, err := v.git(agent, "", "init"); err != nil {
-		return err
-	}
-	_, _ = v.git(agent, "", "config", "user.email", "approving-vcs@local")
-	_, _ = v.git(agent, "", "config", "user.name", "Approving VCS")
-	return nil
+	return fmt.Errorf("%w: %s", ErrVcsGitFailed, err.Error())
 }
 
-func (v *WorkspaceVcsService) hasCommits(agent string) bool {
-	if _, err := os.Stat(v.gitDir(agent)); err != nil {
+func vcsFilesystems(gitDir, workTree string) (*filesystem.Storage, billy.Filesystem) {
+	dot := filesystem.NewStorage(osfs.New(gitDir), cache.NewObjectLRUDefault())
+	return dot, osfs.New(workTree)
+}
+
+// stripWorkspaceGitlink removes a go-git gitdir pointer so the live workspace
+// never contains .git. Init(storer, worktree) would write that file; we Init
+// bare and Open with an explicit worktree instead.
+func stripWorkspaceGitlink(workTree string) {
+	_ = os.Remove(filepath.Join(workTree, ".git"))
+}
+
+func (v *WorkspaceVcsService) openRepo(agent string) (*git.Repository, error) {
+	workTree, err := v.workTree(agent)
+	if err != nil {
+		return nil, err
+	}
+	stripWorkspaceGitlink(workTree)
+	gitDir := v.gitDir(agent)
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		return nil, wrapVcs(err)
+	}
+	store, wtFs := vcsFilesystems(gitDir, workTree)
+	repo, err := git.Open(store, wtFs)
+	if err == nil {
+		return repo, nil
+	}
+	if !errors.Is(err, git.ErrRepositoryNotExists) {
+		_ = os.RemoveAll(gitDir)
+		if err := os.MkdirAll(gitDir, 0o755); err != nil {
+			return nil, wrapVcs(err)
+		}
+		store, wtFs = vcsFilesystems(gitDir, workTree)
+	}
+	if _, err := git.Init(store, nil); err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
+		return nil, wrapVcs(err)
+	}
+	repo, err = git.Open(store, wtFs)
+	if err != nil {
+		return nil, wrapVcs(err)
+	}
+	return repo, nil
+}
+
+func hasCommits(repo *git.Repository) bool {
+	ref, err := repo.Head()
+	if err != nil {
 		return false
 	}
-	out, err := v.git(agent, "", "rev-parse", "HEAD")
-	return err == nil && strings.TrimSpace(out) != ""
+	_, err = repo.CommitObject(ref.Hash())
+	return err == nil
+}
+
+func resolveCommit(repo *git.Repository, rev string) (plumbing.Hash, error) {
+	rev = strings.TrimSpace(rev)
+	if rev == "" {
+		return plumbing.ZeroHash, ErrVcsRevisionMiss
+	}
+	h, err := repo.ResolveRevision(plumbing.Revision(rev))
+	if err != nil || h == nil || h.IsZero() {
+		return plumbing.ZeroHash, ErrVcsRevisionMiss
+	}
+	if _, err := repo.CommitObject(*h); err != nil {
+		return plumbing.ZeroHash, ErrVcsRevisionMiss
+	}
+	return *h, nil
+}
+
+func (v *WorkspaceVcsService) commitAll(repo *git.Repository, meta VcsCommitMeta, allowEmpty bool) (string, error) {
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", wrapVcs(err)
+	}
+	if err := wt.AddWithOptions(&git.AddOptions{All: true}); err != nil {
+		return "", wrapVcs(err)
+	}
+	author := strings.TrimSpace(meta.Author)
+	if author == "" {
+		author = "Approving VCS"
+	}
+	hash, err := wt.Commit(formatVcsMessage(meta), &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  author,
+			Email: "approving-vcs@local",
+			When:  time.Now(),
+		},
+		AllowEmptyCommits: allowEmpty,
+	})
+	if err != nil {
+		return "", wrapVcs(err)
+	}
+	return hash.String(), nil
 }
 
 func (v *WorkspaceVcsService) ensureBaseline(agent string) error {
-	if err := v.ensureRepo(agent); err != nil {
+	repo, err := v.openRepo(agent)
+	if err != nil {
 		return err
 	}
-	if v.hasCommits(agent) {
+	if hasCommits(repo) {
 		return nil
 	}
-	if _, err := v.git(agent, "", "add", "-A"); err != nil {
-		return err
-	}
-	msg := formatVcsMessage(VcsCommitMeta{
+	_, err = v.commitAll(repo, VcsCommitMeta{
 		Author:  "system",
 		Source:  VcsSourceSystem,
 		Reason:  "基线",
 		Changes: []VcsPathChange{{Path: ".", Op: "baseline"}},
-	})
-	if _, err := v.git(agent, msg, "commit", "-F", "-"); err != nil {
-		if strings.Contains(err.Error(), "nothing to commit") {
-			if _, err2 := v.git(agent, msg, "commit", "--allow-empty", "-F", "-"); err2 != nil {
-				return err2
-			}
-		} else {
-			return err
-		}
-	}
-	return nil
+	}, true)
+	return err
 }
 
 func vcsField(s string) string {
@@ -271,115 +282,165 @@ func (v *WorkspaceVcsService) CommitChange(agent string, meta VcsCommitMeta) (st
 	if strings.TrimSpace(meta.Reason) == "" && meta.Source != VcsSourceSystem {
 		return "", ErrVcsReasonRequired
 	}
-	if err := v.ensureRepo(agent); err != nil {
-		return "", err
-	}
-	for _, ch := range meta.Changes {
-		switch ch.Op {
-		case "write", "mkdir", "rename":
-			rel := strings.TrimSpace(ch.Path)
-			if rel != "" && rel != "." {
-				if _, err := v.git(agent, rel+"\n", "add", "--pathspec-from-file=-"); err != nil {
-					return "", err
-				}
-			}
-			if ch.Op == "rename" && ch.FromPath != "" {
-				if _, err := v.git(agent, ch.FromPath+"\n", "add", "--pathspec-from-file=-"); err != nil {
-					return "", err
-				}
-			}
-		case "delete":
-			rel := strings.TrimSpace(ch.Path)
-			if rel != "" {
-				if _, err := v.git(agent, rel+"\n", "rm", "-r", "--ignore-unmatch", "--pathspec-from-file=-"); err != nil {
-					return "", err
-				}
-			}
-		case "restore":
-			if _, err := v.git(agent, "", "add", "-A"); err != nil {
-				return "", err
-			}
-		case "baseline":
-			if _, err := v.git(agent, "", "add", "-A"); err != nil {
-				return "", err
-			}
-		}
-	}
-	msg := formatVcsMessage(meta)
-	out, err := v.git(agent, msg, "commit", "-F", "-")
+	repo, err := v.openRepo(agent)
 	if err != nil {
 		return "", err
 	}
-	sha, _ := v.git(agent, "", "rev-parse", "HEAD")
-	if sha == "" {
-		// Parse from commit output: [branch abc1234]
-		if i := strings.LastIndex(out, " "); i >= 0 {
-			sha = strings.TrimRight(out[i+1:], "]")
-		}
+	return v.commitAll(repo, meta, false)
+}
+
+func commitSubject(c *object.Commit) string {
+	msg := strings.TrimSpace(c.Message)
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = strings.TrimSpace(msg[:i])
 	}
-	if sha == "" {
-		sha, _ = v.git(agent, "", "rev-parse", "HEAD")
+	return msg
+}
+
+func metaFromCommit(c *object.Commit) VcsCommitMeta {
+	meta := parseVcsMessage(c.Hash.String(), commitSubject(c))
+	meta.SHA = c.Hash.String()
+	if c.NumParents() > 0 {
+		meta.ParentSHA = c.ParentHashes[0].String()
 	}
-	return sha, nil
+	meta.CreatedAt = c.Author.When.UTC()
+	return meta
+}
+
+func (v *WorkspaceVcsService) sidecarExists(agent string) bool {
+	_, err := os.Stat(filepath.Join(v.gitDir(agent), "HEAD"))
+	return err == nil
 }
 
 // ListRevisions returns workspace revisions newest-first.
 func (v *WorkspaceVcsService) ListRevisions(agent string, limit int) ([]VcsCommitMeta, error) {
-	if !v.hasCommits(agent) {
+	if !v.sidecarExists(agent) {
+		return []VcsCommitMeta{}, nil
+	}
+	repo, err := v.openRepo(agent)
+	if err != nil {
+		return nil, err
+	}
+	if !hasCommits(repo) {
 		return []VcsCommitMeta{}, nil
 	}
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	shasOut, err := v.git(agent, "", "log", "-n", "100", "--pretty=format:%H")
+	iter, err := repo.Log(&git.LogOptions{})
 	if err != nil {
-		return nil, err
+		return nil, wrapVcs(err)
 	}
+	defer iter.Close()
 	var revs []VcsCommitMeta
-	n := 0
-	for _, sha := range strings.Split(strings.TrimSpace(shasOut), "\n") {
-		sha = strings.TrimSpace(sha)
-		if sha == "" {
-			continue
+	err = iter.ForEach(func(c *object.Commit) error {
+		if len(revs) >= limit {
+			return storer.ErrStop
 		}
-		if n >= limit {
-			break
-		}
-		n++
-		parent, _ := v.resolveCommit(agent, sha+"^")
-		tsOut, _ := v.git(agent, sha+"\n", "log", "-1", "--pretty=format:%at", "--no-walk", "--stdin")
-		subject, _ := v.git(agent, sha+"\n", "log", "-1", "--pretty=format:%s", "--no-walk", "--stdin")
-		meta := parseVcsMessage(sha, subject)
-		meta.SHA = sha
-		meta.ParentSHA = parent
-		if ts, err := parseInt64(strings.TrimSpace(tsOut)); err == nil {
-			meta.CreatedAt = time.Unix(ts, 0).UTC()
-		}
-		revs = append(revs, meta)
+		revs = append(revs, metaFromCommit(c))
+		return nil
+	})
+	if err != nil {
+		return nil, wrapVcs(err)
 	}
 	return revs, nil
 }
 
-func parseInt64(s string) (int64, error) {
-	var n int64
-	_, err := fmt.Sscanf(s, "%d", &n)
-	return n, err
+func commitUnifiedDiff(c *object.Commit) (string, error) {
+	var from *object.Tree
+	if c.NumParents() > 0 {
+		parent, err := c.Parent(0)
+		if err != nil {
+			return "", err
+		}
+		from, err = parent.Tree()
+		if err != nil {
+			return "", err
+		}
+	}
+	to, err := c.Tree()
+	if err != nil {
+		return "", err
+	}
+	changes, err := object.DiffTree(from, to)
+	if err != nil {
+		return "", err
+	}
+	patch, err := changes.Patch()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(patch.String()), nil
 }
 
 // DiffRevision returns unified diff vs parent for one revision.
 func (v *WorkspaceVcsService) DiffRevision(agent, sha string) (string, error) {
-	if !v.hasCommits(agent) {
+	if !v.sidecarExists(agent) {
 		return "", ErrVcsRevisionMiss
 	}
-	full, err := v.resolveCommit(agent, sha)
+	repo, err := v.openRepo(agent)
 	if err != nil {
 		return "", err
 	}
-	out, err := v.git(agent, full+"\n", "log", "-1", "--pretty=format:", "-p", "--stdin")
+	if !hasCommits(repo) {
+		return "", ErrVcsRevisionMiss
+	}
+	full, err := resolveCommit(repo, sha)
 	if err != nil {
 		return "", err
+	}
+	c, err := repo.CommitObject(full)
+	if err != nil {
+		return "", ErrVcsRevisionMiss
+	}
+	out, err := commitUnifiedDiff(c)
+	if err != nil {
+		return "", wrapVcs(err)
 	}
 	return out, nil
+}
+
+func checkoutTree(workTree string, tree *object.Tree) error {
+	keep := map[string]struct{}{}
+	err := tree.Files().ForEach(func(f *object.File) error {
+		keep[f.Name] = struct{}{}
+		contents, err := f.Contents()
+		if err != nil {
+			return err
+		}
+		dest := filepath.Join(workTree, filepath.FromSlash(f.Name))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(dest, []byte(contents), 0o644)
+	})
+	if err != nil {
+		return err
+	}
+	return filepath.WalkDir(workTree, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, rerr := filepath.Rel(workTree, path)
+		if rerr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				_ = os.RemoveAll(path)
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if _, ok := keep[rel]; !ok {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
 }
 
 // RestoreRevision restores workspace to target sha and appends a restore revision.
@@ -390,50 +451,36 @@ func (v *WorkspaceVcsService) RestoreRevision(agent, sha, author, reason string)
 	if err := v.ensureBaseline(agent); err != nil {
 		return "", err
 	}
-	full, err := v.resolveCommit(agent, sha)
+	repo, err := v.openRepo(agent)
 	if err != nil {
 		return "", err
+	}
+	full, err := resolveCommit(repo, sha)
+	if err != nil {
+		return "", err
+	}
+	c, err := repo.CommitObject(full)
+	if err != nil {
+		return "", ErrVcsRevisionMiss
+	}
+	tree, err := c.Tree()
+	if err != nil {
+		return "", wrapVcs(err)
 	}
 	workTree, err := v.workTree(agent)
 	if err != nil {
 		return "", err
 	}
-	// Clean untracked except sidecar placeholder files
-	if _, err := v.git(agent, "", "clean", "-fd"); err != nil {
-		return "", err
+	if err := checkoutTree(workTree, tree); err != nil {
+		return "", wrapVcs(err)
 	}
-	if _, err := v.git(agent, "update "+vcsRestoreRef+" "+full+"\n", "update-ref", "--stdin"); err != nil {
-		return "", err
-	}
-	if _, err := v.git(agent, "", "checkout", vcsRestoreRef, "--", "."); err != nil {
-		return "", err
-	}
-	// Remove files added after target snapshot
-	listOut, _ := v.git(agent, "", "ls-tree", "-r", "--name-only", vcsRestoreRef)
-	keep := map[string]bool{"": true}
-	for _, p := range strings.Split(listOut, "\n") {
-		keep[strings.TrimSpace(p)] = true
-	}
-	_ = filepath.WalkDir(workTree, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		rel, rerr := filepath.Rel(workTree, path)
-		if rerr != nil {
-			return nil
-		}
-		rel = filepath.ToSlash(rel)
-		if !keep[rel] {
-			_ = os.Remove(path)
-		}
-		return nil
-	})
-	return v.CommitChange(agent, VcsCommitMeta{
+	stripWorkspaceGitlink(workTree)
+	return v.commitAll(repo, VcsCommitMeta{
 		Author:  author,
 		Source:  VcsSourceRestore,
 		Reason:  reason,
-		Changes: []VcsPathChange{{Op: "restore", Path: full}},
-	})
+		Changes: []VcsPathChange{{Op: "restore", Path: full.String()}},
+	}, true)
 }
 
 // RenameAgent moves the sidecar repo when an agent is renamed.
@@ -523,6 +570,5 @@ const PlaceholderFileName = ".approving-dir-placeholder"
 
 // EnsureDirTracked adds a placeholder so mkdir can be versioned.
 func EnsureDirTracked(agent, rel string) error {
-	// noop at service layer; mkdir in skill adds placeholder
 	return nil
 }
