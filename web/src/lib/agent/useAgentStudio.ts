@@ -945,8 +945,11 @@ async function save(reason?: string) {
   try {
     if (draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value) {
       const payload = fromDraft(draft.value)
-      const why = (reason ?? saveReason.value).trim() || t('pages.agentStudio.workspaceHistory.defaultSaveReason')
-      await api.saveAgent(payload, { reason: why })
+      if (typeof reason === 'string' && reason.trim()) {
+        await api.saveAgent(payload, { reason: reason.trim() })
+      } else {
+        await api.saveAgent(payload)
+      }
       const i = agents.value.findIndex((x) => x.name === payload.name)
       if (i >= 0) agents.value[i] = payload
       originalJson.value = JSON.stringify(payload)

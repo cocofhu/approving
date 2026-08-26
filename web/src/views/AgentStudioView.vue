@@ -436,7 +436,7 @@ const {
               variant="primary"
               class="min-h-11"
               :disabled="saving"
-              @click="promptSave"
+              @click="() => save()"
             >
               {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
             </AppButton>
@@ -470,7 +470,7 @@ const {
               size="sm"
               variant="primary"
               :disabled="!dirty || saving"
-              @click="promptSave"
+              @click="() => save()"
             >
               {{ saving ? t('common.buttons.saving') : dirty ? t('common.buttons.save') : t('pages.agentStudio.saved') }}
             </AppButton>
