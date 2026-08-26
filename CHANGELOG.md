@@ -4,15 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
-- **Project shared Agent config**: each project can edit a shared Agent baseline
-  (workspace files / MCP / env / prompts / meta). Workflow Run and project-context
-  chat tests **extend** that baseline then **overlay** the Agent. Agent Studio
-  dialogue tests stay Agent-only (no extend).
-- **Project sandboxEnv removed**: one-time migration copies `Project.sandboxEnv`
-  into shared env (same key keeps shared), then clears the project field. Project
-  API no longer accepts/returns `sandboxEnv`. **Run.sandboxEnv** is unchanged.
-- External scripts must stop sending project `sandboxEnv`; put OS env in
-  **项目共享 Agent 配置 → 环境变量** instead.
+## 0.3.2-beta — 2026-08-26
+
+- Public beta follow-up on [`v0.3.2-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.2-beta)
+  (relative to `v0.3.1-beta`: PRs #415–#439). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.2-beta` (tag publish does not rewrite these files).
+- Highlights: project shared Agent config (+ sandboxEnv migration); project external MCP;
+  clarify queue cancel/reorder/edit; notification read prefs / per-run reads; mobile UX;
+  Plan data_design hard gate; ACP timeline snapshot; home composer draft.
 
 ## 0.3.1-beta — 2026-08-23
 
