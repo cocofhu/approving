@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import type { ECElementEvent } from 'echarts/core'
 import { registerECharts } from '@/components/charts/echartsSetup'
-import { CHART_AXIS, CHART_GRID, fmtCompactAxis } from '@/components/charts/chartTheme'
+import { BOARD_CHART_AXIS, CHART_GRID, fmtCompactAxis } from '@/components/charts/chartTheme'
 import type { TokenStatsBucket } from '@/lib/shared/types'
 import { fmtTokenCount } from '@/lib/run/tokenUsage'
 import { TOKEN_SOURCE_COLORS, formatBucketLabel, placeTrendTooltipAfter } from './tokenStatsShared'
@@ -55,14 +55,14 @@ const chartOption = computed(() => {
     xAxis: {
       type: 'category',
       data: labels,
-      ...CHART_AXIS,
+      ...BOARD_CHART_AXIS,
       splitLine: { show: false },
-      axisLabel: { ...CHART_AXIS.axisLabel, maxInterval: Math.ceil(labels.length / 8) },
+      axisLabel: { ...BOARD_CHART_AXIS.axisLabel, maxInterval: Math.ceil(labels.length / 8) },
     },
     yAxis: {
       type: 'value',
-      ...CHART_AXIS,
-      axisLabel: { ...CHART_AXIS.axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
+      ...BOARD_CHART_AXIS,
+      axisLabel: { ...BOARD_CHART_AXIS.axisLabel, formatter: (v: number) => fmtCompactAxis(v) },
     },
     series: [
       {
