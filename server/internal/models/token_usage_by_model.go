@@ -6,6 +6,9 @@ import "strings"
 // flattened totals, or weak keys when ACP_BRIDGE_MODEL was not configured).
 const TokenUsageModelUnknown = "未知/未分桶"
 
+// TokenUsageModelUnknownDisplay is the default user-visible label when no project alias is set.
+const TokenUsageModelUnknownDisplay = "未知模型"
+
 // Source labels persisted on each model bucket.
 const (
 	TokenUsageSourceUpstream = "upstream"

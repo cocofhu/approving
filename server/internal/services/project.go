@@ -37,10 +37,10 @@ var (
 const UnknownModelDisplayNameMaxLen = 64
 
 // NormalizeUnknownModelDisplayName trims input; empty / whitespace-only / equal to
-// the default 「未知/未分桶」 label become "" (unset). Over-length rejects.
+// the legacy or new default label become "" (unset). Over-length rejects.
 func NormalizeUnknownModelDisplayName(raw string) (string, error) {
 	v := strings.TrimSpace(raw)
-	if v == "" || v == models.TokenUsageModelUnknown {
+	if v == "" || v == models.TokenUsageModelUnknown || v == models.TokenUsageModelUnknownDisplay {
 		return "", nil
 	}
 	if utf8.RuneCountInString(v) > UnknownModelDisplayNameMaxLen {
@@ -49,13 +49,19 @@ func NormalizeUnknownModelDisplayName(raw string) (string, error) {
 	return v, nil
 }
 
-// ResolveUnknownModelDisplayName returns the configured alias or the default label.
+// ResolveUnknownModelDisplayName returns the configured alias or the default display label.
 func ResolveUnknownModelDisplayName(alias string) string {
 	v := strings.TrimSpace(alias)
-	if v == "" || v == models.TokenUsageModelUnknown {
-		return models.TokenUsageModelUnknown
+	if v == "" || v == models.TokenUsageModelUnknown || v == models.TokenUsageModelUnknownDisplay {
+		return models.TokenUsageModelUnknownDisplay
 	}
 	return v
+}
+
+// IsConfiguredUnknownAlias reports whether alias is a real project override (not empty/default labels).
+func IsConfiguredUnknownAlias(alias string) bool {
+	v := strings.TrimSpace(alias)
+	return v != "" && v != models.TokenUsageModelUnknown && v != models.TokenUsageModelUnknownDisplay
 }
 
 // ProjectService manages project CRUD and secret-aware config updates.

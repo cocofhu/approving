@@ -1,19 +1,26 @@
 import type { ModelTokenUsage, TokenUsage, TokenUsageByModel } from '../shared/types'
 
-/** Display key for legacy / unbucketed usage (matches server). */
+/** Persistence / API key for legacy / unbucketed usage (matches server). */
 export const TOKEN_USAGE_UNKNOWN_MODEL = '未知/未分桶'
+
+/** Default user-visible label when no project alias is configured. */
+export const TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY = '未知模型'
 
 /** Max rune/char length for project unknown-model display name (matches server). */
 export const UNKNOWN_MODEL_DISPLAY_NAME_MAX_LEN = 64
 
+function isUnsetUnknownAlias(v: string): boolean {
+  return !v || v === TOKEN_USAGE_UNKNOWN_MODEL || v === TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY
+}
+
 /**
  * Resolve display text for the unknown token bucket.
- * Empty / whitespace / equal to the default label → default 「未知/未分桶」.
+ * Empty / whitespace / equal to legacy or new default label → 「未知模型」.
  */
 export function unknownDisplayName(modelKey: string, alias?: string | null): string {
   if (modelKey !== TOKEN_USAGE_UNKNOWN_MODEL) return modelKey
   const v = (alias ?? '').trim()
-  if (!v || v === TOKEN_USAGE_UNKNOWN_MODEL) return TOKEN_USAGE_UNKNOWN_MODEL
+  if (isUnsetUnknownAlias(v)) return TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY
   return v
 }
 
@@ -28,7 +35,8 @@ export function shouldShowUnknownVisual(
   displayName: string | null | undefined,
 ): boolean {
   if (!unknown) return false
-  return (displayName ?? '').trim() === TOKEN_USAGE_UNKNOWN_MODEL
+  const v = (displayName ?? '').trim()
+  return v === TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY || v === TOKEN_USAGE_UNKNOWN_MODEL
 }
 
 /**
@@ -45,7 +53,7 @@ export function normalizeUnknownModelDisplayNameInput(
       error: `显示名最多 ${UNKNOWN_MODEL_DISPLAY_NAME_MAX_LEN} 个字符，请缩短后再保存。`,
     }
   }
-  if (!trimmed || trimmed === TOKEN_USAGE_UNKNOWN_MODEL) {
+  if (!trimmed || trimmed === TOKEN_USAGE_UNKNOWN_MODEL || trimmed === TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY) {
     return { value: '' }
   }
   return { value: trimmed }
@@ -78,6 +86,9 @@ export function fmtTokenCount(n: number): string {
 export function fmtCompactTokenCount(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   const abs = Math.abs(n)
+  if (abs >= 1_000_000_000) {
+    return `${Math.round((n / 1_000_000_000) * 100) / 100}B`
+  }
   if (abs >= 1_000_000) {
     return `${Math.round((n / 1_000_000) * 100) / 100}M`
   }

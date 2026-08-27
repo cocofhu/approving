@@ -87,8 +87,27 @@ function statsTooltip(extra: Record<string, unknown> = {}) {
     backgroundColor: dark ? '#27272a' : '#ffffff',
     borderColor: dark ? '#3f3f46' : '#e4e4e7',
     textStyle: { color: dark ? '#e4e4e7' : '#27272a', fontSize: 12 },
+    confine: false,
+    appendToBody: true,
+    extraCssText: 'z-index: 1000;',
     ...extra,
   }
+}
+
+function axisTooltip(extra: Record<string, unknown> = {}) {
+  return statsTooltip({
+    trigger: 'axis',
+    valueFormatter: (v: number) => fmtCompactTokenCount(v),
+    ...extra,
+  })
+}
+
+function pieTooltipFormatter(params: unknown): string {
+  const p = params as { name?: string; value?: number; percent?: number }
+  const name = p.name ?? ''
+  const value = fmtCompactTokenCount(p.value ?? 0)
+  const pct = p.percent != null ? p.percent.toFixed(1) : '0'
+  return `${name}: ${value} (${pct}%)`
 }
 
 const isEmpty = computed(() => !!data.value?.empty)
@@ -158,7 +177,7 @@ function lineChartOption() {
 
   return {
     grid: STATS_CHART_GRID,
-    tooltip: statsTooltip({ trigger: 'axis' }),
+    tooltip: axisTooltip(),
     legend: statsLegend(),
     xAxis: {
       type: 'category',
@@ -197,19 +216,23 @@ function pieOption(
   if (!slices.length) return null
   const colors = slices.map((s, i) => s.color || ['#4f46e5', '#7c6dff', '#a99cff', '#94a3b8'][i % 4])
   return {
-    tooltip: statsTooltip({ trigger: 'item', formatter: '{b}: {c} ({d}%)' }),
+    tooltip: statsTooltip({ trigger: 'item', formatter: pieTooltipFormatter }),
     legend: {
       show: true,
-      bottom: 0,
+      orient: 'vertical',
+      right: 0,
+      top: 'middle',
       type: 'scroll',
+      itemWidth: 10,
+      itemHeight: 8,
       itemStyle: { borderRadius: 0 },
       textStyle: { fontSize: 10, color: chartTone.value.legend },
     },
     series: [
       {
         type: 'pie',
-        radius: donut ? ['42%', '68%'] : '68%',
-        center: ['50%', '46%'],
+        radius: donut ? ['36%', '54%'] : '54%',
+        center: ['38%', '50%'],
         data: slices.map((s) => ({ name: s.name, value: s.value, key: s.key })),
         itemStyle: { borderWidth: 0 },
         color: colors,
@@ -284,7 +307,7 @@ function barChartOption() {
   })
   return {
     grid: STATS_CHART_GRID,
-    tooltip: statsTooltip({ trigger: 'axis', axisPointer: { type: 'shadow' } }),
+    tooltip: axisTooltip({ axisPointer: { type: 'shadow' } }),
     legend: {
       ...statsLegend(),
       data: TOKEN_PART_KEYS.map((k) => partLabel(k)),
@@ -311,7 +334,7 @@ function areaChartOption() {
   if (areaMode.value === 'source') {
     return {
       grid: STATS_CHART_GRID,
-      tooltip: statsTooltip({ trigger: 'axis' }),
+      tooltip: axisTooltip(),
       legend: statsLegend(),
       xAxis: {
         type: 'category',
@@ -347,7 +370,7 @@ function areaChartOption() {
   }
   return {
     grid: STATS_CHART_GRID,
-    tooltip: statsTooltip({ trigger: 'axis' }),
+    tooltip: axisTooltip(),
     legend: statsLegend(),
     xAxis: {
       type: 'category',
@@ -391,7 +414,9 @@ function heatmapOption() {
       position: 'top',
       formatter: (p: { data: [number, number, number] }) => {
       const [x, y, v] = p.data
-      return `${hm.rows[y]} × ${hm.cols[x]}<br/>${fmtTokenCount(v)}`
+      const compact = fmtCompactTokenCount(v)
+      const exact = fmtTokenCount(v)
+      return `${hm.rows[y]} × ${hm.cols[x]}<br/>${compact}<br/><span style="opacity:0.75;font-size:11px">${exact}</span>`
     }}),
     xAxis: {
       type: 'category',
@@ -666,7 +691,7 @@ watch([windowSel], () => void load())
               {{ t(`pages.tokenAnalytics.lineModes.${m}`) }}
             </button>
           </div>
-          <div class="token-analytics-plot mt-2 h-[200px] overflow-hidden" data-testid="token-analytics-plot-lines">
+          <div class="token-analytics-plot mt-2 h-[200px] overflow-visible" data-testid="token-analytics-plot-lines">
             <VChart v-if="lineChartOption()" :option="lineChartOption()!" autoresize class="h-full w-full" />
           </div>
         </section>
@@ -700,7 +725,7 @@ watch([windowSel], () => void load())
             {{ t('pages.tokenAnalytics.charts.bars') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.barsHint') }}</em>
           </h2>
-          <div class="token-analytics-plot mt-2 h-[200px] overflow-hidden" data-testid="token-analytics-plot-bars">
+          <div class="token-analytics-plot mt-2 h-[200px] overflow-visible" data-testid="token-analytics-plot-bars">
             <VChart
               v-if="barChartOption()"
               :option="barChartOption()!"
@@ -728,14 +753,14 @@ watch([windowSel], () => void load())
               {{ t(`pages.tokenAnalytics.areaModes.${m}`) }}
             </button>
           </div>
-          <div class="token-analytics-plot mt-2 h-[200px] overflow-hidden" data-testid="token-analytics-plot-area">
+          <div class="token-analytics-plot mt-2 h-[200px] overflow-visible" data-testid="token-analytics-plot-area">
             <VChart v-if="areaChartOption()" :option="areaChartOption()!" autoresize class="h-full w-full" />
           </div>
         </section>
 
         <section id="heat" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
           <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.heat') }}</h2>
-          <div class="token-analytics-plot mt-2 h-[240px] overflow-hidden" data-testid="token-analytics-plot-heat">
+          <div class="token-analytics-plot mt-2 h-[240px] overflow-visible" data-testid="token-analytics-plot-heat">
             <VChart v-if="heatmapOption()" :option="heatmapOption()!" autoresize class="h-full w-full" />
           </div>
         </section>

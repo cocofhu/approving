@@ -48,7 +48,7 @@ function barColor(vm: unknown, idx: number) {
 const rankModels = [
   { modelKey: 'cursor-grok-4.5-high-fast', name: 'cursor-grok-4.5-high-fast', total: 800, filled: true },
   { modelKey: 'gpt-5.6-sol-medium', name: 'gpt-5.6-sol-medium', total: 600, filled: true },
-  { modelKey: '未知/未分桶', name: '未知/未分桶', total: 400, unknown: true },
+  { modelKey: '未知/未分桶', name: '未知模型', total: 400, unknown: true },
   { modelKey: 'other', name: 'other', total: 200, other: true },
 ]
 
@@ -93,7 +93,7 @@ describe('TokenModelRank hides filledTag (g2.2)', () => {
     const unknownRow = wrapper.find('[data-unknown="1"]')
     expect(unknownRow.exists()).toBe(true)
     expect(unknownRow.attributes('data-filled')).toBe('0')
-    expect(unknownRow.text()).toContain('未知/未分桶')
+    expect(unknownRow.text()).toContain('未知模型')
     expectNoFilledTagCopy(unknownRow.text())
     expect(barColor(wrapper.vm, 2)).toBe('#71717A')
 
@@ -149,10 +149,10 @@ describe('TokenModelRank hides filledTag (g2.2)', () => {
 })
 
 describe('TokenModelRank unknown vs other (g3.3)', () => {
-  it('qualifying unknown keeps 未知/未分桶, data-unknown, gray text and #71717A bar', () => {
+  it('qualifying unknown keeps 未知模型, data-unknown, gray text and #71717A bar', () => {
     const models = [
       { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 100 },
-      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 80, unknown: true },
+      { modelKey: '未知/未分桶', name: '未知模型', total: 80, unknown: true },
       { name: 'other', total: 30, other: true },
     ]
     expect(colorForModel(models[1]!, 1)).toBe('#71717A')
@@ -170,7 +170,7 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     const unk = wrapper.find('[data-unknown="1"]')
     expect(unk.exists()).toBe(true)
     expect(unk.attributes('data-other')).toBe('0')
-    expect(unk.text()).toContain('未知/未分桶')
+    expect(unk.text()).toContain('未知模型')
     expect(unk.text()).toContain('未知')
     expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
     expect(unk.text()).not.toContain('other（其余模型）')
@@ -223,7 +223,7 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     })
     const unk = wrapper.find('[data-unknown="1"]')
     expect(unk.text()).toContain('Auto')
-    expect(unk.text()).not.toContain('未知/未分桶')
+    expect(unk.text()).not.toContain('未知模型')
     expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
     expect(unk.find('.text-ok').exists()).toBe(true)
     expect(barColor(wrapper.vm, 0)).toBe('#34D399')

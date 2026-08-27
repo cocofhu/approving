@@ -433,7 +433,7 @@ func rebucketGlobalModelKey(mk, projectID string, unknownAliases map[string]stri
 		return mk
 	}
 	alias := strings.TrimSpace(unknownAliases[projectID])
-	if alias != "" && alias != models.TokenUsageModelUnknown {
+	if IsConfiguredUnknownAlias(alias) {
 		return alias
 	}
 	return mk
@@ -737,7 +737,7 @@ func buildGlobalModelStats(cur, prev *globalAgg, unknownAliases map[string]strin
 		name := m.Name
 		if m.Unknown {
 			for _, alias := range unknownAliases {
-				if alias != "" {
+				if IsConfiguredUnknownAlias(alias) {
 					name = alias
 					break
 				}

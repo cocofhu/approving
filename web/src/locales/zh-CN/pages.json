@@ -289,7 +289,7 @@
       "close": "关闭",
       "sourceUpstream": "upstream · 真实上报",
       "sourceBridge": "via ACP_BRIDGE_MODEL",
-      "sourceUnknown": "未知/未分桶",
+      "sourceUnknown": "未知模型",
       "unknownBadge": "未知",
       "modelTableTitle": "按模型用量",
       "colModel": "模型",

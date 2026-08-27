@@ -289,7 +289,7 @@
       "close": "Close",
       "sourceUpstream": "upstream · reported",
       "sourceBridge": "via ACP_BRIDGE_MODEL",
-      "sourceUnknown": "Unknown/unbucketed",
+      "sourceUnknown": "Unknown model",
       "unknownBadge": "Unknown",
       "modelTableTitle": "Usage by model",
       "colModel": "Model",

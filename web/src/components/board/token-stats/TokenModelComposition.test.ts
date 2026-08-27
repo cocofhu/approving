@@ -37,7 +37,7 @@ const i18nEn = () =>
 
 /** Screenshot-like sample: unknown grey + two filled (ACP_BRIDGE backfill) buckets. */
 const screenshotLikeModels = [
-  { modelKey: '未知/未分桶', name: '未知/未分桶', total: 100, unknown: true },
+  { modelKey: '未知/未分桶', name: '未知模型', total: 100, unknown: true },
   { modelKey: 'cursor-grok-4.5-high-fast', name: 'cursor-grok-4.5-high-fast', total: 80, filled: true },
   { modelKey: 'gpt-5.6-sol-medium', name: 'gpt-5.6-sol-medium', total: 60, filled: true },
 ]
@@ -55,7 +55,7 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
   it('renders ECharts pie host without svg path sectors (g1.1/g2.1)', () => {
     const wrapper = mount(TokenModelComposition, {
       props: {
-        models: [{ modelKey: '未知/未分桶', name: '未知/未分桶', total: 1056, unknown: true }],
+        models: [{ modelKey: '未知/未分桶', name: '未知模型', total: 1056, unknown: true }],
       },
       global: { plugins: [i18n()] },
     })
@@ -73,7 +73,7 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
   })
 
   it('unknown-only near-full circle: #71717A sector + legend 100% (g1.2/g2.2)', () => {
-    const unknown = { modelKey: '未知/未分桶', name: '未知/未分桶', total: 1056240000, unknown: true }
+    const unknown = { modelKey: '未知/未分桶', name: '未知模型', total: 1056240000, unknown: true }
     expect(colorForModel(unknown, 0)).toBe('#71717A')
 
     const wrapper = mount(TokenModelComposition, {
@@ -85,16 +85,16 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     const data = chartData(wrapper.vm)
     expect(data[0]!.color).toBe('#71717A')
     const legend = wrapper.find('[data-testid="token-model-legend"]')
-    expect(legend.text()).toContain('未知/未分桶')
+    expect(legend.text()).toContain('未知模型')
     expect(legend.text()).toContain('100%')
-    expect(legend.text()).toContain('1056.24M')
+    expect(legend.text()).toContain('1.06B')
     wrapper.unmount()
   })
 
   it('thin wedge + dominant bucket: ECharts sectors keep colors (g2.2 attach-like)', () => {
     const models = [
       { modelKey: 'cursor-grok', name: 'cursor-grok-4.5-high-fast', total: 50090000, filled: true },
-      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 1059710000, unknown: true },
+      { modelKey: '未知/未分桶', name: '未知模型', total: 1059710000, unknown: true },
     ]
     const wrapper = mount(TokenModelComposition, {
       props: { models },
@@ -108,7 +108,7 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     expect(legend).toContain('4.5%')
     expect(legend).toContain('95.5%')
     expect(legend).toContain('50.09M')
-    expect(legend).toContain('1059.71M')
+    expect(legend).toContain('1.06B')
     expect(legend).toContain('cursor-grok-4.5-high-fast')
     expectNoFilledTagCopy(legend)
     expect(colorForModel(models[0]!, 0)).toBe('#34D399')
@@ -119,7 +119,7 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
   it('multi-bucket: ECharts sectors keep unknown #71717A and other #A1A1AA (g1.3/g2.1/g2.2)', () => {
     const models = [
       { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 600, filled: true },
-      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 300, unknown: true },
+      { modelKey: '未知/未分桶', name: '未知模型', total: 300, unknown: true },
       { modelKey: 'other', name: 'other', total: 100, other: true },
     ]
     expect(colorForModel(models[1]!, 1)).toBe('#71717A')
@@ -133,7 +133,7 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     expect(colors).toContain('#71717A')
     expect(colors).toContain('#A1A1AA')
     const legend = wrapper.find('[data-testid="token-model-legend"]').text()
-    expect(legend).toContain('未知/未分桶')
+    expect(legend).toContain('未知模型')
     expect(legend).toContain('other')
     expect(legend).toContain('claude-sonnet-4')
     expect(wrapper.find('[data-testid="token-model-composition"]').classes()).toContain('sm:grid-cols-[120px_1fr]')
@@ -168,7 +168,7 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     })
     const legend = wrapper.find('[data-testid="token-model-legend"]')
     const text = legend.text()
-    expect(text).toContain('未知/未分桶')
+    expect(text).toContain('未知模型')
     expect(text).toContain('cursor-grok-4.5-high-fast')
     expect(text).toContain('gpt-5.6-sol-medium')
     expectNoFilledTagCopy(text)
