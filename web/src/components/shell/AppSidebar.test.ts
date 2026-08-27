@@ -57,11 +57,12 @@ describe('AppSidebar', () => {
     wrapper.unmount()
   })
 
-  it('puts a 44px hide-nav control on the 72px brand row (g2.1 / g2.2)', () => {
+  it('puts a 44px hide-nav control on the 56px brand row (g1.2 / g2.1)', () => {
     const wrapper = mountSidebar()
     const row = wrapper.find('[data-testid="sidebar-brand-row"]')
     expect(row.exists()).toBe(true)
-    expect(row.classes()).toContain('h-[72px]')
+    expect(row.classes()).toContain('h-14')
+    expect(row.classes()).not.toContain('h-[72px]')
     expect(row.classes()).toContain('justify-between')
     const hide = wrapper.find('[data-testid="desktop-nav-hide"]')
     expect(hide.exists()).toBe(true)
@@ -74,9 +75,36 @@ describe('AppSidebar', () => {
     wrapper.unmount()
   })
 
-  it('does not render brand rail below brand row (g2.3)', () => {
+  it('does not render brand rail below brand row (g1.3)', () => {
     const wrapper = mountSidebar()
     expect(wrapper.find('[data-testid="sidebar-brand-rail"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('sidebar brand row uses compact gradient wordmark without wash (g1.1 / g2.2)', () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages, ...shell } },
+    })
+    const wrapper = mount(AppSidebar, {
+      global: {
+        plugins: [i18n],
+        stubs: {
+          AppSidebarNav: { template: '<nav data-testid="nav" />' },
+          ShellChromeControls: { template: '<div data-testid="shell-chrome-controls" />' },
+          Icon: true,
+        },
+      },
+    })
+    const row = wrapper.find('[data-testid="sidebar-brand-row"]')
+    expect(row.classes()).toContain('h-14')
+    expect(row.classes()).toContain('app-sidebar-brand-row')
+    const logo = wrapper.find('.brand-logo')
+    expect(logo.exists()).toBe(true)
+    expect(logo.find('.brand-logo__mark').exists()).toBe(false)
+    expect(logo.find('.brand-logo__tagline').exists()).toBe(false)
+    expect(logo.find('.brand-logo__name').exists()).toBe(true)
     wrapper.unmount()
   })
 
