@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VChart from 'vue-echarts'
+import { registerECharts } from '@/components/charts/echartsSetup'
+import { BOARD_CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import type { TokenStatsModel } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount, shouldShowUnknownVisual } from '@/lib/run/tokenUsage'
 import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
 import { colorForModel } from './tokenModelColors'
+
+registerECharts()
 
 const props = defineProps<{
   models: TokenStatsModel[]
@@ -18,9 +23,34 @@ function displayName(m: TokenStatsModel): string {
   return m.name || m.modelKey || '—'
 }
 
-function barWidth(total: number): string {
-  return `${Math.max(2, Math.round((total / maxTotal.value) * 100))}%`
+function rowChartOption(m: TokenStatsModel, i: number) {
+  const color = colorForModel(m, i)
+  return {
+    animation: false,
+    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+    xAxis: { type: 'value', show: false, max: maxTotal.value },
+    yAxis: { type: 'category', data: [''], show: false },
+    tooltip: {
+      trigger: 'item',
+      ...BOARD_CHART_TOOLTIP,
+      formatter: () => fmtTokenCount(m.total),
+    },
+    series: [
+      {
+        type: 'bar',
+        data: [m.total || 0],
+        barWidth: 8,
+        itemStyle: { color, borderRadius: [0, 2, 2, 0] },
+        showBackground: true,
+        backgroundStyle: { color: 'rgb(var(--c-elevated))' },
+      },
+    ],
+  }
 }
+
+const rowOptions = computed(() => props.models.map((m, i) => rowChartOption(m, i)))
+
+defineExpose({ rowOptions, maxTotal })
 </script>
 
 <template>
@@ -42,11 +72,8 @@ function barWidth(total: number): string {
           <span class="min-w-0 truncate">{{ displayName(m) }}</span>
           <UnknownModelBadge v-if="shouldShowUnknownVisual(m.unknown, displayName(m))" />
         </div>
-        <div class="mt-1 h-2 overflow-hidden bg-elevated">
-          <div
-            class="h-full transition-[width] duration-300"
-            :style="{ width: barWidth(m.total), background: colorForModel(m, i) }"
-          />
+        <div class="mt-1 h-2 overflow-hidden" data-testid="token-model-rank-bar">
+          <VChart :option="rowOptions[i]" autoresize class="h-full w-full" />
         </div>
       </div>
       <span

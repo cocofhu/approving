@@ -1,21 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VChart from 'vue-echarts'
+import { registerECharts } from '@/components/charts/echartsSetup'
+import { BOARD_CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import type { TokenStatsModel } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount, shouldShowUnknownVisual } from '@/lib/run/tokenUsage'
 import { MODEL_PALETTE, colorForModel } from './tokenModelColors'
 import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
+
+registerECharts()
 
 const props = defineProps<{
   models: TokenStatsModel[]
 }>()
 
 const { t } = useI18n()
-
-const SIZE = 110
-const CX = SIZE / 2
-const CY = SIZE / 2
-const R = SIZE / 2
 
 const total = computed(() => props.models.reduce((s, m) => s + (m.total || 0), 0))
 
@@ -28,90 +28,62 @@ const rows = computed(() => {
   }))
 })
 
-function polar(cx: number, cy: number, r: number, angleDeg: number) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180
-  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) }
-}
-
-/** Solid pie slice from center (Demo / StatsPieChart-aligned). Full circle = two semicircles. */
-function describeSlice(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
-  if (endDeg - startDeg >= 359.999) {
-    const mid = polar(cx, cy, r, startDeg + 180)
-    const end = polar(cx, cy, r, startDeg + 360)
-    const start = polar(cx, cy, r, startDeg)
-    return [
-      `M ${cx} ${cy}`,
-      `L ${start.x} ${start.y}`,
-      `A ${r} ${r} 0 1 1 ${mid.x} ${mid.y}`,
-      `A ${r} ${r} 0 1 1 ${end.x} ${end.y}`,
-      'Z',
-    ].join(' ')
-  }
-  const start = polar(cx, cy, r, startDeg)
-  const end = polar(cx, cy, r, endDeg)
-  const large = endDeg - startDeg > 180 ? 1 : 0
-  return [
-    `M ${cx} ${cy}`,
-    `L ${start.x} ${start.y}`,
-    `A ${r} ${r} 0 ${large} 1 ${end.x} ${end.y}`,
-    'Z',
-  ].join(' ')
-}
-
-const slices = computed(() => {
+const chartOption = computed(() => {
   const sum = total.value
-  if (sum <= 0) return [] as { key: string; d: string; color: string }[]
-  let angle = 0
-  const out: { key: string; d: string; color: string }[] = []
-  rows.value.forEach((r, i) => {
-    const sweep = ((r.total || 0) / sum) * 360
-    if (sweep <= 0) return
-    out.push({
-      key: `${r.modelKey || r.name}-${i}`,
-      d: describeSlice(CX, CY, R, angle, angle + sweep),
-      color: r.color,
-    })
-    angle += sweep
-  })
-  return out
+  if (sum <= 0) return null
+  const visible = rows.value.filter((r) => (r.total || 0) > 0)
+  if (!visible.length) return null
+  return {
+    tooltip: {
+      trigger: 'item',
+      ...BOARD_CHART_TOOLTIP,
+      formatter: (p: { name: string; value: number; percent: number }) =>
+        `${p.name}: ${fmtTokenCount(p.value)} (${p.percent}%)`,
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: '100%',
+        center: ['50%', '50%'],
+        data: visible.map((r, i) => ({
+          name: r.name,
+          value: r.total || 0,
+          itemStyle: { color: r.color },
+          key: `${r.modelKey || r.name}-${i}`,
+        })),
+        label: { show: false },
+        emphasis: { scale: true, scaleSize: 4 },
+      },
+    ],
+  }
 })
+
+/** Exposed for unit tests (ECharts option shape). */
+const chartData = computed(() =>
+  chartOption.value?.series?.[0]?.data?.map((d: { name: string; value: number; itemStyle?: { color: string } }) => ({
+    name: d.name,
+    value: d.value,
+    color: d.itemStyle?.color,
+  })) ?? [],
+)
+
+defineExpose({ chartOption, chartData })
 </script>
 
 <template>
   <div data-testid="token-model-composition" class="grid gap-3 sm:grid-cols-[120px_1fr] sm:items-center">
-    <!-- SVG solid pie: path geometry ignores global border-radius:0 (Demo「修复后」) -->
     <div
       class="mx-auto h-[110px] w-[110px]"
       data-testid="token-model-pie"
       role="img"
       :aria-label="t('pages.board.tokenStats.modelCompositionTitle')"
     >
-      <svg
-        v-if="slices.length"
-        class="block h-full w-full"
-        :viewBox="`0 0 ${SIZE} ${SIZE}`"
-        width="110"
-        height="110"
-        aria-hidden="true"
-      >
-        <path
-          v-for="s in slices"
-          :key="s.key"
-          :d="s.d"
-          :fill="s.color"
-          data-testid="token-model-pie-slice"
-        />
-      </svg>
-      <svg
+      <VChart v-if="chartOption" :option="chartOption" autoresize class="h-full w-full" />
+      <div
         v-else
-        class="block h-full w-full"
-        :viewBox="`0 0 ${SIZE} ${SIZE}`"
-        width="110"
-        height="110"
-        aria-hidden="true"
-      >
-        <circle :cx="CX" :cy="CY" :r="R" fill="rgb(var(--c-elevated))" />
-      </svg>
+        class="h-full w-full rounded-full bg-elevated"
+        data-testid="token-model-pie-empty"
+      />
     </div>
     <ul class="m-0 grid list-none gap-1.5 p-0" data-testid="token-model-legend">
       <li

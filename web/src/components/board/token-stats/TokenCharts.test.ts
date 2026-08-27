@@ -304,6 +304,8 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.find('.token-rank-pm').exists()).toBe(true)
     expect(wrapper.find('.token-rank-other').exists()).toBe(true)
     expect(wrapper.find('[data-kind="pm"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="token-rank-bar"]').length).toBe(4)
+    expect(wrapper.findAll('[data-testid="mock-vchart"]').length).toBe(4)
     expect(wrapper.text()).toContain('项目管理')
     expect(wrapper.text()).toContain('其他')
 
@@ -321,11 +323,14 @@ describe('Token charts (g2.3/g2.4)', () => {
     const wfBadge = items[0]!.find('span')
     expect(wfBadge.classes()).toEqual(pmBadge.classes())
 
-    // Same purple bar as workflow — no amber (#f59e0b / #d97706 / #fbbf24)
-    const pmHtml = pmRow.html()
-    expect(pmHtml).toContain('#6d5cff')
-    expect(pmHtml).toContain('#9b8cff')
-    expect(pmHtml).not.toMatch(/#f59e0b|#d97706|#fbbf24|245,\s*158,\s*11/)
+    // Same purple bar as workflow — gradient #6d5cff → #9b8cff
+    const pmBar = pmRow.find('[data-testid="token-rank-bar"]')
+    expect(pmBar.exists()).toBe(true)
+    const barColorFn = (wrapper.vm as { barColor: (w: { kind?: string; other?: boolean }) => { colorStops: { color: string }[] } }).barColor
+    const pmGradient = barColorFn({ kind: 'pm' })
+    expect(pmGradient.colorStops[0]!.color).toBe('#6d5cff')
+    expect(pmGradient.colorStops[1]!.color).toBe('#9b8cff')
+    expect(pmGradient.colorStops.map((s) => s.color)).not.toContain('#f59e0b')
 
     // Compact K/M main values remain visible on the right
     const values = wrapper.findAll('[data-testid="token-rank-value"]').map((v) => v.text())

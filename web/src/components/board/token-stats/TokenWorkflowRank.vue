@@ -1,8 +1,37 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VChart from 'vue-echarts'
+import { registerECharts } from '@/components/charts/echartsSetup'
+import { BOARD_CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import type { TokenStatsWorkflow } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
+
+registerECharts()
+
+const WF_BAR_GRADIENT = {
+  type: 'linear' as const,
+  x: 0,
+  y: 0,
+  x2: 1,
+  y2: 0,
+  colorStops: [
+    { offset: 0, color: '#6d5cff' },
+    { offset: 1, color: '#9b8cff' },
+  ],
+}
+
+const OTHER_BAR_GRADIENT = {
+  type: 'linear' as const,
+  x: 0,
+  y: 0,
+  x2: 1,
+  y2: 0,
+  colorStops: [
+    { offset: 0, color: '#94a3b8' },
+    { offset: 1, color: '#cbd5e1' },
+  ],
+}
 
 const props = defineProps<{
   workflows: TokenStatsWorkflow[]
@@ -27,13 +56,8 @@ function displayName(w: TokenStatsWorkflow): string {
   return w.name || w.workflowId || '—'
 }
 
-function barWidth(total: number): string {
-  return `${Math.max(2, Math.round((total / maxTotal.value) * 100))}%`
-}
-
 function badgeLabel(w: TokenStatsWorkflow, i: number): string {
   if (isOther(w)) return '·'
-  // Workflow + PM share one continuous numeric sequence (no "PM" text badge / no 12PM34).
   let n = 0
   for (let j = 0; j <= i; j++) {
     const row = props.workflows[j]
@@ -44,18 +68,41 @@ function badgeLabel(w: TokenStatsWorkflow, i: number): string {
 
 function badgeClass(w: TokenStatsWorkflow, i: number): string {
   if (isOther(w)) return 'w-[22px] bg-elevated text-txt3'
-  // PM uses the same numeric badge classes as workflow rows (Demo-aligned).
   const n = Number(badgeLabel(w, i))
   return n <= 3
     ? 'w-[22px] bg-accent-dim text-accent-2'
     : 'w-[22px] bg-elevated text-txt3'
 }
 
-function barClass(w: TokenStatsWorkflow): string {
-  // PM bar matches workflow purple gradient (#6d5cff → #9b8cff); other stays neutral grey.
-  if (isOther(w)) return 'bg-gradient-to-r from-slate-400 to-slate-300'
-  return 'bg-gradient-to-r from-[#6d5cff] to-[#9b8cff]'
+function barColor(w: TokenStatsWorkflow) {
+  return isOther(w) ? OTHER_BAR_GRADIENT : WF_BAR_GRADIENT
 }
+
+function rowChartOption(w: TokenStatsWorkflow) {
+  return {
+    animation: false,
+    grid: { left: 0, right: 0, top: 0, bottom: 0 },
+    xAxis: { type: 'value', show: false, max: maxTotal.value },
+    yAxis: { type: 'category', data: [''], show: false },
+    tooltip: {
+      trigger: 'item',
+      ...BOARD_CHART_TOOLTIP,
+      formatter: () => fmtTokenCount(w.total),
+    },
+    series: [
+      {
+        type: 'bar',
+        data: [w.total || 0],
+        barWidth: 8,
+        itemStyle: { color: barColor(w), borderRadius: [0, 999, 999, 0] },
+        showBackground: true,
+        backgroundStyle: { color: '#f1f3f6' },
+      },
+    ],
+  }
+}
+
+const rowOptions = computed(() => props.workflows.map((w) => rowChartOption(w)))
 
 const tip = ref({ show: false, x: 0, y: 0, idx: -1 })
 
@@ -78,6 +125,8 @@ function hideTip() {
 }
 
 const tipRow = computed(() => (tip.value.idx >= 0 ? props.workflows[tip.value.idx] : null))
+
+defineExpose({ rowOptions, maxTotal, barColor })
 </script>
 
 <template>
@@ -105,12 +154,8 @@ const tipRow = computed(() => (tip.value.idx >= 0 ? props.workflows[tip.value.id
       </span>
       <div class="min-w-0">
         <div class="truncate text-xs font-medium text-txt">{{ displayName(w) }}</div>
-        <div class="mt-1 h-2 overflow-hidden rounded-full bg-[#f1f3f6]">
-          <div
-            class="h-full rounded-full transition-[width] duration-300"
-            :class="barClass(w)"
-            :style="{ width: barWidth(w.total) }"
-          />
+        <div class="mt-1 h-2 overflow-hidden rounded-full" data-testid="token-rank-bar">
+          <VChart :option="rowOptions[i]" autoresize class="h-full w-full" />
         </div>
       </div>
       <span
