@@ -50,10 +50,10 @@ async function onHideNav() {
   >
     <div class="flex h-full w-[232px] min-w-[232px] flex-col">
       <div
-        class="app-sidebar-brand-row flex h-[72px] items-center justify-between gap-2 pl-3.5 pr-2"
+        class="app-sidebar-brand-row flex h-14 items-center justify-between gap-2 pl-3.5 pr-2"
         data-testid="sidebar-brand-row"
       >
-        <BrandLogo size="md" align="start" show-mark />
+        <BrandLogo size="md" align="start" :show-tagline="false" />
         <button
           type="button"
           class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-txt3 hover:text-txt2"
