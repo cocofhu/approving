@@ -8,6 +8,8 @@ import { CHART_AXIS, fmtCompactAxis } from '@/components/charts/chartTheme'
 import { api } from '@/lib/api/api'
 import type { GlobalTokenStats, TokenStatsWindow } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
+import { displayRunTitle } from '@/lib/run/runTitle'
+import { truncateText } from '@/lib/shared/format'
 import {
   TOKEN_PART_COLORS,
   TOKEN_PART_KEYS,
@@ -534,6 +536,21 @@ function goRun(runId: string) {
   void router.push(`/runs/${runId}`)
 }
 
+const RUN_TITLE_MAX_DISPLAY = 60
+
+function runTitleReadable(raw: string): string {
+  return displayRunTitle(raw).replace(/\s+/g, ' ').trim()
+}
+
+function runTitleDisplay(raw: string): string {
+  return truncateText(runTitleReadable(raw), RUN_TITLE_MAX_DISPLAY)
+}
+
+function runTitleTooltip(raw: string): string | undefined {
+  const readable = runTitleReadable(raw)
+  return readable.length > RUN_TITLE_MAX_DISPLAY ? readable : undefined
+}
+
 onMounted(() => {
   void load()
 })
@@ -823,8 +840,13 @@ watch([windowSel], () => void load())
                 </thead>
                 <tbody>
                   <tr v-for="r in data.topRuns" :key="r.runId" class="hover:bg-accent-dim/40">
-                    <td class="border-b border-line/60 py-1.5">
-                      <button type="button" class="text-accent-2" @click="goRun(r.runId)">{{ r.title }}</button>
+                    <td class="max-w-0 border-b border-line/60 py-1.5">
+                      <button
+                        type="button"
+                        class="block max-w-full truncate text-left text-accent-2"
+                        :title="runTitleTooltip(r.title)"
+                        @click="goRun(r.runId)"
+                      >{{ runTitleDisplay(r.title) }}</button>
                     </td>
                     <td class="border-b border-line/60 py-1.5">{{ r.projectName }}</td>
                     <td class="border-b border-line/60 py-1.5">{{ r.modelName || r.modelKey }}</td>

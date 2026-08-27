@@ -39,6 +39,7 @@ const i18n = createI18n({
 })
 
 import { api } from '@/lib/api/api'
+import { displayRunTitle } from '@/lib/run/runTitle'
 
 const sampleData = {
   window: '30d',
@@ -220,6 +221,58 @@ describe('TokenAnalyticsView', () => {
     expect(projectBtn).toBeTruthy()
     await projectBtn!.trigger('click')
     expect(pushMock).toHaveBeenCalledWith({ path: '/projects/p1', query: { tab: 'board' } })
+    wrapper.unmount()
+  })
+
+  it('truncates long multiline run titles to a single line in top runs table', async () => {
+    const longTitle =
+      '5. 迁移编号须严格递增，不得重用历史编号；6. 所有新增表结构变更必须配套 SQLite migration，禁止只改 Go struct；7. 关键路径必须有可重现的 Go tests。\n\n三、接口与安全\n对外 HTTP 接口保持向后兼容；敏感字段不得出现在日志。\n\n四、验收测试\n须覆盖主流程与边界，PR 不得带未测试的 Sendable 变更。'
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
+      ...sampleData,
+      topRuns: [{ ...sampleData.topRuns[0], title: longTitle }],
+    })
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const runsTable = wrapper.find('[data-testid="token-analytics-runs-table"]')
+    const runBtn = runsTable.find('tbody button.text-accent-2')
+    const displayed = runBtn.text()
+    expect(displayed.endsWith('…')).toBe(true)
+    expect(displayed.length).toBeLessThanOrEqual(61)
+    expect(displayed).not.toContain('\n')
+    expect(displayed).not.toContain('三、接口与安全')
+    expect(runBtn.classes()).toContain('truncate')
+    const tooltip = displayRunTitle(longTitle).replace(/\s+/g, ' ').trim()
+    expect(runBtn.attributes('title')).toBe(tooltip)
+    expect(tooltip.length).toBeGreaterThan(60)
+    wrapper.unmount()
+  })
+
+  it('shows short run titles without ellipsis in top runs table', async () => {
+    const shortTitle = '我要讲解一个技术 或者一个产品 目前模板太少了'
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
+      ...sampleData,
+      topRuns: [{ ...sampleData.topRuns[0], title: shortTitle }],
+    })
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const runsTable = wrapper.find('[data-testid="token-analytics-runs-table"]')
+    const runBtn = runsTable.find('tbody button.text-accent-2')
+    expect(runBtn.text()).toBe(shortTitle)
+    expect(runBtn.attributes('title')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('navigates to run detail when clicking truncated run title', async () => {
+    const longTitle = 'A'.repeat(80)
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
+      ...sampleData,
+      topRuns: [{ ...sampleData.topRuns[0], runId: 'r-long', title: longTitle }],
+    })
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const runsTable = wrapper.find('[data-testid="token-analytics-runs-table"]')
+    await runsTable.find('tbody button.text-accent-2').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/runs/r-long')
     wrapper.unmount()
   })
 })
