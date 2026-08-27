@@ -76,6 +76,8 @@ function mountPanel() {
       stubs: {
         TokenTrendChart: { template: '<div data-testid="stub-trend" />' },
         TokenDonutChart: { template: '<div data-testid="stub-donut" />' },
+        TokenModelComposition: { template: '<div data-testid="stub-model-comp" />' },
+        TokenModelRank: { template: '<div data-testid="stub-model-rank" />' },
         TokenWorkflowRank: { template: '<div data-testid="stub-rank" />' },
       },
     },

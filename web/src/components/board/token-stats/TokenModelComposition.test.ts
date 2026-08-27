@@ -1,13 +1,25 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
 import TokenModelComposition from './TokenModelComposition.vue'
 import { colorForModel } from './tokenModelColors'
+
+vi.mock('vue-echarts', () => ({
+  default: {
+    name: 'VChart',
+    template: '<div data-testid="mock-vchart" class="h-full w-full"><canvas /></div>',
+    props: ['option'],
+  },
+}))
+
+vi.mock('@/components/charts/echartsSetup', () => ({
+  registerECharts: () => {},
+}))
 
 const i18n = () =>
   createI18n({
@@ -35,8 +47,12 @@ function expectNoFilledTagCopy(text: string) {
   expect(text).not.toContain('includes filled data')
 }
 
-describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
-  it('renders svg/path solid pie without conic-gradient or rounded-full (g1.1/g1.2/g2.1)', () => {
+function chartData(vm: unknown) {
+  return (vm as { chartData: { name: string; value: number; color?: string }[] }).chartData
+}
+
+describe('TokenModelComposition ECharts pie (g1.1)', () => {
+  it('renders ECharts pie host without svg path sectors (g1.1/g2.1)', () => {
     const wrapper = mount(TokenModelComposition, {
       props: {
         models: [{ modelKey: '未知/未分桶', name: '未知模型', total: 1056, unknown: true }],
@@ -45,20 +61,18 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
     })
     const pie = wrapper.find('[data-testid="token-model-pie"]')
     expect(pie.exists()).toBe(true)
-    expect(pie.find('svg').exists()).toBe(true)
-    const paths = pie.findAll('path')
-    expect(paths.length).toBeGreaterThanOrEqual(1)
-    // Solid pie: path starts from center (M cx cy L …), not a donut ring
-    expect(paths[0]!.attributes('d')).toMatch(/^M\s+55\s+55\s+L/)
+    expect(pie.find('[data-testid="mock-vchart"]').exists()).toBe(true)
+    expect(pie.find('svg').exists()).toBe(false)
+    expect(pie.findAll('path').length).toBe(0)
     expect(wrapper.html()).not.toMatch(/conic-gradient/i)
     expect(wrapper.html()).not.toMatch(/rounded-full/)
-    expect(wrapper.html()).not.toMatch(/inset\s+0\s+0\s+0\s+28px/)
-    // No inner hole circle masking the center
-    expect(pie.findAll('circle').length).toBe(0)
+    const data = chartData(wrapper.vm)
+    expect(data).toHaveLength(1)
+    expect(data[0]!.color).toBe('#71717A')
     wrapper.unmount()
   })
 
-  it('unknown-only near-full circle: solid #71717A path + legend 100% (g1.2/g2.2)', () => {
+  it('unknown-only near-full circle: #71717A sector + legend 100% (g1.2/g2.2)', () => {
     const unknown = { modelKey: '未知/未分桶', name: '未知模型', total: 1056240000, unknown: true }
     expect(colorForModel(unknown, 0)).toBe('#71717A')
 
@@ -67,11 +81,9 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
       global: { plugins: [i18n()] },
     })
     const pie = wrapper.find('[data-testid="token-model-pie"]')
-    const path = pie.find('path')
-    expect(path.exists()).toBe(true)
-    expect(path.attributes('fill')).toBe('#71717A')
-    // Full circle uses two semicircle arcs (Demo describeSlice)
-    expect(path.attributes('d')).toMatch(/A\s+55\s+55\s+0\s+1\s+1/)
+    expect(pie.find('[data-testid="mock-vchart"]').exists()).toBe(true)
+    const data = chartData(wrapper.vm)
+    expect(data[0]!.color).toBe('#71717A')
     const legend = wrapper.find('[data-testid="token-model-legend"]')
     expect(legend.text()).toContain('未知模型')
     expect(legend.text()).toContain('100%')
@@ -79,7 +91,7 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
     wrapper.unmount()
   })
 
-  it('thin wedge + dominant bucket: circular solid sectors (g2.2 attach-like)', () => {
+  it('thin wedge + dominant bucket: ECharts sectors keep colors (g2.2 attach-like)', () => {
     const models = [
       { modelKey: 'cursor-grok', name: 'cursor-grok-4.5-high-fast', total: 50090000, filled: true },
       { modelKey: '未知/未分桶', name: '未知模型', total: 1059710000, unknown: true },
@@ -88,12 +100,10 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
       props: { models },
       global: { plugins: [i18n()] },
     })
-    const pie = wrapper.find('[data-testid="token-model-pie"]')
-    const paths = pie.findAll('[data-testid="token-model-pie-slice"]')
-    expect(paths.length).toBe(2)
-    expect(paths.every((p) => p.attributes('d')?.startsWith('M 55 55'))).toBe(true)
-    expect(paths[0]!.attributes('fill')).toBe(colorForModel(models[0]!, 0))
-    expect(paths[1]!.attributes('fill')).toBe('#71717A')
+    const data = chartData(wrapper.vm)
+    expect(data).toHaveLength(2)
+    expect(data[0]!.color).toBe(colorForModel(models[0]!, 0))
+    expect(data[1]!.color).toBe('#71717A')
     const legend = wrapper.find('[data-testid="token-model-legend"]').text()
     expect(legend).toContain('4.5%')
     expect(legend).toContain('95.5%')
@@ -106,7 +116,7 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
     wrapper.unmount()
   })
 
-  it('multi-bucket: svg sectors keep unknown #71717A and other #A1A1AA (g1.3/g2.1/g2.2)', () => {
+  it('multi-bucket: ECharts sectors keep unknown #71717A and other #A1A1AA (g1.3/g2.1/g2.2)', () => {
     const models = [
       { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 600, filled: true },
       { modelKey: '未知/未分桶', name: '未知模型', total: 300, unknown: true },
@@ -119,33 +129,27 @@ describe('TokenModelComposition SVG solid pie (g1/g2)', () => {
       props: { models },
       global: { plugins: [i18n()] },
     })
-    const pie = wrapper.find('[data-testid="token-model-pie"]')
-    const paths = pie.findAll('path')
-    expect(paths.length).toBe(3)
-    const fills = paths.map((p) => p.attributes('fill'))
-    expect(fills).toContain('#71717A')
-    expect(fills).toContain('#A1A1AA')
-    expect(pie.findAll('circle').length).toBe(0)
+    const colors = chartData(wrapper.vm).map((d) => d.color)
+    expect(colors).toContain('#71717A')
+    expect(colors).toContain('#A1A1AA')
     const legend = wrapper.find('[data-testid="token-model-legend"]').text()
     expect(legend).toContain('未知模型')
     expect(legend).toContain('other')
     expect(legend).toContain('claude-sonnet-4')
-    // Layout: square swatches in legend, left pie + right legend grid
     expect(wrapper.find('[data-testid="token-model-composition"]').classes()).toContain('sm:grid-cols-[120px_1fr]')
     const swatch = wrapper.find('[data-testid="token-model-legend"] span.h-2\\.5')
     expect(swatch.exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('empty models: elevated circle placeholder, no square conic block (g2.2)', () => {
+  it('empty models: elevated placeholder, no ECharts host (g2.2)', () => {
     const wrapper = mount(TokenModelComposition, {
       props: { models: [] },
       global: { plugins: [i18n()] },
     })
     const pie = wrapper.find('[data-testid="token-model-pie"]')
-    expect(pie.find('svg').exists()).toBe(true)
-    expect(pie.findAll('path').length).toBe(0)
-    expect(pie.find('circle').exists()).toBe(true)
+    expect(pie.find('[data-testid="token-model-pie-empty"]').exists()).toBe(true)
+    expect(pie.find('[data-testid="mock-vchart"]').exists()).toBe(false)
     expect(wrapper.html()).not.toMatch(/conic-gradient/i)
     expect(wrapper.find('[data-testid="token-model-legend"]').text()).toMatch(/./)
     wrapper.unmount()
@@ -183,7 +187,7 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     expect(nameSpans[2]!.classes()).toContain('text-ok')
     expect(items[0]!.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
 
-    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
     wrapper.unmount()
   })
@@ -205,7 +209,7 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     const nameSpan = legend.findAll('li')[0]!.findAll('span')[1]!
     expect(nameSpan.classes()).not.toContain('text-txt3')
     expect(nameSpan.classes()).toContain('text-txt')
-    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills[0]).toBe('#7B61FF')
     expect(fills[0]).not.toBe('#71717A')
     expect(legend.findAll('li')).toHaveLength(2)
@@ -228,7 +232,7 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     const nameSpan = legend.findAll('li')[0]!.findAll('span')[1]!
     expect(nameSpan.classes()).toContain('text-ok')
     expect(nameSpan.classes()).not.toContain('text-txt3')
-    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills).toEqual(['#34D399', '#34D399'])
     wrapper.unmount()
   })
@@ -245,7 +249,7 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
     expect(wrapper.html()).not.toContain('includes filled data')
     expect(wrapper.html()).not.toContain('含补全')
 
-    const fills = wrapper.findAll('[data-testid="token-model-pie-slice"]').map((p) => p.attributes('fill'))
+    const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
     wrapper.unmount()
   })

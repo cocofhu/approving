@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { registerECharts } from '@/components/charts/echartsSetup'
+import { BOARD_CHART_TOOLTIP } from '@/components/charts/chartTheme'
 import type { TokenStatsComposition } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
 import { TOKEN_PART_COLORS, TOKEN_PART_KEYS, type TokenPartKey } from './tokenStatsShared'
@@ -48,7 +49,7 @@ const chartOption = computed(() => {
   const visible = parts.value.filter((p) => p.value > 0)
   if (!visible.length) return null
   return {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    tooltip: { trigger: 'item', ...BOARD_CHART_TOOLTIP, formatter: '{b}: {c} ({d}%)' },
     series: [
       {
         type: 'pie',

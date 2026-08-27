@@ -6,6 +6,20 @@ export const CHART_AXIS = {
   splitLine: { lineStyle: { color: '#eef0f3' } },
 }
 
+/** Dark board token panel: unified axis / grid / tooltip tones. */
+export const BOARD_CHART_AXIS = {
+  ...CHART_AXIS,
+  axisLabel: { ...CHART_AXIS.axisLabel, color: '#9aa1ad' },
+  splitLine: { lineStyle: { color: '#2a2e36' } },
+}
+
+export const BOARD_CHART_TOOLTIP = {
+  borderRadius: 8,
+  backgroundColor: '#1a1d23',
+  borderColor: '#2a2e36',
+  textStyle: { color: '#e8eaed', fontSize: 11 },
+}
+
 export const CHART_GRID = {
   left: 42,
   right: 12,

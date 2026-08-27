@@ -1,13 +1,25 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
 import TokenModelRank from './TokenModelRank.vue'
 import { colorForModel } from './tokenModelColors'
+
+vi.mock('vue-echarts', () => ({
+  default: {
+    name: 'VChart',
+    template: '<div data-testid="mock-vchart" class="h-full w-full"><canvas /></div>',
+    props: ['option'],
+  },
+}))
+
+vi.mock('@/components/charts/echartsSetup', () => ({
+  registerECharts: () => {},
+}))
 
 const i18nZh = () =>
   createI18n({
@@ -28,12 +40,30 @@ function expectNoFilledTagCopy(text: string) {
   expect(text).not.toContain('includes filled data')
 }
 
+function barColor(vm: unknown, idx: number) {
+  const opts = (vm as { rowOptions: { series: { itemStyle: { color: string } }[] }[] }).rowOptions
+  return opts[idx]?.series[0]?.itemStyle?.color
+}
+
 const rankModels = [
   { modelKey: 'cursor-grok-4.5-high-fast', name: 'cursor-grok-4.5-high-fast', total: 800, filled: true },
   { modelKey: 'gpt-5.6-sol-medium', name: 'gpt-5.6-sol-medium', total: 600, filled: true },
   { modelKey: '未知/未分桶', name: '未知模型', total: 400, unknown: true },
   { modelKey: 'other', name: 'other', total: 200, other: true },
 ]
+
+describe('TokenModelRank ECharts bars (g1.2)', () => {
+  it('renders ECharts bar hosts without HTML width bars', () => {
+    const wrapper = mount(TokenModelRank, {
+      props: { models: rankModels },
+      global: { plugins: [i18nZh()] },
+    })
+    expect(wrapper.findAll('[data-testid="token-model-rank-bar"]').length).toBe(4)
+    expect(wrapper.findAll('[data-testid="mock-vchart"]').length).toBe(4)
+    expect(wrapper.find('.h-full.transition-\\[width\\]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})
 
 describe('TokenModelRank hides filledTag (g2.2)', () => {
   it('zh-CN: filled/unknown/other rows have no 含补全; data-filled keeps #34D399 / #71717A', () => {
@@ -55,8 +85,8 @@ describe('TokenModelRank hides filledTag (g2.2)', () => {
     for (const row of filledRows) {
       expectNoFilledTagCopy(row.text())
       expect(row.text()).not.toContain('含补全')
-      const bar = row.find('.h-full')
-      expect(bar.attributes('style')).toMatch(/background:\s*#34D399/i)
+      const idx = filledRows.indexOf(row)
+      expect(barColor(wrapper.vm, idx)).toBe('#34D399')
       expect(row.find('.text-ok').exists()).toBe(true)
     }
 
@@ -65,13 +95,13 @@ describe('TokenModelRank hides filledTag (g2.2)', () => {
     expect(unknownRow.attributes('data-filled')).toBe('0')
     expect(unknownRow.text()).toContain('未知模型')
     expectNoFilledTagCopy(unknownRow.text())
-    expect(unknownRow.find('.h-full').attributes('style')).toMatch(/background:\s*#71717A/i)
+    expect(barColor(wrapper.vm, 2)).toBe('#71717A')
 
     const otherRow = wrapper.find('[data-other="1"]')
     expect(otherRow.exists()).toBe(true)
     expect(otherRow.text()).toContain('other（其余模型）')
     expectNoFilledTagCopy(otherRow.text())
-    expect(otherRow.find('.h-full').attributes('style')).toMatch(/background:\s*#A1A1AA/i)
+    expect(barColor(wrapper.vm, 3)).toBe('#A1A1AA')
 
     expect(root.text()).toContain('cursor-grok-4.5-high-fast')
     expect(root.text()).toContain('gpt-5.6-sol-medium')
@@ -90,13 +120,12 @@ describe('TokenModelRank hides filledTag (g2.2)', () => {
 
     const filledRows = wrapper.findAll('[data-filled="1"]')
     expect(filledRows).toHaveLength(2)
-    for (const row of filledRows) {
-      expectNoFilledTagCopy(row.text())
-      expect(row.find('.h-full').attributes('style')).toMatch(/background:\s*#34D399/i)
+    for (let i = 0; i < filledRows.length; i++) {
+      expectNoFilledTagCopy(filledRows[i]!.text())
+      expect(barColor(wrapper.vm, i)).toBe('#34D399')
     }
 
-    const unknownRow = wrapper.find('[data-unknown="1"]')
-    expect(unknownRow.find('.h-full').attributes('style')).toMatch(/background:\s*#71717A/i)
+    expect(barColor(wrapper.vm, 2)).toBe('#71717A')
 
     const otherRow = wrapper.find('[data-other="1"]')
     expect(otherRow.text()).toContain('other (remaining models)')
@@ -146,13 +175,13 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
     expect(unk.text()).not.toContain('other（其余模型）')
     expect(unk.find('.text-txt3').exists()).toBe(true)
-    expect(unk.find('.h-full').attributes('style')).toMatch(/#71717A/i)
+    expect(barColor(wrapper.vm, 1)).toBe('#71717A')
 
     const other = wrapper.find('[data-other="1"]')
     expect(other.exists()).toBe(true)
     expect(other.attributes('data-unknown')).toBe('0')
     expect(other.text()).toContain('other（其余模型）')
-    expect(other.find('.h-full').attributes('style')).toMatch(/#A1A1AA/i)
+    expect(barColor(wrapper.vm, 2)).toBe('#A1A1AA')
     wrapper.unmount()
   })
 
@@ -161,7 +190,6 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
       { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
       { modelKey: '未知/未分桶', name: 'gpt-5', total: 80, unknown: true },
     ]
-    // Alias removes unknown-gray; falls through to palette (idx 1 → #60A5FA).
     expect(colorForModel(models[1]!, 1)).toBe('#60A5FA')
     expect(colorForModel(models[1]!, 1)).not.toBe('#71717A')
     expect(colorForModel({ name: 'gpt-5', unknown: false }, 0)).not.toBe('#71717A')
@@ -176,9 +204,8 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     const nameRow = unk.find('.flex.min-w-0.items-center')
     expect(nameRow.classes()).not.toContain('text-txt3')
     expect(nameRow.classes()).toContain('text-txt')
-    expect(unk.find('.h-full').attributes('style')).not.toMatch(/#71717A/i)
-    expect(unk.find('.h-full').attributes('style')).toMatch(/#60A5FA/i)
-    // Two rows with same display text stay distinct via data-unknown.
+    expect(barColor(wrapper.vm, 1)).toBe('#60A5FA')
+    expect(barColor(wrapper.vm, 1)).not.toBe('#71717A')
     expect(wrapper.findAll('[data-testid="token-model-rank"] > li')).toHaveLength(2)
     wrapper.unmount()
   })
@@ -199,8 +226,8 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     expect(unk.text()).not.toContain('未知模型')
     expect(unk.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
     expect(unk.find('.text-ok').exists()).toBe(true)
-    expect(unk.find('.h-full').attributes('style')).toMatch(/#34D399/i)
-    expect(unk.find('.h-full').attributes('style')).not.toMatch(/#71717A/i)
+    expect(barColor(wrapper.vm, 0)).toBe('#34D399')
+    expect(barColor(wrapper.vm, 0)).not.toBe('#71717A')
     wrapper.unmount()
   })
 })
