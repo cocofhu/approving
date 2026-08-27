@@ -326,8 +326,14 @@ describe('Token charts (g2.3/g2.4)', () => {
     // Same purple bar as workflow — gradient #6d5cff → #9b8cff
     const pmBar = pmRow.find('[data-testid="token-rank-bar"]')
     expect(pmBar.exists()).toBe(true)
-    const barColorFn = (wrapper.vm as { barColor: (w: { kind?: string; other?: boolean }) => { colorStops: { color: string }[] } }).barColor
-    const pmGradient = barColorFn({ kind: 'pm' })
+    const barColorFn = (
+      wrapper.vm as unknown as {
+        barColor: (w: { kind?: string; other?: boolean; name: string; total: number }) => {
+          colorStops: { color: string }[]
+        }
+      }
+    ).barColor
+    const pmGradient = barColorFn({ kind: 'pm', name: 'PM', total: 80_000 })
     expect(pmGradient.colorStops[0]!.color).toBe('#6d5cff')
     expect(pmGradient.colorStops[1]!.color).toBe('#9b8cff')
     expect(pmGradient.colorStops.map((s) => s.color)).not.toContain('#f59e0b')
