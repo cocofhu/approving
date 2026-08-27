@@ -140,12 +140,58 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('uses fixed-height plot areas', async () => {
+  it('uses overflow-visible plot areas so tooltips are not clipped', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
-    expect(wrapper.find('[data-testid="token-analytics-plot-lines"]').classes()).toContain('overflow-hidden')
-    expect(wrapper.find('[data-testid="token-analytics-plot-bars"]').classes()).toContain('overflow-hidden')
-    expect(wrapper.find('[data-testid="token-analytics-plot-area"]').classes()).toContain('overflow-hidden')
+    expect(wrapper.find('[data-testid="token-analytics-plot-lines"]').classes()).toContain('overflow-visible')
+    expect(wrapper.find('[data-testid="token-analytics-plot-bars"]').classes()).toContain('overflow-visible')
+    expect(wrapper.find('[data-testid="token-analytics-plot-area"]').classes()).toContain('overflow-visible')
+    expect(wrapper.find('[data-testid="token-analytics-plot-heat"]').classes()).toContain('overflow-visible')
+    wrapper.unmount()
+  })
+
+  it('pie charts use right-side legend, visible labels, and compact tooltip', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const charts = wrapper.findAllComponents({ name: 'VChart' })
+    expect(charts.length).toBeGreaterThan(0)
+    const pieChart = charts.find((c) => {
+      const opt = c.props('option') as { series?: { type?: string }[] }
+      return opt?.series?.[0]?.type === 'pie'
+    })
+    expect(pieChart).toBeTruthy()
+    const option = pieChart!.props('option') as {
+      legend?: { orient?: string; right?: number; bottom?: number }
+      tooltip?: { formatter?: unknown; appendToBody?: boolean }
+      series?: { label?: { show?: boolean }; center?: string[]; radius?: string | string[] }[]
+    }
+    expect(option.legend?.orient).toBe('vertical')
+    expect(option.legend?.right).toBe(0)
+    expect(option.legend?.bottom).toBeUndefined()
+    expect(option.series?.[0]?.label?.show).toBe(true)
+    expect(option.series?.[0]?.center?.[0]).toBe('38%')
+    expect(typeof option.tooltip?.formatter).toBe('function')
+    expect(option.tooltip?.appendToBody).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('axis charts use compact tooltip formatters and append tooltips to body', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const charts = wrapper.findAllComponents({ name: 'VChart' })
+    const lineChart = charts.find((c) => {
+      const opt = c.props('option') as { series?: { type?: string }[] }
+      return opt?.series?.[0]?.type === 'line' && opt?.series?.length === 2
+    })
+    expect(lineChart).toBeTruthy()
+    const option = lineChart!.props('option') as {
+      tooltip?: { valueFormatter?: (v: number) => string; appendToBody?: boolean; confine?: boolean }
+      yAxis?: { axisLabel?: { formatter?: (v: number) => string } }
+    }
+    expect(option.tooltip?.appendToBody).toBe(true)
+    expect(option.tooltip?.confine).toBe(false)
+    expect(option.tooltip?.valueFormatter?.(2_080_982_825)).toBe('2.08B')
+    expect(option.yAxis?.axisLabel?.formatter?.(2_500_000_000)).toBe('2.5B')
     wrapper.unmount()
   })
 

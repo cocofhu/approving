@@ -59,7 +59,7 @@ describe('TokenUsageByModelTable narrow layout', () => {
       usageByModel: { '未知/未分桶': { ...sampleUsage, source: 'unknown' } },
     })
     const row = wrapper.get('[data-unknown="1"]')
-    expect(row.text()).toContain('未知/未分桶')
+    expect(row.text()).toContain('未知模型')
     expect(row.text()).toMatch(/27\.75M/)
     expect(row.text()).not.toMatch(/%/)
     expect(row.text()).toContain('input')

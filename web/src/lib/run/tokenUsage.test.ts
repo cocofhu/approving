@@ -11,6 +11,7 @@ import {
   summarizeTimelineUsage,
   sumTotalTokens,
   TOKEN_USAGE_UNKNOWN_MODEL,
+  TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY,
   tokenUsageTotal,
   totalTokensOrNull,
   shouldShowUnknownVisual,
@@ -47,6 +48,7 @@ describe('tokenUsage', () => {
     expect(fmtCompactTokenCount(1_020_000)).toBe('1.02M')
     expect(fmtCompactTokenCount(1_000_000)).toBe('1M')
     expect(fmtCompactTokenCount(9_645_255)).toBe('9.65M')
+    expect(fmtCompactTokenCount(2_080_982_825)).toBe('2.08B')
   })
 
   it('formats compact token/s for KPI main values', () => {
@@ -182,17 +184,22 @@ describe('tokenUsage', () => {
 
   it('unknownDisplayName covers alias / empty / default-name / non-unknown keys', () => {
     expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, 'gpt-5')).toBe('gpt-5')
-    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, '  ')).toBe(TOKEN_USAGE_UNKNOWN_MODEL)
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, '  ')).toBe(TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY)
     expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, TOKEN_USAGE_UNKNOWN_MODEL)).toBe(
-      TOKEN_USAGE_UNKNOWN_MODEL,
+      TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY,
     )
-    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, null)).toBe(TOKEN_USAGE_UNKNOWN_MODEL)
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY)).toBe(
+      TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY,
+    )
+    expect(unknownDisplayName(TOKEN_USAGE_UNKNOWN_MODEL, null)).toBe(TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY)
     expect(unknownDisplayName('gpt-5', 'alias')).toBe('gpt-5')
   })
 
   it('shouldShowUnknownVisual: only unknown + default label', () => {
+    expect(shouldShowUnknownVisual(true, TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY)).toBe(true)
     expect(shouldShowUnknownVisual(true, TOKEN_USAGE_UNKNOWN_MODEL)).toBe(true)
     expect(shouldShowUnknownVisual(true, ' 未知/未分桶 ')).toBe(true)
+    expect(shouldShowUnknownVisual(true, ' 未知模型 ')).toBe(true)
     expect(shouldShowUnknownVisual(true, 'Auto')).toBe(false)
     expect(shouldShowUnknownVisual(true, 'gpt-5')).toBe(false)
     expect(shouldShowUnknownVisual(false, TOKEN_USAGE_UNKNOWN_MODEL)).toBe(false)
@@ -203,6 +210,7 @@ describe('tokenUsage', () => {
     expect(normalizeUnknownModelDisplayNameInput(' gpt-5 ')).toEqual({ value: 'gpt-5' })
     expect(normalizeUnknownModelDisplayNameInput('   ')).toEqual({ value: '' })
     expect(normalizeUnknownModelDisplayNameInput(TOKEN_USAGE_UNKNOWN_MODEL)).toEqual({ value: '' })
+    expect(normalizeUnknownModelDisplayNameInput(TOKEN_USAGE_UNKNOWN_MODEL_DISPLAY)).toEqual({ value: '' })
     const tooLong = 'a'.repeat(65)
     expect(normalizeUnknownModelDisplayNameInput(tooLong).error).toMatch(/64/)
   })

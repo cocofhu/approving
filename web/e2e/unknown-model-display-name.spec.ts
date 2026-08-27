@@ -222,6 +222,7 @@ test.describe('未知模型显示名', () => {
     await expect(rank).toContainText('gpt-5')
     await expect(rank.getByTestId('unknown-model-badge')).toHaveCount(0)
     await expect(rank).not.toContainText('未知/未分桶')
+    await expect(rank).not.toContainText('未知模型')
     const unkRank = rank.locator('[data-unknown="1"]')
     await expect(unkRank).toHaveCount(1)
     // 条色非未知灰 #71717A
@@ -232,6 +233,7 @@ test.describe('未知模型显示名', () => {
     await expect(legend).toContainText('gpt-5')
     await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(0)
     await expect(legend).not.toContainText('未知/未分桶')
+    await expect(legend).not.toContainText('未知模型')
 
     await page.screenshot({
       path: path.join(shotDir, '03-board-alias-no-badge.png'),
@@ -247,11 +249,11 @@ test.describe('未知模型显示名', () => {
       ...aliasedTokenStats(),
       modelComposition: [
         { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
-        { modelKey: '未知/未分桶', name: '未知/未分桶', total: 80, unknown: true },
+        { modelKey: '未知/未分桶', name: '未知模型', total: 80, unknown: true },
       ],
       modelRanking: [
         { modelKey: 'gpt-5', name: 'gpt-5', total: 100 },
-        { modelKey: '未知/未分桶', name: '未知/未分桶', total: 80, unknown: true },
+        { modelKey: '未知/未分桶', name: '未知模型', total: 80, unknown: true },
       ],
     }
 
@@ -286,16 +288,18 @@ test.describe('未知模型显示名', () => {
 
     const rank = page.getByTestId('token-model-rank')
     const unkRank = rank.locator('[data-unknown="1"]')
-    await expect(unkRank).toContainText('未知/未分桶')
+    await expect(unkRank).toContainText('未知模型')
+    await expect(unkRank).not.toContainText('未知/未分桶')
     await expect(unkRank.getByTestId('unknown-model-badge')).toHaveCount(1)
     await expect(unkRank.locator('.h-full')).toHaveCSS('background-color', 'rgb(113, 113, 122)')
 
     const legend = page.getByTestId('token-model-legend')
     await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(1)
-    await expect(legend).toContainText('未知/未分桶')
+    await expect(legend).toContainText('未知模型')
+    await expect(legend).not.toContainText('未知/未分桶')
   })
 
-  test('Run 按模型明细：显示别名且无未知角标，来源列仍为未知/未分桶', async ({ page }) => {
+  test('Run 按模型明细：显示别名且无未知角标，来源列仍为未知模型', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
 
     const nodes = [
@@ -433,9 +437,11 @@ test.describe('未知模型显示名', () => {
     // 已设名：模型列无「未知」角标
     await expect(unkRow.getByTestId('unknown-model-badge')).toHaveCount(0)
     // 来源徽章属性标签不随显示名改变
-    await expect(unkRow).toContainText('未知/未分桶')
-    // 模型名区域不显示默认桶名（已被别名覆盖）；来源徽章可含「未知/未分桶」
+    await expect(unkRow).toContainText('未知模型')
+    await expect(unkRow).not.toContainText('未知/未分桶')
+    // 模型名区域不显示默认桶名（已被别名覆盖）；来源徽章显示新默认名
     await expect(unkRow.locator('[title="gpt-5"]')).toContainText('gpt-5')
+    await expect(unkRow.locator('[title="gpt-5"]')).not.toContainText('未知模型')
     await expect(unkRow.locator('[title="gpt-5"]')).not.toContainText('未知/未分桶')
 
     await page.screenshot({

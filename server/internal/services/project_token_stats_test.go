@@ -587,7 +587,7 @@ func TestBuildModelStatsDemoScenes(t *testing.T) {
 					t.Fatal("duplicate unknown row")
 				}
 				unkIdx = i
-				if r.Name != models.TokenUsageModelUnknown {
+				if r.Name != models.TokenUsageModelUnknownDisplay {
 					t.Fatalf("unknown renamed: %q", r.Name)
 				}
 				if r.Other {
@@ -685,7 +685,7 @@ func TestBuildModelStatsDemoScenes(t *testing.T) {
 			}
 			if r.Unknown {
 				hasUnk = true
-				if r.Name != models.TokenUsageModelUnknown {
+				if r.Name != models.TokenUsageModelUnknownDisplay {
 					t.Fatalf("unknown name=%q", r.Name)
 				}
 			}
@@ -733,7 +733,7 @@ func TestTokenStatsLegacyMapsToUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.ModelComposition) != 1 || res.ModelComposition[0].Name != models.TokenUsageModelUnknown {
+	if len(res.ModelComposition) != 1 || res.ModelComposition[0].Name != models.TokenUsageModelUnknownDisplay {
 		t.Fatalf("composition=%+v", res.ModelComposition)
 	}
 	if res.ModelComposition[0].Total != 50 || !res.ModelComposition[0].Unknown {
@@ -782,7 +782,7 @@ func TestBuildModelStatsUnknownAlias(t *testing.T) {
 	t.Run("empty_alias_keeps_default_name", func(t *testing.T) {
 		comp, _ := buildModelStats(totals, "  ")
 		for _, r := range comp {
-			if r.Unknown && r.Name != models.TokenUsageModelUnknown {
+			if r.Unknown && r.Name != models.TokenUsageModelUnknownDisplay {
 				t.Fatalf("empty alias Name=%q", r.Name)
 			}
 		}

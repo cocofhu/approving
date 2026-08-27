@@ -53,11 +53,11 @@ function sampleStats(partial: Partial<ProjectTokenStats> = {}): ProjectTokenStat
     ],
     modelComposition: [
       { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 100, filled: true },
-      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 40, unknown: true },
+      { modelKey: '未知/未分桶', name: '未知模型', total: 40, unknown: true },
     ],
     modelRanking: [
       { modelKey: 'claude-sonnet-4', name: 'claude-sonnet-4', total: 100, filled: true },
-      { modelKey: '未知/未分桶', name: '未知/未分桶', total: 40, unknown: true },
+      { modelKey: '未知/未分桶', name: '未知模型', total: 40, unknown: true },
     ],
     ...partial,
   }

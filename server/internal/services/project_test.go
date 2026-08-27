@@ -634,6 +634,7 @@ func TestNormalizeUnknownModelDisplayName(t *testing.T) {
 		{"", "", false},
 		{"  ", "", false},
 		{models.TokenUsageModelUnknown, "", false},
+		{models.TokenUsageModelUnknownDisplay, "", false},
 		{" gpt-5 ", "gpt-5", false},
 		{strings.Repeat("a", 65), "", true},
 		{strings.Repeat("中", 64), strings.Repeat("中", 64), false},
@@ -671,8 +672,16 @@ func TestProjectUpdateUnknownModelDisplayName(t *testing.T) {
 	if p.UnknownModelDisplayName != "gpt-5" {
 		t.Fatalf("alias=%q", p.UnknownModelDisplayName)
 	}
-	sameAsDefault := models.TokenUsageModelUnknown
+	sameAsDefault := models.TokenUsageModelUnknownDisplay
 	p, err = s.Update(p.ID, nil, nil, nil, nil, nil, &sameAsDefault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.UnknownModelDisplayName != "" {
+		t.Fatalf("new default name should clear, got %q", p.UnknownModelDisplayName)
+	}
+	sameAsLegacy := models.TokenUsageModelUnknown
+	p, err = s.Update(p.ID, nil, nil, nil, nil, nil, &sameAsLegacy)
 	if err != nil {
 		t.Fatal(err)
 	}
