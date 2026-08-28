@@ -15,6 +15,7 @@
       "useAgentFilesPanel.ts",
       "useAgentImport.ts",
       "useAgentStudio.ts",
+      "useInheritedGitEnv.ts",
       "workspaceHistoryDiff.ts"
     ],
     "api": [
@@ -171,7 +172,7 @@
     ]
   },
   "totals": {
-    "agent": 14,
+    "agent": 15,
     "api": 3,
     "composables": 16,
     "inbox": 20,
