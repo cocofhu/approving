@@ -97,6 +97,7 @@ async function mockBoardApis(page: import('@playwright/test').Page) {
             version: 1,
             updatedAt: '2026-07-18T00:00:00Z',
             needsRepo: false,
+            showOnHome: true,
             nodes: [
               { id: 'in', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
               { id: 'ap', type: 'approve', label: '澄清', position: { x: 0, y: 0 }, config: {} },

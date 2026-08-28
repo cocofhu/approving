@@ -128,6 +128,7 @@ func (s *WorkflowService) Import(raw []byte, projectID string) (models.WorkflowD
 			Name:        name,
 			Description: env.Description,
 			NeedsRepo:   env.NeedsRepo,
+			ShowOnHome:  false, // import never inherits Home visibility (plan g1.3)
 			Status:      "draft",
 			Version:     1,
 			Graph:       graph,

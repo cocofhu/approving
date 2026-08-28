@@ -13,7 +13,7 @@
       ],
       "selectProject": "选择项目",
       "noProject": "尚未选择项目。选择一个项目后可从首页启动 Approve 流水线。",
-      "noPipelines": "账号下暂无「开始后是 Approve」的已发布流水线。",
+      "noPipelines": "没有可在首页使用的流水线。请到项目详情为已发布、Approve 打头的流水线打开「首页可见」。",
       "goCanvas": "去画布把 Approve 接到开始节点后",
       "goProjects": "前往项目查看流水线",
       "pickPipeline": "请先选择一条流水线",
@@ -456,6 +456,12 @@
         "modeInherit": "跟随项目",
         "modeCustom": "自定义",
         "wfUpdated": "已更新"
+      },
+      "homeVisibility": {
+        "col": "首页可见",
+        "label": "首页可见",
+        "updated": "已更新首页可见",
+        "updateFailed": "更新首页可见失败"
       },
       "audit": {
         "title": "审计",

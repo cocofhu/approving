@@ -22,6 +22,12 @@ export const workflowsClient = {
       method: 'PATCH',
       body: JSON.stringify({ notifyPolicy }),
     }),
+  /** Home-visibility only: never sends nodes/edges (plan g1.2). */
+  patchWorkflowHomeVisibility: (id: string, showOnHome: boolean) =>
+    req<Workflow>(`/workflows/${id}/home-visibility`, {
+      method: 'PATCH',
+      body: JSON.stringify({ showOnHome }),
+    }),
   publishWorkflow: (id: string) => req<Workflow>(`/workflows/${id}/publish`, { method: 'POST' }),
   listAPIKeys: (workflowId: string) =>
     req<{ id: string; name: string; key_prefix: string; created_at: string }[]>(`/workflows/${workflowId}/api-keys`),
