@@ -76,6 +76,53 @@ func (h *Handlers) ImportOrgFolder(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// ScanOrgSensitiveKeys lists Token-class env key names in a group subtree (no values).
+func (h *Handlers) ScanOrgSensitiveKeys(c *gin.Context) {
+	if h.Org == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "org service unavailable"})
+		return
+	}
+	groupID := strings.TrimSpace(c.Query("groupId"))
+	if groupID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "groupId is required"})
+		return
+	}
+	hits, err := h.Org.ScanGroupSensitiveKeys(groupID)
+	if err != nil {
+		writeOrgFolderError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"keys": hits})
+}
+
+type stripOrgSensitiveBody struct {
+	GroupID string   `json:"groupId"`
+	Keys    []string `json:"keys"`
+}
+
+// StripOrgSensitiveKeys removes selected Token-class keys from agents in a group subtree.
+func (h *Handlers) StripOrgSensitiveKeys(c *gin.Context) {
+	if h.Org == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "org service unavailable"})
+		return
+	}
+	var body stripOrgSensitiveBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	if strings.TrimSpace(body.GroupID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "groupId is required"})
+		return
+	}
+	result, err := h.Org.StripGroupSensitiveKeys(body.GroupID, body.Keys)
+	if err != nil {
+		writeOrgFolderError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func writeOrgFolderError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, services.ErrOrgFolderGroupNotFound),

@@ -37,6 +37,7 @@ const emit = defineEmits<{
   (e: 'assign-project', groupId: string): void
   (e: 'export-group', groupId: string): void
   (e: 'import-group', groupId: string): void
+  (e: 'clear-sensitive-config', groupId: string): void
   (e: 'move-group', groupId: string, newParentId: string): void
   (e: 'move-agent', agentName: string, sourceGroupId: string, targetGroupId: string): void
   (e: 'toggle-collapsed'): void
@@ -161,6 +162,7 @@ function onCtxAction(action: string) {
     else if (action === 'import') emit('import-group', id)
     else if (action === 'rename') emit('rename-group', id)
     else if (action === 'assignProject') emit('assign-project', id)
+    else if (action === 'clearSensitive') emit('clear-sensitive-config', id)
     else if (action === 'delete') emit('delete-group', id)
     return
   }
@@ -490,6 +492,15 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
             >{{ t('pages.agentStudio.org.assignNewBadge') }}</span>
           </button>
           <div data-org-ctx-sep class="my-1 h-px bg-line" />
+          <button
+            type="button"
+            data-org-ctx-action="clearSensitive"
+            class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-txt2 hover:bg-err/10 hover:text-err"
+            @click="onCtxAction('clearSensitive')"
+          >
+            <Icon name="close" :size="13" class="text-txt3" />
+            {{ t('pages.agentStudio.org.clearSensitiveConfig') }}
+          </button>
           <button
             type="button"
             data-org-ctx-action="delete"

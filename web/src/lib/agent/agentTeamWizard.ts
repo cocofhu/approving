@@ -18,6 +18,7 @@ import {
 import { normalizeAgentName, validateAgentName } from '@/lib/agent/agentIO'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { authGuideFor, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
+import { stripTokenKeysFromKV, stripTokenKeysFromRecord } from '@/lib/agent/tokenEnvKeys'
 import { getRegionPolicy } from '@/lib/shared/regionPolicy'
 
 export type TeamWizardStepId = 'team' | 'acp' | 'apiKey' | 'git' | 'mcp' | 'env' | 'review'
@@ -181,14 +182,9 @@ export type TeamBootstrapPayload = {
 
 export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapPayload {
   const w = teamDraftAsWizardDraft(d)
-  if (w.authMode === 'customConfig') {
-    w.env = stripAuthKeysFromEnv(w.env, w.acpBackend)
-  }
-  const env = normalizeWizardRegions(w)
-  d.env = w.env
   const policy = getRegionPolicy(d.acpBackend)
   const region = policy
-    ? d.env.find((e) => e.k.trim() === policy.regionEnvKey)?.v?.trim() || undefined
+    ? w.env.find((e) => e.k.trim() === policy.regionEnvKey)?.v?.trim() || undefined
     : undefined
   const guide = authGuideFor(d.acpBackend, region || '')
   const primaryKey = guide.keys[0]?.key || ''
@@ -197,8 +193,17 @@ export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapP
     d.authMode === 'customConfig' && customParsed.ok && customParsed.normalized
       ? customParsed.normalized
       : undefined
+  // Capture API Key for project/shared layer before stripping Token keys from agent env.
+  const rawEnv = kvToRec(w.env)
   const apiKey =
-    !customConfig && primaryKey ? env[primaryKey]?.trim() || undefined : undefined
+    !customConfig && primaryKey ? rawEnv[primaryKey]?.trim() || undefined : undefined
+
+  if (w.authMode === 'customConfig') {
+    w.env = stripAuthKeysFromEnv(w.env, w.acpBackend)
+  }
+  w.env = stripTokenKeysFromKV(w.env)
+  const env = stripTokenKeysFromRecord(normalizeWizardRegions(w))
+  d.env = w.env
   return {
     projectName: d.projectName.trim(),
     prefix: d.prefix.trim(),

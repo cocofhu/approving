@@ -20,3 +20,19 @@ func TestIsPlatformAuthEnvKey(t *testing.T) {
 		}
 	}
 }
+
+func TestIsTokenEnvKey(t *testing.T) {
+	for _, k := range TokenEnvKeys() {
+		if !IsTokenEnvKey(k) {
+			t.Fatalf("%s should be token env key", k)
+		}
+	}
+	for _, k := range []string{
+		"GIT_REPOS", "GITHUB_URL", "GITLAB_URL", "GIT_SSH_KNOWN_HOSTS",
+		"APPROVING_CODEBUDDY_REGION", "APPROVING_TRAE_REGION", "FEATURE_FLAG",
+	} {
+		if IsTokenEnvKey(k) {
+			t.Fatalf("%s must not be token env key", k)
+		}
+	}
+}

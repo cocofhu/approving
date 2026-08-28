@@ -18,7 +18,11 @@ const AppModalStub = defineComponent({
   `,
 })
 
-function mountGuide(env: { k: string; v: string }[], credentialType?: 'github_https' | 'gitlab_https' | 'ssh') {
+function mountGuide(
+  env: { k: string; v: string }[],
+  credentialType?: 'github_https' | 'gitlab_https' | 'ssh',
+  allowTokenRecommend = true,
+) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
@@ -29,6 +33,7 @@ function mountGuide(env: { k: string; v: string }[], credentialType?: 'github_ht
       env,
       credentialType,
       upsertEnv: () => {},
+      allowTokenRecommend,
     },
     global: {
       plugins: [i18n],
@@ -110,5 +115,34 @@ describe('AgentGitGuide', () => {
     expect(wrapper.text()).toContain('需要确认凭据类型')
     expect(wrapper.text()).toContain('选择已失效')
     expect(wrapper.text()).not.toContain('已应用/待保存')
+  })
+
+  it('Agent 管理下添加推荐变量不注入 Git Token（g2.4）', async () => {
+    const added: string[] = []
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(AgentGitGuide, {
+      props: {
+        env: [],
+        credentialType: 'gitlab_https',
+        allowTokenRecommend: false,
+        upsertEnv: (key: string) => {
+          added.push(key)
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { AppModal: AppModalStub },
+      },
+    })
+    await wrapper.findAll('header button').find((b) => b.text() === '调整类型')!.trigger('click')
+    await wrapper.findAll('[data-test="modal"] button').find((b) => b.text() === '添加推荐变量')!.trigger('click')
+    expect(added).toContain('GIT_REPOS')
+    expect(added).not.toContain('GITLAB_TOKEN')
+    expect(added).not.toContain('GITHUB_TOKEN')
+    expect(added).not.toContain('GIT_SSH_PRIVATE_KEY')
   })
 })

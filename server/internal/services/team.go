@@ -598,7 +598,7 @@ func (s *TeamService) CreateAgentFromTemplate(args CreateFromTemplateArgs) (Agen
 		}
 	}
 	applyOnboardingAgentRegion(mergedEnv, backend, args.Region)
-	tmpl.Env = mergedEnv
+	tmpl.Env = stripTokenKeysFromEnvMap(mergedEnv)
 
 	// MCP: prefer request list when provided, else template
 	if len(args.MCP) > 0 {
@@ -698,7 +698,7 @@ func (s *TeamService) buildPMAgent(req normalizedTeamReq, projectID string) (Age
 		}
 	}
 	applyOnboardingAgentRegion(mergedEnv, backend, req.Region)
-	tmpl.Env = mergedEnv
+	tmpl.Env = stripTokenKeysFromEnvMap(mergedEnv)
 
 	if len(req.MCP) > 0 {
 		tmpl.MCP = req.MCP

@@ -20,10 +20,17 @@ import {
   type AgentStudioDraft,
 } from '@/lib/agent/agentStudioDraft'
 
-const props = defineProps<{ draft: AgentStudioDraft }>()
+const props = defineProps<{
+  draft: AgentStudioDraft
+  /** agent = Studio 单 Agent；shared = 项目共享配置（可继续写 Token） */
+  context?: 'agent' | 'shared'
+}>()
 const emit = defineEmits<{ toast: [msg: string]; 'open-settings-file': [] }>()
 
 const { t } = useI18n()
+
+const envContext = computed(() => props.context ?? 'agent')
+const preferSharedAuth = computed(() => envContext.value === 'agent')
 
 const envRaw = ref(false)
 const envRawText = ref('')
@@ -133,12 +140,19 @@ watch(
         :env="draft.env"
         :upsert-env="upsertEnv"
         :credential-type="draft.gitCredentialType"
+        :allow-token-recommend="!preferSharedAuth"
         @update:credential-type="draft.gitCredentialType = $event"
         @help="openEnvHelp('git')"
       />
       <div class="mb-3 rounded-lg border border-line bg-base/50 p-3 text-[11px] leading-6 text-txt3">
         <div class="mb-1 flex items-center justify-between gap-2">
-          <div class="font-medium text-txt2">{{ t('pages.agentStudio.env.backendAuthTitle') }}</div>
+          <div class="font-medium text-txt2">
+            {{
+              preferSharedAuth
+                ? t('pages.agentStudio.env.backendAuthPreferShared')
+                : t('pages.agentStudio.env.backendAuthTitle')
+            }}
+          </div>
           <AppButton
             type="button"
             size="sm"
@@ -150,6 +164,9 @@ watch(
             {{ t('pages.agentStudio.envHelp.link') }}
           </AppButton>
         </div>
+        <p v-if="preferSharedAuth" class="mb-1 text-txt2" data-test="env-auth-prefer-shared">
+          {{ t('pages.agentStudio.env.backendAuthPreferSharedBody') }}
+        </p>
         <p class="font-mono text-accent-2">{{ currentAuthHint.key }}<span v-if="currentAuthHint.alt"> / {{ currentAuthHint.alt }}</span></p>
       </div>
       <template v-for="(e, i) in draft.env" :key="i">

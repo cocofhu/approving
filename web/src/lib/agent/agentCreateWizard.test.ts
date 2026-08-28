@@ -143,6 +143,23 @@ describe('assembleCreatePayload', () => {
     expect(payload.env).toEqual({ APPROVING_TRAE_REGION: 'intl', OTHER: 'ok' })
     expect(payload).not.toHaveProperty('region')
   })
+
+  it('strips Token-class keys from create payload.env (g3.1)', () => {
+    const d = freshDraft()
+    d.name = 'x'
+    d.authMode = 'apiKey'
+    d.env = [
+      { k: 'APPROVING_CURSOR_API_KEY', v: 'sk-test' },
+      { k: 'GITLAB_TOKEN', v: 'glpat-x' },
+      { k: 'GIT_REPOS', v: 'app|https://gitlab.com/a/b.git' },
+      { k: 'FEATURE_FLAG', v: '1' },
+    ]
+    const payload = assembleCreatePayload(d)
+    expect(payload.env).toEqual({
+      GIT_REPOS: 'app|https://gitlab.com/a/b.git',
+      FEATURE_FLAG: '1',
+    })
+  })
 })
 
 describe('validateBasics', () => {

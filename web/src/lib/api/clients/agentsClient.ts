@@ -206,6 +206,20 @@ export const agentsClient = {
     }
     return (await res.json()) as OrgFolderImportResult
   },
+  scanOrgSensitiveKeys: (groupId: string) =>
+    req<{ keys: { key: string; agentCount: number }[] }>(
+      `/agents/org/sensitive-keys?groupId=${encodeURIComponent(groupId)}`,
+    ),
+  stripOrgSensitiveKeys: (groupId: string, keys: string[]) =>
+    req<{
+      cleared: number
+      failed?: string[]
+      strippedKeys: string[]
+      agentNames: string[]
+    }>(`/agents/org/strip-sensitive-keys`, {
+      method: 'POST',
+      body: JSON.stringify({ groupId, keys }),
+    }),
   importAgent: async (zipFile: File, opts: { targetName: string; mode: 'create' | 'overwrite' }): Promise<Agent> => {
     const fd = new FormData()
     fd.append('file', zipFile)
