@@ -195,6 +195,7 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 		}
 	}
 
+	vars = runtime.MergeEnvIntoTemplateVars(vars, agent.Env)
 	specs := filterAgentPlatformMCP(resolveAgentMCP(agent.MCP, vars))
 	specs = append(specs, platformSpecs...)
 	specs = dedupeMCPByName(specs)

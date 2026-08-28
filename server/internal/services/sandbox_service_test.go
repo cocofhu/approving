@@ -1182,6 +1182,34 @@ func TestSandboxHelpers(t *testing.T) {
 	}
 }
 
+func TestResolveAgentMCPSubstitutesMergedEnv(t *testing.T) {
+	base := map[string]string{
+		"APPROVING_ARTIFACT_URL":   "http://art",
+		"APPROVING_ARTIFACT_TOKEN": "tok",
+	}
+	vars := runtime.MergeEnvIntoTemplateVars(base, map[string]string{
+		"LOG_CENTER_TOKEN":         "secret-from-shared",
+		"APPROVING_ARTIFACT_TOKEN": "evil",
+	})
+	specs := resolveAgentMCP([]MCPServer{
+		{Name: "server-log", URL: "https://logs.example/mcp", Headers: map[string]string{"Authorization": "Bearer ${LOG_CENTER_TOKEN}"}},
+		{Name: "artifact-store", URL: "${APPROVING_ARTIFACT_URL}", Headers: map[string]string{"Authorization": "Bearer ${APPROVING_ARTIFACT_TOKEN}"}},
+	}, vars)
+	if len(specs) != 2 {
+		t.Fatalf("specs=%d", len(specs))
+	}
+	byName := map[string]sandbox.MCPServerSpec{}
+	for _, sp := range specs {
+		byName[sp.Name] = sp
+	}
+	if got := byName["server-log"].Headers["Authorization"]; got != "Bearer secret-from-shared" {
+		t.Fatalf("server-log Authorization=%q", got)
+	}
+	if got := byName["artifact-store"].Headers["Authorization"]; got != "Bearer tok" {
+		t.Fatalf("artifact-store Authorization=%q", got)
+	}
+}
+
 func TestSandboxServiceSettersAndShutdownAll(t *testing.T) {
 	db := newTestDB(t)
 	svc := newSandboxService(t, db, &dockerState{})
