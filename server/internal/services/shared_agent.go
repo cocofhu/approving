@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cocofhu/approving/internal/envauth"
 	"github.com/cocofhu/approving/internal/models"
 
 	"github.com/rs/zerolog/log"
@@ -216,7 +217,9 @@ func (c SharedAgentConfig) AsAgent() Agent {
 	}
 }
 
-// ExtendOverlay merges shared (base) then agent (overlay). Same-key Agent wins.
+// ExtendOverlay merges shared (base) then agent (overlay).
+// Non-Token same-key: Agent wins. Token-class keys: shared wins when present;
+// if shared lacks the key, Agent stock value is kept so legacy agents keep auth.
 // projectId: only fill when Agent.ProjectID is empty (does not persist back).
 func ExtendOverlay(shared SharedAgentConfig, agent Agent) Agent {
 	base := shared.AsAgent()
@@ -227,7 +230,7 @@ func ExtendOverlay(shared SharedAgentConfig, agent Agent) Agent {
 		GitCredentialType: pickNonEmpty(agent.GitCredentialType, base.GitCredentialType),
 		Files:             mergeFiles(base.Files, agent.Files),
 		MCP:               mergeMCP(base.MCP, agent.MCP),
-		Env:               mergeStringMap(base.Env, agent.Env),
+		Env:               mergeEnvSharedTokenPriority(base.Env, agent.Env),
 		Layout:            mergeLayout(base.Layout, agent.Layout),
 		Prompts:           mergePrompts(base.Prompts, agent.Prompts),
 	}
@@ -262,6 +265,31 @@ func mergeStringMap(base, overlay map[string]string) map[string]string {
 	for k, v := range overlay {
 		if strings.TrimSpace(k) == "" {
 			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// mergeEnvSharedTokenPriority: non-Token keys use Agent-over-shared; Token keys
+// keep shared when the key exists on shared, otherwise keep Agent stock.
+func mergeEnvSharedTokenPriority(shared, agent map[string]string) map[string]string {
+	out := map[string]string{}
+	for k, v := range shared {
+		if strings.TrimSpace(k) == "" {
+			continue
+		}
+		out[k] = v
+	}
+	for k, v := range agent {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if envauth.IsTokenEnvKey(k) {
+			if _, ok := shared[k]; ok {
+				continue
+			}
 		}
 		out[k] = v
 	}

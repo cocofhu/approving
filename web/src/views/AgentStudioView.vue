@@ -87,6 +87,19 @@ const {
   exporting,
   showFolderSecrets,
   pendingFolderExportGroupId,
+  onClearSensitiveConfig,
+  showClearSensitive,
+  clearSensitiveBusy,
+  clearSensitiveGroupName,
+  clearSensitiveAgentCount,
+  clearSensitiveHits,
+  clearSensitiveSelectedCount,
+  isClearSensitiveKeySelected,
+  toggleClearSensitiveKey,
+  selectAllClearSensitiveKeys,
+  clearAllClearSensitiveKeys,
+  cancelClearSensitive,
+  confirmClearSensitive,
   agentImport,
   importFileInput,
   showImportDiscardConfirm,
@@ -368,6 +381,7 @@ const {
         @assign-project="onAssignProject"
         @export-group="onExportGroup"
         @import-group="onImportGroup"
+        @clear-sensitive-config="onClearSensitiveConfig"
         @move-group="onMoveGroup"
         @move-agent="onMoveAgent"
         @toggle-collapsed="toggleAgentListCollapsed"
@@ -562,6 +576,7 @@ const {
         <AgentEnvPanel
           v-if="tab === 'env' && draft && !isMobile"
           :draft="draft"
+          context="agent"
           @toast="showToast"
           @open-settings-file="openSettingsInFiles"
         />
@@ -925,6 +940,62 @@ const {
         <AppButton size="sm" variant="ghost" @click="cancelFolderSecrets">{{ t('common.buttons.cancel') }}</AppButton>
         <AppButton size="sm" variant="primary" :disabled="exporting" @click="confirmFolderSecrets">
           {{ t('pages.agentStudio.exportImport.folderSecrets.confirm') }}
+        </AppButton>
+      </template>
+    </AppModal>
+
+    <AppModal
+      :open="showClearSensitive"
+      :title="t('pages.agentStudio.org.clearSensitive.title')"
+      :width="460"
+      close-on-esc
+      @close="cancelClearSensitive"
+    >
+      <p class="mb-3 text-[13px] leading-6 text-txt2">
+        {{
+          t('pages.agentStudio.org.clearSensitive.lead', {
+            name: clearSensitiveGroupName,
+            count: clearSensitiveAgentCount,
+          })
+        }}
+      </p>
+      <div class="mb-2 flex gap-2">
+        <AppButton size="sm" variant="outline" @click="selectAllClearSensitiveKeys">
+          {{ t('pages.agentStudio.org.clearSensitive.selectAll') }}
+        </AppButton>
+        <AppButton size="sm" variant="outline" @click="clearAllClearSensitiveKeys">
+          {{ t('pages.agentStudio.org.clearSensitive.selectNone') }}
+        </AppButton>
+      </div>
+      <div class="max-h-60 overflow-auto border border-line" data-test="clear-sensitive-modal">
+        <label
+          v-for="hit in clearSensitiveHits"
+          :key="hit.key"
+          class="flex cursor-pointer items-center gap-2 border-b border-line px-3 py-2 last:border-b-0 hover:bg-overlay"
+        >
+          <input
+            type="checkbox"
+            :checked="isClearSensitiveKeySelected(hit.key)"
+            @change="toggleClearSensitiveKey(hit.key, ($event.target as HTMLInputElement).checked)"
+          />
+          <code class="font-mono text-[12px] text-accent-2">{{ hit.key }}</code>
+          <span class="ml-auto text-[11px] text-txt3">
+            {{ t('pages.agentStudio.org.clearSensitive.agentCount', { n: hit.agentCount }) }}
+          </span>
+        </label>
+      </div>
+      <template #footer>
+        <AppButton size="sm" variant="ghost" @click="cancelClearSensitive">
+          {{ t('pages.agentStudio.org.clearSensitive.cancel') }}
+        </AppButton>
+        <AppButton
+          size="sm"
+          variant="danger"
+          :disabled="clearSensitiveBusy || clearSensitiveSelectedCount === 0"
+          data-test="clear-sensitive-confirm"
+          @click="confirmClearSensitive"
+        >
+          {{ t('pages.agentStudio.org.clearSensitive.confirm') }}
         </AppButton>
       </template>
     </AppModal>

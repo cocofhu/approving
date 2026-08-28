@@ -1760,6 +1760,19 @@
         "parentNone": "无上级",
         "assignProject": "指定项目",
         "assignNewBadge": "NEW",
+        "clearSensitiveConfig": "删除该层敏感配置",
+        "clearSensitive": {
+          "title": "删除该层敏感配置",
+          "lead": "「{name}」及子组共 {count} 个 Agent。勾选要删除的变量名，确认后立即保存。",
+          "selectAll": "全选",
+          "selectNone": "取消全选",
+          "agentCount": "{n} 个 Agent",
+          "cancel": "取消",
+          "confirm": "删除并保存",
+          "empty": "该层没有可删除的敏感变量",
+          "success": "已从 {agents} 个 Agent 删除 {keys} 个变量并自动保存",
+          "partialFail": "已处理 {cleared} 个 Agent；失败：{failed}"
+        },
         "assignTitle": "指定项目 · {name}",
         "assignIntro": "将递归指定 {n} 个去重 Agent（含子组）。仅能指定已有项目，不解绑。",
         "assignMembers": "成员：{list}",
@@ -1889,6 +1902,8 @@
       "env": {
         "hint": "环境变量会注入该 Agent 的沙箱容器;值支持运行级变量与全局变量 {'${vars.<名字>}'}(如 {'${vars.feature}'})。ACP API Key 须在此配置,平台不再提供全局 Key。",
         "backendAuthTitle": "当前后端所需鉴权变量",
+        "backendAuthPreferShared": "不建议在单个 Agent 上新写 Token",
+        "backendAuthPreferSharedBody": "ACP / Git Token 请到「项目共享 Agent 配置」中维护。下方已有行仍可编辑（不影响使用），运行时同名 Token 以共享配置为准。",
         "backendAuthIntro": "acpBackend={backend} 时,请在下方添加对应 Key(值不会在界面明文回显):",
         "backendAuthMasked": "保存后写入 agent.json,运行时注入沙箱",
         "regionLabel": "站点",
@@ -2306,17 +2321,17 @@
           "remapBody": "已配置的 MCP / Skills / Commands / Rules 可能依赖当前路径。更换 Backend 将按新的 configRoot 重映射；取消则保持原 Backend。"
         },
         "apiKey": {
-          "meta": "按当前 Backend 配置鉴权；可跳过，稍后在 Studio Env 或配置文件中补全。",
+          "meta": "Token 类鉴权请写到「项目共享 Agent 配置」；本步可跳过，创建时不会把 API Key 写入单个 Agent。",
           "modeGroup": "鉴权方式",
           "modeApiKey": "粘贴 API Key",
-          "modeApiKeyHint": "写入 Env，与现网一致",
+          "modeApiKeyHint": "仅作参考输入，创建时不会写入单个 Agent.env；请到项目共享 Agent 配置保存",
           "modeCustomConfig": "自定义配置",
           "modeCustomConfigHint": "编辑 settings.json，创建时写入 Agent 文件树",
           "backendBanner": "当前 Backend：{backend}。",
           "alias": "别名（任选其一）",
-          "inputLabel": "粘贴 API Key",
-          "inputPlaceholder": "sk-… / token…（可留空并跳过）",
-          "skipHint": "未填写也可点「下一步」或「跳过」；运行前可在 Studio Env 补全。",
+          "inputLabel": "粘贴 API Key（可选，不会写入 Agent.env）",
+          "inputPlaceholder": "建议跳过，改到项目共享 Agent 配置填写",
+          "skipHint": "推荐直接「跳过」或「下一步」；在项目详情 → 项目共享 Agent 配置中填写 Token。",
           "notes": {
             "codebuddySite": "Key 与站点绑定；请到与 Agent 步所选站点一致的控制台申请。",
             "traeToken": "官方 CLI 登录令牌须含 trae-lt- 前缀（旗舰版）。"

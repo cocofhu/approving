@@ -262,6 +262,16 @@ const exporting = ref(false)
 const showFolderSecrets = ref(false)
 const pendingFolderExportGroupId = ref('')
 
+type SensitiveKeyHit = { key: string; agentCount: number }
+const showClearSensitive = ref(false)
+const clearSensitiveBusy = ref(false)
+const clearSensitiveGroupId = ref('')
+const clearSensitiveGroupName = ref('')
+const clearSensitiveAgentCount = ref(0)
+const clearSensitiveHits = ref<SensitiveKeyHit[]>([])
+const clearSensitiveSelected = ref<Set<string>>(new Set())
+const clearSensitiveSelectedCount = computed(() => clearSensitiveSelected.value.size)
+
 const agentImport = useAgentImport({
   dirty: () => agentDirty.value,
   agentDirty: () => agentDirty.value,
@@ -1090,6 +1100,100 @@ function onImportGroup(groupId: string) {
   triggerGroupImport(groupId)
 }
 
+function isClearSensitiveKeySelected(key: string): boolean {
+  return clearSensitiveSelected.value.has(key)
+}
+
+function toggleClearSensitiveKey(key: string, checked: boolean) {
+  const next = new Set(clearSensitiveSelected.value)
+  if (checked) next.add(key)
+  else next.delete(key)
+  clearSensitiveSelected.value = next
+}
+
+function selectAllClearSensitiveKeys() {
+  clearSensitiveSelected.value = new Set(clearSensitiveHits.value.map((h) => h.key))
+}
+
+function clearAllClearSensitiveKeys() {
+  clearSensitiveSelected.value = new Set()
+}
+
+function cancelClearSensitive() {
+  showClearSensitive.value = false
+  clearSensitiveBusy.value = false
+  clearSensitiveGroupId.value = ''
+  clearSensitiveGroupName.value = ''
+  clearSensitiveAgentCount.value = 0
+  clearSensitiveHits.value = []
+  clearSensitiveSelected.value = new Set()
+}
+
+async function onClearSensitiveConfig(groupId: string) {
+  if (clearSensitiveBusy.value) return
+  if (orgDirty.value) {
+    if (!(await persistOrg(org.value))) return
+  }
+  clearSensitiveBusy.value = true
+  error.value = ''
+  try {
+    const group = (org.value.groups || []).find((g) => g.id === groupId)
+    const names = recursiveMemberNames(org.value, groupId, agentNames.value)
+    const { keys } = await api.scanOrgSensitiveKeys(groupId)
+    if (!keys.length) {
+      showToast(t('pages.agentStudio.org.clearSensitive.empty'))
+      return
+    }
+    clearSensitiveGroupId.value = groupId
+    clearSensitiveGroupName.value = group?.name || groupId
+    clearSensitiveAgentCount.value = names.length
+    clearSensitiveHits.value = keys
+    clearSensitiveSelected.value = new Set(keys.map((k) => k.key))
+    showClearSensitive.value = true
+  } catch (e: any) {
+    error.value = String(e?.message || e)
+  } finally {
+    clearSensitiveBusy.value = false
+  }
+}
+
+async function confirmClearSensitive() {
+  const groupId = clearSensitiveGroupId.value
+  const keys = [...clearSensitiveSelected.value]
+  if (!groupId || !keys.length || clearSensitiveBusy.value) return
+  clearSensitiveBusy.value = true
+  error.value = ''
+  try {
+    const result = await api.stripOrgSensitiveKeys(groupId, keys)
+    const failed = result.failed || []
+    if (failed.length) {
+      showToast(
+        t('pages.agentStudio.org.clearSensitive.partialFail', {
+          cleared: result.cleared,
+          failed: failed.join(', '),
+        }),
+      )
+    } else {
+      showToast(
+        t('pages.agentStudio.org.clearSensitive.success', {
+          agents: result.cleared,
+          keys: (result.strippedKeys || keys).length,
+        }),
+      )
+    }
+    const affected = new Set(result.agentNames || [])
+    if (activeName.value && affected.has(activeName.value)) {
+      await reloadAgentFromServer(activeName.value)
+    }
+    await refreshAgentsList()
+    cancelClearSensitive()
+  } catch (e: any) {
+    error.value = String(e?.message || e)
+  } finally {
+    clearSensitiveBusy.value = false
+  }
+}
+
 const showCreateWizard = ref(false)
 const showTeamWizard = ref(false)
 const teamBootstrapSessionId = ref('')
@@ -1551,6 +1655,19 @@ onBeforeUnmount(() => {
   cancelFolderSecrets,
   confirmFolderSecrets,
   onImportGroup,
+  onClearSensitiveConfig,
+  showClearSensitive,
+  clearSensitiveBusy,
+  clearSensitiveGroupName,
+  clearSensitiveAgentCount,
+  clearSensitiveHits,
+  clearSensitiveSelectedCount,
+  isClearSensitiveKeySelected,
+  toggleClearSensitiveKey,
+  selectAllClearSensitiveKeys,
+  clearAllClearSensitiveKeys,
+  cancelClearSensitive,
+  confirmClearSensitive,
   showCreateWizard,
   showTeamWizard,
   teamBootstrapSessionId,

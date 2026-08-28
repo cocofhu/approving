@@ -76,6 +76,33 @@ func TestExtendOverlay_AgentWinsSameKeys(t *testing.T) {
 	}
 }
 
+func TestExtendOverlay_TokenSharedPriority(t *testing.T) {
+	shared := SharedAgentConfig{
+		Env: map[string]string{
+			"APPROVING_CURSOR_API_KEY": "shared-key",
+			"FEATURE_FLAG":             "shared-flag",
+		},
+	}
+	agent := Agent{
+		Name: "demo",
+		Env: map[string]string{
+			"APPROVING_CURSOR_API_KEY": "agent-key",
+			"GITLAB_TOKEN":             "agent-gl",
+			"FEATURE_FLAG":             "agent-flag",
+		},
+	}
+	got := ExtendOverlay(shared, agent)
+	if got.Env["APPROVING_CURSOR_API_KEY"] != "shared-key" {
+		t.Fatalf("token both present → shared wins: %#v", got.Env)
+	}
+	if got.Env["GITLAB_TOKEN"] != "agent-gl" {
+		t.Fatalf("token only on agent → keep stock: %#v", got.Env)
+	}
+	if got.Env["FEATURE_FLAG"] != "agent-flag" {
+		t.Fatalf("non-token still agent wins: %#v", got.Env)
+	}
+}
+
 func TestExtendOverlay_ProjectIDFillEmptyOnly(t *testing.T) {
 	shared := SharedAgentConfig{ProjectID: "proj-a", DefaultProjectID: "proj-default"}
 	got := ExtendOverlay(shared, Agent{Name: "x"})

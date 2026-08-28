@@ -21,6 +21,8 @@ const props = defineProps<{
   env: KV[]
   upsertEnv: (key: string, value: string) => void
   credentialType?: GitCredentialType
+  /** When false (Agent Studio), skip injecting Git Token keys. Default true for shared config. */
+  allowTokenRecommend?: boolean
 }>()
 const emit = defineEmits<{
   'update:credentialType': [value: GitCredentialType]
@@ -97,7 +99,11 @@ function confirmType() {
 }
 
 function applyRecommended() {
+  const allowTokens = props.allowTokenRecommend !== false
   for (const item of recommendations[pendingType.value]) {
+    if (!allowTokens && (item.key === 'GITHUB_TOKEN' || item.key === 'GITLAB_TOKEN' || item.key === 'GIT_SSH_PRIVATE_KEY')) {
+      continue
+    }
     if (!props.env.some((entry) => entry.k === item.key)) {
       props.upsertEnv(item.key, item.value)
     }

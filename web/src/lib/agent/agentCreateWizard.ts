@@ -7,6 +7,7 @@ import {
   BACKEND_AUTH_HINTS,
   hasAuthKeyConfigured,
 } from '@/lib/agent/backendAuthGuide'
+import { stripTokenKeysFromKV, stripTokenKeysFromRecord } from '@/lib/agent/tokenEnvKeys'
 import {
   ACP_BACKENDS,
   isManagedRegionKey,
@@ -294,18 +295,20 @@ function collectFiles(draft: WizardDraft): AgentFile[] {
   return files
 }
 
-/** Assemble POST /agents payload. Skip Rules still writes default rule; Skip Prompts omits prompts. */
+/** Assemble POST /agents payload. Skip Rules still writes default rule; Skip Prompts omits prompts.
+ * Token-class keys are always stripped from env (write them in Project shared Agent config). */
 export function assembleCreatePayload(draft: WizardDraft): Agent {
   const name = normalizeAgentName(draft.name)
   const prompts = draftPromptsToApi(draft.prompts, !!draft.skipped.prompts)
   const envDraft: WizardDraft = {
     ...draft,
-    env:
+    env: stripTokenKeysFromKV(
       draft.authMode === 'customConfig'
         ? stripAuthKeysFromEnv(draft.env, draft.acpBackend)
         : draft.env,
+    ),
   }
-  const env = normalizeWizardRegions(envDraft)
+  const env = stripTokenKeysFromRecord(normalizeWizardRegions(envDraft))
   return {
     name,
     acpBackend: draft.acpBackend || 'cursor',

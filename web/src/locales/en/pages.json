@@ -1760,6 +1760,19 @@
         "parentNone": "No parent",
         "assignProject": "Assign project",
         "assignNewBadge": "NEW",
+        "clearSensitiveConfig": "Clear sensitive config in this group",
+        "clearSensitive": {
+          "title": "Clear sensitive config in this group",
+          "lead": "Group “{name}” and subgroups include {count} agent(s). Select variable names to delete; confirm saves immediately.",
+          "selectAll": "Select all",
+          "selectNone": "Clear selection",
+          "agentCount": "{n} agent(s)",
+          "cancel": "Cancel",
+          "confirm": "Delete and save",
+          "empty": "No sensitive variables to clear in this group",
+          "success": "Removed {keys} variable(s) from {agents} agent(s) and saved",
+          "partialFail": "Processed {cleared} agent(s); failed: {failed}"
+        },
         "assignTitle": "Assign project · {name}",
         "assignIntro": "Recursively assign {n} deduped agent(s) including subgroups. Existing projects only; unbind is not available here.",
         "assignMembers": "Members: {list}",
@@ -1889,6 +1902,8 @@
       "env": {
         "hint": "Injected into agent sandbox; supports run-scoped and {'${vars.<name>}'} globals. Configure ACP API keys here — no platform-global key.",
         "backendAuthTitle": "Auth vars for current backend",
+        "backendAuthPreferShared": "Do not add new Tokens on a single Agent",
+        "backendAuthPreferSharedBody": "Keep ACP / Git Tokens in Project shared Agent config. Existing rows stay editable; at runtime same-name Tokens prefer shared config.",
         "backendAuthIntro": "When acpBackend={backend}, add the matching key below (values are not shown in plain text):",
         "backendAuthMasked": "Saved to agent.json and injected at runtime",
         "regionLabel": "Site",
@@ -2306,17 +2321,17 @@
           "remapBody": "MCP / Skills / Commands / Rules may depend on the current paths. Switching remaps to the new configRoot; cancel keeps the current Backend."
         },
         "apiKey": {
-          "meta": "Configure auth for the current Backend; skip and finish later in Studio Env or config files.",
+          "meta": "Put Token auth in Project shared Agent config; you can skip this step — create will not write API Keys into a single Agent.",
           "modeGroup": "Auth method",
           "modeApiKey": "Paste API Key",
-          "modeApiKeyHint": "Written to Env — same as production",
+          "modeApiKeyHint": "Reference only; create will not write it into Agent.env — save Tokens in Project shared Agent config",
           "modeCustomConfig": "Custom config",
           "modeCustomConfigHint": "Edit settings.json; written to Agent files on create",
           "backendBanner": "Current Backend: {backend}.",
           "alias": "Alias (either works)",
-          "inputLabel": "Paste API Key",
-          "inputPlaceholder": "sk-… / token… (optional; you can skip)",
-          "skipHint": "You can leave this empty and click Next or Skip; complete it later in Studio Env before running.",
+          "inputLabel": "Paste API Key (optional; not written to Agent.env)",
+          "inputPlaceholder": "Prefer skipping; configure in Project shared Agent config",
+          "skipHint": "Prefer Skip / Next; set Tokens under Project → shared Agent config.",
           "notes": {
             "codebuddySite": "Keys are bound to a site; apply in the console that matches the site chosen in the Agent step.",
             "traeToken": "Official CLI login tokens must start with trae-lt- (Enterprise plan)."

@@ -256,13 +256,22 @@ describe('AgentOrgSidebar context menus', () => {
     const actions = [...(menu?.querySelectorAll('[data-org-ctx-action]') || [])].map(
       (el) => el.getAttribute('data-org-ctx-action'),
     )
-    expect(actions).toEqual(['newChild', 'export', 'import', 'rename', 'assignProject', 'delete'])
+    expect(actions).toEqual([
+      'newChild',
+      'export',
+      'import',
+      'rename',
+      'assignProject',
+      'clearSensitive',
+      'delete',
+    ])
     expect(menu?.querySelector('[data-org-ctx-sep]')).toBeTruthy()
     expect(menu?.querySelector('[data-org-ctx-new]')?.textContent).toContain('NEW')
     expect(menu?.textContent).toContain('新建子组')
     expect(menu?.textContent).toContain('导出')
     expect(menu?.textContent).toContain('导入')
     expect(menu?.textContent).toContain('指定项目')
+    expect(menu?.textContent).toContain('删除该层敏感配置')
     expect(menu?.textContent).not.toContain('导出文件夹')
 
     const exportBtn = menu!.querySelector('[data-org-ctx-action="export"]') as HTMLButtonElement
@@ -282,6 +291,14 @@ describe('AgentOrgSidebar context menus', () => {
     assignBtn.click()
     await wrapper.vm.$nextTick()
     expect(wrapper.emitted('assign-project')?.[0]).toEqual(['g_dev'])
+
+    await group.trigger('contextmenu', { clientX: 12, clientY: 24 })
+    const clearBtn = document.querySelector(
+      '[data-org-ctx-action="clearSensitive"]',
+    ) as HTMLButtonElement
+    clearBtn.click()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('clear-sensitive-config')?.[0]).toEqual(['g_dev'])
     expect(document.querySelector('[data-org-ctx-menu]')).toBeNull()
     wrapper.unmount()
   })
@@ -294,7 +311,9 @@ describe('AgentOrgSidebar context menus', () => {
     const agentMenu = document.querySelector('[data-org-ctx-menu]') as HTMLElement | null
     expect(agentMenu?.getAttribute('data-org-ctx-kind')).toBe('agent')
     expect(agentMenu?.querySelector('[data-org-ctx-action="assignProject"]')).toBeNull()
+    expect(agentMenu?.querySelector('[data-org-ctx-action="clearSensitive"]')).toBeNull()
     expect(agentMenu?.textContent).not.toContain('指定项目')
+    expect(agentMenu?.textContent).not.toContain('删除该层敏感配置')
 
     ;(document.querySelector('[data-org-ctx-backdrop]') as HTMLElement | null)?.click()
     await wrapper.vm.$nextTick()

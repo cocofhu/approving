@@ -207,6 +207,8 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.PUT("/agents/org", h.PutAgentsOrg)
 		api.GET("/agents/org/export", h.ExportOrgFolder)
 		api.POST("/agents/org/import", h.ImportOrgFolder)
+		api.GET("/agents/org/sensitive-keys", h.ScanOrgSensitiveKeys)
+		api.POST("/agents/org/strip-sensitive-keys", h.StripOrgSensitiveKeys)
 		api.GET("/agents/:name/export", h.ExportAgent)
 		api.POST("/agents/import", h.ImportAgent)
 		api.GET("/agents/:name/platform-rules", h.ListAgentPlatformRules)

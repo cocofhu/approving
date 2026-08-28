@@ -380,6 +380,7 @@ onMounted(() => {
       <AgentEnvPanel
         v-if="subTab === 'env'"
         :draft="draft"
+        context="shared"
         @toast="toast.success($event)"
         @open-settings-file="openSettingsInFiles"
       />
