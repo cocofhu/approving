@@ -23,7 +23,7 @@ func reviewGraph() models.Graph {
 		},
 		Nodes: []models.Node{
 			{ID: "input", Type: "input", Label: "输入"},
-			{ID: "prop", Type: "proposal", Label: "方案", Config: map[string]any{"skill_profile": "pm-agent", "prompt": "给方案"}},
+			{ID: "prop", Type: "proposal", Label: "方案", Config: map[string]any{"agent_profile": "pm-agent", "prompt": "给方案"}},
 			{ID: "output", Type: "output", Label: "输出"},
 		},
 		Edges: []models.Edge{
@@ -381,7 +381,7 @@ func gateReactGraph() models.Graph {
 		},
 		Nodes: []models.Node{
 			{ID: "input", Type: "input", Label: "输入"},
-			{ID: "prop", Type: "proposal", Label: "方案", Config: map[string]any{"skill_profile": "pm-agent", "prompt": "给方案"}},
+			{ID: "prop", Type: "proposal", Label: "方案", Config: map[string]any{"agent_profile": "pm-agent", "prompt": "给方案"}},
 			{ID: "select", Type: "proposal_select", Label: "确认",
 				Config: map[string]any{"auto_var": "auto_confirm", "output_var": "selected_proposal"}},
 			{ID: "output", Type: "output", Label: "输出"},

@@ -102,7 +102,7 @@ type Engine struct {
 	reviewMu   sync.Mutex
 	reviewSess map[string]*reviewSession // key: runID|producerNodeID
 
-	// skills looks up Agents for same-project skill_profile runtime gate.
+	// skills looks up Agents for same-project agent_profile runtime gate.
 	skills SkillLookup
 
 	// blobs externalizes PromptImage bytes (optional in unit tests).
@@ -146,8 +146,8 @@ func (e *Engine) SetMaxConcurrent(n int) {
 	e.signalDispatch()
 }
 
-// SkillLookup is the narrow Agent catalog port used by the skill_profile
-// project gate. Composition root injects *services.SkillService.
+// SkillLookup is the narrow Agent catalog port used by the agent_profile
+// project gate. Composition root injects *services.AgentService.
 type SkillLookup interface {
 	Get(name string) (services.Agent, bool)
 }
@@ -158,8 +158,8 @@ type IssueResolver interface {
 	MarkResolvedByNode(runID, nodeID string) error
 }
 
-// SetSkills wires the Agent catalog used by the skill_profile project gate.
-func (e *Engine) SetSkills(skills SkillLookup) { e.skills = skills }
+// SetAgents wires the Agent catalog used by the agent_profile project gate.
+func (e *Engine) SetAgents(skills SkillLookup) { e.skills = skills }
 
 // MaxConcurrent returns the current concurrency cap.
 func (e *Engine) MaxConcurrent() int { return e.sem.Limit() }

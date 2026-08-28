@@ -24,7 +24,7 @@ type platformMCPWire struct {
 	context   *contextmcp.Host
 	scheduler *schedulermcp.Host
 	pmSvc     *services.PmService
-	skills    *services.SkillService
+	skills    *services.AgentService
 }
 
 // agentBoundToProject is true when the Agent exists and its home project equals

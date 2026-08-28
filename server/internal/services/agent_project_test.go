@@ -9,7 +9,7 @@ import (
 
 func TestUpdateProjectIDDoesNotTouchWorkspaceOrMCP(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	if err := s.Save(Agent{
 		Name:      "keep-ws",
 		ProjectID: "old-proj",
@@ -65,7 +65,7 @@ func TestUpdateProjectIDDoesNotTouchWorkspaceOrMCP(t *testing.T) {
 }
 
 func TestUpdateProjectIDMissingAgent(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.UpdateProjectID("ghost", "p1"); err == nil {
 		t.Fatal("expected not found")
 	}

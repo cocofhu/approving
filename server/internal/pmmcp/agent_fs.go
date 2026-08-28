@@ -155,7 +155,7 @@ func (h *Host) workspaceWriteOpts(sess *Session) services.WorkspaceWriteOpts {
 }
 
 // authorizeAgentFSTarget allows PM to manage any agent bound to the same project (incl. self).
-func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.SkillService, _ *services.OrgService, target string) (errMsg string, deny bool) {
+func (h *Host) authorizeAgentFSTarget(sess *Session, skill *services.AgentService, _ *services.OrgService, target string) (errMsg string, deny bool) {
 	if strings.TrimSpace(sess.AgentName) == "" {
 		return "pm leader not bound", true
 	}

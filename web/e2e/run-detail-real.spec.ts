@@ -7,14 +7,14 @@ const nodes = [
     type: 'agent',
     label: '构建并推送包含超长仓库名称与提交标识的容器镜像用于验证截断提示',
     position: { x: 180, y: 0 },
-    config: { skill_profile: 'release-engineer' },
+    config: { agent_profile: 'release-engineer' },
   },
   {
     id: 'deploy',
     type: 'implement',
     label: '部署到 production-ap-southeast-1 集群并等待全部工作负载完成滚动更新',
     position: { x: 360, y: 0 },
-    config: { skill_profile: 'deployment-agent' },
+    config: { agent_profile: 'deployment-agent' },
   },
   { id: 'notify', type: 'output', label: '健康检查与发布结果通知', position: { x: 540, y: 0 }, config: {} },
 ]

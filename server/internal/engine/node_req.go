@@ -13,15 +13,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// checkSkillProfileProject verifies the referenced Agent exists before
+// checkAgentProfileProject verifies the referenced Agent exists before
 // agent-class execution. Inheritance of project shared config no longer
 // requires Agent.projectId to equal the workflow project (extend uses the
-// current run's project). Empty skill_profile is allowed and skipped.
-func (e *Engine) checkSkillProfileProject(c *execCtx, node *models.Node) error {
+// current run's project). Empty agent_profile is allowed and skipped.
+func (e *Engine) checkAgentProfileProject(c *execCtx, node *models.Node) error {
 	if e == nil || node == nil || node.Config == nil {
 		return nil
 	}
-	raw, _ := node.Config["skill_profile"].(string)
+	raw, _ := node.Config["agent_profile"].(string)
 	profile := strings.TrimSpace(raw)
 	if profile == "" {
 		return nil

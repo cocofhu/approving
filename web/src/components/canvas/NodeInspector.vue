@@ -45,8 +45,8 @@ const helpHtml = computed(() => (def.value?.help ? renderMarkdown(def.value.help
 type AgentRow = { name: string; projectId?: string }
 const agents = ref<AgentRow[]>([])
 
-/** Classify a configured skill_profile against the workflow project. */
-function classifySkillProfile(name: string): { ok: boolean; label: string } {
+/** Classify a configured agent_profile against the workflow project. */
+function classifyAgentProfile(name: string): { ok: boolean; label: string } {
   const cur = String(name || '').trim()
   if (!cur) return { ok: true, label: '' }
   const a = agents.value.find((x) => x.name === cur)
@@ -61,12 +61,12 @@ function classifySkillProfile(name: string): { ok: boolean; label: string } {
   return { ok: true, label: '' }
 }
 
-const skillProfileStale = computed(() => {
-  const hasField = def.value?.fields?.some((f) => f.key === 'skill_profile')
+const agentProfileStale = computed(() => {
+  const hasField = def.value?.fields?.some((f) => f.key === 'agent_profile')
   if (!hasField) return null
-  const cur = String(props.node.config?.skill_profile || '').trim()
+  const cur = String(props.node.config?.agent_profile || '').trim()
   if (!cur) return null
-  const st = classifySkillProfile(cur)
+  const st = classifyAgentProfile(cur)
   if (st.ok) return null
   return { name: cur, reason: st.label }
 })
@@ -80,7 +80,7 @@ onMounted(async () => {
   } catch {
     agents.value = []
   }
-  // Empty skill_profile must remain allowed — do not auto-fill the first agent.
+  // Empty agent_profile must remain allowed — do not auto-fill the first agent.
 })
 
 const gateBodyOptions = computed(() =>
@@ -88,7 +88,7 @@ const gateBodyOptions = computed(() =>
 )
 
 function fieldOptions(f: FieldSchema): { value: string; label: string }[] {
-  if (f.key === 'skill_profile') {
+  if (f.key === 'agent_profile') {
     const pid = String(props.projectId || '').trim()
     // Only same-project, non-empty projectId agents are selectable.
     const same = pid
@@ -100,9 +100,9 @@ function fieldOptions(f: FieldSchema): { value: string; label: string }[] {
     for (const a of same) {
       opts.push({ value: a.name, label: a.name })
     }
-    const cur = String(props.node.config?.skill_profile || '').trim()
+    const cur = String(props.node.config?.agent_profile || '').trim()
     if (cur && !same.some((a) => a.name === cur)) {
-      const st = classifySkillProfile(cur)
+      const st = classifyAgentProfile(cur)
       opts.push({
         value: cur,
         label: st.ok ? cur : `${cur} · ${st.label}`,
@@ -461,16 +461,16 @@ function setSwitch(key: string, on: boolean) {
             <option v-for="o in fieldOptions(f)" :key="o.value" :value="o.value">{{ o.label }}</option>
           </select>
           <div
-            v-if="f.key === 'skill_profile' && skillProfileStale"
+            v-if="f.key === 'agent_profile' && agentProfileStale"
             class="mt-2 border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] leading-5 text-warn"
             data-testid="skill-profile-stale-banner"
           >
             <strong class="font-semibold">{{ t('pages.workflowEditor.inspector.staleBannerTitle') }}</strong>
             —
-            {{ t('pages.workflowEditor.inspector.staleBannerBody', { name: skillProfileStale.name, reason: skillProfileStale.reason }) }}
+            {{ t('pages.workflowEditor.inspector.staleBannerBody', { name: agentProfileStale.name, reason: agentProfileStale.reason }) }}
           </div>
           <p
-            v-else-if="f.key === 'skill_profile'"
+            v-else-if="f.key === 'agent_profile'"
             class="mt-1 text-[11px] leading-4 text-txt3"
           >{{ t('pages.workflowEditor.inspector.skillProfileHint') }}</p>
         </template>

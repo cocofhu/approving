@@ -22,7 +22,7 @@ func setupExternalMcpHarness(t *testing.T) (*harness, string) {
 	cfg := config.GetConfig()
 	cfg.Server.MCPAdvertise = "http://api.example.com"
 	config.StoreConfig(cfg)
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, hn.h.WF, hn.h.Runs, hn.h.Arts, nil)
@@ -223,8 +223,8 @@ func TestExternalMcpAuditExternalCallerKind(t *testing.T) {
 func wireExternalAgentFS(t *testing.T, hn *harness) *services.OrgService {
 	t.Helper()
 	root := t.TempDir()
-	skill := services.NewSkillService(root)
-	hn.h.Skill = skill
+	skill := services.NewAgentService(root)
+	hn.h.Agents = skill
 	pm := services.NewPmService(hn.db, skill)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
@@ -233,7 +233,7 @@ func wireExternalAgentFS(t *testing.T, hn *harness) *services.OrgService {
 	org := services.NewOrgService(root, skill)
 	hn.h.Org = org
 	team := services.NewTeamService(hn.h.Projects, skill, org, pm, nil)
-	hn.h.PMMCP.SetOrgAndSkill(org, skill)
+	hn.h.PMMCP.SetOrgAndAgent(org, skill)
 	hn.h.PMMCP.SetTeam(team)
 	return org
 }
@@ -270,10 +270,10 @@ func TestExternalMcpAgentFSUsesPmLeader(t *testing.T) {
 	hn, pid := setupExternalMcpHarness(t)
 	org := wireExternalAgentFS(t, hn)
 
-	if err := hn.h.Skill.Save(services.Agent{Name: "pm-leader", ProjectID: pid}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-leader", ProjectID: pid}); err != nil {
 		t.Fatal(err)
 	}
-	if err := hn.h.Skill.Save(services.Agent{Name: "member-a", ProjectID: pid}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "member-a", ProjectID: pid}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := org.Put(services.AgentOrg{
@@ -348,7 +348,7 @@ func TestExternalMcpAgentFSRequiresPmLeader(t *testing.T) {
 	hn, pid := setupExternalMcpHarness(t)
 	_ = wireExternalAgentFS(t, hn)
 
-	if err := hn.h.Skill.Save(services.Agent{Name: "orphan", ProjectID: pid}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "orphan", ProjectID: pid}); err != nil {
 		t.Fatal(err)
 	}
 

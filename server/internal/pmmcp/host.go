@@ -64,7 +64,7 @@ type Host struct {
 	runs     *services.RunService
 	arts     *services.ArtifactService
 	org      *services.OrgService
-	skill    *services.SkillService
+	skill    *services.AgentService
 	team     *services.TeamService
 	drafts   *services.RequirementDraftService
 	eng      engineOps
@@ -95,9 +95,9 @@ func NewHost(pm *services.PmService, progress *services.PmProgress, wf *services
 	}
 }
 
-// SetOrgAndSkill wires OrgService + SkillService for pm-agent-fs tools.
+// SetOrgAndAgent wires OrgService + AgentService for pm-agent-fs tools.
 // Safe to call after NewHost (main wiring); nil leaves org/FS tools unavailable.
-func (h *Host) SetOrgAndSkill(org *services.OrgService, skill *services.SkillService) {
+func (h *Host) SetOrgAndAgent(org *services.OrgService, skill *services.AgentService) {
 	h.mu.Lock()
 	h.org = org
 	h.skill = skill

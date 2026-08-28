@@ -48,7 +48,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-clarify',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.react.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.react.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.react.fields.prompt.label', type: 'prompt', placeholder: 'nodes.react.fields.prompt.placeholder' },
       { key: 'max_rounds', label: 'nodes.react.fields.max_rounds.label', type: 'number', placeholder: 'nodes.react.fields.max_rounds.placeholder' },
       { key: 'auto_var', label: 'nodes.react.fields.auto_var.label', type: 'text', placeholder: 'nodes.react.fields.auto_var.placeholder', optional: true },
@@ -69,7 +69,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-clarify',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.approve.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.approve.fields.agent_profile.label', type: 'select' },
       { key: 'timeout', label: 'nodes.approve.fields.timeout.label', type: 'duration', optional: true },
     ],
     outputs: productOutputDefs('approve', [
@@ -86,7 +86,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.agent.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.agent.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.agent.fields.prompt.label', type: 'prompt', placeholder: 'nodes.agent.fields.prompt.placeholder' },
       { key: 'timeout', label: 'nodes.agent.fields.timeout.label', type: 'duration', optional: true },
       { key: 'produces', label: 'nodes.agent.fields.produces.label', type: 'text', placeholder: 'nodes.agent.fields.produces.placeholder', optional: true },
@@ -115,7 +115,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.plan.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.plan.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.plan.fields.prompt.label', type: 'prompt', placeholder: 'nodes.plan.fields.prompt.placeholder' },
       { key: 'timeout', label: 'nodes.plan.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.plan.fields.conditional_prompt.label', type: 'conditional', optional: true },
@@ -133,7 +133,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.implement.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.implement.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.implement.fields.prompt.label', type: 'prompt', placeholder: 'nodes.implement.fields.prompt.placeholder' },
       { key: 'max_rounds', label: 'nodes.implement.fields.max_rounds.label', type: 'number', placeholder: 'nodes.implement.fields.max_rounds.placeholder' },
       { key: 'timeout', label: 'nodes.implement.fields.timeout.label', type: 'duration', optional: true },
@@ -160,7 +160,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.research.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.research.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.research.fields.prompt.label', type: 'prompt', placeholder: 'nodes.research.fields.prompt.placeholder' },
       { key: 'timeout', label: 'nodes.research.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.research.fields.conditional_prompt.label', type: 'conditional', optional: true },
@@ -178,7 +178,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.test.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.test.fields.agent_profile.label', type: 'select' },
       { key: 'reason_var', label: 'nodes.test.fields.reason_var.label', type: 'text', placeholder: 'nodes.test.fields.reason_var.placeholder', optional: true },
       { key: 'repoScope', label: 'nodes.test.fields.repoScope.label', type: 'text', placeholder: 'nodes.test.fields.repoScope.placeholder', optional: true },
       { key: 'block_on_skipped', label: 'nodes.test.fields.block_on_skipped.label', type: 'switch', optional: true },
@@ -198,7 +198,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.review.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.review.fields.agent_profile.label', type: 'select' },
       { key: 'reason_var', label: 'nodes.review.fields.reason_var.label', type: 'text', placeholder: 'nodes.review.fields.reason_var.placeholder', optional: true },
       { key: 'prompt', label: 'nodes.review.fields.prompt.label', type: 'prompt', placeholder: 'nodes.review.fields.prompt.placeholder' },
       { key: 'timeout', label: 'nodes.review.fields.timeout.label', type: 'duration', optional: true },
@@ -217,7 +217,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.proposal.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.proposal.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.proposal.fields.prompt.label', type: 'prompt', placeholder: 'nodes.proposal.fields.prompt.placeholder' },
       { key: 'timeout', label: 'nodes.proposal.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.proposal.fields.conditional_prompt.label', type: 'conditional', optional: true },
@@ -254,7 +254,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.submit_mr.fields.skill_profile.label', type: 'select', optional: true },
+      { key: 'agent_profile', label: 'nodes.submit_mr.fields.agent_profile.label', type: 'select', optional: true },
       { key: 'repo', label: 'nodes.submit_mr.fields.repo.label', type: 'repo_select', placeholder: 'nodes.submit_mr.fields.repo.placeholder', optional: true },
       { key: 'source_branch', label: 'nodes.submit_mr.fields.source_branch.label', type: 'text', placeholder: 'nodes.submit_mr.fields.source_branch.placeholder', optional: true },
       { key: 'target_branch', label: 'nodes.submit_mr.fields.target_branch.label', type: 'text', placeholder: 'nodes.submit_mr.fields.target_branch.placeholder', optional: true },
@@ -281,7 +281,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-llm',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.visual.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.visual.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.visual.fields.prompt.label', type: 'prompt', placeholder: 'nodes.visual.fields.prompt.placeholder' },
       { key: 'timeout', label: 'nodes.visual.fields.timeout.label', type: 'duration', optional: true },
       { key: 'conditional_prompt', label: 'nodes.visual.fields.conditional_prompt.label', type: 'conditional', optional: true },
@@ -333,7 +333,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     color: 'text-n-gate',
     category: 'nodes.categories.agent',
     fields: [
-      { key: 'skill_profile', label: 'nodes.app_preview.fields.skill_profile.label', type: 'select' },
+      { key: 'agent_profile', label: 'nodes.app_preview.fields.agent_profile.label', type: 'select' },
       { key: 'prompt', label: 'nodes.app_preview.fields.prompt.label', type: 'prompt', placeholder: 'nodes.app_preview.fields.prompt.placeholder' },
       { key: 'max_rounds', label: 'nodes.app_preview.fields.max_rounds.label', type: 'number', placeholder: 'nodes.app_preview.fields.max_rounds.placeholder' },
       { key: 'timeout', label: 'nodes.app_preview.fields.timeout.label', type: 'duration', optional: true },

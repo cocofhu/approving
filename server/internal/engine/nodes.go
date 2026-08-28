@@ -42,7 +42,7 @@ func (e *Engine) executeNode(c *execCtx, node *models.Node) nodeOutcome {
 			Msg("node executed")
 	}()
 
-	if err := e.checkSkillProfileProject(c, node); err != nil {
+	if err := e.checkAgentProfileProject(c, node); err != nil {
 		msg := err.Error()
 		return nodeOutcome{status: "failed", err: msg, outputMd: msg}
 	}

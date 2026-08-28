@@ -213,7 +213,7 @@ func TestPutAgentsOrgHTTPErrors(t *testing.T) {
 	h := newHarness(t)
 	enableAdmin(t)
 	root := t.TempDir()
-	skills := services.NewSkillService(root)
+	skills := services.NewAgentService(root)
 	h.h.Org = services.NewOrgService(root, skills)
 
 	w := h.do(http.MethodPut, "/api/agents/org", map[string]any{
@@ -255,7 +255,7 @@ func TestPutAgentsOrgHTTPErrors(t *testing.T) {
 func TestGetAgentsOrgLoadError(t *testing.T) {
 	h := newHarness(t)
 	root := t.TempDir()
-	skills := services.NewSkillService(root)
+	skills := services.NewAgentService(root)
 	h.h.Org = services.NewOrgService(root, skills)
 	if err := os.WriteFile(filepath.Join(root, "_org.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)

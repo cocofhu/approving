@@ -107,11 +107,11 @@ func validPmFailKind(kind string) bool {
 type PmService struct {
 	blobs  blob.Store
 	db     *gorm.DB
-	skills *SkillService
+	skills *AgentService
 }
 
 // NewPmService builds the service.
-func NewPmService(db *gorm.DB, skills *SkillService) *PmService {
+func NewPmService(db *gorm.DB, skills *AgentService) *PmService {
 	return &PmService{db: db, skills: skills}
 }
 

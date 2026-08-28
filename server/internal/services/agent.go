@@ -16,27 +16,27 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// SkillService manages user-defined Agents on the filesystem. Each Agent owns a
+// AgentService manages user-defined Agents on the filesystem. Each Agent owns a
 // single working directory (a file tree) plus its MCP servers and env vars:
 //
 //	<root>/<agent>/workspace/<path...>   -- the agent's working dir (file tree)
 //	<root>/<agent>/agent.json         -- MCP servers + environment vars
 //
-// Workflow nodes reference an agent by name via skill_profile. At run time the
+// Workflow nodes reference an agent by name via agent_profile. At run time the
 // runtime copies the whole workspace/ tree into the sandbox config root (rules,
 // skills, AGENTS.md, scripts, …), layers the platform base rules + the resolved
 // mcp.json on top, and injects the env vars. Files the agent authors are loaded
 // natively by the in-container ACP agent.
-type SkillService struct {
+type AgentService struct {
 	root string
 	mu   sync.Mutex
 	Vcs  *WorkspaceVcsService
 }
 
-// NewSkillService builds the service. It ships no preset agents (users create
+// NewAgentService builds the service. It ships no preset agents (users create
 // their own); it only migrates any existing agents to the current on-disk layout.
-func NewSkillService(root string) *SkillService {
-	s := &SkillService{root: root, Vcs: NewWorkspaceVcsService(root)}
+func NewAgentService(root string) *AgentService {
+	s := &AgentService{root: root, Vcs: NewWorkspaceVcsService(root)}
 	s.seed()
 	return s
 }
@@ -106,7 +106,7 @@ func (l AgentLayout) withDefaults() AgentLayout {
 	return l
 }
 
-// AcpBackend values bind a skill_profile to a sandbox ACP bridge.
+// AcpBackend values bind a agent_profile to a sandbox ACP bridge.
 const (
 	AcpBackendCursor     = "cursor"
 	AcpBackendClaudeCode = "claude_code"
@@ -215,12 +215,12 @@ func DefaultPlatformMCP() []MCPServer {
 
 // seed no longer ships any preset agents — users create their own. It only runs
 // on-disk layout migrations for any agents that already exist.
-func (s *SkillService) seed() {
+func (s *AgentService) seed() {
 	s.migrateLegacy()
 	s.migrateAllWorkDirs()
 }
 
-func (s *SkillService) migrateAllWorkDirs() {
+func (s *AgentService) migrateAllWorkDirs() {
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
 		return
@@ -235,7 +235,7 @@ func (s *SkillService) migrateAllWorkDirs() {
 
 // migrateCursorWorkDir upgrades cursor/ → workspace/ when only the legacy dir
 // exists. If workspace/ already exists, migration is skipped (workspace wins).
-func (s *SkillService) migrateCursorWorkDir(name string) {
+func (s *AgentService) migrateCursorWorkDir(name string) {
 	dir := filepath.Join(s.root, sanitize(name))
 	workspace := filepath.Join(dir, WorkDirName)
 	legacy := filepath.Join(dir, legacyWorkDirName)
@@ -254,7 +254,7 @@ func (s *SkillService) migrateCursorWorkDir(name string) {
 // migrateLegacy upgrades any agent still using the old on-disk layout
 // (rules.md + skills/<name>/) to the unified workspace/ working-dir tree, so both
 // the UI and the runtime read a single consistent representation.
-func (s *SkillService) migrateLegacy() {
+func (s *AgentService) migrateLegacy() {
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
 		return
@@ -284,7 +284,7 @@ func (s *SkillService) migrateLegacy() {
 }
 
 // List returns all agents, sorted by name.
-func (s *SkillService) List() []Agent {
+func (s *AgentService) List() []Agent {
 	out := []Agent{}
 	entries, err := os.ReadDir(s.root)
 	if err != nil {
@@ -303,7 +303,7 @@ func (s *SkillService) List() []Agent {
 }
 
 // Get returns one agent (working-dir files + mcp + env).
-func (s *SkillService) Get(name string) (Agent, bool) {
+func (s *AgentService) Get(name string) (Agent, bool) {
 	dir := filepath.Join(s.root, sanitize(name))
 	if _, err := os.Stat(dir); err != nil {
 		return Agent{}, false
@@ -334,7 +334,7 @@ func (s *SkillService) Get(name string) (Agent, bool) {
 // readFiles loads the agent's working-dir tree from workspace/, falling back to
 // legacy cursor/ during the compatibility window. If the agent still uses the
 // oldest layout it synthesizes the tree from rules.md + skills/.
-func (s *SkillService) readFiles(name string) []AgentFile {
+func (s *AgentService) readFiles(name string) []AgentFile {
 	dir := filepath.Join(s.root, sanitize(name))
 	if files := readTreeIfDir(filepath.Join(dir, WorkDirName)); len(files) > 0 {
 		return files
@@ -354,7 +354,7 @@ func readTreeIfDir(dir string) []AgentFile {
 }
 
 // legacyFiles maps the old rules.md + skills/<name>/ layout to working-dir paths.
-func (s *SkillService) legacyFiles(dir, name string) []AgentFile {
+func (s *AgentService) legacyFiles(dir, name string) []AgentFile {
 	var out []AgentFile
 	if b, err := os.ReadFile(filepath.Join(dir, "rules.md")); err == nil {
 		body := string(b)
@@ -438,7 +438,7 @@ func underRoot(root, rel string) (string, error) {
 	return absFull, nil
 }
 
-func (s *SkillService) readConfig(name string) agentConfig {
+func (s *AgentService) readConfig(name string) agentConfig {
 	var cfg agentConfig
 	b, err := os.ReadFile(filepath.Join(s.root, sanitize(name), "agent.json"))
 	if err != nil {
@@ -451,7 +451,7 @@ func (s *SkillService) readConfig(name string) agentConfig {
 // UpdateProjectID writes only agent.json.projectId. Unlike Save it does not
 // RemoveAll(workspace), rewrite files, or touch MCP / env / layout / prompts.
 // Used by group-level assign so unrelated drafts and workspace stay intact.
-func (s *SkillService) UpdateProjectID(name, projectID string) error {
+func (s *AgentService) UpdateProjectID(name, projectID string) error {
 	n := sanitize(name)
 	if n == "" {
 		return fmt.Errorf("invalid agent name")
@@ -472,13 +472,13 @@ func (s *SkillService) UpdateProjectID(name, projectID string) error {
 // Save writes an agent's working-dir tree + config, creating it if needed. The
 // workspace/ tree is fully rewritten so removed files disappear from disk; the
 // legacy rules.md / skills/ / cursor/ are dropped on save.
-func (s *SkillService) Save(a Agent) error {
+func (s *AgentService) Save(a Agent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.saveUnlocked(a)
 }
 
-func (s *SkillService) saveUnlocked(a Agent) error {
+func (s *AgentService) saveUnlocked(a Agent) error {
 	name := sanitize(a.Name)
 	if name == "" {
 		return fmt.Errorf("invalid agent name")
@@ -540,13 +540,13 @@ func (s *SkillService) saveUnlocked(a Agent) error {
 }
 
 // Delete removes an agent and all its files.
-func (s *SkillService) Delete(name string) error {
+func (s *AgentService) Delete(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.deleteUnlocked(name)
 }
 
-func (s *SkillService) deleteUnlocked(name string) error {
+func (s *AgentService) deleteUnlocked(name string) error {
 	n := sanitize(name)
 	if n == "" {
 		return fmt.Errorf("invalid agent name")
@@ -560,7 +560,7 @@ func (s *SkillService) deleteUnlocked(name string) error {
 // Rename atomically renames an agent directory (old -> newName) via os.Rename,
 // so the change either fully succeeds or leaves the old agent untouched (no
 // half-copied intermediate state).
-func (s *SkillService) Rename(old, newName string) error {
+func (s *AgentService) Rename(old, newName string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o, n := sanitize(old), sanitize(newName)
@@ -588,7 +588,7 @@ func (s *SkillService) Rename(old, newName string) error {
 }
 
 // Exists reports whether an agent directory is present.
-func (s *SkillService) Exists(name string) bool {
+func (s *AgentService) Exists(name string) bool {
 	n := sanitize(name)
 	if n == "" {
 		return false
@@ -599,7 +599,7 @@ func (s *SkillService) Exists(name string) bool {
 
 // WorkDir returns the agent's on-disk working directory (workspace/ or legacy
 // cursor/) if it exists, for verbatim copy into the sandbox config root.
-func (s *SkillService) WorkDir(name string) string {
+func (s *AgentService) WorkDir(name string) string {
 	dir := filepath.Join(s.root, sanitize(name))
 	for _, sub := range []string{WorkDirName, legacyWorkDirName} {
 		d := filepath.Join(dir, sub)

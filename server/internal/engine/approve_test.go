@@ -15,7 +15,7 @@ func approveOnlyGraph() models.Graph {
 	return models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "predev", Type: "approve", Config: map[string]any{"skill_profile": "pm"}},
+			{ID: "predev", Type: "approve", Config: map[string]any{"agent_profile": "pm"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{

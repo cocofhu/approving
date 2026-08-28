@@ -20,7 +20,7 @@ func TestParseVcsMessageReasonSpaces(t *testing.T) {
 
 func TestWorkspaceVcsBaselineAndWrite(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	if err := s.Save(Agent{Name: "coder", ProjectID: "p1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestWorkspaceVcsBaselineAndWrite(t *testing.T) {
 
 func TestWorkspaceVcsListWithoutSidecar(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	if err := s.Save(Agent{Name: "a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestWorkspaceVcsListWithoutSidecar(t *testing.T) {
 }
 
 func TestWorkspaceVcsReasonRequired(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestWorkspaceVcsReasonRequired(t *testing.T) {
 }
 
 func TestWorkspaceVcsRestore(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestWorkspaceVcsRestore(t *testing.T) {
 }
 
 func TestWorkspaceVcsRenameAgent(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "old"}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestWorkspaceVcsRenameAgent(t *testing.T) {
 }
 
 func TestWorkspaceVcsDiffRevision(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestWorkspaceVcsDiffRevision(t *testing.T) {
 }
 
 func TestWorkspaceVcsDeleteAndRestoreDropsExtra(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "a"}); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestWorkspaceVcsDeleteAndRestoreDropsExtra(t *testing.T) {
 
 func TestWorkspaceVcsWorksWithoutGitOnPATH(t *testing.T) {
 	t.Setenv("PATH", "")
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "a"}); err != nil {
 		t.Fatal(err)
 	}

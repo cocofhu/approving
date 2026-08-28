@@ -1,5 +1,5 @@
 // Package runtime executes agent/react nodes behind an ExecProvider
-// abstraction. ProviderRegistry routes skill_profile.acpBackend to one of four
+// abstraction. ProviderRegistry routes agent_profile.acpBackend to one of four
 // ACP backends (cursor, claude_code, codebuddy, trae) sharing baseACPProvider
 // logic. Production runs real CLI bridges in per-node Docker sandboxes; fake-
 // bridge E2E tests in this package exercise the same path without live CLIs.
@@ -57,7 +57,7 @@ type Options struct {
 	InjectStore *sandbox.BundleStore
 	// Blobs resolves blob:{id} attachments for ACP chat turns.
 	Blobs blob.Store
-	// ProfilesRoot is where skill_profile rules live (<root>/<profile>/rules.md),
+	// ProfilesRoot is where agent_profile rules live (<root>/<profile>/rules.md),
 	// copied into the per-node /root/.cursor mount.
 	ProfilesRoot string
 	// PlatformRulesRoot is where global platform-rule defaults are stored.

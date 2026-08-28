@@ -12,11 +12,11 @@ import (
 )
 
 func (h *Handlers) ListAgents(c *gin.Context) {
-	c.JSON(http.StatusOK, h.Skill.List())
+	c.JSON(http.StatusOK, h.Agents.List())
 }
 
 func (h *Handlers) GetAgent(c *gin.Context) {
-	a, ok := h.Skill.Get(c.Param("name"))
+	a, ok := h.Agents.Get(c.Param("name"))
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
@@ -84,7 +84,7 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if h.Skill.Exists(name) {
+	if h.Agents.Exists(name) {
 		c.JSON(http.StatusConflict, gin.H{"error": "agent already exists"})
 		return
 	}
@@ -97,12 +97,12 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.Skill.Save(agent); err != nil {
+	if err := h.Agents.Save(agent); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	a, _ := h.Skill.Get(name)
+	a, _ := h.Agents.Get(name)
 	c.JSON(http.StatusCreated, a)
 }
 
@@ -123,7 +123,7 @@ func (h *Handlers) PatchAgentProject(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "组级指定不支持解绑主项目"})
 		return
 	}
-	prev, ok := h.Skill.Get(name)
+	prev, ok := h.Agents.Get(name)
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
@@ -142,7 +142,7 @@ func (h *Handlers) PatchAgentProject(c *gin.Context) {
 			return
 		}
 	}
-	if err := h.Skill.UpdateProjectID(name, projectID); err != nil {
+	if err := h.Agents.UpdateProjectID(name, projectID); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -158,7 +158,7 @@ func (h *Handlers) SaveAgent(c *gin.Context) {
 	}
 	name := c.Param("name")
 	oldProjectID := ""
-	if prev, ok := h.Skill.Get(name); ok {
+	if prev, ok := h.Agents.Get(name); ok {
 		oldProjectID = strings.TrimSpace(prev.ProjectID)
 	}
 	agent := b.toAgent(name, oldProjectID)
@@ -179,7 +179,7 @@ func (h *Handlers) SaveAgent(c *gin.Context) {
 	if reason == "" {
 		reason = "Studio 保存"
 	}
-	if _, err := h.Skill.SaveAgentWithVcs(agent, sessionUsername(c), reason, true); err != nil {
+	if _, err := h.Agents.SaveAgentWithVcs(agent, sessionUsername(c), reason, true); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -196,7 +196,7 @@ func (h *Handlers) DeleteAgent(c *gin.Context) {
 			return
 		}
 	}
-	if err := h.Skill.Delete(name); err != nil {
+	if err := h.Agents.Delete(name); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -234,22 +234,22 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if !h.Skill.Exists(old) {
+	if !h.Agents.Exists(old) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	if name != old && h.Skill.Exists(name) {
+	if name != old && h.Agents.Exists(name) {
 		c.JSON(http.StatusConflict, gin.H{"error": "agent already exists"})
 		return
 	}
-	if err := h.Skill.Rename(old, name); err != nil {
+	if err := h.Agents.Rename(old, name); err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if h.Pm != nil && name != old {
 		if err := h.Pm.RenameAgentScopedData(old, name); err != nil {
-			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+			if rbErr := h.Agents.Rename(name, old); rbErr != nil {
 				_ = c.Error(err)
 				_ = c.Error(rbErr)
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -265,7 +265,7 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 	if h.Org != nil {
 		if err := h.Org.OnRenameAgent(old, name); err != nil {
 
-			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+			if rbErr := h.Agents.Rename(name, old); rbErr != nil {
 				_ = c.Error(err)
 				_ = c.Error(rbErr)
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -285,10 +285,10 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 	}
 	updatedWorkflowCount := 0
 	if h.WF != nil && name != old {
-		n, err := h.WF.RenameSkillProfileRefs(old, name)
+		n, err := h.WF.RenameAgentProfileRefs(old, name)
 		if err != nil {
 
-			if rbErr := h.Skill.Rename(name, old); rbErr != nil {
+			if rbErr := h.Agents.Rename(name, old); rbErr != nil {
 				_ = c.Error(err)
 				_ = c.Error(rbErr)
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -312,7 +312,7 @@ func (h *Handlers) RenameAgent(c *gin.Context) {
 		}
 		updatedWorkflowCount = n
 	}
-	a, _ := h.Skill.Get(name)
+	a, _ := h.Agents.Get(name)
 	c.JSON(http.StatusOK, renameAgentResp{Agent: a, UpdatedWorkflowCount: updatedWorkflowCount})
 }
 
@@ -371,7 +371,7 @@ func (h *Handlers) PutAgentsOrg(c *gin.Context) {
 // ExportAgent streams a ZIP export of one agent (on-disk state only).
 func (h *Handlers) ExportAgent(c *gin.Context) {
 	name := c.Param("name")
-	raw, err := h.Skill.ExportZIP(name)
+	raw, err := h.Agents.ExportZIP(name)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
@@ -424,7 +424,7 @@ func (h *Handlers) ImportAgent(c *gin.Context) {
 		return
 	}
 
-	agent, err := h.Skill.ImportZIP(raw, targetName, mode)
+	agent, err := h.Agents.ImportZIP(raw, targetName, mode)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

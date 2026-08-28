@@ -45,12 +45,12 @@ type AgentOrg struct {
 // OrgService manages the central Agent organization index.
 type OrgService struct {
 	root  string
-	skill *SkillService
+	skill *AgentService
 	mu    sync.Mutex
 }
 
-// NewOrgService builds an OrgService sharing the same profiles root as SkillService.
-func NewOrgService(root string, skill *SkillService) *OrgService {
+// NewOrgService builds an OrgService sharing the same profiles root as AgentService.
+func NewOrgService(root string, skill *AgentService) *OrgService {
 	return &OrgService{root: root, skill: skill}
 }
 

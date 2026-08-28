@@ -89,7 +89,7 @@ func TestEnsurePmSandboxUnavailable(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 	hn.cookie = hn.login(t)
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = nil
@@ -100,7 +100,7 @@ func TestEnsurePmSandboxUnavailable(t *testing.T) {
 	var proj map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	pid := proj["id"].(string)
-	if err := hn.h.Skill.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}}); err != nil {
 		t.Fatal(err)
 	}
 	w = hn.do(http.MethodPut, "/api/projects/"+pid+"/pm-leader", map[string]any{
@@ -125,7 +125,7 @@ func TestEnsurePmSandboxUnavailable(t *testing.T) {
 func TestPmMCPRPCEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	hn := newHarness(t)
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	progress := services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.Pm = pm
 	hn.h.PmProgress = progress

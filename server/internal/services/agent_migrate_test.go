@@ -24,8 +24,8 @@ func TestMigrateLegacyToWorkDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// NewSkillService runs seed()+migrateLegacy().
-	s := NewSkillService(root)
+	// NewAgentService runs seed()+migrateLegacy().
+	s := NewAgentService(root)
 
 	if _, err := os.Stat(filepath.Join(agent, "rules.md")); !os.IsNotExist(err) {
 		t.Fatalf("legacy rules.md should be gone, err=%v", err)
@@ -72,7 +72,7 @@ func TestMigrateCursorWorkDirOnlyLegacy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := &SkillService{root: root}
+	s := &AgentService{root: root}
 	s.migrateCursorWorkDir("agent-a")
 
 	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
@@ -105,7 +105,7 @@ func TestMigrateCursorWorkDirSkipWhenWorkspaceExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := &SkillService{root: root}
+	s := &AgentService{root: root}
 	s.migrateCursorWorkDir("agent-b")
 
 	if b, _ := os.ReadFile(filepath.Join(workspace, "keep.md")); string(b) != "workspace wins" {
@@ -127,7 +127,7 @@ func TestMigrateCursorWorkDirOnlyWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := &SkillService{root: root}
+	s := &AgentService{root: root}
 	s.migrateCursorWorkDir("agent-c")
 
 	if wd := s.WorkDir("agent-c"); wd != workspace {

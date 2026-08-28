@@ -30,7 +30,7 @@ func enableAdmin(t *testing.T) {
 
 func seedAgent(t *testing.T, hn *harness, name string) {
 	t.Helper()
-	if err := hn.h.Skill.Save(services.Agent{
+	if err := hn.h.Agents.Save(services.Agent{
 		Name:  name,
 		Files: []services.AgentFile{{Path: "AGENTS.md", Content: "# hi"}},
 	}); err != nil {

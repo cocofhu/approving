@@ -36,7 +36,7 @@ func buildTestZip(t *testing.T, meta []byte, files map[string][]byte) []byte {
 
 func TestExportImportZIPRoundTrip(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 
 	binary := []byte{0x00, 0x01, 0xFF, 0xFE, 0x89, 0x50, 0x4E, 0x47}
 	err := s.Save(Agent{
@@ -59,7 +59,7 @@ func TestExportImportZIPRoundTrip(t *testing.T) {
 		t.Fatalf("ExportZIP: %v", err)
 	}
 
-	s2 := NewSkillService(t.TempDir())
+	s2 := NewAgentService(t.TempDir())
 	imported, err := s2.ImportZIP(raw, "trip-copy", ImportZIPCreate)
 	if err != nil {
 		t.Fatalf("ImportZIP: %v", err)
@@ -91,7 +91,7 @@ func TestExportImportZIPRoundTrip(t *testing.T) {
 }
 
 func TestImportZIPRejectsBadSchema(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	meta := []byte(`{"name":"x","schemaVersion":99,"exportedAt":"2026-01-01T00:00:00Z"}`)
 	raw := buildTestZip(t, meta, nil)
 	if _, err := s.ImportZIP(raw, "x", ImportZIPCreate); err == nil {
@@ -100,7 +100,7 @@ func TestImportZIPRejectsBadSchema(t *testing.T) {
 }
 
 func TestImportZIPRejectsPathTraversal(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	meta := []byte(`{"name":"x","schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z"}`)
 	raw := buildTestZip(t, meta, map[string][]byte{"../evil.txt": []byte("bad")})
 	if _, err := s.ImportZIP(raw, "x", ImportZIPCreate); err == nil {
@@ -110,7 +110,7 @@ func TestImportZIPRejectsPathTraversal(t *testing.T) {
 
 func TestImportZIPOverwriteClearsOldFiles(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 
 	if err := s.Save(Agent{
 		Name: "target",
@@ -142,7 +142,7 @@ func TestImportZIPOverwriteClearsOldFiles(t *testing.T) {
 }
 
 func TestImportZIPAcpBackendCreateAndOverwrite(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "src", AcpBackend: AcpBackendTrae}); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestImportZIPAcpBackendCreateAndOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dst := NewSkillService(t.TempDir())
+	dst := NewAgentService(t.TempDir())
 	created, err := dst.ImportZIP(raw, "src-copy", ImportZIPCreate)
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -171,7 +171,7 @@ func TestImportZIPAcpBackendCreateAndOverwrite(t *testing.T) {
 }
 
 func TestImportZIPMissingAcpBackendDefaultsCursor(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	meta := []byte(`{"name":"legacy","schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z"}`)
 	raw := buildTestZip(t, meta, map[string][]byte{"rules/a.md": []byte("a")})
 	got, err := s.ImportZIP(raw, "legacy", ImportZIPCreate)
@@ -184,7 +184,7 @@ func TestImportZIPMissingAcpBackendDefaultsCursor(t *testing.T) {
 }
 
 func TestImportZIPMissingAgentJSON(t *testing.T) {
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	buf := &bytes.Buffer{}
 	zw := zip.NewWriter(buf)
 	w, _ := zw.Create("rules/x.md")

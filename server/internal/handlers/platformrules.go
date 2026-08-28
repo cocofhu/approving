@@ -98,7 +98,7 @@ func (h *Handlers) GetPlatformRuleEmbed(c *gin.Context) {
 // ListAgentPlatformRules handles GET /api/agents/:name/platform-rules.
 func (h *Handlers) ListAgentPlatformRules(c *gin.Context) {
 	agent := c.Param("name")
-	if !h.Skill.Exists(agent) {
+	if !h.Agents.Exists(agent) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -114,7 +114,7 @@ func (h *Handlers) ListAgentPlatformRules(c *gin.Context) {
 // GetAgentPlatformRule handles GET /api/agents/:name/platform-rules/:file.
 func (h *Handlers) GetAgentPlatformRule(c *gin.Context) {
 	agent := c.Param("name")
-	if !h.Skill.Exists(agent) {
+	if !h.Agents.Exists(agent) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -129,7 +129,7 @@ func (h *Handlers) GetAgentPlatformRule(c *gin.Context) {
 // SaveAgentPlatformRule handles PUT /api/agents/:name/platform-rules/:file.
 func (h *Handlers) SaveAgentPlatformRule(c *gin.Context) {
 	agent := c.Param("name")
-	if !h.Skill.Exists(agent) {
+	if !h.Agents.Exists(agent) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -149,7 +149,7 @@ func (h *Handlers) SaveAgentPlatformRule(c *gin.Context) {
 // DeleteAgentPlatformRule handles DELETE /api/agents/:name/platform-rules/:file.
 func (h *Handlers) DeleteAgentPlatformRule(c *gin.Context) {
 	agent := c.Param("name")
-	if !h.Skill.Exists(agent) {
+	if !h.Agents.Exists(agent) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}

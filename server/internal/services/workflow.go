@@ -37,8 +37,8 @@ type WorkflowService struct {
 // NewWorkflowService builds the service.
 func NewWorkflowService(db *gorm.DB) *WorkflowService { return &WorkflowService{db: db} }
 
-// SetSkills wires the Agent catalog used by skill_profile project validation.
-func (s *WorkflowService) SetSkills(skills AgentGetter) { s.skills = skills }
+// SetAgents wires the Agent catalog used by agent_profile project validation.
+func (s *WorkflowService) SetAgents(skills AgentGetter) { s.skills = skills }
 
 // List returns all workflow definitions (without heavy graph bodies).
 // When projectID is non-empty, results are scoped to that project.
@@ -195,7 +195,7 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		if err := s.validateWorkflowName(wf.Name, wf.ID, wf.ProjectID); err != nil {
 			return err
 		}
-		if err := s.validateSkillProfiles(wf); err != nil {
+		if err := s.validateAgentProfiles(wf); err != nil {
 			return err
 		}
 		if wf.Version == 0 {
@@ -237,7 +237,7 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		wf.NotifyPolicy = existing.NotifyPolicy
 		return nil
 	}
-	if err := s.validateSkillProfiles(wf); err != nil {
+	if err := s.validateAgentProfiles(wf); err != nil {
 		return err
 	}
 	wf.NotifyPolicy = NormalizeWorkflowNotifyPolicy(wf.NotifyPolicy)
@@ -277,7 +277,7 @@ func (s *WorkflowService) Publish(id string) (models.WorkflowDef, error) {
 	if err := wf.Graph.Validate(); err != nil {
 		return wf, err
 	}
-	if err := s.validateSkillProfiles(&wf); err != nil {
+	if err := s.validateAgentProfiles(&wf); err != nil {
 		return wf, err
 	}
 	wf.Version++
@@ -330,25 +330,25 @@ func (s *WorkflowService) Restore(id string, version int) (models.WorkflowDef, e
 	return wf, nil
 }
 
-// renameSkillProfileRefsFailHook, when non-nil, is invoked inside
-// RenameSkillProfileRefs before persisting. Tests use it to simulate write
+// renameAgentProfileRefsFailHook, when non-nil, is invoked inside
+// RenameAgentProfileRefs before persisting. Tests use it to simulate write
 // failure so RenameAgent can verify Skill/Pm/Org rollback.
-var renameSkillProfileRefsFailHook func() error
+var renameAgentProfileRefsFailHook func() error
 
-// SetRenameSkillProfileRefsFailHookForTest injects a persist failure for tests.
+// SetRenameAgentProfileRefsFailHookForTest injects a persist failure for tests.
 // The returned function clears the hook; call it from t.Cleanup.
-func SetRenameSkillProfileRefsFailHookForTest(fn func() error) func() {
-	renameSkillProfileRefsFailHook = fn
-	return func() { renameSkillProfileRefsFailHook = nil }
+func SetRenameAgentProfileRefsFailHookForTest(fn func() error) func() {
+	renameAgentProfileRefsFailHook = fn
+	return func() { renameAgentProfileRefsFailHook = nil }
 }
 
-// RenameSkillProfileRefs rewrites nodes[].config.skill_profile from oldName to
+// RenameAgentProfileRefs rewrites nodes[].config.agent_profile from oldName to
 // newName across WorkflowDef and WorkflowVersion graphs. Matching is exact
 // string equality (no substring replace). Persistence keeps Status and Version
 // unchanged — it does not go through Save's graphChanged→draft path.
 // Run.Graph is never touched. Returns the number of distinct WorkflowDef IDs
 // that had at least one Def or Version graph rewritten.
-func (s *WorkflowService) RenameSkillProfileRefs(oldName, newName string) (int, error) {
+func (s *WorkflowService) RenameAgentProfileRefs(oldName, newName string) (int, error) {
 	oldName = strings.TrimSpace(oldName)
 	newName = strings.TrimSpace(newName)
 	if oldName == "" || newName == "" || oldName == newName {
@@ -356,16 +356,16 @@ func (s *WorkflowService) RenameSkillProfileRefs(oldName, newName string) (int, 
 	}
 	var count int
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		n, err := (&WorkflowService{db: tx}).renameSkillProfileRefsTx(oldName, newName)
+		n, err := (&WorkflowService{db: tx}).renameAgentProfileRefsTx(oldName, newName)
 		count = n
 		return err
 	})
 	return count, err
 }
 
-func (s *WorkflowService) renameSkillProfileRefsTx(oldName, newName string) (int, error) {
-	if renameSkillProfileRefsFailHook != nil {
-		if err := renameSkillProfileRefsFailHook(); err != nil {
+func (s *WorkflowService) renameAgentProfileRefsTx(oldName, newName string) (int, error) {
+	if renameAgentProfileRefsFailHook != nil {
+		if err := renameAgentProfileRefsFailHook(); err != nil {
 			return 0, err
 		}
 	}
@@ -380,7 +380,7 @@ func (s *WorkflowService) renameSkillProfileRefsTx(oldName, newName string) (int
 	now := time.Now()
 	for i := range defs {
 		wf := &defs[i]
-		if !renameSkillProfileInGraph(&wf.Graph, oldName, newName) {
+		if !renameAgentProfileInGraph(&wf.Graph, oldName, newName) {
 			continue
 		}
 		wf.UpdatedAt = now
@@ -397,7 +397,7 @@ func (s *WorkflowService) renameSkillProfileRefsTx(oldName, newName string) (int
 	}
 	for i := range versions {
 		snap := &versions[i]
-		if !renameSkillProfileInGraph(&snap.Graph, oldName, newName) {
+		if !renameAgentProfileInGraph(&snap.Graph, oldName, newName) {
 			continue
 		}
 		if err := s.db.Save(snap).Error; err != nil {
@@ -408,9 +408,9 @@ func (s *WorkflowService) renameSkillProfileRefsTx(oldName, newName string) (int
 	return len(affected), nil
 }
 
-// renameSkillProfileInGraph replaces config.skill_profile values that exactly
+// renameAgentProfileInGraph replaces config.agent_profile values that exactly
 // equal oldName with newName. Returns whether any node was changed.
-func renameSkillProfileInGraph(g *models.Graph, oldName, newName string) bool {
+func renameAgentProfileInGraph(g *models.Graph, oldName, newName string) bool {
 	if g == nil {
 		return false
 	}
@@ -420,7 +420,7 @@ func renameSkillProfileInGraph(g *models.Graph, oldName, newName string) bool {
 		if cfg == nil {
 			continue
 		}
-		v, ok := cfg["skill_profile"]
+		v, ok := cfg["agent_profile"]
 		if !ok {
 			continue
 		}
@@ -428,7 +428,7 @@ func renameSkillProfileInGraph(g *models.Graph, oldName, newName string) bool {
 		if !ok || s != oldName {
 			continue
 		}
-		cfg["skill_profile"] = newName
+		cfg["agent_profile"] = newName
 		changed = true
 	}
 	return changed
@@ -460,22 +460,26 @@ func (s *WorkflowService) Delete(id string) error {
 	})
 }
 
-func (s *WorkflowService) validateSkillProfiles(wf *models.WorkflowDef) error {
-	if s == nil || wf == nil || s.skills == nil {
+func (s *WorkflowService) validateAgentProfiles(wf *models.WorkflowDef) error {
+	if s == nil || wf == nil {
 		return nil
 	}
-	return ValidateSkillProfilesProject(s.skills, wf.ProjectID, wf.Graph)
+	MigrateAgentProfileInGraph(&wf.Graph)
+	if s.skills == nil {
+		return nil
+	}
+	return ValidateAgentProfilesProject(s.skills, wf.ProjectID, wf.Graph)
 }
 
-// AgentGetter looks up an Agent by name (SkillService.Get).
+// AgentGetter looks up an Agent by name (AgentService.Get).
 type AgentGetter interface {
 	Get(name string) (Agent, bool)
 }
 
-// ValidateSkillProfilesProject rejects non-empty skill_profile refs that are
+// ValidateAgentProfilesProject rejects non-empty agent_profile refs that are
 // missing. Unbound / cross-project Agents are allowed: at Run time they extend
-// the current workflow project's shared Agent config. Empty skill_profile is skipped.
-func ValidateSkillProfilesProject(skills AgentGetter, projectID string, g models.Graph) error {
+// the current workflow project's shared Agent config. Empty agent_profile is skipped.
+func ValidateAgentProfilesProject(skills AgentGetter, projectID string, g models.Graph) error {
 	if skills == nil {
 		return nil
 	}
@@ -485,7 +489,7 @@ func ValidateSkillProfilesProject(skills AgentGetter, projectID string, g models
 		if n.Config == nil {
 			continue
 		}
-		raw, _ := n.Config["skill_profile"].(string)
+		raw, _ := n.Config["agent_profile"].(string)
 		profile := strings.TrimSpace(raw)
 		if profile == "" {
 			continue
@@ -502,5 +506,5 @@ func ValidateSkillProfilesProject(skills AgentGetter, projectID string, g models
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("存在不可用 skill_profile，请改选有效 Agent 后再保存：%s", strings.Join(bad, "；"))
+	return fmt.Errorf("存在不可用 agent_profile，请改选有效 Agent 后再保存：%s", strings.Join(bad, "；"))
 }

@@ -27,7 +27,7 @@ func setupPmDB(t *testing.T) *gorm.DB {
 
 func TestPmBindingEnableRequiresAgent(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	pm := NewPmService(db, skills)
 	p, err := NewProjectService(db).Create("P1", "", nil, nil)
 	if err != nil {

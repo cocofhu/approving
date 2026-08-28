@@ -82,7 +82,7 @@ func TestSetVarBranchImplementPipeline(t *testing.T) {
 			{ID: "br", Type: "branch", Config: map[string]any{"cases": []any{
 				map[string]any{"when": "vars.x == 3", "goto": "impl"},
 			}}},
-			{ID: "impl", Type: "implement", Config: map[string]any{"prompt": "build", "skill_profile": "dev"}},
+			{ID: "impl", Type: "implement", Config: map[string]any{"prompt": "build", "agent_profile": "dev"}},
 			{ID: "output", Type: "output", Config: map[string]any{"result": "done x={{vars.x}} branch={{vars.branches}}"}},
 		},
 		Edges: []models.Edge{
@@ -342,7 +342,7 @@ func reactOnlyGraph() models.Graph {
 	return models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "clarify", Type: "react", Config: map[string]any{"skill_profile": "pm", "prompt": "澄清"}},
+			{ID: "clarify", Type: "react", Config: map[string]any{"agent_profile": "pm", "prompt": "澄清"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{
@@ -418,7 +418,7 @@ func autoReactGraph(autoVal any) models.Graph {
 		Variables: []models.Variable{{Name: "auto_clarify", Type: "bool", Value: autoVal}},
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "clarify", Type: "react", Config: map[string]any{"skill_profile": "pm", "prompt": "澄清", "auto_var": "auto_clarify"}},
+			{ID: "clarify", Type: "react", Config: map[string]any{"agent_profile": "pm", "prompt": "澄清", "auto_var": "auto_clarify"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{

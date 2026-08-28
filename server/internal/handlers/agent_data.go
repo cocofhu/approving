@@ -13,7 +13,7 @@ import (
 // 404 if missing; 400 if unbound.
 func (h *Handlers) resolveAgentProject(c *gin.Context) (name, projectID string, ok bool) {
 	name = c.Param("name")
-	agent, exists := h.Skill.Get(name)
+	agent, exists := h.Agents.Get(name)
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "agent not found"})
 		return "", "", false

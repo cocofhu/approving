@@ -52,7 +52,7 @@ func TestSanitizeRejectsDotDotAndSeparators(t *testing.T) {
 
 func TestSaveRejectsPathEscape(t *testing.T) {
 	t.Parallel()
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	err := s.Save(Agent{
 		Name:  "safe",
 		Files: []AgentFile{{Path: "../escape.txt", Content: "x"}},
@@ -73,7 +73,7 @@ func TestSaveRejectsPathEscape(t *testing.T) {
 
 func TestImportZIPRejectsAbsolutePath(t *testing.T) {
 	t.Parallel()
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	meta := []byte(`{"name":"x","schemaVersion":1,"exportedAt":"2026-01-01T00:00:00Z"}`)
 	raw := buildTestZip(t, meta, map[string][]byte{"/tmp/evil.txt": []byte("bad")})
 	if _, err := s.ImportZIP(raw, "x", ImportZIPCreate); err == nil {

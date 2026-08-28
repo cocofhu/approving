@@ -12,7 +12,7 @@ import (
 // defaults. This is the data source the executor consumes at sandbox creation.
 func TestAgentLayoutPersistRoundTrip(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 
 	// Save with a custom workspaceDir but no configRoot.
 	in := Agent{
@@ -62,7 +62,7 @@ func TestAgentLayoutPersistRoundTrip(t *testing.T) {
 
 func TestGitCredentialTypeInvalidClearedOnSave(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	if err := s.Save(Agent{
 		Name:              "dirty-git",
 		GitCredentialType: "gitea_https",
@@ -103,7 +103,7 @@ func TestAgentLayoutDefaultsWhenAbsent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	got, ok := s.Get("legacy-agent")
 	if !ok {
 		t.Fatal("agent not found")

@@ -81,7 +81,7 @@ type TeamBootstrapSession struct {
 // TeamService orchestrates Create Agent Team bootstrap + scoped template creates.
 type TeamService struct {
 	Projects *ProjectService
-	Skills   *SkillService
+	Skills   *AgentService
 	Org      *OrgService
 	Pm       *PmService
 	Sbx      *SandboxService
@@ -92,7 +92,7 @@ type TeamService struct {
 }
 
 // NewTeamService wires dependencies (Sbx may be nil in unit tests).
-func NewTeamService(projects *ProjectService, skills *SkillService, org *OrgService, pm *PmService, sbx *SandboxService) *TeamService {
+func NewTeamService(projects *ProjectService, skills *AgentService, org *OrgService, pm *PmService, sbx *SandboxService) *TeamService {
 	return &TeamService{
 		Projects:   projects,
 		Skills:     skills,

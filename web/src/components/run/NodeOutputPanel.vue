@@ -71,7 +71,7 @@ const inputItems = computed(() => {
 })
 
 // agent
-const agentProfile = computed(() => props.node.config?.skill_profile as string | undefined)
+const agentProfile = computed(() => props.node.config?.agent_profile as string | undefined)
 const narration = computed(() => outputs.value.narration_summary as string | undefined)
 
 // plan / implement: render the structured two-level plan.json artifact instead of
@@ -257,7 +257,7 @@ function fileStatusClass(s: string): string {
     <div v-else-if="isClarifyInteractive(node.type)" class="card mb-3 p-3">
       <div class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-txt2"><Icon name="chat" :size="13" :style="{ color: hex }" /> {{ t('pages.nodeOutput.reactInteraction') }}</div>
       <div class="space-y-1.5 text-[12px]">
-        <div class="flex min-w-0 max-w-full items-center gap-2"><span class="w-20 shrink-0 text-txt3">Agent</span><code class="min-w-0 max-w-full flex-1 overflow-x-auto whitespace-nowrap rounded bg-base px-1.5 py-0.5 font-mono text-accent-2">{{ node.config?.skill_profile || '—' }}</code></div>
+        <div class="flex min-w-0 max-w-full items-center gap-2"><span class="w-20 shrink-0 text-txt3">Agent</span><code class="min-w-0 max-w-full flex-1 overflow-x-auto whitespace-nowrap rounded bg-base px-1.5 py-0.5 font-mono text-accent-2">{{ node.config?.agent_profile || '—' }}</code></div>
         <div v-if="isClarifyNode" class="flex items-center gap-2"><span class="w-20 shrink-0 text-txt3">{{ t('pages.nodeOutput.humanRounds') }}</span><span class="text-txt">{{ t('pages.nodeOutput.rounds', { n: clarifyRounds }) }}</span></div>
         <div class="flex items-center gap-2">
           <span class="w-20 shrink-0 text-txt3">{{ t('pages.nodeOutput.status') }}</span>

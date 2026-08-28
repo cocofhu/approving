@@ -290,13 +290,13 @@ func newTestProvider(t *testing.T, host *mcp.Host, opts Options, mgr sandboxMana
 	return newTestProviderBackend(t, host, opts, mgr, BackendCursor)
 }
 
-const testSkillProfile = "test-agent"
+const testAgentProfile = "test-agent"
 
 func ensureTestProfiles(t *testing.T, opts Options) Options {
 	if opts.ProfilesRoot != "" {
 		return opts
 	}
-	opts.ProfilesRoot = writeAgent(t, testSkillProfile, `{"env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
+	opts.ProfilesRoot = writeAgent(t, testAgentProfile, `{"env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
 	return opts
 }
 
@@ -304,8 +304,8 @@ func reqWithProfile(req NodeReq) NodeReq {
 	if req.Config == nil {
 		req.Config = map[string]any{}
 	}
-	if str2(req.Config["skill_profile"]) == "" {
-		req.Config["skill_profile"] = testSkillProfile
+	if str2(req.Config["agent_profile"]) == "" {
+		req.Config["agent_profile"] = testAgentProfile
 	}
 	return req
 }

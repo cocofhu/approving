@@ -14,57 +14,57 @@ func (f fakeAgentLookup) Get(name string) (Agent, bool) {
 	return a, ok
 }
 
-func TestValidateSkillProfilesProject(t *testing.T) {
+func TestValidateAgentProfilesProject(t *testing.T) {
 	skills := fakeAgentLookup{
 		"ok-agent":      {Name: "ok-agent", ProjectID: "alpha"},
 		"other-agent":   {Name: "other-agent", ProjectID: "beta"},
 		"unbound-agent": {Name: "unbound-agent", ProjectID: ""},
 	}
 
-	t.Run("empty skill_profile skipped", func(t *testing.T) {
+	t.Run("empty agent_profile skipped", func(t *testing.T) {
 		g := models.Graph{Nodes: []models.Node{
-			{ID: "n1", Type: "research", Label: "调研", Config: map[string]any{"skill_profile": ""}},
+			{ID: "n1", Type: "research", Label: "调研", Config: map[string]any{"agent_profile": ""}},
 			{ID: "n2", Type: "human_gate", Label: "门禁", Config: map[string]any{}},
 		}}
-		if err := ValidateSkillProfilesProject(skills, "alpha", g); err != nil {
+		if err := ValidateAgentProfilesProject(skills, "alpha", g); err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
 	})
 
 	t.Run("same project ok", func(t *testing.T) {
 		g := models.Graph{Nodes: []models.Node{
-			{ID: "n1", Type: "implement", Label: "实现", Config: map[string]any{"skill_profile": "ok-agent"}},
-			{ID: "n2", Type: "app_preview", Label: "预览", Config: map[string]any{"skill_profile": "ok-agent"}},
+			{ID: "n1", Type: "implement", Label: "实现", Config: map[string]any{"agent_profile": "ok-agent"}},
+			{ID: "n2", Type: "app_preview", Label: "预览", Config: map[string]any{"agent_profile": "ok-agent"}},
 		}}
-		if err := ValidateSkillProfilesProject(skills, "alpha", g); err != nil {
+		if err := ValidateAgentProfilesProject(skills, "alpha", g); err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
 	})
 
 	t.Run("allows cross project and unbound; rejects deleted", func(t *testing.T) {
 		g := models.Graph{Nodes: []models.Node{
-			{ID: "a", Type: "agent", Label: "执行", Config: map[string]any{"skill_profile": "other-agent"}},
-			{ID: "b", Type: "react", Label: "澄清", Config: map[string]any{"skill_profile": "unbound-agent"}},
+			{ID: "a", Type: "agent", Label: "执行", Config: map[string]any{"agent_profile": "other-agent"}},
+			{ID: "b", Type: "react", Label: "澄清", Config: map[string]any{"agent_profile": "unbound-agent"}},
 		}}
-		if err := ValidateSkillProfilesProject(skills, "alpha", g); err != nil {
+		if err := ValidateAgentProfilesProject(skills, "alpha", g); err != nil {
 			t.Fatalf("cross/unbound should pass for shared extend: %v", err)
 		}
 		g2 := models.Graph{Nodes: []models.Node{
-			{ID: "c", Type: "plan", Label: "计划", Config: map[string]any{"skill_profile": "ghost"}},
+			{ID: "c", Type: "plan", Label: "计划", Config: map[string]any{"agent_profile": "ghost"}},
 		}}
-		err := ValidateSkillProfilesProject(skills, "alpha", g2)
+		err := ValidateAgentProfilesProject(skills, "alpha", g2)
 		if err == nil || !strings.Contains(err.Error(), "已删除") || !strings.Contains(err.Error(), "计划 → ghost") {
 			t.Fatalf("got %v", err)
 		}
 	})
 
-	t.Run("covers all skill_profile node types not only agent", func(t *testing.T) {
+	t.Run("covers all agent_profile node types not only agent", func(t *testing.T) {
 		types := []string{"react", "agent", "approve", "plan", "implement", "research", "test", "review", "proposal", "submit_mr", "visual", "app_preview"}
 		for _, typ := range types {
 			g := models.Graph{Nodes: []models.Node{
-				{ID: "n", Type: typ, Label: typ, Config: map[string]any{"skill_profile": "ghost"}},
+				{ID: "n", Type: typ, Label: typ, Config: map[string]any{"agent_profile": "ghost"}},
 			}}
-			if err := ValidateSkillProfilesProject(skills, "alpha", g); err == nil {
+			if err := ValidateAgentProfilesProject(skills, "alpha", g); err == nil {
 				t.Fatalf("type %s: expected rejection for deleted agent", typ)
 			}
 		}
@@ -74,7 +74,7 @@ func TestValidateSkillProfilesProject(t *testing.T) {
 func TestWorkflowServiceSavePublishSkillProfileGate(t *testing.T) {
 	db := newTestDB(t)
 	s := NewWorkflowService(db)
-	s.SetSkills(fakeAgentLookup{
+	s.SetAgents(fakeAgentLookup{
 		"ok-agent":    {Name: "ok-agent", ProjectID: models.DefaultProjectID},
 		"other-agent": {Name: "other-agent", ProjectID: "beta"},
 	})
@@ -87,7 +87,7 @@ func TestWorkflowServiceSavePublishSkillProfileGate(t *testing.T) {
 		Version:   1,
 		Graph: models.Graph{Nodes: []models.Node{
 			{ID: "in", Type: "input", Label: "输入", Position: models.Position{}, Config: map[string]any{}},
-			{ID: "ag", Type: "agent", Label: "执行", Position: models.Position{}, Config: map[string]any{"skill_profile": "other-agent"}},
+			{ID: "ag", Type: "agent", Label: "执行", Position: models.Position{}, Config: map[string]any{"agent_profile": "other-agent"}},
 			{ID: "out", Type: "output", Label: "输出", Position: models.Position{}, Config: map[string]any{}},
 		}, Edges: []models.Edge{
 			{ID: "e1", Source: "in", Target: "ag"},
@@ -99,12 +99,12 @@ func TestWorkflowServiceSavePublishSkillProfileGate(t *testing.T) {
 		t.Fatalf("Save foreign should pass: %v", err)
 	}
 
-	wf.Graph.Nodes[1].Config["skill_profile"] = "ghost"
+	wf.Graph.Nodes[1].Config["agent_profile"] = "ghost"
 	if err := s.Save(wf); err == nil || !strings.Contains(err.Error(), "已删除") {
 		t.Fatalf("Save want deleted reject, got %v", err)
 	}
 
-	wf.Graph.Nodes[1].Config["skill_profile"] = "ok-agent"
+	wf.Graph.Nodes[1].Config["agent_profile"] = "ok-agent"
 	if err := s.Save(wf); err != nil {
 		t.Fatalf("Save ok: %v", err)
 	}

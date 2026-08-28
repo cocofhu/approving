@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-func setupOrg(t *testing.T) (*SkillService, *OrgService) {
+func setupOrg(t *testing.T) (*AgentService, *OrgService) {
 	t.Helper()
 	root := t.TempDir()
-	skill := NewSkillService(root)
+	skill := NewAgentService(root)
 	for _, name := range []string{"alice", "bob", "carol", "dave"} {
 		if err := skill.Save(Agent{Name: name}); err != nil {
 			t.Fatal(err)
@@ -29,7 +29,7 @@ func TestNewGroupID(t *testing.T) {
 
 func TestOrgLoadCorruptFile(t *testing.T) {
 	root := t.TempDir()
-	skill := NewSkillService(root)
+	skill := NewAgentService(root)
 	orgSvc := NewOrgService(root, skill)
 	if err := os.WriteFile(filepath.Join(root, orgFileName), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
@@ -241,7 +241,7 @@ func TestOrgGetPrunesMissingAgent(t *testing.T) {
 
 func TestOrgLegacyParentAgentStrippedOnGet(t *testing.T) {
 	root := t.TempDir()
-	skill := NewSkillService(root)
+	skill := NewAgentService(root)
 	for _, name := range []string{"pm", "eng1", "eng2", "eng3"} {
 		if err := skill.Save(Agent{Name: name, ProjectID: "proj-1"}); err != nil {
 			t.Fatal(err)

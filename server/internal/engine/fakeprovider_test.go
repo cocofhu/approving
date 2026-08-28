@@ -280,7 +280,7 @@ func (f *fakeProvider) RunAgent(ctx context.Context, req runtime.NodeReq) (runti
 		return runtime.NodeResult{Events: events}, err
 	}
 	f.emitCall(req)
-	content := fmt.Sprintf("# %s (fake)\n\nprofile=%v\n", req.NodeID, req.Config["skill_profile"])
+	content := fmt.Sprintf("# %s (fake)\n\nprofile=%v\n", req.NodeID, req.Config["agent_profile"])
 	out := map[string]any{"content": content}
 	// Record the resolved prompt so tests can assert conditional injection.
 	out["prompt"] = fakePrompt(req)

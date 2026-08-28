@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *services.SkillService, org *services.OrgService) {
+func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *services.AgentService, org *services.OrgService) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:pmmcp_agent_fs_"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -30,7 +30,7 @@ func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *se
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	skill = services.NewSkillService(root)
+	skill = services.NewAgentService(root)
 	org = services.NewOrgService(root, skill)
 	for _, name := range []string{"leader", "alice", "bob", "outsider"} {
 		if err := skill.Save(services.Agent{Name: name, ProjectID: p.ID}); err != nil {
@@ -59,7 +59,7 @@ func setupAgentFSHost(t *testing.T) (projectID, token string, h *Host, skill *se
 		t.Fatal(err)
 	}
 	h = NewHost(pm, services.NewPmProgress(pm, nil, nil), nil, nil, services.NewArtifactService(db), nil)
-	h.SetOrgAndSkill(org, skill)
+	h.SetOrgAndAgent(org, skill)
 	tok := platformmcp.NewToken()
 	h.Restore(p.ID, "thr-fs", "alice-user", "leader", tok)
 	return p.ID, tok, h, skill, org

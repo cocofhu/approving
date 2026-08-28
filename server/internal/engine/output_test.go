@@ -27,8 +27,8 @@ func TestExecOutputMultiSourceAndFallback(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "research", Type: "research", Label: "技术调研", Config: map[string]any{"skill_profile": "ResearchAgent"}},
-			{ID: "agent", Type: "agent", Label: "代码实现", Config: map[string]any{"skill_profile": "ImplementAgent"}},
+			{ID: "research", Type: "research", Label: "技术调研", Config: map[string]any{"agent_profile": "ResearchAgent"}},
+			{ID: "agent", Type: "agent", Label: "代码实现", Config: map[string]any{"agent_profile": "ImplementAgent"}},
 			{ID: "output", Type: "output", Config: map[string]any{
 				"results": []any{
 					"{{nodes.research.outputs.research}}",
@@ -79,7 +79,7 @@ func TestExecOutputLegacyResultFallback(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "agent", Type: "agent", Label: "A", Config: map[string]any{"skill_profile": "ImplementAgent"}},
+			{ID: "agent", Type: "agent", Label: "A", Config: map[string]any{"agent_profile": "ImplementAgent"}},
 			{ID: "output", Type: "output", Config: map[string]any{
 				"result": "{{nodes.agent.outputs.content}}",
 			}},
@@ -129,7 +129,7 @@ func TestExecOutputHidesUnexecutedAndStaysCompleted(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "agent", Type: "agent", Label: "代码实现", Config: map[string]any{"skill_profile": "ImplementAgent"}},
+			{ID: "agent", Type: "agent", Label: "代码实现", Config: map[string]any{"agent_profile": "ImplementAgent"}},
 			{ID: "visual_l6zc", Type: "visual", Label: ""},
 			{ID: "output", Type: "output", Config: map[string]any{
 				"results": []any{

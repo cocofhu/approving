@@ -75,39 +75,39 @@ export function downloadJson(filename: string, data: unknown) {
   URL.revokeObjectURL(a.href)
 }
 
-/** Collect skill_profile references from agent-class nodes. */
-export function collectSkillProfiles(nodes: WFNode[]): string[] {
+/** Collect agent_profile references from agent-class nodes. */
+export function collectAgentProfiles(nodes: WFNode[]): string[] {
   const agentTypes = new Set([
     'react', 'approve', 'agent', 'plan', 'implement', 'research', 'test', 'review', 'proposal', 'submit_mr', 'visual', 'app_preview',
   ])
   const out = new Set<string>()
   for (const n of nodes) {
     if (!agentTypes.has(n.type)) continue
-    const sp = n.config?.skill_profile
+    const sp = n.config?.agent_profile
     if (typeof sp === 'string' && sp.trim()) out.add(sp.trim())
   }
   return [...out]
 }
 
-export type SkillProfileIssue = {
+export type AgentProfileIssue = {
   name: string
   /** missing = not found / deleted; foreign = unbound or other project */
   reason: 'missing' | 'foreign'
 }
 
 /**
- * Return skill_profile refs that are missing or not bound to the workflow project.
+ * Return agent_profile refs that are missing or not bound to the workflow project.
  * Unbound Agents (empty projectId) count as foreign.
  */
-export function skillProfileIssues(
+export function agentProfileIssues(
   nodes: WFNode[],
   agents: { name: string; projectId?: string }[],
   projectId?: string,
-): SkillProfileIssue[] {
+): AgentProfileIssue[] {
   const byName = new Map(agents.map((a) => [a.name, a]))
   const pid = String(projectId || '').trim()
-  const out: SkillProfileIssue[] = []
-  for (const name of collectSkillProfiles(nodes)) {
+  const out: AgentProfileIssue[] = []
+  for (const name of collectAgentProfiles(nodes)) {
     const a = byName.get(name)
     if (!a) {
       out.push({ name, reason: 'missing' })

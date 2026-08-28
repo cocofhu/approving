@@ -17,8 +17,8 @@ func TestRenameAgent_cascadesWorkflowAndReturnsCount(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "in", Type: "input", Label: "Start"},
-			{ID: "r", Type: "research", Label: "R", Config: map[string]any{"skill_profile": "research-agent"}},
-			{ID: "p", Type: "app_preview", Label: "P", Config: map[string]any{"skill_profile": "research-agent"}},
+			{ID: "r", Type: "research", Label: "R", Config: map[string]any{"agent_profile": "research-agent"}},
+			{ID: "p", Type: "app_preview", Label: "P", Config: map[string]any{"agent_profile": "research-agent"}},
 			{ID: "out", Type: "output", Label: "End"},
 		},
 		Edges: []models.Edge{
@@ -54,7 +54,7 @@ func TestRenameAgent_cascadesWorkflowAndReturnsCount(t *testing.T) {
 	if resp.UpdatedWorkflowCount != 1 {
 		t.Fatalf("updatedWorkflowCount=%d", resp.UpdatedWorkflowCount)
 	}
-	if !hn.h.Skill.Exists("research-pro") || hn.h.Skill.Exists("research-agent") {
+	if !hn.h.Agents.Exists("research-pro") || hn.h.Agents.Exists("research-agent") {
 		t.Fatal("directory rename incomplete")
 	}
 	got, ok := hn.h.WF.Get("wf-cascade")
@@ -68,15 +68,15 @@ func TestRenameAgent_cascadesWorkflowAndReturnsCount(t *testing.T) {
 		if n.Config == nil {
 			continue
 		}
-		if v, _ := n.Config["skill_profile"].(string); v == "research-agent" {
-			t.Fatalf("old skill_profile residue on %s", n.ID)
+		if v, _ := n.Config["agent_profile"].(string); v == "research-agent" {
+			t.Fatalf("old agent_profile residue on %s", n.ID)
 		}
 	}
 }
 
 func TestRenameAgent_workflowCascadeFailureRollsBackSkillPmOrg(t *testing.T) {
 	hn := newHarness(t)
-	skills := hn.h.Skill
+	skills := hn.h.Agents
 	hn.h.Org = services.NewOrgService(t.TempDir(), skills)
 	hn.h.Pm = services.NewPmService(hn.db, skills)
 
@@ -97,7 +97,7 @@ func TestRenameAgent_workflowCascadeFailureRollsBackSkillPmOrg(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clear := services.SetRenameSkillProfileRefsFailHookForTest(func() error {
+	clear := services.SetRenameAgentProfileRefsFailHookForTest(func() error {
 		return errors.New("inject cascade fail")
 	})
 	t.Cleanup(clear)
@@ -106,10 +106,10 @@ func TestRenameAgent_workflowCascadeFailureRollsBackSkillPmOrg(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500 on cascade fail, got %d %s", w.Code, w.Body.String())
 	}
-	if !hn.h.Skill.Exists("old-agent") {
+	if !hn.h.Agents.Exists("old-agent") {
 		t.Fatal("skill directory should roll back to old-agent")
 	}
-	if hn.h.Skill.Exists("new-agent") {
+	if hn.h.Agents.Exists("new-agent") {
 		t.Fatal("new-agent directory should not remain after rollback")
 	}
 	mem, _ := hn.h.Pm.ListMemories(models.DefaultProjectID, "old-agent")

@@ -54,7 +54,7 @@ func TestSpecMergesSharedEnvExtendThenAgentOverlay(t *testing.T) {
 		WorkflowID: "wf-1",
 		NodeType:   "agent",
 		Token:      "tok",
-		Config:     map[string]any{"skill_profile": "demo"},
+		Config:     map[string]any{"agent_profile": "demo"},
 		Vars:       map[string]any{"region": "cn-east"},
 	}
 	spec, err := c.spec(req)
@@ -113,7 +113,7 @@ func TestSpecSharedAuthKeyAloneSucceeds(t *testing.T) {
 		WorkflowID: "wf-1",
 		NodeType:   "agent",
 		Token:      "tok",
-		Config:     map[string]any{"skill_profile": "demo"},
+		Config:     map[string]any{"agent_profile": "demo"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestSpecSkipsSharedEnvWithoutLookup(t *testing.T) {
 		WorkflowID: "wf-1",
 		NodeType:   "agent",
 		Token:      "t",
-		Config:     map[string]any{"skill_profile": "demo"},
+		Config:     map[string]any{"agent_profile": "demo"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -196,7 +196,7 @@ func TestSpecMergesRunSandboxEnvAfterAgent(t *testing.T) {
 		WorkflowID: "wf-1",
 		NodeType:   "agent",
 		Token:      "tok",
-		Config:     map[string]any{"skill_profile": "demo"},
+		Config:     map[string]any{"agent_profile": "demo"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -253,7 +253,7 @@ func TestSpecRunSandboxEnvDoesNotOverrideReservedAfterInject(t *testing.T) {
 	spec, err := c.spec(NodeReq{
 		RunID:  "run-1",
 		Token:  "tok",
-		Config: map[string]any{"skill_profile": "demo"},
+		Config: map[string]any{"agent_profile": "demo"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -281,7 +281,7 @@ func TestSpecSkipsRunEnvWithoutLookup(t *testing.T) {
 	}
 	spec, err := c.spec(NodeReq{
 		RunID: "run-1", NodeType: "agent", Token: "t",
-		Config: map[string]any{"skill_profile": "demo"},
+		Config: map[string]any{"agent_profile": "demo"},
 	})
 	if err != nil {
 		t.Fatal(err)
