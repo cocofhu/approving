@@ -1952,8 +1952,9 @@
         "special": "现有特殊配置：{value}"
       },
       "git": {
-        "title": "Git 仓库与凭据",
-        "subtitle": "根据全部仓库地址和环境变量静态识别凭据类型",
+        "title": "Git 连接方式",
+        "subtitle": "这次拉仓库用哪种方式？点一个即可。",
+        "choiceHint": "这次拉仓库用哪种方式？点一个即可。",
         "openWizard": "配置向导",
         "adjustType": "调整类型",
         "chooseTitle": "选择 Git 凭据类型",
@@ -1982,9 +1983,9 @@
           "unknown": "待确认连接方式"
         },
         "typeHints": {
-          "github_https": "使用 GITHUB_TOKEN；自建实例还需匹配 GITHUB_URL",
-          "gitlab_https": "使用 GITLAB_TOKEN；服务地址可由仓库 URL 推导",
-          "ssh": "使用私钥与 known_hosts"
+          "github_https": "用 Token",
+          "gitlab_https": "用 Token",
+          "ssh": "用私钥"
         },
         "source": {
           "auto": "自动识别",
@@ -2232,7 +2233,7 @@
           "meta": "该配置用于 PM 及后续工程师的默认 ACP。"
         },
         "git": {
-          "meta": "可选。供建团结合仓库选型，并写入团队默认 Git 相关配置。",
+          "meta": "可选。点选 GitHub / GitLab / SSH；已有 Token（含项目共享）时本步无需选择。",
           "url": "仓库 URL"
         },
         "mcp": {
@@ -2384,7 +2385,7 @@
           }
         },
         "git": {
-          "meta": "选择 GitHub / GitLab / SSH 并按需添加推荐变量；可跳过，之后在 Studio 再配。"
+          "meta": "点选 GitHub / GitLab / SSH 即可；本地或项目共享已有 Token 时无需选择。可跳过，之后在 Studio 再配。"
         },
         "env": {
           "meta": "注入沙箱的环境变量。区域保留键由 Agent 步骤统一管理，密钥仅保存在 Agent 配置中。"

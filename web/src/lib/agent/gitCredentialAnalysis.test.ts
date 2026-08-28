@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   analyzeGitCredentials,
+  hasConfiguredGitToken,
+  inferGitCredentialTypeFromTokens,
   isGitVariableReference,
   type GitCredentialStatus,
   type GitCredentialType,
@@ -252,5 +254,44 @@ describe('isGitVariableReference', () => {
     expect(isGitVariableReference('${vars.gitlab.token}')).toBe(true)
     expect(isGitVariableReference('${vars.}')).toBe(false)
     expect(isGitVariableReference('${secrets.token}')).toBe(false)
+  })
+})
+
+describe('hasConfiguredGitToken / inferGitCredentialTypeFromTokens', () => {
+  it('空串与仅空白视为未配置；合法 ${vars.*} 视为已配置', () => {
+    expect(hasConfiguredGitToken({ GITLAB_TOKEN: '' })).toBe(false)
+    expect(hasConfiguredGitToken({ GITLAB_TOKEN: '   ' })).toBe(false)
+    expect(hasConfiguredGitToken({ GITLAB_TOKEN: '${vars.gitlab_pat}' })).toBe(true)
+    expect(hasConfiguredGitToken({ GITLAB_TOKEN: '${invalid}' })).toBe(false)
+  })
+
+  it('ACP API Key 不计入 Git Token', () => {
+    expect(hasConfiguredGitToken({ APPROVING_CURSOR_API_KEY: 'sk-x', CURSOR_API_KEY: 'sk-y' })).toBe(
+      false,
+    )
+    expect(inferGitCredentialTypeFromTokens({ APPROVING_CURSOR_API_KEY: 'sk-x' })).toBeUndefined()
+  })
+
+  it('本地或继承任一有值即视为已配置（空本地不覆盖继承）', () => {
+    expect(
+      hasConfiguredGitToken({ GITLAB_TOKEN: '' }, { GITLAB_TOKEN: '${vars.gitlab_pat}' }),
+    ).toBe(true)
+    expect(hasConfiguredGitToken([{ k: 'GITHUB_TOKEN', v: 'ghp-x' }], undefined)).toBe(true)
+  })
+
+  it('单类 Token 推断对应类型；多类且无已选时不推断', () => {
+    expect(inferGitCredentialTypeFromTokens({ GITHUB_TOKEN: 't' })).toBe('github_https')
+    expect(inferGitCredentialTypeFromTokens({ GITLAB_TOKEN: '${vars.gitlab_pat}' })).toBe(
+      'gitlab_https',
+    )
+    expect(inferGitCredentialTypeFromTokens({ GIT_SSH_PRIVATE_KEY: '${vars.git_ssh_private_key}' })).toBe(
+      'ssh',
+    )
+    expect(
+      inferGitCredentialTypeFromTokens({ GITHUB_TOKEN: 't', GITLAB_TOKEN: 't' }),
+    ).toBeUndefined()
+    expect(
+      inferGitCredentialTypeFromTokens({ GITHUB_TOKEN: 't' }, { GIT_SSH_PRIVATE_KEY: 'k' }),
+    ).toBeUndefined()
   })
 })
