@@ -84,7 +84,9 @@ export function useHomeApproveChat() {
   /** Toast once after a non-empty restore. */
   let restoreToastShown = false
 
-  const pipelines = computed(() => workflows.value.filter(isPublishedApproveFirst))
+  const pipelines = computed(() =>
+    workflows.value.filter((w) => isPublishedApproveFirst(w) && !!w.showOnHome),
+  )
   const selected = computed(
     () => pipelines.value.find((w) => w.id === selectedId.value) || pipelines.value[0] || null,
   )

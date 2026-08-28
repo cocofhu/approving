@@ -112,6 +112,9 @@ func TestWorkflowImportCreatesDraft(t *testing.T) {
 	if imported.Status != "draft" || imported.Version != 1 {
 		t.Fatalf("status/version = %s/%d", imported.Status, imported.Version)
 	}
+	if imported.ShowOnHome {
+		t.Fatal("import ShowOnHome want false (plan g1.3)")
+	}
 	if imported.ID == "wf-x" {
 		t.Fatal("expected new id")
 	}
@@ -316,4 +319,3 @@ func TestWorkflowImportMigratesAgentProfileKey(t *testing.T) {
 		t.Fatalf("agent_profile=%v", implCfg["agent_profile"])
 	}
 }
-

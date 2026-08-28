@@ -38,6 +38,7 @@ type workflowBody struct {
 	Name         string                       `json:"name"`
 	Description  string                       `json:"description"`
 	NeedsRepo    bool                         `json:"needsRepo"`
+	ShowOnHome   *bool                        `json:"showOnHome"`
 	NotifyPolicy *models.WorkflowNotifyPolicy `json:"notifyPolicy"`
 	Nodes        []models.Node                `json:"nodes"`
 	Edges        []models.Edge                `json:"edges"`
@@ -77,6 +78,15 @@ func (h *Handlers) SaveWorkflow(c *gin.Context) {
 		if existing, ok := h.WF.Get(b.ID); ok {
 			wf.NotifyPolicy = existing.NotifyPolicy
 		}
+	}
+	// Create always false (handler + service). On update, omit → keep stored
+	// value so an editor save cannot silently turn Home visibility off (plan g1.3).
+	if isCreate {
+		wf.ShowOnHome = false
+	} else if b.ShowOnHome != nil {
+		wf.ShowOnHome = *b.ShowOnHome
+	} else if existing, ok := h.WF.Get(b.ID); ok {
+		wf.ShowOnHome = existing.ShowOnHome
 	}
 	if err := h.WF.Save(&wf); err != nil {
 		switch {
@@ -153,6 +163,51 @@ func (h *Handlers) PatchWorkflowNotifyPolicy(c *gin.Context) {
 			"notifyPolicy": wf.NotifyPolicy,
 			"status":       wf.Status,
 			"version":      wf.Version,
+		},
+	})
+	c.JSON(http.StatusOK, workflowDTO(wf))
+}
+
+type workflowHomeVisibilityBody struct {
+	ShowOnHome *bool `json:"showOnHome"`
+}
+
+// PatchWorkflowHomeVisibility handles PATCH /api/workflows/:id/home-visibility.
+// Visibility-only write path: does not accept or rewrite Graph (plan g1.2).
+func (h *Handlers) PatchWorkflowHomeVisibility(c *gin.Context) {
+	var b workflowHomeVisibilityBody
+	if err := c.ShouldBindJSON(&b); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if b.ShowOnHome == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "showOnHome is required"})
+		return
+	}
+	id := c.Param("id")
+	wf, err := h.WF.UpdateShowOnHome(id, *b.ShowOnHome)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrWorkflowNotFound):
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		default:
+			_ = c.Error(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+	h.recordAudit(services.AuditRecord{
+		ProjectID:    wf.ProjectID,
+		Actor:        h.auditActorFromContext(c),
+		Action:       models.AuditActionWorkflowUpdate,
+		ResourceType: "workflow",
+		ResourceID:   wf.ID,
+		Outcome:      models.AuditOutcomeOK,
+		Summary:      "update workflow home visibility",
+		Payload: map[string]any{
+			"showOnHome": wf.ShowOnHome,
+			"status":     wf.Status,
+			"version":    wf.Version,
 		},
 	})
 	c.JSON(http.StatusOK, workflowDTO(wf))

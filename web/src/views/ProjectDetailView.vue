@@ -2,6 +2,7 @@
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import AppSwitch from '@/components/ui/AppSwitch.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunchModal.vue'
@@ -108,6 +109,8 @@ const {
   persistWorkflowNotify,
   setWorkflowNotifyMode,
   toggleWorkflowNotifyEvent,
+  savingHomeWfId,
+  toggleWorkflowShowOnHome,
   VAR_TYPES,
   existingNames,
   askFields,
@@ -590,6 +593,25 @@ const {
                 </label>
               </div>
             </div>
+            <div
+              class="flex min-w-0 items-center gap-2"
+              data-testid="wf-home-visibility-inline"
+              @click.stop
+            >
+              <AppSwitch
+                :model-value="!!w.showOnHome"
+                :disabled="savingHomeWfId === w.id"
+                :aria-label="t('pages.projectDetail.homeVisibility.label')"
+                data-testid="wf-home-visibility-switch"
+                @update:model-value="toggleWorkflowShowOnHome(w, $event)"
+              />
+              <span class="text-[12px] text-txt2">{{ t('pages.projectDetail.homeVisibility.label') }}</span>
+              <span
+                v-if="savingHomeWfId === w.id"
+                class="text-[11px] text-txt3"
+                data-testid="wf-home-visibility-saving"
+              >{{ t('common.buttons.saving') }}</span>
+            </div>
             <div class="relative flex items-center gap-2" data-wf-menu @click.stop>
               <button
                 type="button"
@@ -675,6 +697,7 @@ const {
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.colName') }}</th>
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.colStatus') }}</th>
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.notify.colPolicy') }}</th>
+                  <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.homeVisibility.col') }}</th>
                   <th class="px-3 py-2 font-medium">{{ t('pages.projectDetail.colUpdated') }}</th>
                   <th class="px-3 py-2 text-right font-medium whitespace-nowrap">{{ t('common.table.actions') }}</th>
                 </tr>
@@ -772,6 +795,22 @@ const {
                         />
                         <span>{{ t('pages.projectDetail.notify.segCompleted') }}</span>
                       </label>
+                    </div>
+                  </td>
+                  <td class="px-3 py-2.5" @click.stop data-testid="wf-home-visibility-cell">
+                    <div class="flex items-center gap-2">
+                      <AppSwitch
+                        :model-value="!!w.showOnHome"
+                        :disabled="savingHomeWfId === w.id"
+                        :aria-label="t('pages.projectDetail.homeVisibility.label')"
+                        data-testid="wf-home-visibility-switch"
+                        @update:model-value="toggleWorkflowShowOnHome(w, $event)"
+                      />
+                      <span
+                        v-if="savingHomeWfId === w.id"
+                        class="text-[11px] text-txt3"
+                        data-testid="wf-home-visibility-saving"
+                      >{{ t('common.buttons.saving') }}</span>
                     </div>
                   </td>
                   <td class="px-3 py-2.5 text-txt3">{{ fmtTime(w.updatedAt) }}</td>

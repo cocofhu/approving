@@ -63,6 +63,7 @@ func workflowDTO(wf models.WorkflowDef) gin.H {
 	return gin.H{
 		"id": wf.ID, "projectId": wf.ProjectID, "name": wf.Name, "description": wf.Description,
 		"status": wf.Status, "version": wf.Version, "needsRepo": wf.NeedsRepo,
+		"showOnHome":   wf.ShowOnHome,
 		"notifyPolicy": policy,
 		"updatedAt":    wf.UpdatedAt, "lastRunAt": wf.LastRunAt,
 		"nodes": graphNodesDTO(wf.Graph), "edges": wf.Graph.Edges, "variables": wf.Graph.Variables,

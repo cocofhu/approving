@@ -51,4 +51,20 @@ describe('HomePipelineSelect', () => {
     expect(panel.classes()).toContain('home-pipeline-select__panel')
     wrapper.unmount()
   })
+
+  // plan g3.3 — search only looks at the already-filtered Home list
+  it('does not surface a pipeline omitted from props even when the query matches its name', async () => {
+    const wrapper = mountSelect({
+      pipelines: [{ id: 'wf-a', name: '自我迭代PRO' }],
+      modelValue: 'wf-a',
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-search"]').setValue('内部副本')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-hidden"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="home-pipeline-select-empty"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })

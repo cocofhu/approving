@@ -161,6 +161,7 @@ func (s *WorkflowService) Copy(sourceID, name string) (models.WorkflowDef, error
 			Name:        name,
 			Description: src.Description,
 			NeedsRepo:   src.NeedsRepo,
+			ShowOnHome:  false, // copies never inherit Home visibility (plan g1.3)
 			Status:      "draft",
 			Version:     1,
 			Graph:       graph,
@@ -205,6 +206,8 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		if wf.NotifyPolicy.Mode == "" {
 			wf.NotifyPolicy.Mode = models.NotifyModeInherit
 		}
+		// Create always starts hidden on Home (plan g1.3).
+		wf.ShowOnHome = false
 		return s.db.Create(wf).Error
 	}
 	if wf.ProjectID != "" && wf.ProjectID != existing.ProjectID {
@@ -223,6 +226,7 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 	metaChanged := wf.Name != existing.Name ||
 		wf.Description != existing.Description ||
 		wf.NeedsRepo != existing.NeedsRepo ||
+		wf.ShowOnHome != existing.ShowOnHome ||
 		!WorkflowNotifyPoliciesEqual(wf.NotifyPolicy, existing.NotifyPolicy)
 	if graphChanged {
 		wf.Status = "draft"
@@ -235,6 +239,7 @@ func (s *WorkflowService) Save(wf *models.WorkflowDef) error {
 		wf.UpdatedAt = existing.UpdatedAt
 		wf.LastRunAt = existing.LastRunAt
 		wf.NotifyPolicy = existing.NotifyPolicy
+		wf.ShowOnHome = existing.ShowOnHome
 		return nil
 	}
 	if err := s.validateAgentProfiles(wf); err != nil {
@@ -259,6 +264,26 @@ func (s *WorkflowService) UpdateNotifyPolicy(id string, policy models.WorkflowNo
 		return wf, nil
 	}
 	wf.NotifyPolicy = policy
+	wf.UpdatedAt = time.Now()
+	if err := s.db.Save(&wf).Error; err != nil {
+		return wf, err
+	}
+	return wf, nil
+}
+
+// UpdateShowOnHome persists only the Home-visibility flag.
+// It loads the current row and never touches Graph / Status / Version, so a
+// list-row inline toggle cannot roll back a newer editor graph or demote
+// published → draft (plan g1.2).
+func (s *WorkflowService) UpdateShowOnHome(id string, show bool) (models.WorkflowDef, error) {
+	var wf models.WorkflowDef
+	if err := s.db.First(&wf, "id = ?", id).Error; err != nil {
+		return wf, ErrWorkflowNotFound
+	}
+	if wf.ShowOnHome == show {
+		return wf, nil
+	}
+	wf.ShowOnHome = show
 	wf.UpdatedAt = time.Now()
 	if err := s.db.Save(&wf).Error; err != nil {
 		return wf, err

@@ -13,7 +13,7 @@
       ],
       "selectProject": "Select a project",
       "noProject": "No project selected. Pick a project to start an Approve pipeline from Home.",
-      "noPipelines": "No published pipeline whose first node after start is Approve is available on this account.",
+      "noPipelines": "No pipelines are available on Home. In a project, turn on “Show on Home” for a published pipeline whose first node after start is Approve.",
       "goCanvas": "Open the canvas and connect Approve after start",
       "goProjects": "Browse projects for pipelines",
       "pickPipeline": "Select a pipeline first",
@@ -456,6 +456,12 @@
         "modeInherit": "Inherit",
         "modeCustom": "Custom",
         "wfUpdated": "Updated"
+      },
+      "homeVisibility": {
+        "col": "Show on Home",
+        "label": "Show on Home",
+        "updated": "Home visibility updated",
+        "updateFailed": "Failed to update home visibility"
       },
       "audit": {
         "title": "Audit",

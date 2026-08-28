@@ -94,6 +94,9 @@ type WorkflowDef struct {
 	Status      string `json:"status"` // draft | published
 	Version     int    `json:"version"`
 	NeedsRepo   bool   `json:"needsRepo"`
+	// ShowOnHome gates Home cards + Home pipeline search. Missing/zero = false
+	// so existing rows stay hidden after AutoMigrate (plan g1.1).
+	ShowOnHome bool `json:"showOnHome"`
 	// NotifyPolicy is the workflow-level override (off|inherit|custom + events).
 	// Zero value (empty mode) is treated as inherit at resolve time.
 	NotifyPolicy WorkflowNotifyPolicy `gorm:"serializer:json" json:"notifyPolicy"`

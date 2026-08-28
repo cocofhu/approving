@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   listAgents: vi.fn(),
   getPmLeader: vi.fn(),
   writeStoredProjectId: vi.fn(),
+  patchWorkflowHomeVisibility: vi.fn(),
 }))
 
 vi.mock('@/lib/api/api', async () => {
@@ -25,6 +26,7 @@ vi.mock('@/lib/api/api', async () => {
       listWorkflows: mocks.listWorkflows,
       listAgents: mocks.listAgents,
       getPmLeader: mocks.getPmLeader,
+      patchWorkflowHomeVisibility: mocks.patchWorkflowHomeVisibility,
     },
   }
 })
@@ -119,6 +121,7 @@ describe('useProjectDetail', () => {
     mocks.listAgents.mockReset()
     mocks.getPmLeader.mockReset()
     mocks.writeStoredProjectId.mockReset()
+    mocks.patchWorkflowHomeVisibility.mockReset()
 
     mocks.getProject.mockResolvedValue(sampleProject)
     mocks.listWorkflows.mockResolvedValue(sampleWorkflows)
@@ -164,6 +167,30 @@ describe('useProjectDetail', () => {
     expect(detail.showPmMemoryMigration.value).toBe(false)
     await detail.rewriteLegacyPmMemoryQuery()
     expect(String(router.currentRoute.value.query.tab || '')).not.toBe('pmMemory')
+
+    app.unmount()
+  })
+
+  it('PATCHes home visibility without opening the editor and rolls back on failure (g2.1 / g2.3)', async () => {
+    mocks.patchWorkflowHomeVisibility.mockResolvedValueOnce({
+      ...sampleWorkflows[0],
+      showOnHome: true,
+    })
+    const { detail, app } = await withProjectDetail()
+    await flushPromises()
+    await nextTick()
+    const wf = detail.workflows.value[0]
+    expect(wf.showOnHome).toBeFalsy()
+
+    await detail.toggleWorkflowShowOnHome(wf as any, true)
+    await flushPromises()
+    expect(mocks.patchWorkflowHomeVisibility).toHaveBeenCalledWith('wf-1', true)
+    expect(detail.workflows.value[0].showOnHome).toBe(true)
+
+    mocks.patchWorkflowHomeVisibility.mockRejectedValueOnce(new Error('network down'))
+    await detail.toggleWorkflowShowOnHome(detail.workflows.value[0] as any, false)
+    await flushPromises()
+    expect(detail.workflows.value[0].showOnHome).toBe(true)
 
     app.unmount()
   })
