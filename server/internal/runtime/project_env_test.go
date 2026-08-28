@@ -266,6 +266,113 @@ func TestSpecRunSandboxEnvDoesNotOverrideReservedAfterInject(t *testing.T) {
 	}
 }
 
+func TestResolvedMCPSpecsSubstitutesSharedEnv(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agentJSON := `{"mcp":[{"name":"server-log","url":"https://logs.example/mcp","headers":{"Authorization":"Bearer ${LOG_CENTER_TOKEN}"}},{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":{"APPROVING_ARTIFACT_TOKEN":"evil-agent","APPROVING_CURSOR_API_KEY":"k"}}`
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &acpProvider{
+		opts: Options{
+			ProjectIDForWorkflow: func(string) string { return "proj-1" },
+			SharedAgentForProject: func(string) SharedAgentView {
+				return SharedAgentView{Env: map[string]string{
+					"LOG_CENTER_TOKEN": "secret-from-shared",
+				}}
+			},
+			ProfilesRoot: root,
+			MCPEndpoint:  "http://mcp.local",
+		},
+		backend: BackendCursor,
+	}
+	req := NodeReq{
+		WorkflowID: "wf-1",
+		RunID:      "run-1",
+		NodeID:     "n1",
+		Token:      "tok",
+		Config:     map[string]any{"agent_profile": "demo"},
+	}
+	specs := c.resolvedMCPSpecs(req)
+	var logHdr, artHdr string
+	for _, sp := range specs {
+		switch sp.Name {
+		case "server-log":
+			logHdr = sp.Headers["Authorization"]
+		case "artifact-store":
+			artHdr = sp.Headers["Authorization"]
+		}
+	}
+	if logHdr != "Bearer secret-from-shared" {
+		t.Fatalf("server-log Authorization = %q", logHdr)
+	}
+	if artHdr != "Bearer tok" {
+		t.Fatalf("artifact-store must keep run token, got %q", artHdr)
+	}
+	spec, err := c.spec(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Env["LOG_CENTER_TOKEN"] != "secret-from-shared" {
+		t.Fatalf("OS env LOG_CENTER_TOKEN = %q", spec.Env["LOG_CENTER_TOKEN"])
+	}
+}
+
+func TestResolvedMCPSpecsAgentEnvOverlaysShared(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "demo")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agentJSON := `{"mcp":[{"name":"server-log","url":"https://logs.example/mcp","headers":{"Authorization":"Bearer ${LOG_CENTER_TOKEN}"}}],"env":{"LOG_CENTER_TOKEN":"from-agent"}}`
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &acpProvider{
+		opts: Options{
+			ProjectIDForWorkflow: func(string) string { return "proj-1" },
+			SharedAgentForProject: func(string) SharedAgentView {
+				return SharedAgentView{Env: map[string]string{"LOG_CENTER_TOKEN": "secret-from-shared"}}
+			},
+			ProfilesRoot: root,
+		},
+		backend: BackendCursor,
+	}
+	specs := c.resolvedMCPSpecs(NodeReq{
+		WorkflowID: "wf-1",
+		Token:      "tok",
+		Config:     map[string]any{"agent_profile": "demo"},
+	})
+	if len(specs) != 1 || specs[0].Headers["Authorization"] != "Bearer from-agent" {
+		t.Fatalf("agent env should win: %+v", specs)
+	}
+}
+
+func TestMergeEnvIntoTemplateVarsReservedWinAndSubst(t *testing.T) {
+	base := map[string]string{
+		"APPROVING_ARTIFACT_TOKEN": "tok",
+		"vars.region":              "cn-east",
+	}
+	got := MergeEnvIntoTemplateVars(base, map[string]string{
+		"LOG_CENTER_TOKEN":         "secret",
+		"APPROVING_ARTIFACT_TOKEN": "evil",
+		"TEMPLATED":                "${vars.region}",
+		"":                         "skip",
+	})
+	if got["LOG_CENTER_TOKEN"] != "secret" {
+		t.Fatalf("LOG_CENTER_TOKEN=%q", got["LOG_CENTER_TOKEN"])
+	}
+	if got["APPROVING_ARTIFACT_TOKEN"] != "tok" {
+		t.Fatalf("reserved overwritten: %q", got["APPROVING_ARTIFACT_TOKEN"])
+	}
+	if got["TEMPLATED"] != "cn-east" {
+		t.Fatalf("TEMPLATED=%q", got["TEMPLATED"])
+	}
+}
+
 func TestSpecSkipsRunEnvWithoutLookup(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "demo")

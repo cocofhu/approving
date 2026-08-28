@@ -170,7 +170,7 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		}
 	}()
 
-	vars := s.testMcpVars(runID, token, projectID, profile)
+	vars := runtime.MergeEnvIntoTemplateVars(s.testMcpVars(runID, token, projectID, profile), agent.Env)
 	specs := s.buildTestSandboxSpecs(projectID, profile, runID, token, agent, vars)
 
 	env := map[string]string{}

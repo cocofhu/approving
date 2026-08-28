@@ -307,6 +307,34 @@ func (c *acpProvider) mcpVars(req NodeReq) map[string]string {
 	return m
 }
 
+// templateVars is the substitution map for user-authored MCP fields: platform
+// mcpVars first, then effective Agent/shared env keys that are not already
+// reserved. Agent env cannot override APPROVING_* / vars.*.
+func (c *acpProvider) templateVars(req NodeReq) map[string]string {
+	return MergeEnvIntoTemplateVars(c.mcpVars(req), c.effectiveAgent(req).Env)
+}
+
+// MergeEnvIntoTemplateVars copies base, then adds env keys that are not already
+// present. Existing base keys (APPROVING_*, vars.*, …) win. Env values are
+// substituted against base only so ${vars.x} / ${APPROVING_*} still resolve.
+func MergeEnvIntoTemplateVars(base, env map[string]string) map[string]string {
+	out := make(map[string]string, len(base)+len(env))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range env {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if _, exists := out[k]; exists {
+			continue
+		}
+		out[k] = substVars(v, base)
+	}
+	return out
+}
+
 func substVars(s string, vars map[string]string) string {
 	if s == "" {
 		return s
@@ -351,7 +379,7 @@ func (c *acpProvider) resolvedMCPSpecs(req NodeReq) []sandbox.MCPServerSpec {
 	if len(mcp) == 0 {
 		return nil
 	}
-	vars := c.mcpVars(req)
+	vars := c.templateVars(req)
 	out := make([]sandbox.MCPServerSpec, 0, len(mcp))
 	for _, m := range mcp {
 		if m.Name == "" {
