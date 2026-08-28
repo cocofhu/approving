@@ -52,7 +52,7 @@ function sampleNodes(): WFNode[] {
       type: 'research',
       label: '调研',
       position: { x: 200, y: 0 },
-      config: { skill_profile: 'default' },
+      config: { agent_profile: 'default' },
     },
   ]
 }

@@ -44,7 +44,7 @@ func TestLookupAndResolvePreview(t *testing.T) {
 		"3000":    "10.0.0.5:3000",
 	})
 	mgr := sandbox.NewManager(fg.Client(), sandbox.ManagerOptions{WorkspaceDir: "/root/workspace"})
-	skills := services.NewSkillService(t.TempDir())
+	skills := services.NewAgentService(t.TempDir())
 	hostMCP := mcp.NewHost(services.NewArtifactService(db))
 	sbx := services.NewSandboxService(db, mgr, skills, hostMCP, services.SandboxOptions{Max: 2, TTL: time.Minute})
 	preview := services.NewPreviewService(db, mgr)
@@ -85,7 +85,7 @@ func TestSandboxVNCDisabledPaths(t *testing.T) {
 	}
 	fg := sandboxtest.New(t)
 	mgr := sandbox.NewManager(fg.Client(), sandbox.ManagerOptions{WorkspaceDir: "/root/workspace"})
-	skills := services.NewSkillService(t.TempDir())
+	skills := services.NewAgentService(t.TempDir())
 	hostMCP := mcp.NewHost(services.NewArtifactService(db))
 	sbx := services.NewSandboxService(db, mgr, skills, hostMCP, services.SandboxOptions{Max: 2, TTL: time.Minute})
 

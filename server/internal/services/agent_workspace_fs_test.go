@@ -8,16 +8,16 @@ import (
 	"testing"
 )
 
-func setupWorkspaceAgent(t *testing.T, name string) *SkillService {
+func setupWorkspaceAgent(t *testing.T, name string) *AgentService {
 	t.Helper()
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: name, ProjectID: "proj-1", MCP: []MCPServer{{Name: "keep-me", URL: "http://x"}}}); err != nil {
 		t.Fatal(err)
 	}
 	return s
 }
 
-func agentJSON(t *testing.T, s *SkillService, name string) string {
+func agentJSON(t *testing.T, s *AgentService, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(s.root, name, "agent.json"))
 	if err != nil {

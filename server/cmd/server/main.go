@@ -161,6 +161,7 @@ func main() {
 	services.BackfillAuditElevatedFields(db)
 	sharedAgentSvc := services.NewSharedAgentService(services.DefaultSharedAgentRoot(cfg.Engine.ProfilesRoot))
 	services.MigrateProjectSandboxEnvOnce(db, projectSvc, sharedAgentSvc)
+	services.MigrateAgentProfilesOnce(db)
 	provider := runtime.NewProvider(cfg.Engine.ExecProvider, host, runtime.Options{
 		SandboxImage:         cfg.Sandbox.Image,
 		SandboxImages:        cfg.Sandbox.Images,
@@ -279,9 +280,9 @@ func main() {
 	// SSH inject. Empty → OS temp dir (see config.Sandbox.WorkDir).
 	sandbox.HomeBaseDir = cfg.Sandbox.WorkDir
 
-	skillSvc := services.NewSkillService(cfg.Engine.ProfilesRoot)
-	eng.SetSkills(skillSvc)
-	orgSvc := services.NewOrgService(cfg.Engine.ProfilesRoot, skillSvc)
+	agentSvc := services.NewAgentService(cfg.Engine.ProfilesRoot)
+	eng.SetAgents(agentSvc)
+	orgSvc := services.NewOrgService(cfg.Engine.ProfilesRoot, agentSvc)
 	platformRuleSvc, err := services.NewPlatformRuleService(cfg.Engine.PlatformRulesRoot, cfg.Engine.ProfilesRoot)
 	if err != nil {
 		log.Fatal().Err(err).Msg("platform rules init failed")
@@ -297,7 +298,7 @@ func main() {
 		Blobs:           blobStore,
 	})
 	log.Info().Str("gateway", cfg.Sandbox.GatewayURL).Msg("sandbox control plane: sandbox-gateway")
-	sbxSvc := services.NewSandboxService(db, sbxMgr, skillSvc, host, services.SandboxOptions{
+	sbxSvc := services.NewSandboxService(db, sbxMgr, agentSvc, host, services.SandboxOptions{
 		ProfilesRoot:      cfg.Engine.ProfilesRoot,
 		PlatformRulesRoot: cfg.Engine.PlatformRulesRoot,
 		MCPEndpoint:       cfg.Server.MCPAdvertise,
@@ -353,13 +354,13 @@ func main() {
 	coord := shutdown.New(cfg.AgentChatTimeout())
 	authSvc := auth.NewService(db, config.GetConfig)
 
-	pmSvc := services.NewPmService(db, skillSvc)
+	pmSvc := services.NewPmService(db, agentSvc)
 	pmSvc.SetBlobStore(blobStore)
 	pmProgress := services.NewPmProgress(pmSvc, runSvc, artifactSvc)
 	wfSvc := services.NewWorkflowService(db)
-	wfSvc.SetSkills(skillSvc)
+	wfSvc.SetAgents(agentSvc)
 	pmMCP := pmmcp.NewHost(pmSvc, pmProgress, wfSvc, runSvc, artifactSvc, eng)
-	pmMCP.SetOrgAndSkill(orgSvc, skillSvc)
+	pmMCP.SetOrgAndAgent(orgSvc, agentSvc)
 	pmMCP.SetRequirementDrafts(requirementDraftSvc)
 	memoryMCP := memorymcp.NewHost(pmSvc)
 	contextMCP := contextmcp.NewHost(pmSvc)
@@ -371,7 +372,7 @@ func main() {
 	schedulerMCP.SetAuditRecorder(recordMCPAudit)
 	mcpWire := &platformMCPWire{
 		pm: pmMCP, memory: memoryMCP, context: contextMCP,
-		scheduler: schedulerMCP, pmSvc: pmSvc, skills: skillSvc,
+		scheduler: schedulerMCP, pmSvc: pmSvc, skills: agentSvc,
 	}
 	pmTurns := services.NewPmTurnRunner(pmSvc, sbxSvc)
 	pmTurns.SetCitationDeps(runSvc, artifactSvc, wfSvc)
@@ -412,7 +413,7 @@ func main() {
 	}
 	channelBridge := channels.NewChannelBridge(pmSvc, sbxSvc, pmTurns, channelHooks)
 	channelSvc := services.NewChannelConfigService(db)
-	channelSvc.SetSkillService(skillSvc)
+	channelSvc.SetAgentService(agentSvc)
 	channelMgr := channels.NewManager(channelBridge, map[string]channels.AdapterFactory{
 		models.ChannelTypeQQ:       qq.New,
 		models.ChannelTypeWeCom:    wecom.New,
@@ -434,7 +435,7 @@ func main() {
 		Runs:              runSvc,
 		Arts:              artifactSvc,
 		APIKeys:           services.NewAPIKeyService(db),
-		Skill:             skillSvc,
+		Agents:            agentSvc,
 		SharedAgent:       sharedAgentSvc,
 		Org:               orgSvc,
 		Dash:              services.NewDashboardService(db, projectSvc),
@@ -470,8 +471,8 @@ func main() {
 		PublicAdvertise:   cfg.Server.PublicAdvertise,
 		InjectBundles:     injectStore,
 		Blobs:             blobStore,
-		Onboarding:        services.NewOnboardingService(projectSvc, skillSvc, sharedAgentSvc, wfSvc),
-		Team:              services.NewTeamService(projectSvc, skillSvc, orgSvc, pmSvc, sbxSvc),
+		Onboarding:        services.NewOnboardingService(projectSvc, agentSvc, sharedAgentSvc, wfSvc),
+		Team:              services.NewTeamService(projectSvc, agentSvc, orgSvc, pmSvc, sbxSvc),
 	}
 	if h.Team != nil && h.PMMCP != nil {
 		h.PMMCP.SetTeam(h.Team)

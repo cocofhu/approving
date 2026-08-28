@@ -48,7 +48,7 @@ func setupProviderBackend(t *testing.T, backend AcpBackend, chatFor func(attempt
 	opts.ProfilesRoot = profiles
 	p, reg := newTestProviderBackend(t, host, opts, mgr, backend)
 	req := NodeReq{RunID: runID, NodeID: nodeID, NodeType: "agent", Token: tok,
-		Config: map[string]any{"prompt": "do it", "produces": "report.md", "skill_profile": "test-agent"}, Vars: map[string]any{}}
+		Config: map[string]any{"prompt": "do it", "produces": "report.md", "agent_profile": "test-agent"}, Vars: map[string]any{}}
 	return p, host, store, mgr, reg, req
 }
 
@@ -181,7 +181,7 @@ func reactSetupBackend(t *testing.T, backend AcpBackend, chatFor func(attempt in
 	opts.ProfilesRoot = profiles
 	p, _ := newTestProviderBackend(t, host, opts, mgr, backend)
 	req := NodeReq{RunID: runID, NodeID: nodeID, NodeType: "react", Token: tok,
-		Config: map[string]any{"prompt": "clarify", "max_rounds": 3, "skill_profile": "react-agent"}, Vars: map[string]any{}}
+		Config: map[string]any{"prompt": "clarify", "max_rounds": 3, "agent_profile": "react-agent"}, Vars: map[string]any{}}
 	return p, host, store, mgr, req
 }
 
@@ -514,7 +514,7 @@ func approveSetup(t *testing.T, chatFor func(attempt int) chatFunc) (*acpProvide
 	t.Helper()
 	p, host, store, mgr, req := reactSetup(t, chatFor)
 	req.NodeType = "approve"
-	req.Config = map[string]any{"skill_profile": "react-agent"}
+	req.Config = map[string]any{"agent_profile": "react-agent"}
 	return p, host, store, mgr, req
 }
 

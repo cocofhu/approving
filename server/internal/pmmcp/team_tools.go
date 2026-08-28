@@ -7,7 +7,7 @@ import (
 	"github.com/cocofhu/approving/internal/services"
 )
 
-func (h *Host) callTeamTools(sess *Session, skill *services.SkillService, name string, args map[string]any) (any, bool) {
+func (h *Host) callTeamTools(sess *Session, skill *services.AgentService, name string, args map[string]any) (any, bool) {
 	h.mu.RLock()
 	team := h.team
 	h.mu.RUnlock()

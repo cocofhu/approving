@@ -35,7 +35,7 @@ type WorkspaceEntry struct {
 
 // ensureWorkspaceRoot returns the on-disk workspace/ directory for agent,
 // creating it when missing. Never touches agent.json.
-func (s *SkillService) ensureWorkspaceRoot(agent string) (string, error) {
+func (s *AgentService) ensureWorkspaceRoot(agent string) (string, error) {
 	name := sanitize(agent)
 	if name == "" {
 		return "", ErrWorkspaceAgentMissing
@@ -56,7 +56,7 @@ func (s *SkillService) ensureWorkspaceRoot(agent string) (string, error) {
 // resolveWorkspacePath maps a workspace-relative path to an absolute path
 // that stays under the agent workspace after symlink checks.
 // emptyRelOK allows "" to mean the workspace root (for list).
-func (s *SkillService) resolveWorkspacePath(agent, rel string, emptyRelOK bool) (absRoot, absPath string, err error) {
+func (s *AgentService) resolveWorkspacePath(agent, rel string, emptyRelOK bool) (absRoot, absPath string, err error) {
 	absRoot, err = s.ensureWorkspaceRoot(agent)
 	if err != nil {
 		return "", "", err
@@ -153,7 +153,7 @@ func containResolved(absRoot, candidate string) (string, error) {
 }
 
 // ListWorkspace lists entries under a workspace-relative directory ("" = root).
-func (s *SkillService) ListWorkspace(agent, relDir string) ([]WorkspaceEntry, error) {
+func (s *AgentService) ListWorkspace(agent, relDir string) ([]WorkspaceEntry, error) {
 	_, abs, err := s.resolveWorkspacePath(agent, relDir, true)
 	if err != nil {
 		return nil, err
@@ -209,7 +209,7 @@ func (s *SkillService) ListWorkspace(agent, relDir string) ([]WorkspaceEntry, er
 }
 
 // ReadWorkspaceFile reads a file under workspace; rejects dirs and >1MiB.
-func (s *SkillService) ReadWorkspaceFile(agent, rel string) (string, error) {
+func (s *AgentService) ReadWorkspaceFile(agent, rel string) (string, error) {
 	_, abs, err := s.resolveWorkspacePath(agent, rel, false)
 	if err != nil {
 		return "", err
@@ -247,7 +247,7 @@ func (s *SkillService) ReadWorkspaceFile(agent, rel string) (string, error) {
 }
 
 // WriteWorkspaceFile creates/overwrites a file; MkdirAll parents; rejects >1MiB.
-func (s *SkillService) WriteWorkspaceFile(agent, rel, content string) error {
+func (s *AgentService) WriteWorkspaceFile(agent, rel, content string) error {
 	if len(content) > WorkspaceFileMaxBytes {
 		return ErrWorkspaceFileTooLarge
 	}
@@ -273,7 +273,7 @@ func (s *SkillService) WriteWorkspaceFile(agent, rel, content string) error {
 }
 
 // DeleteWorkspacePath removes a file or recursively deletes a directory.
-func (s *SkillService) DeleteWorkspacePath(agent, rel string) error {
+func (s *AgentService) DeleteWorkspacePath(agent, rel string) error {
 	absRoot, abs, err := s.resolveWorkspacePath(agent, rel, false)
 	if err != nil {
 		return err
@@ -291,7 +291,7 @@ func (s *SkillService) DeleteWorkspacePath(agent, rel string) error {
 }
 
 // MkdirWorkspace creates a directory (and parents) under workspace.
-func (s *SkillService) MkdirWorkspace(agent, rel string) error {
+func (s *AgentService) MkdirWorkspace(agent, rel string) error {
 	_, abs, err := s.resolveWorkspacePath(agent, rel, false)
 	if err != nil {
 		return err
@@ -307,7 +307,7 @@ func (s *SkillService) MkdirWorkspace(agent, rel string) error {
 }
 
 // RenameWorkspace moves/renames within the same agent workspace.
-func (s *SkillService) RenameWorkspace(agent, fromRel, toRel string) error {
+func (s *AgentService) RenameWorkspace(agent, fromRel, toRel string) error {
 	_, fromAbs, err := s.resolveWorkspacePath(agent, fromRel, false)
 	if err != nil {
 		return err
@@ -334,6 +334,6 @@ func (s *SkillService) RenameWorkspace(agent, fromRel, toRel string) error {
 }
 
 // WorkspaceRootAbs returns the absolute workspace path (creating if needed).
-func (s *SkillService) WorkspaceRootAbs(agent string) (string, error) {
+func (s *AgentService) WorkspaceRootAbs(agent string) (string, error) {
 	return s.ensureWorkspaceRoot(agent)
 }

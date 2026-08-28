@@ -25,7 +25,7 @@ func writeProfileInto(t *testing.T, root, profile, agentJSON string) {
 }
 
 func reqFor(profile string) NodeReq {
-	return NodeReq{Config: map[string]any{"skill_profile": profile}}
+	return NodeReq{Config: map[string]any{"agent_profile": profile}}
 }
 
 // TestNewProviderRegistryBuildsAllBackends asserts the registry wires one
@@ -52,7 +52,7 @@ func TestNewProviderRegistryBuildsAllBackends(t *testing.T) {
 }
 
 // TestProviderRegistryRouting covers backendFor / providerFor resolution from a
-// skill_profile's agent.json acpBackend field, plus every fallback-to-cursor path.
+// agent_profile's agent.json acpBackend field, plus every fallback-to-cursor path.
 func TestProviderRegistryRouting(t *testing.T) {
 	root := t.TempDir()
 	writeProfileInto(t, root, "cur", `{"acpBackend":"cursor"}`)

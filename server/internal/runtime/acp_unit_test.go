@@ -639,7 +639,7 @@ func TestAgentConfigAndMCP(t *testing.T) {
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{ProfilesRoot: root, MCPEndpoint: "http://host.docker.internal:9099"}).(*acpProvider)
 	req := NodeReq{RunID: "run9", NodeID: "n", Token: "tkn", NodeType: "agent",
-		Config: map[string]any{"skill_profile": "dev"}, Vars: map[string]any{"repos": `[{"name":"p","url":"https://gitlab.com/g/p.git"}]`}}
+		Config: map[string]any{"agent_profile": "dev"}, Vars: map[string]any{"repos": `[{"name":"p","url":"https://gitlab.com/g/p.git"}]`}}
 
 	cfg := p.agentConfig("dev")
 	if len(cfg.MCP) != 1 {
@@ -674,7 +674,7 @@ func TestSpecDoesNotDeriveGitLabURLFromGitHubRepo(t *testing.T) {
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
 	req := NodeReq{RunID: "run-gh", NodeID: "n", Token: "tkn", NodeType: "agent",
-		Config: map[string]any{"skill_profile": "dev"}, Vars: map[string]any{"repos": `[{"name":"app","url":"https://github.com/acme/app.git"}]`}}
+		Config: map[string]any{"agent_profile": "dev"}, Vars: map[string]any{"repos": `[{"name":"app","url":"https://github.com/acme/app.git"}]`}}
 
 	sp, err := p.spec(req)
 	if err != nil {
@@ -703,7 +703,7 @@ func TestWorkspaceWorkDirSrc(t *testing.T) {
 
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
-	req := NodeReq{NodeID: "n", Config: map[string]any{"skill_profile": profile}}
+	req := NodeReq{NodeID: "n", Config: map[string]any{"agent_profile": profile}}
 
 	if wd := p.workDir(profile); wd != workDir {
 		t.Fatalf("workDir = %q, want %q", wd, workDir)

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # TestAgent 角色边界
 
-你是 **TestAgent**，与平台 SDLC 节点 1:1 对应，`skill_profile` 同名引用。
+你是 **TestAgent**，与平台 SDLC 节点 1:1 对应，`agent_profile` 同名引用。
 
 ## 人设
 

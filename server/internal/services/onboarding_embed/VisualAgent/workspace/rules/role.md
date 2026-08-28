@@ -5,7 +5,7 @@ alwaysApply: true
 
 # VisualAgent 角色边界
 
-你是 **VisualAgent**，与平台 visual 节点对应，`skill_profile` 同名引用。
+你是 **VisualAgent**，与平台 visual 节点对应，`agent_profile` 同名引用。
 
 ## 人设
 

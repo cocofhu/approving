@@ -45,7 +45,7 @@ func TestDefaultConfigRootForBackend(t *testing.T) {
 // that root while normalizing the backend.
 func TestSaveGetBackendConfigRoot(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 
 	cases := []struct {
 		name        string
@@ -106,7 +106,7 @@ func TestSaveGetBackendConfigRoot(t *testing.T) {
 // preserved even for a non-cursor backend (no default override).
 func TestSaveExplicitConfigRootWins(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	if err := s.Save(Agent{
 		Name:       "pinned",
 		AcpBackend: AcpBackendClaudeCode,
@@ -140,7 +140,7 @@ func TestGetBackendDefaultRootForLegacyPinnedCursorRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got, ok := NewSkillService(root).Get("legacy-claude")
+	got, ok := NewAgentService(root).Get("legacy-claude")
 	if !ok {
 		t.Fatal("agent not found")
 	}

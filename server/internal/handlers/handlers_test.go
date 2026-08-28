@@ -66,7 +66,7 @@ func newHarness(t *testing.T) *harness {
 	arts := services.NewArtifactService(db)
 	host := mcp.NewHost(arts)
 	profilesRoot := t.TempDir()
-	skills := services.NewSkillService(profilesRoot)
+	skills := services.NewAgentService(profilesRoot)
 	globalRules := t.TempDir() + "/platform-rules"
 	platformRules, err := services.NewPlatformRuleService(globalRules, profilesRoot)
 	if err != nil {
@@ -117,7 +117,7 @@ func newHarness(t *testing.T) *harness {
 		Runs:             services.NewRunService(db),
 		Arts:             arts,
 		APIKeys:          services.NewAPIKeyService(db),
-		Skill:            skills,
+		Agents:           skills,
 		SharedAgent:      sharedAgent,
 		Dash:             services.NewDashboardService(db, projectSvc),
 		Sbx:              sbx,
@@ -1436,8 +1436,8 @@ func TestHandlerDBErrorBranches(t *testing.T) {
 func TestAgentErrorBranches(t *testing.T) {
 	h := newHarness(t)
 	// Seed two agents to rename around.
-	_ = h.h.Skill.Save(services.Agent{Name: "keep"})
-	_ = h.h.Skill.Save(services.Agent{Name: "taken"})
+	_ = h.h.Agents.Save(services.Agent{Name: "keep"})
+	_ = h.h.Agents.Save(services.Agent{Name: "taken"})
 
 	// SaveAgent with a malformed body -> 400.
 	if w := h.do("PUT", "/api/agents/keep", "not-json"); w.Code != 400 {

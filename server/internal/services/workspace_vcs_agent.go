@@ -27,7 +27,7 @@ func vcsPersistError(err error) error {
 }
 
 // WriteWorkspaceFileVcs writes a file and records one revision.
-func (s *SkillService) WriteWorkspaceFileVcs(agent, rel, content string, opts WorkspaceWriteOpts) (string, error) {
+func (s *AgentService) WriteWorkspaceFileVcs(agent, rel, content string, opts WorkspaceWriteOpts) (string, error) {
 	if err := requireWorkspaceReason(opts.Reason); err != nil {
 		return "", err
 	}
@@ -56,7 +56,7 @@ func (s *SkillService) WriteWorkspaceFileVcs(agent, rel, content string, opts Wo
 }
 
 // DeleteWorkspacePathVcs deletes a path and records one revision.
-func (s *SkillService) DeleteWorkspacePathVcs(agent, rel string, opts WorkspaceWriteOpts) (string, error) {
+func (s *AgentService) DeleteWorkspacePathVcs(agent, rel string, opts WorkspaceWriteOpts) (string, error) {
 	if err := requireWorkspaceReason(opts.Reason); err != nil {
 		return "", err
 	}
@@ -82,7 +82,7 @@ func (s *SkillService) DeleteWorkspacePathVcs(agent, rel string, opts WorkspaceW
 }
 
 // MkdirWorkspaceVcs creates a directory (with placeholder) and records one revision.
-func (s *SkillService) MkdirWorkspaceVcs(agent, rel string, opts WorkspaceWriteOpts) (string, error) {
+func (s *AgentService) MkdirWorkspaceVcs(agent, rel string, opts WorkspaceWriteOpts) (string, error) {
 	if err := requireWorkspaceReason(opts.Reason); err != nil {
 		return "", err
 	}
@@ -108,7 +108,7 @@ func (s *SkillService) MkdirWorkspaceVcs(agent, rel string, opts WorkspaceWriteO
 }
 
 // RenameWorkspaceVcs renames within workspace and records one revision.
-func (s *SkillService) RenameWorkspaceVcs(agent, fromRel, toRel string, opts WorkspaceWriteOpts) (string, error) {
+func (s *AgentService) RenameWorkspaceVcs(agent, fromRel, toRel string, opts WorkspaceWriteOpts) (string, error) {
 	if err := requireWorkspaceReason(opts.Reason); err != nil {
 		return "", err
 	}
@@ -135,7 +135,7 @@ func (s *SkillService) RenameWorkspaceVcs(agent, fromRel, toRel string, opts Wor
 }
 
 // RestoreWorkspaceVcs restores workspace to a revision.
-func (s *SkillService) RestoreWorkspaceVcs(agent, sha, author, reason string) (string, error) {
+func (s *AgentService) RestoreWorkspaceVcs(agent, sha, author, reason string) (string, error) {
 	if err := requireWorkspaceReason(reason); err != nil {
 		return "", err
 	}
@@ -143,7 +143,7 @@ func (s *SkillService) RestoreWorkspaceVcs(agent, sha, author, reason string) (s
 }
 
 // SaveAgentWithVcs saves agent files and records studio revisions per changed path.
-func (s *SkillService) SaveAgentWithVcs(a Agent, author, reason string, recordVcs bool) ([]string, error) {
+func (s *AgentService) SaveAgentWithVcs(a Agent, author, reason string, recordVcs bool) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var before []AgentFile

@@ -55,7 +55,7 @@ func TestCancelAbortsLiveAgent(t *testing.T) {
 		NodeID:   "work",
 		NodeType: "agent",
 		Config: map[string]any{
-			"skill_profile": "backend-dev",
+			"agent_profile": "backend-dev",
 			// Keep the agent busy long enough for AbortRun to race mid-turn.
 			"prompt": "请先等待并思考 3 分钟，期间不要创建任何文件；然后在工作目录创建 wait.txt，内容为 done。",
 		},
@@ -99,7 +99,7 @@ func TestCancelAbortsLiveAgent(t *testing.T) {
 	req2.RunID = runID2
 	req2.Token = tok2
 	req2.Config = map[string]any{
-		"skill_profile": "backend-dev",
+		"agent_profile": "backend-dev",
 		"prompt":        "在工作目录创建文件 ok.txt，内容仅一行：ok。不要创建其他文件。",
 		"produces":      "ok.txt",
 	}

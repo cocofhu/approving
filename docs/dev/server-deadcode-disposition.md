@@ -51,7 +51,7 @@ Legend: **内化** = unexport / keep as test helper; **删除** = remove thin wr
 | 65 | BuildPmPlatformMCPSpecs | 删除 | Thin compose of Agent+PmRole specs |
 | 66 | TeamService.EnsureChildGroup | 删除 | No callers (prod or test) |
 | 67 | TeamEmbedPackageNames | 保留 | Embed sync guard (services_test) |
-| 68 | SetRenameSkillProfileRefsFailHookForTest | 保留 | *ForTest |
+| 68 | SetRenameAgentProfileRefsFailHookForTest | 保留 | *ForTest |
 | 69 | shutdown.Coordinator.GracePeriod | 内化→gracePeriod | Test-only |
 
 ## Explicit non-goals (记账)

@@ -55,7 +55,7 @@ func TestStructuredGatePassGoto(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"reason_var": "reason",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": "ok"},
@@ -81,7 +81,7 @@ func TestStructuredGateFailGoto(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": "ok"},
 					"fail": map[string]any{"goto": "fix"},
@@ -111,7 +111,7 @@ func TestStructuredGateFailWhenFallback(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": ""},
 					"fail": map[string]any{"goto": ""},
@@ -141,7 +141,7 @@ func TestReviewStructuredGateVerdicts(t *testing.T) {
 			Nodes: []models.Node{
 				{ID: "input", Type: "input"},
 				{ID: "review", Type: "review", Config: map[string]any{
-					"skill_profile": "v", "prompt": "评审",
+					"agent_profile": "v", "prompt": "评审",
 					"reason_var": "review_reason",
 					"exits": map[string]any{
 						"pass": map[string]any{"goto": passGoto},
@@ -185,7 +185,7 @@ func TestLegacyStructuredGateRouting(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "test", Type: "test", Config: map[string]any{"skill_profile": "t", "prompt": "测试"}},
+			{ID: "test", Type: "test", Config: map[string]any{"agent_profile": "t", "prompt": "测试"}},
 			{ID: "ok", Type: "output"},
 			{ID: "bad", Type: "output"},
 		},
@@ -212,7 +212,7 @@ func TestStructuredGateMalformed(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": ""},
 					"fail": map[string]any{"goto": "bad"},
@@ -287,7 +287,7 @@ func TestStructuredGateRetrySnapshotsScreenshots(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Checkpoint: true, Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 			}},
 			{ID: "output", Type: "output"},
 		},
@@ -348,7 +348,7 @@ func TestStructuredGateSkippedOnlyPass(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": "ok"},
 					"fail": map[string]any{"goto": "bad"},
@@ -377,7 +377,7 @@ func TestStructuredGateBlockOnSkipped(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"block_on_skipped": true,
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": "ok"},
@@ -437,9 +437,9 @@ func planCoverageGateGraph() models.Graph {
 	return models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "plan", Type: "plan", Config: map[string]any{"skill_profile": "p", "prompt": "计划"}},
+			{ID: "plan", Type: "plan", Config: map[string]any{"agent_profile": "p", "prompt": "计划"}},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": "ok"},
 					"fail": map[string]any{"goto": "fix"},
@@ -492,7 +492,7 @@ func TestStructuredGatePlanCoverageNoPlanFailOpen(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "test", Type: "test", Config: map[string]any{
-				"skill_profile": "t", "prompt": "测试",
+				"agent_profile": "t", "prompt": "测试",
 				"exits": map[string]any{
 					"pass": map[string]any{"goto": "ok"},
 					"fail": map[string]any{"goto": "fix"},

@@ -55,7 +55,7 @@ type Project struct {
 	Variables  []ProjectVariable `gorm:"serializer:json" json:"variables"`
 	// PmLeaderEnabled toggles the project-level PM Leader consult entry.
 	PmLeaderEnabled bool `json:"pmLeaderEnabled"`
-	// PmLeaderAgent is the bound Agent config name (skill_profile). Empty when
+	// PmLeaderAgent is the bound Agent config name (agent_profile). Empty when
 	// unbound. Enabling requires a non-empty, existing agent name.
 	PmLeaderAgent string `json:"pmLeaderAgent,omitempty"`
 	// PmEnabledMcps lists enabled PM-only MCP ids (pm-progress, pm-workflow-read, pm-workflow-write, pm-agent-fs, pm-prd-manager).

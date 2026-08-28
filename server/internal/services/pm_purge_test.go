@@ -10,7 +10,7 @@ import (
 
 func TestPurgeAgentProjectData(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	pm := NewPmService(db, skills)
 	ps := NewProjectService(db)
 	pA, err := ps.Create("ProjA", "", nil, nil)
@@ -107,7 +107,7 @@ func TestPurgeAgentProjectData(t *testing.T) {
 
 func TestUpdateBindingRequiresAgentHomeProject(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	pm := NewPmService(db, skills)
 	ps := NewProjectService(db)
 	pA, err := ps.Create("BindA", "", nil, nil)
@@ -137,7 +137,7 @@ func TestUpdateBindingRequiresAgentHomeProject(t *testing.T) {
 
 func TestUpdateMemoryForAgentScoped(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	pm := NewPmService(db, skills)
 	ps := NewProjectService(db)
 	p, err := ps.Create("MemScope", "", nil, nil)
@@ -163,7 +163,7 @@ func TestUpdateMemoryForAgentScoped(t *testing.T) {
 
 func TestRenameAgentScopedData(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	pm := NewPmService(db, skills)
 	ps := NewProjectService(db)
 	p, err := ps.Create("RenameHome", "", nil, nil)

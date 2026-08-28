@@ -29,7 +29,7 @@ func graphWithProfiles(profiles map[string]string) models.Graph {
 			Type:  typ,
 			Label: typ,
 			Config: map[string]any{
-				"skill_profile": profiles[typ],
+				"agent_profile": profiles[typ],
 			},
 		})
 	}
@@ -48,14 +48,14 @@ func skillProfileOf(g models.Graph, nodeType string) string {
 		if n.Type != nodeType || n.Config == nil {
 			continue
 		}
-		if v, ok := n.Config["skill_profile"].(string); ok {
+		if v, ok := n.Config["agent_profile"].(string); ok {
 			return v
 		}
 	}
 	return ""
 }
 
-func TestRenameSkillProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
+func TestRenameAgentProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 	db := newTestDB(t)
 	s := NewWorkflowService(db)
 
@@ -90,7 +90,7 @@ func TestRenameSkillProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, err := s.RenameSkillProfileRefs(old, neu)
+	n, err := s.RenameAgentProfileRefs(old, neu)
 	if err != nil {
 		t.Fatalf("rename refs: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestRenameSkillProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 	}
 	for _, typ := range []string{"research", "app_preview", "implement"} {
 		if skillProfileOf(got.Graph, typ) != neu {
-			t.Fatalf("%s skill_profile want %q got %q", typ, neu, skillProfileOf(got.Graph, typ))
+			t.Fatalf("%s agent_profile want %q got %q", typ, neu, skillProfileOf(got.Graph, typ))
 		}
 	}
 	if skillProfileOf(got.Graph, "proposal") != "other-bot" {
@@ -118,7 +118,7 @@ func TestRenameSkillProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 		if node.Config == nil {
 			continue
 		}
-		if v, _ := node.Config["skill_profile"].(string); v == old {
+		if v, _ := node.Config["agent_profile"].(string); v == old {
 			t.Fatalf("old name residue on node %s", node.ID)
 		}
 	}
@@ -146,7 +146,7 @@ func TestRenameSkillProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 	}
 }
 
-func TestRenameSkillProfileRefs_versionOnlyCountsAndSkipsRun(t *testing.T) {
+func TestRenameAgentProfileRefs_versionOnlyCountsAndSkipsRun(t *testing.T) {
 	db := newTestDB(t)
 	s := NewWorkflowService(db)
 
@@ -185,7 +185,7 @@ func TestRenameSkillProfileRefs_versionOnlyCountsAndSkipsRun(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 
-	n, err := s.RenameSkillProfileRefs(old, neu)
+	n, err := s.RenameAgentProfileRefs(old, neu)
 	if err != nil {
 		t.Fatalf("rename refs: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestRenameSkillProfileRefs_versionOnlyCountsAndSkipsRun(t *testing.T) {
 	}
 }
 
-func TestRenameSkillProfileRefs_keepsPublishedAndDraftStatus(t *testing.T) {
+func TestRenameAgentProfileRefs_keepsPublishedAndDraftStatus(t *testing.T) {
 	db := newTestDB(t)
 	s := NewWorkflowService(db)
 	old, neu := "a1", "a2"
@@ -240,7 +240,7 @@ func TestRenameSkillProfileRefs_keepsPublishedAndDraftStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, err := s.RenameSkillProfileRefs(old, neu)
+	n, err := s.RenameAgentProfileRefs(old, neu)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestRenameSkillProfileRefs_keepsPublishedAndDraftStatus(t *testing.T) {
 	}
 }
 
-func TestRenameSkillProfileRefs_failHookAbortsTransaction(t *testing.T) {
+func TestRenameAgentProfileRefs_failHookAbortsTransaction(t *testing.T) {
 	db := newTestDB(t)
 	s := NewWorkflowService(db)
 	old, neu := "x", "y"
@@ -280,10 +280,10 @@ func TestRenameSkillProfileRefs_failHookAbortsTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	renameSkillProfileRefsFailHook = func() error { return errors.New("inject persist fail") }
-	t.Cleanup(func() { renameSkillProfileRefsFailHook = nil })
+	renameAgentProfileRefsFailHook = func() error { return errors.New("inject persist fail") }
+	t.Cleanup(func() { renameAgentProfileRefsFailHook = nil })
 
-	n, err := s.RenameSkillProfileRefs(old, neu)
+	n, err := s.RenameAgentProfileRefs(old, neu)
 	if err == nil {
 		t.Fatal("expected injected error")
 	}

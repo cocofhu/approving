@@ -27,7 +27,7 @@ func TestCreateAndRenameAgent_unicodeNameAndInvalid400(t *testing.T) {
 	if created["name"] != "Approve需求澄清视觉研发" {
 		t.Fatalf("created name = %v", created["name"])
 	}
-	if !h.h.Skill.Exists("Approve需求澄清视觉研发") {
+	if !h.h.Agents.Exists("Approve需求澄清视觉研发") {
 		t.Fatal("created agent missing on disk")
 	}
 
@@ -46,14 +46,14 @@ func TestCreateAndRenameAgent_unicodeNameAndInvalid400(t *testing.T) {
 	}
 
 	// Seed a legacy-style ASCII agent then rename to Chinese.
-	if err := h.h.Skill.Save(services.Agent{Name: "legacy-agent"}); err != nil {
+	if err := h.h.Agents.Save(services.Agent{Name: "legacy-agent"}); err != nil {
 		t.Fatal(err)
 	}
 	w = h.do("POST", "/api/agents/"+url.PathEscape("legacy-agent")+"/rename", map[string]any{"name": "视觉研发助手"})
 	if w.Code != 200 {
 		t.Fatalf("rename to chinese: %d %s", w.Code, w.Body.String())
 	}
-	if !h.h.Skill.Exists("视觉研发助手") {
+	if !h.h.Agents.Exists("视觉研发助手") {
 		t.Fatal("renamed chinese agent missing")
 	}
 
@@ -67,7 +67,7 @@ func TestCreateAndRenameAgent_unicodeNameAndInvalid400(t *testing.T) {
 func TestRenameAgent_fromLegacyDottedName(t *testing.T) {
 	h := newHarness(t)
 	// Path layer still accepts legacy dotted names for Get/Rename(old).
-	if err := h.h.Skill.Save(services.Agent{Name: "clarify.v1"}); err != nil {
+	if err := h.h.Agents.Save(services.Agent{Name: "clarify.v1"}); err != nil {
 		t.Fatal(err)
 	}
 	w := h.do("POST", "/api/agents/"+url.PathEscape("clarify.v1")+"/rename", map[string]any{
@@ -76,10 +76,10 @@ func TestRenameAgent_fromLegacyDottedName(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("rename legacy dotted → unicode: %d %s", w.Code, w.Body.String())
 	}
-	if h.h.Skill.Exists("clarify.v1") {
+	if h.h.Agents.Exists("clarify.v1") {
 		t.Fatal("old dotted name should be gone")
 	}
-	if !h.h.Skill.Exists("Approve-需求澄清") {
+	if !h.h.Agents.Exists("Approve-需求澄清") {
 		t.Fatal("new unicode name should exist")
 	}
 }

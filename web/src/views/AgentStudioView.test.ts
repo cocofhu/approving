@@ -731,7 +731,7 @@ describe('AgentStudio rename entry migration', () => {
     await flushPromises()
 
     expect(wrapper.text()).not.toContain('工作流引用不会自动更新')
-    expect(wrapper.text()).toContain('将同步更新目录、项目管理、组织关系，以及工作流中的 skill_profile 引用')
+    expect(wrapper.text()).toContain('将同步更新目录、项目管理、组织关系，以及工作流中的 agent_profile 引用')
     await wrapper.findAll('button').find((b) => b.text() === '取消')!.trigger('click')
     await flushPromises()
     expect(mocks.renameAgent).not.toHaveBeenCalled()
@@ -1571,7 +1571,7 @@ describe('AgentStudio copy removal (subtitle + toolbar)', () => {
   const subtitleZh = ['配置可复用的 Agent', '复制进沙箱', '/root/.cursor']
   const subtitleEn = ['Reusable agents', 'copied to', '/root/.cursor']
   const demoShell = [
-    '可复用 Agent 配置 · 组织与 skill_profile 引用',
+    '可复用 Agent 配置 · 组织与 agent_profile 引用',
     '已拖入未分组',
     'clearToast',
   ]
@@ -1720,7 +1720,7 @@ describe('AgentStudio org toast and remaining hints', () => {
 
     expect(wrapper.text()).toContain('数据')
     expect(wrapper.text()).toContain('元信息')
-    expect(wrapper.text()).not.toContain('可复用 Agent 配置 · 组织与 skill_profile 引用')
+    expect(wrapper.text()).not.toContain('可复用 Agent 配置 · 组织与 agent_profile 引用')
     expect(wrapper.text()).not.toMatch(/改前|改后/)
 
     await wrapper.findAll('button').find((item) => item.text().startsWith('MCP'))!.trigger('click')

@@ -16,8 +16,8 @@ import (
 func TestExportImportOrgFolderHTTP(t *testing.T) {
 	hn := newHarness(t)
 	root := t.TempDir()
-	skills := services.NewSkillService(root)
-	hn.h.Skill = skills
+	skills := services.NewAgentService(root)
+	hn.h.Agents = skills
 	hn.h.Org = services.NewOrgService(root, skills)
 
 	if err := skills.Save(services.Agent{
@@ -103,8 +103,8 @@ func TestExportImportOrgFolderHTTP(t *testing.T) {
 func TestImportOrgFolderRejectsSingleAgentZIP(t *testing.T) {
 	hn := newHarness(t)
 	root := t.TempDir()
-	skills := services.NewSkillService(root)
-	hn.h.Skill = skills
+	skills := services.NewAgentService(root)
+	hn.h.Agents = skills
 	hn.h.Org = services.NewOrgService(root, skills)
 	if err := skills.Save(services.Agent{Name: "solo", Files: []services.AgentFile{{Path: "rules/a.md", Content: "a"}}}); err != nil {
 		t.Fatal(err)

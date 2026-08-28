@@ -51,13 +51,13 @@ type OnboardingBootstrapResult struct {
 // OnboardingService atomically bootstraps project auth + 5 agents + light workflow.
 type OnboardingService struct {
 	Projects    *ProjectService
-	Skills      *SkillService
+	Skills      *AgentService
 	SharedAgent *SharedAgentService
 	WF          *WorkflowService
 }
 
 // NewOnboardingService wires dependencies.
-func NewOnboardingService(projects *ProjectService, skills *SkillService, shared *SharedAgentService, wf *WorkflowService) *OnboardingService {
+func NewOnboardingService(projects *ProjectService, skills *AgentService, shared *SharedAgentService, wf *WorkflowService) *OnboardingService {
 	return &OnboardingService{Projects: projects, Skills: skills, SharedAgent: shared, WF: wf}
 }
 
@@ -325,7 +325,7 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 			{
 				ID: "clarify", Type: "react", Label: "澄清", Position: models.Position{X: 280, Y: 200},
 				Config: map[string]any{
-					"skill_profile": "ClarifyAgent",
+					"agent_profile": "ClarifyAgent",
 					"max_rounds":    6,
 					"review_var":    "review",
 					"prompt":        "针对以下需求提出澄清问题,直到信息充分,再调用 set_clarified_requirement 写入结构化需求:\n{{vars.feature}}",
@@ -334,7 +334,7 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 			{
 				ID: "visual", Type: "visual", Label: "视觉", Position: models.Position{X: 520, Y: 200},
 				Config: map[string]any{
-					"skill_profile": "VisualAgent",
+					"agent_profile": "VisualAgent",
 					"review_var":    "review",
 					"prompt":        visualPrompt,
 				},
@@ -342,7 +342,7 @@ func buildOnboardingLightGraph(repos, feature string) models.Graph {
 			{
 				ID: "implement", Type: "implement", Label: "实现", Position: models.Position{X: 760, Y: 200},
 				Config: map[string]any{
-					"skill_profile": "ImplementAgent",
+					"agent_profile": "ImplementAgent",
 					"max_rounds":    3,
 					"prompt":        implementPrompt,
 				},

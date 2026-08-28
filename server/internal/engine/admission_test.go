@@ -100,7 +100,7 @@ func slowGraph() models.Graph {
 	return models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "work", Type: "agent", Config: map[string]any{"skill_profile": "t", "prompt": "work"}},
+			{ID: "work", Type: "agent", Config: map[string]any{"agent_profile": "t", "prompt": "work"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{
@@ -117,7 +117,7 @@ func gateThenWorkGraph() models.Graph {
 			{ID: "gate", Type: "human_gate", Config: map[string]any{
 				"actions": []any{map[string]any{"id": "ok", "label": "OK"}},
 			}},
-			{ID: "work", Type: "agent", Config: map[string]any{"skill_profile": "t", "prompt": "work"}},
+			{ID: "work", Type: "agent", Config: map[string]any{"agent_profile": "t", "prompt": "work"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{
@@ -135,7 +135,7 @@ func workThenGateGraph() models.Graph {
 	return models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "work", Type: "agent", Config: map[string]any{"skill_profile": "t", "prompt": "work"}},
+			{ID: "work", Type: "agent", Config: map[string]any{"agent_profile": "t", "prompt": "work"}},
 			{ID: "gate", Type: "human_gate", Config: map[string]any{
 				"actions": []any{map[string]any{"id": "ok", "label": "OK"}},
 			}},

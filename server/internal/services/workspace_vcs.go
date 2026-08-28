@@ -70,7 +70,7 @@ func (v *WorkspaceVcsService) gitDir(agent string) string {
 }
 
 func (v *WorkspaceVcsService) workTree(agent string) (string, error) {
-	s := &SkillService{root: v.agentsRoot}
+	s := &AgentService{root: v.agentsRoot}
 	return s.ensureWorkspaceRoot(agent)
 }
 

@@ -26,7 +26,7 @@ var (
 )
 
 // ProviderRegistry routes agent/react execution to the ExecProvider matching
-// each skill_profile's acpBackend field.
+// each agent_profile's acpBackend field.
 type ProviderRegistry struct {
 	providers    map[AcpBackend]ExecProvider
 	profilesRoot string
@@ -46,7 +46,7 @@ func NewProviderRegistry(host *mcp.Host, opts Options) *ProviderRegistry {
 func (r *ProviderRegistry) Name() string { return "registry" }
 
 func (r *ProviderRegistry) backendFor(req NodeReq) AcpBackend {
-	profile := strings.TrimSpace(str2(req.Config["skill_profile"]))
+	profile := strings.TrimSpace(str2(req.Config["agent_profile"]))
 	if profile == "" || r.profilesRoot == "" {
 		return BackendCursor
 	}
@@ -91,7 +91,7 @@ func (r *ProviderRegistry) ReactReply(ctx context.Context, req NodeReq, history 
 }
 
 // ReviseInPlace forwards a post-run review edit to the backend that owns the
-// node's parked session (same skill_profile routing as RunAgent/ReactReply).
+// node's parked session (same agent_profile routing as RunAgent/ReactReply).
 func (r *ProviderRegistry) ReviseInPlace(ctx context.Context, req NodeReq, history []models.ReactMessage, human string, images []models.PromptImage) ReactTurn {
 	p := r.providerFor(req)
 	rp, ok := p.(ReviewProvider)
@@ -103,7 +103,7 @@ func (r *ProviderRegistry) ReviseInPlace(ctx context.Context, req NodeReq, histo
 }
 
 // OfferCommitOnConfirm forwards confirm-time git wrap-up to the backend that
-// owns the parked session (same skill_profile routing as ReviseInPlace).
+// owns the parked session (same agent_profile routing as ReviseInPlace).
 func (r *ProviderRegistry) OfferCommitOnConfirm(ctx context.Context, req NodeReq) ReactTurn {
 	p := r.providerFor(req)
 	rp, ok := p.(ReviewProvider)

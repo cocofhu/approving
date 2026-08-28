@@ -30,7 +30,7 @@ func researchContractGraph() models.Graph {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "research", Type: "research", Label: "调研",
-				Config: map[string]any{"skill_profile": "r", "prompt": "调研"}},
+				Config: map[string]any{"agent_profile": "r", "prompt": "调研"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{
@@ -47,7 +47,7 @@ func reviewGateGraph() models.Graph {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "review", Type: "review", Label: "评审",
-				Config: map[string]any{"skill_profile": "v", "prompt": "评审"}},
+				Config: map[string]any{"agent_profile": "v", "prompt": "评审"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{

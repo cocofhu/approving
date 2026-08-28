@@ -64,7 +64,7 @@ func TestProviderBudgetHelpers(t *testing.T) {
 	}
 
 	// gitToken with no ProfilesRoot -> empty.
-	if pd.gitToken(NodeReq{Config: map[string]any{"skill_profile": "x"}}) != "" {
+	if pd.gitToken(NodeReq{Config: map[string]any{"agent_profile": "x"}}) != "" {
 		t.Error("gitToken with no profiles root should be empty")
 	}
 }
@@ -120,7 +120,7 @@ func TestMcpServersFromAgentConfig(t *testing.T) {
 
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{ProfilesRoot: root, MCPEndpoint: "http://mcp.local"}).(*acpProvider)
-	req := NodeReq{RunID: "r1", Token: "t1", NodeID: "n1", Config: map[string]any{"skill_profile": "a"}}
+	req := NodeReq{RunID: "r1", Token: "t1", NodeID: "n1", Config: map[string]any{"agent_profile": "a"}}
 
 	specs := p.resolvedMCPSpecs(req)
 	if len(specs) != 2 {

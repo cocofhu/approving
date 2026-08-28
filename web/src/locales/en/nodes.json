@@ -54,7 +54,7 @@
       "label": "Clarify",
       "desc": "Multi-turn ReAct dialogue to clarify requirements via set_clarified_requirement",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -93,7 +93,7 @@
       "label": "Approve",
       "desc": "One ReAct dialogue for pre-dev work: no prompt template, unlimited rounds; user speaks first, then the agent uses tools; mandatory clarified requirement + plan",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "timeout": {
@@ -138,7 +138,7 @@
       "label": "Generic",
       "desc": "Run a user-defined agent (design/code/review, etc.) in sandbox with artifacts",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -194,7 +194,7 @@
       "label": "Plan",
       "desc": "Structured plan (goals→subgoals, optional six SDD sections) via set_plan; deliverable only, no code/files",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -222,7 +222,7 @@
       "label": "Implement",
       "desc": "Consume plan via get_plan; update_plan_status; auto-nudge until done",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -263,7 +263,7 @@
       "label": "Research",
       "desc": "Technical research / feasibility via set_research",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -291,7 +291,7 @@
       "label": "Test",
       "desc": "Test upstream implementation via set_test_result",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "reason_var": {
@@ -330,7 +330,7 @@
       "label": "Review",
       "desc": "Code/design review via set_review (verdict + findings)",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "reason_var": {
@@ -362,7 +362,7 @@
       "label": "Proposal",
       "desc": "Candidate solutions via set_proposals for downstream selection",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -424,7 +424,7 @@
       "label": "Submit MR",
       "desc": "Merge target into source, push, create MR/PR by host (glab/gh), then mark done via node_complete",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "repo": {
@@ -476,7 +476,7 @@
       "label": "Visual page",
       "desc": "HTML prototype demo as self-contained page.html with iframe preview",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
@@ -543,7 +543,7 @@
       "label": "App preview",
       "desc": "Start app in sandbox or register an external URL via set_preview; wait state is pick-annotate · await confirmation (single exit)",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent profile"
         },
         "prompt": {
