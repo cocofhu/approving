@@ -161,13 +161,13 @@ describe('NodeInspector', () => {
     wrapper.unmount()
   })
 
-  it('loads agent list for agent node config without auto-filling empty skill_profile', async () => {
+  it('loads agent list for agent node config without auto-filling empty agent_profile', async () => {
     const agentNode: WFNode = {
       id: 'agent',
       type: 'agent',
       label: 'Agent',
       position: { x: 0, y: 0 },
-      config: { skill_profile: '' },
+      config: { agent_profile: '' },
     }
     apiMocks.listAgents.mockResolvedValue([
       { name: 'agent-a', projectId: 'proj-1' },
@@ -198,7 +198,7 @@ describe('NodeInspector', () => {
     await flushPromises()
     expect(apiMocks.listAgents).toHaveBeenCalled()
     // Empty config must stay empty (g1.4) — no auto-fill of agentNames[0].
-    expect(agentNode.config.skill_profile).toBe('')
+    expect(agentNode.config.agent_profile).toBe('')
     const opts = wrapper.findAll('select option').map((o) => o.text())
     expect(opts.some((t) => t.includes('agent-a'))).toBe(true)
     expect(opts.some((t) => t.includes('other'))).toBe(false)
@@ -206,13 +206,13 @@ describe('NodeInspector', () => {
     wrapper.unmount()
   })
 
-  it('keeps stale cross-project skill_profile with banner', async () => {
+  it('keeps stale cross-project agent_profile with banner', async () => {
     const agentNode: WFNode = {
       id: 'agent',
       type: 'agent',
       label: 'Agent',
       position: { x: 0, y: 0 },
-      config: { skill_profile: 'beta-runner' },
+      config: { agent_profile: 'beta-runner' },
     }
     apiMocks.listAgents.mockResolvedValue([
       { name: 'agent-a', projectId: 'proj-1' },
@@ -242,7 +242,7 @@ describe('NodeInspector', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="skill-profile-stale-banner"]').exists()).toBe(true)
     expect(wrapper.text()).toMatch(/非本项目|stale/)
-    expect(agentNode.config.skill_profile).toBe('beta-runner')
+    expect(agentNode.config.agent_profile).toBe('beta-runner')
     wrapper.unmount()
   })
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// profileNamePattern restricts skill_profile directory names to a single safe
+// profileNamePattern restricts agent_profile directory names to a single safe
 // segment. Allows Unicode letters/digits plus `._-` so Chinese names and legacy
 // dotted profiles (e.g. clarify.v1) resolve at runtime.
 var profileNamePattern = regexp.MustCompile(`^[\p{L}\p{N}._-]+$`)
@@ -54,7 +54,7 @@ func underRoot(root, rel string) (string, error) {
 func profileDir(profilesRoot, profile string) (string, error) {
 	name := safeProfileName(profile)
 	if name == "" || strings.TrimSpace(profilesRoot) == "" {
-		return "", fmt.Errorf("invalid skill_profile")
+		return "", fmt.Errorf("invalid agent_profile")
 	}
 	return underRoot(profilesRoot, name)
 }

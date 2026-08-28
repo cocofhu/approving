@@ -361,7 +361,7 @@ func newOnboardingHarness(t *testing.T) (*services.OnboardingService, string) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	skills := services.NewSkillService(t.TempDir())
+	skills := services.NewAgentService(t.TempDir())
 	wf := services.NewWorkflowService(db)
 	return services.NewOnboardingService(projects, skills, services.NewSharedAgentService(t.TempDir()), wf), p.ID
 }

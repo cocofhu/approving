@@ -102,7 +102,7 @@ func (h *Handlers) PutProjectSharedAgent(c *gin.Context) {
 // CreateProjectSharedAgentTest starts a chat-test sandbox with extend→overlay
 // against the current project shared config + a chosen Agent.
 func (h *Handlers) CreateProjectSharedAgentTest(c *gin.Context) {
-	if h.Projects == nil || h.SharedAgent == nil || h.Sbx == nil || h.Skill == nil {
+	if h.Projects == nil || h.SharedAgent == nil || h.Sbx == nil || h.Agents == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "shared agent test unavailable"})
 		return
 	}
@@ -125,7 +125,7 @@ func (h *Handlers) CreateProjectSharedAgentTest(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "agentName required"})
 		return
 	}
-	agent, ok := h.Skill.Get(agentName)
+	agent, ok := h.Agents.Get(agentName)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "agent not found"})
 		return

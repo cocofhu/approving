@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildEnvelope, sanitizeFilename, collectSkillProfiles, skillProfileIssues } from './workflowIO'
+import { buildEnvelope, sanitizeFilename, collectAgentProfiles, agentProfileIssues } from './workflowIO'
 import type { WFNode } from '../shared/types'
 
 describe('sanitizeFilename', () => {
@@ -34,17 +34,17 @@ describe('buildEnvelope', () => {
 
 describe('skill profile helpers', () => {
   const nodes: WFNode[] = [
-    { id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { skill_profile: 'ImplementAgent' } },
+    { id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { agent_profile: 'ImplementAgent' } },
     { id: 'b', type: 'input', label: 'In', position: { x: 0, y: 0 }, config: {} },
-    { id: 'c', type: 'app_preview', label: 'P', position: { x: 0, y: 0 }, config: { skill_profile: 'PreviewAgent' } },
+    { id: 'c', type: 'app_preview', label: 'P', position: { x: 0, y: 0 }, config: { agent_profile: 'PreviewAgent' } },
   ]
 
   it('collects agent node profiles including app_preview', () => {
-    expect(collectSkillProfiles(nodes).sort()).toEqual(['ImplementAgent', 'PreviewAgent'].sort())
+    expect(collectAgentProfiles(nodes).sort()).toEqual(['ImplementAgent', 'PreviewAgent'].sort())
   })
 
-  it('reports missing profiles by name via skillProfileIssues', () => {
-    const issues = skillProfileIssues(nodes, [{ name: 'Other', projectId: 'p' }], 'p')
+  it('reports missing profiles by name via agentProfileIssues', () => {
+    const issues = agentProfileIssues(nodes, [{ name: 'Other', projectId: 'p' }], 'p')
     expect(issues.filter((i) => i.reason === 'missing').map((i) => i.name).sort()).toEqual(
       ['ImplementAgent', 'PreviewAgent'].sort(),
     )
@@ -58,18 +58,18 @@ describe('skill profile helpers', () => {
     ]
     const withUnbound: WFNode[] = [
       ...nodes,
-      { id: 'd', type: 'agent', label: 'A', position: { x: 0, y: 0 }, config: { skill_profile: 'unbound' } },
-      { id: 'e', type: 'plan', label: 'Pl', position: { x: 0, y: 0 }, config: { skill_profile: 'ghost' } },
+      { id: 'd', type: 'agent', label: 'A', position: { x: 0, y: 0 }, config: { agent_profile: 'unbound' } },
+      { id: 'e', type: 'plan', label: 'Pl', position: { x: 0, y: 0 }, config: { agent_profile: 'ghost' } },
     ]
-    const issues = skillProfileIssues(withUnbound, agents, 'alpha')
+    const issues = agentProfileIssues(withUnbound, agents, 'alpha')
     expect(issues).toEqual([
       { name: 'PreviewAgent', reason: 'foreign' },
       { name: 'unbound', reason: 'foreign' },
       { name: 'ghost', reason: 'missing' },
     ])
     // same-project only — no false positive
-    expect(skillProfileIssues(
-      [{ id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { skill_profile: 'ImplementAgent' } }],
+    expect(agentProfileIssues(
+      [{ id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { agent_profile: 'ImplementAgent' } }],
       agents,
       'alpha',
     )).toEqual([])

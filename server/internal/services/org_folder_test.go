@@ -11,10 +11,10 @@ import (
 	"testing"
 )
 
-func setupFolderOrg(t *testing.T) (*SkillService, *OrgService) {
+func setupFolderOrg(t *testing.T) (*AgentService, *OrgService) {
 	t.Helper()
 	root := t.TempDir()
-	skill := NewSkillService(root)
+	skill := NewAgentService(root)
 	for _, name := range []string{"alice", "bob", "carol", "outside"} {
 		if err := skill.Save(Agent{
 			Name:       name,
@@ -136,7 +136,7 @@ func TestExportImportFolder_remapMountRenameOverwriteRollback(t *testing.T) {
 
 	// Top-bar import → new root group, remap ids, drop outside parent.
 	dstRoot := t.TempDir()
-	dstSkill := NewSkillService(dstRoot)
+	dstSkill := NewAgentService(dstRoot)
 	dstOrg := NewOrgService(dstRoot, dstSkill)
 	if err := dstSkill.Save(Agent{Name: "alice", Files: []AgentFile{{Path: "rules/old.md", Content: "old"}}}); err != nil {
 		t.Fatal(err)

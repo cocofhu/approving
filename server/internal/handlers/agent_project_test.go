@@ -14,7 +14,7 @@ import (
 
 func attachPm(t *testing.T, hn *harness) *services.PmService {
 	t.Helper()
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
@@ -126,7 +126,7 @@ func TestSaveAgentPurgesOnProjectSwitch(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("unbind: %d %s", w.Code, w.Body.String())
 	}
-	ag, ok := hn.h.Skill.Get("switcher")
+	ag, ok := hn.h.Agents.Get("switcher")
 	if !ok || ag.ProjectID != "" {
 		t.Fatalf("expected unbound agent, got %+v", ag)
 	}
@@ -157,7 +157,7 @@ func TestSaveAgentOmitsProjectIDPreservesBinding(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("save omit: %d %s", w.Code, w.Body.String())
 	}
-	ag, ok := hn.h.Skill.Get("keep-bound")
+	ag, ok := hn.h.Agents.Get("keep-bound")
 	if !ok || ag.ProjectID != pid {
 		t.Fatalf("binding should be preserved, got %+v", ag)
 	}
@@ -442,7 +442,7 @@ func TestPatchAgentProjectFirstBindAndRejectUnbind(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("first bind: %d %s", w.Code, w.Body.String())
 	}
-	ag, ok := hn.h.Skill.Get("first-bind")
+	ag, ok := hn.h.Agents.Get("first-bind")
 	if !ok || ag.ProjectID != pid {
 		t.Fatalf("expected bound agent, got %+v", ag)
 	}
@@ -462,7 +462,7 @@ func TestPatchAgentProjectFirstBindAndRejectUnbind(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unbind via PATCH want 400 got %d %s", w.Code, w.Body.String())
 	}
-	ag, _ = hn.h.Skill.Get("first-bind")
+	ag, _ = hn.h.Agents.Get("first-bind")
 	if ag.ProjectID != pid {
 		t.Fatalf("unbind must be rejected, got projectId=%q", ag.ProjectID)
 	}
@@ -514,7 +514,7 @@ func TestPatchAgentProjectSwitchPurgesAndKeepsWorkspace(t *testing.T) {
 	if len(mem) != 0 {
 		t.Fatalf("old memories should be purged: %v", mem)
 	}
-	ag, ok := hn.h.Skill.Get("patch-switch")
+	ag, ok := hn.h.Agents.Get("patch-switch")
 	if !ok || ag.ProjectID != pidB {
 		t.Fatalf("expected new binding, got %+v", ag)
 	}
@@ -546,7 +546,7 @@ func TestPatchAgentProjectRejectsMissingProject(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("missing project want 400 got %d %s", w.Code, w.Body.String())
 	}
-	ag, _ := hn.h.Skill.Get("bad-target")
+	ag, _ := hn.h.Agents.Get("bad-target")
 	if ag.ProjectID != "" {
 		t.Fatalf("binding should stay empty, got %+v", ag)
 	}
@@ -571,7 +571,7 @@ func TestPmLeaderBindRejectsWrongHomeProject(t *testing.T) {
 	var other map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &other)
 
-	if err := hn.h.Skill.Save(services.Agent{
+	if err := hn.h.Agents.Save(services.Agent{
 		Name: "elsewhere", ProjectID: other["id"].(string),
 		Env: map[string]string{"APPROVING_CURSOR_API_KEY": "k"},
 	}); err != nil {

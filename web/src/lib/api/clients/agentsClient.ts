@@ -31,7 +31,7 @@ function filenameFromContentDisposition(header: string | null, fallback: string)
 }
 
 export const agentsClient = {
-  // agents (reusable, user-defined Agent identities referenced by skill_profile:
+  // agents (reusable, user-defined Agent identities referenced by agent_profile:
   // skill/rules + MCP servers + environment variables)
   listAgents: () => req<Agent[]>('/agents'),
   getAgent: (name: string) => req<Agent>(`/agents/${encodeURIComponent(name)}`),

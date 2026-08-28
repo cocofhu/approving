@@ -20,7 +20,7 @@ func TestPutAgentsOrgRoundTrip(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 	root := t.TempDir()
-	skills := services.NewSkillService(root)
+	skills := services.NewAgentService(root)
 	hn.h.Org = services.NewOrgService(root, skills)
 	w := hn.do(http.MethodPut, "/api/agents/org", map[string]any{
 		"revision": 0,

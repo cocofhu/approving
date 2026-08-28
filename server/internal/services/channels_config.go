@@ -121,7 +121,7 @@ type ChannelConfigDTO struct {
 // trigger onChange so the channels Manager hot-reloads adapters.
 type ChannelConfigService struct {
 	db            *gorm.DB
-	skills        *SkillService
+	skills        *AgentService
 	onChange      func()
 	runtimeLookup func(id string) (state, detail string)
 	// onlineOf reports whether a running adapter is subscribed/online.
@@ -133,8 +133,8 @@ func NewChannelConfigService(db *gorm.DB) *ChannelConfigService {
 	return &ChannelConfigService{db: db}
 }
 
-// SetSkillService wires Agent lookups for home-project / free-agent checks.
-func (s *ChannelConfigService) SetSkillService(skills *SkillService) { s.skills = skills }
+// SetAgentService wires Agent lookups for home-project / free-agent checks.
+func (s *ChannelConfigService) SetAgentService(skills *AgentService) { s.skills = skills }
 
 // SetOnChange registers a callback fired after each successful write.
 func (s *ChannelConfigService) SetOnChange(fn func()) { s.onChange = fn }

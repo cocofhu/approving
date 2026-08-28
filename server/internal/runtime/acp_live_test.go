@@ -158,7 +158,7 @@ func TestCursorLiveRunAgent(t *testing.T) {
 		NodeID:   "implement",
 		NodeType: "agent",
 		Config: map[string]any{
-			"skill_profile": "backend-dev",
+			"agent_profile": "backend-dev",
 			"prompt": "在工作目录创建文件 report.md。" +
 				"文件必须包含至少两行非空 Markdown，第一行是标题 `# Live Selftest`，第二行是一句项目说明。" +
 				"创建后用 read 工具确认文件非空。不要创建其他文件。",

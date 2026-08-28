@@ -121,7 +121,7 @@ func TestSanitizeAgentPath_legacyDotAndUnicode(t *testing.T) {
 
 func TestSaveAndGet_legacyDottedName(t *testing.T) {
 	t.Parallel()
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	// Simulate legacy on-disk agent with '.' in the directory name.
 	if err := s.Save(Agent{Name: "clarify.v1", Files: []AgentFile{{Path: "rules/a.md", Content: "x"}}}); err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func TestSaveAndGet_legacyDottedName(t *testing.T) {
 
 func TestSave_rejectsWriteInvalidViaSanitize(t *testing.T) {
 	t.Parallel()
-	s := NewSkillService(t.TempDir())
+	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{Name: "bad name"}); err == nil {
 		t.Fatal("expected invalid agent name")
 	}

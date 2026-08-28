@@ -22,11 +22,11 @@ func sessionUsername(c *gin.Context) string {
 // ListAgentWorkspaceRevisions handles GET /api/agents/:name/workspace/revisions
 func (h *Handlers) ListAgentWorkspaceRevisions(c *gin.Context) {
 	name := c.Param("name")
-	if _, ok := h.Skill.Get(name); !ok {
+	if _, ok := h.Agents.Get(name); !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	revs, err := h.Skill.Vcs.ListRevisions(name, 100)
+	revs, err := h.Agents.Vcs.ListRevisions(name, 100)
 	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -39,11 +39,11 @@ func (h *Handlers) ListAgentWorkspaceRevisions(c *gin.Context) {
 func (h *Handlers) GetAgentWorkspaceRevisionDiff(c *gin.Context) {
 	name := c.Param("name")
 	sha := c.Param("sha")
-	if _, ok := h.Skill.Get(name); !ok {
+	if _, ok := h.Agents.Get(name); !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	diff, err := h.Skill.Vcs.DiffRevision(name, sha)
+	diff, err := h.Agents.Vcs.DiffRevision(name, sha)
 	if err != nil {
 		if errors.Is(err, services.ErrVcsRevisionMiss) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "revision not found"})
@@ -64,7 +64,7 @@ type restoreWorkspaceBody struct {
 func (h *Handlers) RestoreAgentWorkspaceRevision(c *gin.Context) {
 	name := c.Param("name")
 	sha := c.Param("sha")
-	if _, ok := h.Skill.Get(name); !ok {
+	if _, ok := h.Agents.Get(name); !ok {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
@@ -77,7 +77,7 @@ func (h *Handlers) RestoreAgentWorkspaceRevision(c *gin.Context) {
 	if reason == "" {
 		reason = "回滚到 " + sha
 	}
-	newSha, err := h.Skill.RestoreWorkspaceVcs(name, sha, sessionUsername(c), reason)
+	newSha, err := h.Agents.RestoreWorkspaceVcs(name, sha, sessionUsername(c), reason)
 	if err != nil {
 		if errors.Is(err, services.ErrVcsReasonRequired) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -91,6 +91,6 @@ func (h *Handlers) RestoreAgentWorkspaceRevision(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	a, _ := h.Skill.Get(name)
+	a, _ := h.Agents.Get(name)
 	c.JSON(http.StatusOK, gin.H{"status": "restored", "sha": newSha, "agent": a})
 }

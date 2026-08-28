@@ -28,7 +28,7 @@ func randID() string { return uuid.NewString()[:8] }
 type SandboxService struct {
 	db     *gorm.DB
 	mgr    *sandbox.Manager
-	skills *SkillService
+	skills *AgentService
 	host   *mcp.Host
 
 	profilesRoot      string
@@ -113,7 +113,7 @@ type SandboxView struct {
 }
 
 // NewSandboxService builds the service.
-func NewSandboxService(db *gorm.DB, mgr *sandbox.Manager, skills *SkillService, host *mcp.Host, opts SandboxOptions) *SandboxService {
+func NewSandboxService(db *gorm.DB, mgr *sandbox.Manager, skills *AgentService, host *mcp.Host, opts SandboxOptions) *SandboxService {
 	if opts.TTL <= 0 {
 		opts.TTL = 30 * time.Minute
 	}

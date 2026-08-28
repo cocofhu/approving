@@ -55,7 +55,7 @@ func newSandboxService(t *testing.T, db *gorm.DB, ds *dockerState) *SandboxServi
 	ds.fg = fg
 	mgr := sandbox.NewManager(fg.Client(), sandbox.ManagerOptions{WorkspaceDir: "/root/workspace"})
 	skillsRoot := t.TempDir()
-	skills := NewSkillService(skillsRoot)
+	skills := NewAgentService(skillsRoot)
 	// Create an agent so Open can resolve a profile.
 	if err := skills.Save(Agent{Name: "agentA", AcpBackend: AcpBackendCursor, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}, Files: []AgentFile{{Path: "rules/a.md", Content: "# a"}}}); err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestSandboxServiceDefaults(t *testing.T) {
 	db := newTestDB(t)
 	fg := sandboxtest.New(t)
 	mgr := sandbox.NewManager(fg.Client(), sandbox.ManagerOptions{})
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	host := mcp.NewHost(NewArtifactService(db))
 	// Zero options -> defaults filled in.
 	s := NewSandboxService(db, mgr, skills, host, SandboxOptions{})

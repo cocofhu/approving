@@ -67,7 +67,7 @@ func TestDeleteAgentWithOrgCascade(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 	root := t.TempDir()
-	skills := services.NewSkillService(root)
+	skills := services.NewAgentService(root)
 	hn.h.Org = services.NewOrgService(root, skills)
 	seedAgent(t, hn, "OrgAgent")
 	w := hn.do(http.MethodDelete, "/api/agents/OrgAgent", nil)

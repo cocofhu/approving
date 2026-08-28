@@ -23,7 +23,7 @@ func TestTeamBootstrap_CreatesRoster(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	skills := NewSkillService(filepath.Join(root, "profiles"))
+	skills := NewAgentService(filepath.Join(root, "profiles"))
 	org := NewOrgService(filepath.Join(root, "profiles"), skills)
 	projects := NewProjectService(db)
 	pm := NewPmService(db, skills)
@@ -158,7 +158,7 @@ func TestCreateAgentFromTemplate_Conflict(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	skills := NewSkillService(filepath.Join(root, "profiles"))
+	skills := NewAgentService(filepath.Join(root, "profiles"))
 	org := NewOrgService(filepath.Join(root, "profiles"), skills)
 	projects := NewProjectService(db)
 	pm := NewPmService(db, skills)
@@ -198,7 +198,7 @@ func TestSetOrgMembership_ScopeDenied(t *testing.T) {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
-	skills := NewSkillService(filepath.Join(root, "profiles"))
+	skills := NewAgentService(filepath.Join(root, "profiles"))
 	org := NewOrgService(filepath.Join(root, "profiles"), skills)
 	projects := NewProjectService(db)
 	pm := NewPmService(db, skills)

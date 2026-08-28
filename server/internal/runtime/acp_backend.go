@@ -10,7 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// AcpBackend identifies which ACP CLI bridge a skill_profile binds to.
+// AcpBackend identifies which ACP CLI bridge a agent_profile binds to.
 type AcpBackend string
 
 const (
@@ -357,6 +357,6 @@ func AgentRuntimeLabel(b AcpBackend) string {
 func WarnDeprecatedExecProvider(name string) {
 	if n := strings.TrimSpace(name); n != "" && n != "sandbox" && n != "cursor" {
 		log.Warn().Str("APPROVING_EXEC_PROVIDER", n).
-			Msg("APPROVING_EXEC_PROVIDER is deprecated and ignored; route agents via skill_profile acpBackend")
+			Msg("APPROVING_EXEC_PROVIDER is deprecated and ignored; route agents via agent_profile acpBackend")
 	}
 }

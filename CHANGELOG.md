@@ -79,7 +79,7 @@ All notable public-release changes are documented here.
 - Pin `./start.sh`, `.env.example`, and `compose.release.yaml` defaults to GHCR
   `*:0.1.0-beta` (tag publish does not rewrite these files).
 - Highlights: 评审统一「确认并流转」；澄清/预览流式与刷新续传；桌面 HTML 预览 fillParent；
-  项目管理文案；app_preview 纯 ReAct；同项目 skill_profile 约束。
+  项目管理文案；app_preview 纯 ReAct；同项目 agent_profile 约束。
 
 ## 0.0.4-beta — 2026-07-28
 

@@ -104,7 +104,7 @@ func TestNodeReqPromptImages(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "agent", Type: "agent", Config: map[string]any{
-				"skill_profile": "r",
+				"agent_profile": "r",
 				"prompt":        "Do {{vars.feature}} with {{vars.extra}}",
 			}},
 			{ID: "output", Type: "output"},
@@ -158,7 +158,7 @@ func TestPromptImagesIntegration(t *testing.T) {
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
 			{ID: "research", Type: "research", Config: map[string]any{
-				"skill_profile": "r",
+				"agent_profile": "r",
 				"prompt":        "Research {{vars.feature}}",
 			}},
 			{ID: "output", Type: "output"},

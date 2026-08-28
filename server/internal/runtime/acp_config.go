@@ -31,7 +31,7 @@ func (c *acpProvider) agentLayout(profile string, cfg agentFile) agentLayout {
 
 // buildConfigHome materializes the per-node config home (rules/skills + mcp.json).
 func (c *acpProvider) buildConfigHome(req NodeReq, env map[string]string) string {
-	profile := str2(req.Config["skill_profile"])
+	profile := str2(req.Config["agent_profile"])
 	specs := c.resolvedMCPSpecs(req)
 	home, err := sandbox.BuildConfigHome(sandbox.ConfigHomeSpec{
 		BaseWorkDirSrc:       c.sharedWorkDir(req),
@@ -145,7 +145,7 @@ func (c *acpProvider) sharedWorkDir(req NodeReq) string {
 
 // effectiveAgent returns extend(shared) → overlay(agent) for this node.
 func (c *acpProvider) effectiveAgent(req NodeReq) agentFile {
-	agent := c.agentConfig(str2(req.Config["skill_profile"]))
+	agent := c.agentConfig(str2(req.Config["agent_profile"]))
 	shared, ok := c.sharedView(req)
 	if !ok {
 		return agent

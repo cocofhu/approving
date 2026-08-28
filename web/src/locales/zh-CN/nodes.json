@@ -54,7 +54,7 @@
       "label": "需求澄清",
       "desc": "与人多轮 ReAct 对话澄清需求,经 set_clarified_requirement 写入结构化需求",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -93,7 +93,7 @@
       "label": "Approve",
       "desc": "一次 ReAct 对话完成开发前工作:无 Prompt 模板、不限轮次,用户先发目标后 Agent 用工具对齐;强制产出澄清需求与实施计划",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "timeout": {
@@ -138,7 +138,7 @@
       "label": "通用",
       "desc": "自主执行用户定义的 Agent(设计/编码/评审等);沙箱执行、产物",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -194,7 +194,7 @@
       "label": "计划",
       "desc": "制定结构化计划(大目标→小目标,可选六节设计区),经 set_plan 写入全局计划;唯一交付,不写代码/产物",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -222,7 +222,7 @@
       "label": "实现",
       "desc": "消费上游计划(get_plan)逐项实施,用 update_plan_status 标记进度;未完成由系统自动催促",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -263,7 +263,7 @@
       "label": "调研",
       "desc": "技术调研 / 可行性评估,经 set_research 写入结构化调研结论(问题、发现、建议)",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -291,7 +291,7 @@
       "label": "测试",
       "desc": "对上游实现执行测试,经 set_test_result 写入结构化测试总结(用例、缺陷、评估)",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "reason_var": {
@@ -330,7 +330,7 @@
       "label": "评审",
       "desc": "代码 / 设计评审,经 set_review 写入结构化评审结论(结论 verdict + 按严重度排序意见)",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "reason_var": {
@@ -362,7 +362,7 @@
       "label": "方案",
       "desc": "制定一个或多个候选方案,经 set_proposals 写入结构化方案集(供后续方案确认选择)",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -424,7 +424,7 @@
       "label": "提交 MR",
       "desc": "沙箱内合入目标分支、推送源分支并按托管商创建合并请求(MR/PR),再通过 node_complete 标记完成",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "repo": {
@@ -476,7 +476,7 @@
       "label": "视觉网页",
       "desc": "用 HTML 生成可视化网页/原型 demo:产出自包含单文件 page.html,可在运行内 iframe 预览供人确认",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
@@ -543,7 +543,7 @@
       "label": "应用预览",
       "desc": "沙箱内启动应用或登记外部 URL，通过 set_preview 注册预览；等待态为取点标注 · 等待人工确认（单出口）",
       "fields": {
-        "skill_profile": {
+        "agent_profile": {
           "label": "Agent 配置"
         },
         "prompt": {

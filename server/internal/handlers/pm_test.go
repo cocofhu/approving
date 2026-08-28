@@ -17,7 +17,7 @@ func TestPmLeaderBindingMemoryAndThreadGate(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	progress := services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.Pm = pm
 	hn.h.PmProgress = progress
@@ -66,7 +66,7 @@ func TestPmLeaderBindingMemoryAndThreadGate(t *testing.T) {
 		t.Fatalf("create thread while disabled want 409 got %d %s", w.Code, w.Body.String())
 	}
 
-	if err := hn.h.Skill.Save(services.Agent{Name: "pm-demo", ProjectID: pid}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-demo", ProjectID: pid}); err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
 	w = hn.do(http.MethodPut, "/api/projects/"+pid+"/pm-leader", map[string]any{
@@ -143,7 +143,7 @@ func TestGetPmDraftReconcilesStaleStreamingWhenNotActive(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
@@ -156,7 +156,7 @@ func TestGetPmDraftReconcilesStaleStreamingWhenNotActive(t *testing.T) {
 	var proj map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	pid := proj["id"].(string)
-	if err := hn.h.Skill.Save(services.Agent{Name: "pm-draft", ProjectID: pid}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-draft", ProjectID: pid}); err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
 
@@ -237,7 +237,7 @@ func TestGetPmDraftKeepsStreamingWhenActive(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
@@ -251,7 +251,7 @@ func TestGetPmDraftKeepsStreamingWhenActive(t *testing.T) {
 	var proj map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	pid := proj["id"].(string)
-	if err := hn.h.Skill.Save(services.Agent{Name: "pm-live", ProjectID: pid}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-live", ProjectID: pid}); err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
 
@@ -317,7 +317,7 @@ func TestPmLeaderNonAdminForbidden(t *testing.T) {
 	cfg.Auth.Users = users
 	config.StoreConfig(cfg)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PMMCP = pmmcp.NewHost(pm, services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts), nil, hn.h.Runs, hn.h.Arts, nil)
 
@@ -501,7 +501,7 @@ func TestProjectCronJobsListAndPatch(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronProjA"})
@@ -610,7 +610,7 @@ func TestProjectCronJobsPatchAllowedForNonAdmin(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronNoAdmin"})
@@ -670,7 +670,7 @@ func TestProjectCronJobsDeleteCleansRunsAndThread(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronDelA"})
@@ -796,7 +796,7 @@ func TestProjectCronJobsDeleteAllowedForNonAdmin(t *testing.T) {
 	hn := newHarness(t)
 	enableAdmin(t)
 
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 
 	w := hn.do(http.MethodPost, "/api/projects", map[string]any{"name": "CronDelNoAdmin"})
@@ -840,7 +840,7 @@ func setupPmEnabledHarness(t *testing.T) (*harness, string, string) {
 	hn := newHarness(t)
 	enableAdmin(t)
 	hn.cookie = hn.login(t)
-	pm := services.NewPmService(hn.db, hn.h.Skill)
+	pm := services.NewPmService(hn.db, hn.h.Agents)
 	hn.h.Pm = pm
 	hn.h.PmProgress = services.NewPmProgress(pm, hn.h.Runs, hn.h.Arts)
 	hn.h.PMMCP = pmmcp.NewHost(pm, hn.h.PmProgress, nil, hn.h.Runs, hn.h.Arts, nil)
@@ -852,7 +852,7 @@ func setupPmEnabledHarness(t *testing.T) (*harness, string, string) {
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	pid := proj["id"].(string)
 	// A PM Leader must have this project as its home project (Agent↔project binding).
-	if err := hn.h.Skill.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}}); err != nil {
 		t.Fatal(err)
 	}
 	w = hn.do(http.MethodPut, "/api/projects/"+pid+"/pm-leader", map[string]any{

@@ -148,7 +148,7 @@ export interface OrgGroup {
   parentGroupId?: string
 }
 
-/** Per-agent organization membership (orthogonal to skill_profile identity). */
+/** Per-agent organization membership (orthogonal to agent_profile identity). */
 export interface OrgAgentMembership {
   groupIds?: string[]
 }

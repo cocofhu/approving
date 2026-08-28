@@ -49,7 +49,7 @@ type ConfigHomeSpec struct {
 	// home (CodeBuddy staging needs envRouteMode+endpoint here; BASE_URL alone
 	// hits the wrong chat path).
 	Settings map[string]any
-	// AgentName is the skill_profile used to resolve per-agent platform-rule
+	// AgentName is the agent_profile used to resolve per-agent platform-rule
 	// overrides under <ProfilesRoot>/<agent>/platform-rules/.
 	AgentName string
 	// ProfilesRoot is the agents root (e.g. data/profiles).

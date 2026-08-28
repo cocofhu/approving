@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-func TestSkillServiceCRUD(t *testing.T) {
+func TestAgentServiceCRUD(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 
 	if len(s.List()) != 0 {
 		t.Fatal("empty list")
@@ -60,7 +60,7 @@ func TestSkillServiceCRUD(t *testing.T) {
 
 func TestSkillSaveFilesAndWorkDir(t *testing.T) {
 	root := t.TempDir()
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 
 	// Save an agent with a working-dir tree; a traversal path is dropped.
 	err := s.Save(Agent{
@@ -132,7 +132,7 @@ func TestSkillMigrateLegacy(t *testing.T) {
 	}
 
 	// Construction triggers migrateLegacy via EnsureSeed path.
-	s := NewSkillService(root)
+	s := NewAgentService(root)
 	s.migrateLegacy()
 
 	// After migration the unified cursor/ working dir exists and legacy files

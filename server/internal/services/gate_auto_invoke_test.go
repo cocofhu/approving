@@ -87,7 +87,7 @@ func TestBuildGateAutoPromptAppendsUserPrompt(t *testing.T) {
 
 func TestUpdateBindingGateAutoFields(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	ps := NewProjectService(db)
 	p, err := ps.Create("GateAutoCfg", "", nil, nil)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestUpdateBindingGateAutoFields(t *testing.T) {
 
 func TestGateAutoEnqueuePreconditions(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	ps := NewProjectService(db)
 	p, err := ps.Create("GateAutoPre", "", nil, nil)
 	if err != nil {
@@ -200,7 +200,7 @@ func TestGateAutoEnqueuePreconditions(t *testing.T) {
 
 func TestGateAutoSkipResolvedBeforeSend(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	ps := NewProjectService(db)
 	p, err := ps.Create("GateAutoSkip", "", nil, nil)
 	if err != nil {
@@ -254,7 +254,7 @@ func TestGateAutoSkipResolvedBeforeSend(t *testing.T) {
 
 func TestResolveMainThreadPrefersWritableUser(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	ps := NewProjectService(db)
 	p, err := ps.Create("GateAutoThread", "", nil, nil)
 	if err != nil {
@@ -293,7 +293,7 @@ func TestResolveMainThreadPrefersWritableUser(t *testing.T) {
 
 func TestGateAutoEnqueueFollowsVarFlip(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	ps := NewProjectService(db)
 	p, err := ps.Create("GateAutoFlip", "", nil, nil)
 	if err != nil {
@@ -329,7 +329,7 @@ func TestGateAutoEnqueueFollowsVarFlip(t *testing.T) {
 
 func TestResolveMainThreadCreatesWhenAbsent(t *testing.T) {
 	db := setupPmDB(t)
-	skills := NewSkillService(t.TempDir())
+	skills := NewAgentService(t.TempDir())
 	ps := NewProjectService(db)
 	p, err := ps.Create("GateAutoCreateThr", "", nil, nil)
 	if err != nil {

@@ -78,7 +78,7 @@ describe('NodeOutputPanel', () => {
       type: 'research',
       label: '调研',
       position: { x: 0, y: 0 },
-      config: { skill_profile: 'researcher' },
+      config: { agent_profile: 'researcher' },
     }
     const nodeRun: NodeRun = {
       nodeId: 'research',
@@ -205,7 +205,7 @@ describe('NodeOutputPanel', () => {
       type: 'app_preview',
       label: '预览',
       position: { x: 0, y: 0 },
-      config: { skill_profile: 'previewer' },
+      config: { agent_profile: 'previewer' },
     }
     const nodeRun: NodeRun = {
       nodeId: 'preview',
@@ -227,7 +227,7 @@ describe('NodeOutputPanel', () => {
       type: 'approve',
       label: 'Approve',
       position: { x: 0, y: 0 },
-      config: { skill_profile: 'pm' },
+      config: { agent_profile: 'pm' },
     }
     const nodeRun: NodeRun = {
       nodeId: 'approve',

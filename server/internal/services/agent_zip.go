@@ -30,7 +30,7 @@ type agentExportJSON struct {
 }
 
 // ExportZIP builds a portable ZIP for one agent from on-disk state.
-func (s *SkillService) ExportZIP(name string) ([]byte, error) {
+func (s *AgentService) ExportZIP(name string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	buf := &bytes.Buffer{}
@@ -48,7 +48,7 @@ func (s *SkillService) ExportZIP(name string) ([]byte, error) {
 // writeAgentToZip writes one agent's export snapshot into zw under prefix
 // ("" for single-agent ZIP, "agents/{name}/" for folder packages).
 // agent.json is stored uncompressed. Caller must hold s.mu.
-func (s *SkillService) writeAgentToZip(zw *zip.Writer, name, prefix string) error {
+func (s *AgentService) writeAgentToZip(zw *zip.Writer, name, prefix string) error {
 	a, ok := s.Get(name)
 	if !ok {
 		return fmt.Errorf("agent %q not found", name)
@@ -119,7 +119,7 @@ const (
 )
 
 // ImportZIP parses a ZIP export and writes the agent to disk.
-func (s *SkillService) ImportZIP(raw []byte, targetName string, mode ImportZIPMode) (Agent, error) {
+func (s *AgentService) ImportZIP(raw []byte, targetName string, mode ImportZIPMode) (Agent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	export, files, err := parseZipAgent(bytes.NewReader(raw), int64(len(raw)), "", 0)
@@ -209,7 +209,7 @@ func parseZipAgent(r io.ReaderAt, size int64, prefix string, maxFileBytes int) (
 }
 
 // applyAgentExport writes a parsed export to disk. Caller must hold s.mu.
-func (s *SkillService) applyAgentExport(export agentExportJSON, files []AgentFile, targetName string, mode ImportZIPMode) (Agent, error) {
+func (s *AgentService) applyAgentExport(export agentExportJSON, files []AgentFile, targetName string, mode ImportZIPMode) (Agent, error) {
 	targetName = strings.TrimSpace(targetName)
 	if targetName == "" {
 		return Agent{}, fmt.Errorf("target name is required")

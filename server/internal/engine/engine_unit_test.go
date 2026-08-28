@@ -212,9 +212,9 @@ func TestFrameworkNodesPipeline(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "research", Type: "research", Config: map[string]any{"skill_profile": "r", "prompt": "调研"}},
-			{ID: "test", Type: "test", Config: map[string]any{"skill_profile": "t", "prompt": "测试"}},
-			{ID: "review", Type: "review", Config: map[string]any{"skill_profile": "v", "prompt": "评审"}},
+			{ID: "research", Type: "research", Config: map[string]any{"agent_profile": "r", "prompt": "调研"}},
+			{ID: "test", Type: "test", Config: map[string]any{"agent_profile": "t", "prompt": "测试"}},
+			{ID: "review", Type: "review", Config: map[string]any{"agent_profile": "v", "prompt": "评审"}},
 			{ID: "output", Type: "output"},
 		},
 		Edges: []models.Edge{

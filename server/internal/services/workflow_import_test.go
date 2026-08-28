@@ -277,3 +277,43 @@ func TestWorkflowImportLiftsAndMigrates(t *testing.T) {
 		t.Fatalf("migrated results: %#v", outCfg["results"])
 	}
 }
+
+func TestWorkflowImportMigratesAgentProfileKey(t *testing.T) {
+	db := newTestDB(t)
+	s := NewWorkflowService(db)
+	env := models.ExportEnvelope{
+		SchemaVersion: models.ExportSchemaVersion,
+		Name:          "LegacySP",
+		Graph: models.Graph{
+			Nodes: []models.Node{
+				{ID: "in", Type: "input", Label: "S", Config: map[string]any{}},
+				{ID: "impl", Type: "implement", Label: "I", Config: map[string]any{"skill_profile": "ImplementAgent"}},
+				{ID: "out", Type: "output", Label: "E", Config: map[string]any{"results": []any{"r"}}},
+			},
+			Edges: []models.Edge{
+				{ID: "e1", Source: "in", Target: "impl"},
+				{ID: "e2", Source: "impl", Target: "out"},
+			},
+		},
+	}
+	imported, err := s.Import(envelopeJSON(env), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var implCfg map[string]any
+	for _, n := range imported.Graph.Nodes {
+		if n.ID == "impl" {
+			implCfg = n.Config
+		}
+	}
+	if implCfg == nil {
+		t.Fatal("missing impl node")
+	}
+	if _, ok := implCfg["skill_profile"]; ok {
+		t.Fatal("import must drop legacy skill_profile")
+	}
+	if got, _ := implCfg["agent_profile"].(string); got != "ImplementAgent" {
+		t.Fatalf("agent_profile=%v", implCfg["agent_profile"])
+	}
+}
+

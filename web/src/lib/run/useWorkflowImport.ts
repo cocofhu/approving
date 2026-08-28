@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api/api'
-import { skillProfileIssues } from '@/lib/run/workflowIO'
+import { agentProfileIssues } from '@/lib/run/workflowIO'
 import { readStoredProjectId } from '@/lib/composables/useProjectContext'
 import { useToast } from '@/lib/composables/useToast'
 import type { Workflow } from '@/lib/shared/types'
@@ -64,7 +64,7 @@ export function useWorkflowImport(opts?: {
   async function warnMissingAgents(wf: Workflow) {
     try {
       const agents = await api.listAgents()
-      const issues = skillProfileIssues(wf.nodes, agents, wf.projectId)
+      const issues = agentProfileIssues(wf.nodes, agents, wf.projectId)
       if (issues.length) {
         const list = issues
           .map((i) => {

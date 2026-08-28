@@ -70,11 +70,11 @@ func testClarifyGraph() models.Graph {
 		},
 		Nodes: []models.Node{
 			{ID: "input", Type: "input", Label: "输入"},
-			{ID: "clarify", Type: "react", Label: "需求澄清", Config: map[string]any{"skill_profile": "pm-agent", "max_rounds": 3, "prompt": "澄清:{{vars.idea}}"}},
-			{ID: "design", Type: "agent", Label: "设计", Checkpoint: true, Config: map[string]any{"skill_profile": "design-agent", "prompt": "设计", "produces": "design.md"}},
-			{ID: "review_design", Type: "review", Label: "设计复核", Config: map[string]any{"skill_profile": "analyst-agent", "prompt": "复核"}},
+			{ID: "clarify", Type: "react", Label: "需求澄清", Config: map[string]any{"agent_profile": "pm-agent", "max_rounds": 3, "prompt": "澄清:{{vars.idea}}"}},
+			{ID: "design", Type: "agent", Label: "设计", Checkpoint: true, Config: map[string]any{"agent_profile": "design-agent", "prompt": "设计", "produces": "design.md"}},
+			{ID: "review_design", Type: "review", Label: "设计复核", Config: map[string]any{"agent_profile": "analyst-agent", "prompt": "复核"}},
 			{ID: "approve", Type: "human_gate", Label: "设计评审", Config: map[string]any{"title": "设计评审", "actions": []any{map[string]any{"id": "approve", "label": "批准"}, map[string]any{"id": "revise", "label": "退回"}}}},
-			{ID: "plan", Type: "agent", Label: "方案", Config: map[string]any{"skill_profile": "plan-agent", "prompt": "方案", "produces": "plan.md"}},
+			{ID: "plan", Type: "agent", Label: "方案", Config: map[string]any{"agent_profile": "plan-agent", "prompt": "方案", "produces": "plan.md"}},
 			{ID: "output", Type: "output", Label: "输出"},
 		},
 		Edges: []models.Edge{
@@ -223,7 +223,7 @@ func proposalGraph() models.Graph {
 		Variables: []models.Variable{{Name: "auto_confirm", Type: "bool", Value: true}},
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "propose", Type: "proposal", Config: map[string]any{"skill_profile": "arch", "prompt": "方案"}},
+			{ID: "propose", Type: "proposal", Config: map[string]any{"agent_profile": "arch", "prompt": "方案"}},
 			{ID: "select", Type: "proposal_select", Config: map[string]any{"auto_var": "auto_confirm", "output_var": "selected_proposal"}},
 			{ID: "output", Type: "output"},
 		},
@@ -386,7 +386,7 @@ func TestGateLoopBackReApproval(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "work", Type: "agent", Config: map[string]any{"skill_profile": "x", "prompt": "干活", "produces": "work.md"}},
+			{ID: "work", Type: "agent", Config: map[string]any{"agent_profile": "x", "prompt": "干活", "produces": "work.md"}},
 			{ID: "gate", Type: "human_gate", Config: map[string]any{"title": "评审", "output_var": "action",
 				"actions": []any{
 					map[string]any{"id": "approve", "label": "批准"},
@@ -449,7 +449,7 @@ func TestCancelAtGateThenResumeNoDuplicateApproval(t *testing.T) {
 	g := models.Graph{
 		Nodes: []models.Node{
 			{ID: "input", Type: "input"},
-			{ID: "work", Type: "agent", Config: map[string]any{"skill_profile": "x", "prompt": "干活", "produces": "work.md"}},
+			{ID: "work", Type: "agent", Config: map[string]any{"agent_profile": "x", "prompt": "干活", "produces": "work.md"}},
 			{ID: "gate", Type: "human_gate", Config: map[string]any{"title": "评审", "output_var": "action",
 				"actions": []any{
 					map[string]any{"id": "approve", "label": "批准"},

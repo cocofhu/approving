@@ -10,7 +10,7 @@ import (
 	"github.com/cocofhu/approving/internal/services"
 )
 
-func TestCheckSkillProfileProject(t *testing.T) {
+func TestCheckAgentProfileProject(t *testing.T) {
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "skill-gate.db"))
 	if err != nil {
 		t.Fatalf("db: %v", err)
@@ -24,7 +24,7 @@ func TestCheckSkillProfileProject(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	skills := services.NewSkillService(t.TempDir())
+	skills := services.NewAgentService(t.TempDir())
 	if err := skills.Save(services.Agent{Name: "ok", ProjectID: models.DefaultProjectID}); err != nil {
 		t.Fatalf("save ok: %v", err)
 	}
@@ -40,36 +40,36 @@ func TestCheckSkillProfileProject(t *testing.T) {
 	c := &execCtx{run: &run}
 
 	t.Run("empty skipped", func(t *testing.T) {
-		n := &models.Node{ID: "n", Label: "空", Config: map[string]any{"skill_profile": ""}}
-		if err := eng.checkSkillProfileProject(c, n); err != nil {
+		n := &models.Node{ID: "n", Label: "空", Config: map[string]any{"agent_profile": ""}}
+		if err := eng.checkAgentProfileProject(c, n); err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
 	})
 
 	t.Run("same project ok", func(t *testing.T) {
-		n := &models.Node{ID: "n", Label: "实现", Config: map[string]any{"skill_profile": "ok"}}
-		if err := eng.checkSkillProfileProject(c, n); err != nil {
+		n := &models.Node{ID: "n", Label: "实现", Config: map[string]any{"agent_profile": "ok"}}
+		if err := eng.checkAgentProfileProject(c, n); err != nil {
 			t.Fatalf("unexpected: %v", err)
 		}
 	})
 
 	t.Run("foreign allowed for shared extend", func(t *testing.T) {
-		n := &models.Node{ID: "n", Label: "执行 Agent", Config: map[string]any{"skill_profile": "foreign"}}
-		if err := eng.checkSkillProfileProject(c, n); err != nil {
+		n := &models.Node{ID: "n", Label: "执行 Agent", Config: map[string]any{"agent_profile": "foreign"}}
+		if err := eng.checkAgentProfileProject(c, n); err != nil {
 			t.Fatalf("foreign agent referenced by workflow should pass: %v", err)
 		}
 	})
 
 	t.Run("unbound allowed for shared extend", func(t *testing.T) {
-		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "unbound"}}
-		if err := eng.checkSkillProfileProject(c, n); err != nil {
+		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"agent_profile": "unbound"}}
+		if err := eng.checkAgentProfileProject(c, n); err != nil {
 			t.Fatalf("unbound agent referenced by workflow should pass: %v", err)
 		}
 	})
 
 	t.Run("deleted", func(t *testing.T) {
-		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "ghost"}}
-		err := eng.checkSkillProfileProject(c, n)
+		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"agent_profile": "ghost"}}
+		err := eng.checkAgentProfileProject(c, n)
 		if err == nil || !strings.Contains(err.Error(), "已删除") {
 			t.Fatalf("got %v", err)
 		}
@@ -77,9 +77,17 @@ func TestCheckSkillProfileProject(t *testing.T) {
 
 	t.Run("nil skills skipped", func(t *testing.T) {
 		eng2 := &Engine{db: db, skills: nil}
-		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "ghost"}}
-		if err := eng2.checkSkillProfileProject(c, n); err != nil {
+		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"agent_profile": "ghost"}}
+		if err := eng2.checkAgentProfileProject(c, n); err != nil {
 			t.Fatalf("unexpected: %v", err)
+		}
+	})
+
+	t.Run("legacy skill_profile alone treated as unconfigured", func(t *testing.T) {
+		// Hard-cut: runtime must not fall back to the legacy key.
+		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "ok"}}
+		if err := eng.checkAgentProfileProject(c, n); err != nil {
+			t.Fatalf("legacy-only key must be ignored (empty), got %v", err)
 		}
 	})
 }

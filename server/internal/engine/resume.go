@@ -437,7 +437,7 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 	if node == nil || (!nodereg.ClarifyInteractive(node.Type) && !isReviewNode(node.Type)) {
 		return errors.New("react node not found")
 	}
-	if err := e.checkSkillProfileProject(c, node); err != nil {
+	if err := e.checkAgentProfileProject(c, node); err != nil {
 		return err
 	}
 	// Reply to the LATEST conversation for this node (highest iteration): a
