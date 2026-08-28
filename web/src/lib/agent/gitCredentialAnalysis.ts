@@ -343,3 +343,47 @@ export function analyzeGitCredentials(
 export function isGitVariableReference(value: string): boolean {
   return VAR_REFERENCE_RE.test(value.trim())
 }
+
+/** Git Token keys that hide the connection-type guide (ACP keys do not count). */
+export const GIT_VISIBILITY_TOKEN_KEYS = [
+  'GITHUB_TOKEN',
+  'GITLAB_TOKEN',
+  'GIT_SSH_PRIVATE_KEY',
+] as const
+
+const GIT_TOKEN_TO_TYPE: Record<(typeof GIT_VISIBILITY_TOKEN_KEYS)[number], GitCredentialType> = {
+  GITHUB_TOKEN: 'github_https',
+  GITLAB_TOKEN: 'gitlab_https',
+  GIT_SSH_PRIVATE_KEY: 'ssh',
+}
+
+/** True if any Git Token is configured in local and/or inherited env (union, not overwrite). */
+export function hasConfiguredGitToken(...envs: Array<GitEnv | undefined>): boolean {
+  for (const env of envs) {
+    if (!env) continue
+    const rec = envRecord(env)
+    for (const key of GIT_VISIBILITY_TOKEN_KEYS) {
+      if (configured(rec[key])) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Infer a single connection type from configured Git Tokens across envs.
+ * Returns undefined when none or more than one type is present.
+ */
+export function inferGitCredentialTypeFromTokens(
+  ...envs: Array<GitEnv | undefined>
+): GitCredentialType | undefined {
+  const types = new Set<GitCredentialType>()
+  for (const env of envs) {
+    if (!env) continue
+    const rec = envRecord(env)
+    for (const key of GIT_VISIBILITY_TOKEN_KEYS) {
+      if (configured(rec[key])) types.add(GIT_TOKEN_TO_TYPE[key])
+    }
+  }
+  if (types.size === 1) return [...types][0]
+  return undefined
+}

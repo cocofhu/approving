@@ -14,14 +14,22 @@ const createAgent = vi.fn(async (payload: unknown) => payload)
 const listProjectRunTags = vi.fn(async (_projectId: string) => {
   throw Object.assign(new Error('not found'), { status: 404 })
 })
+const getProjectSharedAgentConfig = vi.fn(async (_projectId?: string) => ({
+  projectId: '',
+  env: {},
+  files: [],
+  mcp: [],
+  layout: {},
+}))
 vi.mock('@/lib/api/api', () => ({
   api: {
     createAgent: (payload: unknown) => createAgent(payload),
     listProjectRunTags: (projectId: string) => listProjectRunTags(projectId),
+    getProjectSharedAgentConfig: (projectId: string) => getProjectSharedAgentConfig(projectId),
   },
 }))
 
-function mountWizard(locale: 'zh-CN' | 'en' = 'zh-CN') {
+function mountWizard(locale: 'zh-CN' | 'en' = 'zh-CN', projectId?: string) {
   const i18n = createI18n({
     legacy: false,
     locale,
@@ -32,7 +40,7 @@ function mountWizard(locale: 'zh-CN' | 'en' = 'zh-CN') {
   })
   return mount(AgentCreateWizard, {
     attachTo: document.body,
-    props: { open: true, existingNames: [] },
+    props: { open: true, existingNames: [], projectId },
     global: { plugins: [i18n] },
   })
 }
@@ -214,6 +222,34 @@ describe('AgentCreateWizard 5-step IA', () => {
     expect(unhandled.some((e) => String(e).includes('is not iterable'))).toBe(false)
 
     process.off('unhandledRejection', onUnhandled)
+    wrapper.unmount()
+  })
+
+  it('Git 步在共享 Token 存在时不渲染引导（g2.1）', async () => {
+    getProjectSharedAgentConfig.mockResolvedValue({
+      projectId: 'proj-shared',
+      env: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
+      files: [],
+      mcp: [],
+      layout: {},
+    })
+    const wrapper = mountWizard('zh-CN', 'proj-shared')
+    fillName('inherit-agent')
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('跳过').click()
+    await wrapper.vm.$nextTick()
+    await vi.waitFor(() => {
+      expect(getProjectSharedAgentConfig).toHaveBeenCalledWith('proj-shared')
+    })
+    await vi.waitFor(() => {
+      expect(document.body.querySelector('[data-test="git-guide"]')).toBeFalsy()
+    })
+    expect(document.body.textContent).toContain('Git')
+    expect(document.body.textContent).not.toContain('调整类型')
     wrapper.unmount()
   })
 

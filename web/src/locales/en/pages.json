@@ -1952,8 +1952,9 @@
         "special": "Existing special configuration: {value}"
       },
       "git": {
-        "title": "Git repositories and credentials",
-        "subtitle": "Statically detect the credential type from all repository URLs and environment variables",
+        "title": "Git connection",
+        "subtitle": "How should this Agent pull the repo? Pick one.",
+        "choiceHint": "How should this Agent pull the repo? Pick one.",
         "openWizard": "Configuration wizard",
         "adjustType": "Adjust type",
         "chooseTitle": "Choose Git credential type",
@@ -1982,9 +1983,9 @@
           "unknown": "Connection type pending"
         },
         "typeHints": {
-          "github_https": "Uses GITHUB_TOKEN; self-hosted instances must match GITHUB_URL",
-          "gitlab_https": "Uses GITLAB_TOKEN; the service URL may be inferred from the repository URL",
-          "ssh": "Uses a private key and known_hosts"
+          "github_https": "Uses a token",
+          "gitlab_https": "Uses a token",
+          "ssh": "Uses a private key"
         },
         "source": {
           "auto": "Auto-detected",
@@ -2232,7 +2233,7 @@
           "meta": "Used as the default ACP for the PM and engineers."
         },
         "git": {
-          "meta": "Optional. Helps roster selection and team Git defaults.",
+          "meta": "Optional. Pick GitHub / GitLab / SSH; skip when a Git Token already exists (including project shared).",
           "url": "Repository URL"
         },
         "mcp": {
@@ -2384,7 +2385,7 @@
           }
         },
         "git": {
-          "meta": "Choose GitHub / GitLab / SSH and optionally add recommended vars. Skip and finish later in Studio."
+          "meta": "Pick GitHub / GitLab / SSH. Skip if a Git Token already exists locally or in project shared config."
         },
         "env": {
           "meta": "Environment variables injected into the sandbox. Region keys are managed by the Agent step; secrets stay in the Agent config."

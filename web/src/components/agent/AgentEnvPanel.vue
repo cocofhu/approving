@@ -9,6 +9,7 @@ import EnvCredentialHelpModal, {
   type EnvCredentialHelpSection,
 } from '@/components/agent/EnvCredentialHelpModal.vue'
 import { BACKEND_AUTH_HINTS, settingsFileAbsPath } from '@/lib/agent/backendAuthGuide'
+import { useInheritedGitEnv } from '@/lib/agent/useInheritedGitEnv'
 import {
   getRegionPolicy,
   isManagedRegionKey,
@@ -31,6 +32,11 @@ const { t } = useI18n()
 
 const envContext = computed(() => props.context ?? 'agent')
 const preferSharedAuth = computed(() => envContext.value === 'agent')
+/** Agent context inherits project shared env; shared editor only looks at this surface. */
+const inheritedProjectId = computed(() =>
+  envContext.value === 'agent' ? props.draft.projectId : '',
+)
+const { inheritedEnv } = useInheritedGitEnv(inheritedProjectId)
 
 const envRaw = ref(false)
 const envRawText = ref('')
@@ -138,6 +144,7 @@ watch(
       </div>
       <AgentGitGuide
         :env="draft.env"
+        :inherited-env="inheritedEnv"
         :upsert-env="upsertEnv"
         :credential-type="draft.gitCredentialType"
         :allow-token-recommend="!preferSharedAuth"

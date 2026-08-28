@@ -25,10 +25,13 @@ import {
   stripAuthKeysFromEnv,
   type WizardAuthMode,
 } from '@/lib/agent/agentCreateWizard'
+import { useInheritedGitEnv } from '@/lib/agent/useInheritedGitEnv'
 
 export interface AgentCreateWizardProps {
   open: boolean
   existingNames: string[]
+  /** When set, Git step can inherit project shared Agent env for hide/infer. */
+  projectId?: string
 }
 
 export type AgentCreateWizardEmit = {
@@ -39,6 +42,7 @@ export type AgentCreateWizardEmit = {
 
 export function useAgentCreateWizard(props: AgentCreateWizardProps, emit: AgentCreateWizardEmit) {
 const { t } = useI18n()
+const { inheritedEnv } = useInheritedGitEnv(() => props.projectId)
 
 const draft = ref<WizardDraft>(freshDraft())
 const nameError = ref('')
@@ -344,6 +348,7 @@ function chipClass(kind: string) {
   onCustomConfigInput,
   onApiKeyInput,
   onGitCredentialType,
+  inheritedEnv,
   goPrev,
   goSkip,
   goNext,

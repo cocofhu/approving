@@ -73,18 +73,15 @@ test('新建 Agent 五步向导浏览器验收', async ({ page }) => {
   await expect(page.locator('.wiz-rail')).toBeVisible()
   await expect(page.locator('.sec-head h3')).toHaveText('Git')
 
-  // Select GitLab + add recommended vars (runtime ${vars.repos}) and assert no dead-end badge.
-  await page.getByRole('button', { name: /调整类型/ }).click()
-  await page.locator('input[type="radio"]').nth(1).check()
-  await page.getByRole('button', { name: /确认|应用|保存|确定|使用/ }).last().click()
-  const addRec = page.getByRole('button', { name: /添加推荐|推荐变量|一键添加/ })
-  if (await addRec.count()) {
-    await addRec.first().click()
-  }
+  // g1.1: pick GitLab on the flat first screen — no「调整类型」modal.
+  await expect(page.getByRole('button', { name: /调整类型/ })).toHaveCount(0)
+  await page.locator('[data-test="git-choice-gitlab_https"]').click()
+  await expect(page.locator('[data-test="git-choice-gitlab_https"]')).toHaveAttribute('aria-pressed', 'true')
   const gitAfter = await page.locator('.step-pane').innerText()
   expect(gitAfter).not.toContain('未逐仓解析')
   expect(gitAfter).not.toContain('无法在此页面逐仓解析')
-  expect(gitAfter).toMatch(/GitLab|运行时解析|配置形态完整|推荐/)
+  expect(gitAfter).not.toContain('调整类型')
+  expect(gitAfter).toContain('GitLab')
   await page.screenshot({ path: path.join(OUT, '06-git-typed.png'), fullPage: true })
 
   await page.getByRole('button', { name: /^下一步|^跳过/ }).last().click()
@@ -99,4 +96,41 @@ test('新建 Agent 五步向导浏览器验收', async ({ page }) => {
   await page.getByRole('button', { name: /创建并进入 Studio/ }).click()
   await expect(page.getByTestId('created-name')).toHaveText('e2e-wizard-agent', { timeout: 10_000 })
   await expect(page.locator('.wiz-rail')).toHaveCount(0)
+})
+
+test('向导能取到项目共享 Git Token 时 Git 步不出现引导（g2.1）', async ({ page }) => {
+  await page.route('**/api/**', async (route) => {
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
+    const url = new URL(route.request().url())
+    if (url.pathname.includes('/shared-agent-config') && route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          projectId: 'proj-shared',
+          env: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
+          files: [],
+          mcp: [],
+          layout: {},
+        }),
+      })
+      return
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+
+  await page.goto('/agent-create-wizard.html?projectId=proj-shared', { waitUntil: 'networkidle' })
+  await expect(page.getByTestId('agent-create-wizard-root')).toBeVisible()
+  await page.locator('#wiz-name-input').fill('e2e-inherited-git')
+  await page.getByRole('button', { name: /^下一步/ }).click()
+  await page.getByRole('button', { name: /Cursor/ }).click()
+  await page.getByRole('button', { name: /^下一步/ }).click()
+  await page.getByRole('button', { name: /^跳过/ }).click()
+  await expect(page.locator('.sec-head h3')).toHaveText('Git')
+  await expect(page.locator('[data-test="git-guide"]')).toHaveCount(0)
+  await expect(page.locator('[data-test="git-choice-github_https"]')).toHaveCount(0)
+  await expect(page.getByText('调整类型')).toHaveCount(0)
 })

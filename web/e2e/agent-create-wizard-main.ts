@@ -23,6 +23,7 @@ async function boot() {
           h(AgentCreateWizard, {
             open: open.value,
             existingNames: [],
+            projectId: new URLSearchParams(location.search).get('projectId') || undefined,
             onClose: () => {
               open.value = false
             },
