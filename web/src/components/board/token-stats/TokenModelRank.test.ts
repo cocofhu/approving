@@ -61,6 +61,9 @@ describe('TokenModelRank ECharts bars (g1.2)', () => {
     expect(wrapper.findAll('[data-testid="token-model-rank-bar"]').length).toBe(4)
     expect(wrapper.findAll('[data-testid="mock-vchart"]').length).toBe(4)
     expect(wrapper.find('.h-full.transition-\\[width\\]').exists()).toBe(false)
+    const unkFill = wrapper.find('[data-unknown="1"] .h-full')
+    expect(unkFill.exists()).toBe(true)
+    expect((unkFill.element as HTMLElement).style.backgroundColor.replace(/\s/g, '')).toMatch(/#71717A|rgb\(113,113,122\)/i)
     wrapper.unmount()
   })
 })
@@ -176,6 +179,8 @@ describe('TokenModelRank unknown vs other (g3.3)', () => {
     expect(unk.text()).not.toContain('other（其余模型）')
     expect(unk.find('.text-txt3').exists()).toBe(true)
     expect(barColor(wrapper.vm, 1)).toBe('#71717A')
+    const unkFill = unk.find('.h-full')
+    expect((unkFill.element as HTMLElement).style.backgroundColor).toBe('#71717A')
 
     const other = wrapper.find('[data-other="1"]')
     expect(other.exists()).toBe(true)

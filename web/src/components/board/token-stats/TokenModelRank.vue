@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { registerECharts } from '@/components/charts/echartsSetup'
-import { BOARD_CHART_TOOLTIP } from '@/components/charts/chartTheme'
+import { statsTooltip } from '@/components/charts/chartTheme'
 import type { TokenStatsModel } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount, shouldShowUnknownVisual } from '@/lib/run/tokenUsage'
 import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
@@ -23,6 +23,10 @@ function displayName(m: TokenStatsModel): string {
   return m.name || m.modelKey || '—'
 }
 
+function barWidthPct(m: TokenStatsModel): number {
+  return Math.max(0, Math.min(100, ((m.total || 0) / maxTotal.value) * 100))
+}
+
 function rowChartOption(m: TokenStatsModel, i: number) {
   const color = colorForModel(m, i)
   return {
@@ -30,11 +34,10 @@ function rowChartOption(m: TokenStatsModel, i: number) {
     grid: { left: 0, right: 0, top: 0, bottom: 0 },
     xAxis: { type: 'value', show: false, max: maxTotal.value },
     yAxis: { type: 'category', data: [''], show: false },
-    tooltip: {
+    tooltip: statsTooltip({
       trigger: 'item',
-      ...BOARD_CHART_TOOLTIP,
-      formatter: () => fmtTokenCount(m.total),
-    },
+      formatter: () => fmtCompactTokenCount(m.total),
+    }),
     series: [
       {
         type: 'bar',
@@ -72,8 +75,12 @@ defineExpose({ rowOptions, maxTotal })
           <span class="min-w-0 truncate">{{ displayName(m) }}</span>
           <UnknownModelBadge v-if="shouldShowUnknownVisual(m.unknown, displayName(m))" />
         </div>
-        <div class="mt-1 h-2 overflow-hidden" data-testid="token-model-rank-bar">
-          <VChart :option="rowOptions[i]" autoresize class="h-full w-full" />
+        <div class="relative mt-1 h-2 overflow-hidden" data-testid="token-model-rank-bar">
+          <div
+            class="h-full"
+            :style="{ width: `${barWidthPct(m)}%`, backgroundColor: colorForModel(m, i) }"
+          />
+          <VChart :option="rowOptions[i]" autoresize class="absolute inset-0 w-full" />
         </div>
       </div>
       <span

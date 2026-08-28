@@ -226,19 +226,15 @@ test.describe('看板 Token 统计图', () => {
     await expect(page.getByTestId('token-donut-chart').locator('canvas')).toBeVisible()
     await expect(page.getByTestId('token-stats-comp-card')).toContainText('用量构成')
     await expect(page.getByTestId('token-stats-comp-card')).not.toContainText('四分量')
-    await expect(page.getByTestId('token-donut-legend')).toContainText('输入')
-    await expect(page.getByTestId('token-donut-legend')).toContainText('输出')
-    await expect(page.getByTestId('token-donut-legend')).toContainText('缓存读')
-    await expect(page.getByTestId('token-donut-legend')).toContainText('缓存写')
-    await expect(page.getByTestId('token-donut-legend')).not.toContainText('input')
+    await expect(page.getByTestId('token-donut-legend')).toHaveCount(0)
+    await expect(page.getByTestId('token-donut-chart')).not.toContainText('总量')
     await expect(panel).toContainText('approve-main')
     await expect(panel).toContainText('项目管理')
     await expect(panel).toContainText('其他')
-    const trendLegend = page.getByTestId('token-trend-legend')
-    await expect(trendLegend.locator('[data-kind="workflow"]')).toContainText('工作流')
-    await expect(trendLegend.locator('[data-kind="pm"]')).toContainText('项目管理')
+    await expect(page.getByTestId('token-trend-legend')).toHaveCount(0)
     const canvas = page.getByTestId('token-trend-chart').locator('canvas')
     await expect(canvas).toBeVisible()
+    const trendTip = page.locator('.token-trend-tooltip')
     await expect(async () => {
       const box = await canvas.boundingBox()
       expect(box).toBeTruthy()
@@ -248,15 +244,14 @@ test.describe('看板 Token 统计图', () => {
         for (const x of xs) {
           if (x >= box!.width - 4 || y >= box!.height - 4) continue
           await canvas.hover({ position: { x, y } })
-          if (await page.getByTestId('token-trend-tooltip').isVisible().catch(() => false)) return
+          if (await trendTip.first().isVisible().catch(() => false)) return
         }
       }
       throw new Error('trend tooltip not shown')
     }).toPass({ timeout: 12_000 })
-    const trendTip = page.getByTestId('token-trend-tooltip')
-    await expect(trendTip).toBeVisible()
-    await expect(trendTip.locator('[data-tip-row="workflow"]')).toContainText('工作流')
-    await expect(trendTip.locator('[data-tip-row="pm"]')).toContainText('项目管理')
+    await expect(trendTip.first()).toBeVisible()
+    await expect(trendTip.first().locator('[data-tip-row="workflow"]')).toContainText('工作流')
+    await expect(trendTip.first().locator('[data-tip-row="pm"]')).toContainText('项目管理')
     await expect(panel).toContainText('消耗排行')
     await expect(panel).toContainText('按来源堆叠')
     await expect(page.getByTestId('token-rank-list').locator('[data-kind="pm"]')).toBeVisible()
@@ -517,9 +512,9 @@ test.describe('看板 Token 统计图', () => {
         for (const x of xs) {
           if (x >= box!.width - 4 || y >= box!.height - 4) continue
           await canvas.hover({ position: { x, y } })
-          const loc = page.getByTestId('token-trend-tooltip')
-          if (await loc.isVisible().catch(() => false)) {
-            const text = await loc.innerText()
+          const loc = page.locator('.token-trend-tooltip')
+          if (await loc.first().isVisible().catch(() => false)) {
+            const text = await loc.first().innerText()
             if (text.includes('07-11')) return
           }
         }
@@ -531,7 +526,7 @@ test.describe('看板 Token 统计图', () => {
       await hoverLeftZeroPoint()
     }).toPass({ timeout: 12_000 })
 
-    const tip = page.getByTestId('token-trend-tooltip')
+    const tip = page.locator('.token-trend-tooltip').first()
     await expect(tip).toContainText('07-11')
     await expect(tip.locator('[data-tip-row="workflow"]')).toContainText('工作流')
     await expect(tip.locator('[data-tip-row="pm"]')).toContainText('项目管理')
@@ -551,7 +546,7 @@ test.describe('看板 Token 统计图', () => {
     await testInfo.attach('token-trend-tooltip-left-zero', { path: hoverShot, contentType: 'image/png' })
 
     await page.mouse.move(4, 4)
-    await expect(page.getByTestId('token-trend-tooltip')).toHaveCount(0)
+    await expect(page.locator('.token-trend-tooltip')).toHaveCount(0)
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByTestId('token-trend-wrap')).toBeVisible()
@@ -564,7 +559,7 @@ test.describe('看板 Token 统计图', () => {
     await expect(async () => {
       await hoverLeftZeroPoint()
     }).toPass({ timeout: 12_000 })
-    const narrowTip = page.getByTestId('token-trend-tooltip')
+    const narrowTip = page.locator('.token-trend-tooltip').first()
     await expect(narrowTip).toContainText('07-11')
     const narrowTipBox = await narrowTip.boundingBox()
     expect(narrowTipBox).toBeTruthy()

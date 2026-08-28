@@ -229,11 +229,10 @@ test.describe('未知模型显示名', () => {
     await expect(unkRank.locator('.h-full')).not.toHaveCSS('background-color', 'rgb(113, 113, 122)')
 
     const legend = page.getByTestId('token-model-legend')
-    await expect(legend).toBeVisible()
-    await expect(legend).toContainText('gpt-5')
-    await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(0)
-    await expect(legend).not.toContainText('未知/未分桶')
-    await expect(legend).not.toContainText('未知模型')
+    await expect(legend).toHaveCount(0)
+    const pie = page.getByTestId('token-model-pie')
+    await expect(pie).toBeVisible()
+    await expect(pie.locator('canvas')).toBeVisible()
 
     await page.screenshot({
       path: path.join(shotDir, '03-board-alias-no-badge.png'),
@@ -293,10 +292,10 @@ test.describe('未知模型显示名', () => {
     await expect(unkRank.getByTestId('unknown-model-badge')).toHaveCount(1)
     await expect(unkRank.locator('.h-full')).toHaveCSS('background-color', 'rgb(113, 113, 122)')
 
-    const legend = page.getByTestId('token-model-legend')
-    await expect(legend.getByTestId('unknown-model-badge')).toHaveCount(1)
-    await expect(legend).toContainText('未知模型')
-    await expect(legend).not.toContainText('未知/未分桶')
+    const pie = page.getByTestId('token-model-pie')
+    await expect(pie).toBeVisible()
+    await expect(pie.locator('canvas')).toBeVisible()
+    await expect(page.getByTestId('token-model-legend')).toHaveCount(0)
   })
 
   test('Run 按模型明细：显示别名且无未知角标，来源列仍为未知模型', async ({ page }) => {
