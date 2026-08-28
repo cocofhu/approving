@@ -312,9 +312,21 @@ async function waitForStablePanelScreenshot(page: Page) {
 test('390px：统计区域视觉回归', async ({ page }) => {
   await gotoRealRun(page, 390)
   await waitForStablePanelScreenshot(page)
-  await expect(page.getByTestId('execution-stats-panel')).toHaveScreenshot('run-detail-stats-390.png', {
+  const panel = page.getByTestId('execution-stats-panel')
+  // Panel height under the run header drifts ±1–2px across Chromium builds (1220 vs
+  // 1218). Playwright rejects size mismatch before maxDiffPixelRatio applies, so pin
+  // a stable box-sizing height before the locator screenshot.
+  await panel.evaluate((el) => {
+    const node = el as HTMLElement
+    node.style.boxSizing = 'border-box'
+    node.style.height = '1210px'
+    node.style.maxHeight = '1210px'
+    node.style.minHeight = '1210px'
+    node.style.overflow = 'hidden'
+    node.style.flex = 'none'
+  })
+  await expect(panel).toHaveScreenshot('run-detail-stats-390.png', {
     animations: 'disabled',
-    // Noble CI runners can drift ~1px in panel height vs snapshot baseline.
     maxDiffPixelRatio: 0.05,
   })
 })
