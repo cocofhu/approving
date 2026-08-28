@@ -62,6 +62,7 @@ type PieOption = {
 }
 
 type TrendOption = {
+  grid?: { left?: number; right?: number; top?: number; containLabel?: boolean }
   legend?: { top?: number; left?: number }
   tooltip?: {
     borderRadius?: number
@@ -69,12 +70,15 @@ type TrendOption = {
     appendToBody?: boolean
     confine?: boolean
     className?: string
+    triggerOn?: string
+    axisPointer?: { snap?: boolean }
+    position?: (...args: unknown[]) => unknown
     formatter?: (p: unknown) => string
     valueFormatter?: (v: number) => string
   }
   xAxis?: { axisLabel?: { color?: string; maxInterval?: number } }
   yAxis?: { splitLine?: { lineStyle?: { color?: string } }; axisLabel?: { color?: string } }
-  series?: { name?: string; lineStyle?: { type?: unknown } }[]
+  series?: { name?: string; lineStyle?: { type?: unknown }; clip?: boolean; symbolSize?: number }[]
 }
 
 function expectSquareThemeTooltip(tip: PieOption['tooltip'] | TrendOption['tooltip'], theme: 'dark' | 'light') {
@@ -155,7 +159,8 @@ describe('Token charts (g2.3/g2.4)', () => {
     })
     const option = (wrapper.vm as unknown as { chartOption: TrendOption }).chartOption
     expectSquareThemeTooltip(option.tooltip, 'dark')
-    expect(option.tooltip?.className).toMatch(/token-trend-tooltip/)
+    expect(option.tooltip?.className).toMatch(/token-stats-echarts-tooltip/)
+    expect(option.tooltip?.className).not.toMatch(/token-trend-tooltip/)
     expect(typeof option.tooltip?.formatter).toBe('function')
     const html = option.tooltip!.formatter!({ dataIndex: 0 })
     expect(html).toContain('07-24')
@@ -470,6 +475,13 @@ describe('TokenTrendChart tooltip / theme chrome (g2.3/g2.4)', () => {
     const html = darkOpt.tooltip!.formatter!({ dataIndex: 0 })
     expect(html).toMatch(/07-11\s*·\s*0/)
     expect(html).not.toMatch(/(^|\s)-11\s*·/)
+    expect(darkOpt.grid?.left).toBe(42)
+    expect(darkOpt.grid?.containLabel).toBe(false)
+    expect(darkOpt.tooltip?.triggerOn).toBe('mousemove')
+    expect(darkOpt.tooltip?.axisPointer?.snap).toBe(true)
+    expect(typeof darkOpt.tooltip?.position).toBe('function')
+    expect(darkOpt.series?.[1]?.symbolSize).toBe(7)
+    expect(darkOpt.series?.[0]?.clip).toBe(false)
     darkWrap.unmount()
 
     setTheme('light')
@@ -482,5 +494,34 @@ describe('TokenTrendChart tooltip / theme chrome (g2.3/g2.4)', () => {
     expect(lightOpt.yAxis?.splitLine?.lineStyle?.color).toBe('#eef0f3')
     expect(lightOpt.xAxis?.axisLabel?.color).toBe('#71717a')
     lightWrap.unmount()
+  })
+
+  it('DOM .token-trend-tooltip is v-if removed on leave so E2E count hits 0 (g2.2/g4.5)', async () => {
+    const trend = [
+      {
+        bucket: '2026-07-11',
+        total: 0,
+        workflowTotal: 0,
+        pmTotal: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    ]
+    const wrapper = mount(TokenTrendChart, {
+      props: { bucketWidth: 'day', trend },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+    const wrap = wrapper.find('[data-testid="token-trend-wrap"]')
+    await wrap.trigger('mousemove', { clientX: 48, clientY: 160 })
+    const shown = document.querySelector('.token-trend-tooltip')
+    expect(shown).toBeTruthy()
+    expect(shown?.textContent).toMatch(/07-11/)
+    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeNull()
+    await wrap.trigger('mouseleave')
+    expect(document.querySelector('.token-trend-tooltip')).toBeNull()
+    wrapper.unmount()
   })
 })

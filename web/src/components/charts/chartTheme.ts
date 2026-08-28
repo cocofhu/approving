@@ -26,6 +26,19 @@ export const STATS_CHART_GRID = {
   containLabel: true,
 }
 
+/**
+ * Board trend plot. Keep CHART_GRID left/right (containLabel:false) so the first
+ * category sits in the left-edge hover band (canvas x≈40–96, g4.5 / 07-11 · 0).
+ * top is raised for the shared top-left legend.
+ */
+export const TREND_CHART_GRID = {
+  left: CHART_GRID.left,
+  right: CHART_GRID.right,
+  top: 40,
+  bottom: CHART_GRID.bottom,
+  containLabel: false,
+}
+
 export const ECHARTS_TOOLTIP_CLASS = 'token-stats-echarts-tooltip'
 
 export type ChartTone = {

@@ -10,6 +10,8 @@ import {
   statsAxis,
   statsLegend,
   statsTooltip,
+  TREND_CHART_GRID,
+  CHART_GRID,
 } from './chartTheme'
 
 describe('chartTheme shared chrome (g1.1)', () => {
@@ -77,5 +79,12 @@ describe('chartTheme shared chrome (g1.1)', () => {
     expect(typeof option!.tooltip.formatter).toBe('function')
     expect(pieTooltipFormatter({ name: '输入', value: 396_400, percent: 99.9 })).toBe('输入: 396.4K (99.9%)')
     expect(axisTooltip().valueFormatter?.(2_080_982_825)).toBe('2.08B')
+  })
+
+  it('board trend grid keeps first category in the left-edge hover band (g2.2)', () => {
+    expect(TREND_CHART_GRID.left).toBe(CHART_GRID.left)
+    expect(TREND_CHART_GRID.left).toBe(42)
+    expect(TREND_CHART_GRID.containLabel).toBe(false)
+    expect(TREND_CHART_GRID.top).toBe(40)
   })
 })

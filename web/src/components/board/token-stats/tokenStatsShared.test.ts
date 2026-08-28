@@ -1,6 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest'
-import { formatBucketLabel, placeTrendTooltipAfter, TREND_TOOLTIP_GAP, TREND_TOOLTIP_PAD } from './tokenStatsShared'
+import {
+  formatBucketLabel,
+  placeTrendTooltipAfter,
+  echartsTooltipPosition,
+  trendCategoryIndexAtX,
+  TREND_TOOLTIP_GAP,
+  TREND_TOOLTIP_PAD,
+  TREND_PLOT_LEFT,
+} from './tokenStatsShared'
 
 describe('formatBucketLabel', () => {
   it('formats day buckets as MM-DD and week buckets as Wxx', () => {
@@ -63,5 +71,30 @@ describe('placeTrendTooltipAfter (Demo placeAfter, g2.1–g2.4)', () => {
     expect(pos.top + tallH).toBeLessThanOrEqual(220 - TREND_TOOLTIP_PAD)
     expect(pos.left).toBeGreaterThanOrEqual(TREND_TOOLTIP_PAD)
     expect(pos.left + 168).toBeLessThanOrEqual(vw - TREND_TOOLTIP_PAD)
+  })
+})
+
+describe('trendCategoryIndexAtX left-edge 0-value (g2.2 / g4.5)', () => {
+  it('maps E2E hover band x=40–48 to index 0 (07-11) on typical canvas widths', () => {
+    expect(TREND_PLOT_LEFT).toBe(42)
+    for (const width of [390, 450, 900]) {
+      expect(trendCategoryIndexAtX(40, width, 30)).toBe(0)
+      expect(trendCategoryIndexAtX(48, width, 30)).toBe(0)
+    }
+    expect(trendCategoryIndexAtX(0, 450, 30)).toBe(0)
+    expect(trendCategoryIndexAtX(450, 450, 30)).toBe(29)
+  })
+})
+
+describe('echartsTooltipPosition (g2.2)', () => {
+  it('keeps left-edge 07-11 tooltip inside the viewport after container offset', () => {
+    const container = { left: 200, top: 120 }
+    const [x, y] = echartsTooltipPosition([48, 172], [168, 72], container)
+    const viewLeft = container.left + x
+    const viewTop = container.top + y
+    expect(viewLeft).toBeGreaterThanOrEqual(TREND_TOOLTIP_PAD)
+    expect(viewTop).toBeGreaterThanOrEqual(TREND_TOOLTIP_PAD)
+    expect(viewLeft + 168).toBeLessThanOrEqual((typeof window !== 'undefined' ? window.innerWidth : 1024) + 1)
+    expect(viewTop + 72).toBeLessThanOrEqual((typeof window !== 'undefined' ? window.innerHeight : 768) + 1)
   })
 })
