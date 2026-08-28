@@ -12,6 +12,20 @@ vi.mock('@/lib/api/api', () => ({
 import { api } from '@/lib/api/api'
 import { usePendingGates } from '@/lib/inbox/usePendingGates'
 
+function clarify(id: string, state?: 'starting' | 'replying'): InboxItem {
+  return {
+    type: 'clarify',
+    runId: `run-${id}`,
+    nodeId: `node-${id}`,
+    workflowName: 'Test',
+    label: `Clarify ${id}`,
+    done: false,
+    requestedAt: '2026-07-04T00:00:00Z',
+    updatedAt: '2026-07-04T00:00:00Z',
+    ...(state ? { state } : {}),
+  }
+}
+
 function gate(id: string): InboxItem {
   return {
     type: 'gate',
@@ -272,5 +286,38 @@ describe('usePendingGates', () => {
     await Promise.all([forceFlight, peekFlight])
     expect(pg.displayedItems.value).toHaveLength(1)
     expect(pg.totalCount.value).toBe(1)
+  })
+
+  it('peek that only flips state=replying updates cards and does not set hasPendingUpdate (plan g2.1)', async () => {
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([clarify('1'), clarify('2')], 2))
+    const pg = usePendingGates()
+    await pg.refresh({ mode: 'force' })
+    expect(pg.displayedItems.value.map((it) => ('state' in it ? it.state : undefined))).toEqual([
+      undefined,
+      undefined,
+    ])
+
+    vi.mocked(api.listGates).mockResolvedValueOnce(
+      paged([clarify('1', 'replying'), clarify('2')], 2),
+    )
+    await pg.peek({ source: 'sidebar-poll' })
+
+    expect(pg.hasPendingUpdate.value).toBe(false)
+    expect(pg.pendingMeta.value).toBeNull()
+    expect(pg.displayedItems.value).toHaveLength(2)
+    expect(pg.displayedItems.value[0]).toMatchObject({ nodeId: 'node-1', state: 'replying' })
+    expect(pg.displayedItems.value[1]).toMatchObject({ nodeId: 'node-2' })
+    expect('state' in pg.displayedItems.value[1] ? pg.displayedItems.value[1].state : undefined).toBeUndefined()
+  })
+
+  it('patchItemReplying updates matching cards without changing membership', async () => {
+    vi.mocked(api.listGates).mockResolvedValueOnce(paged([clarify('1')], 1))
+    const pg = usePendingGates()
+    await pg.refresh({ mode: 'force' })
+    pg.patchItemReplying('run-1:node-1', true)
+    expect(pg.displayedItems.value[0]).toMatchObject({ state: 'replying' })
+    expect(pg.hasPendingUpdate.value).toBe(false)
+    pg.patchItemReplying('run-1:node-1', false)
+    expect('state' in pg.displayedItems.value[0] ? pg.displayedItems.value[0].state : undefined).toBeUndefined()
   })
 })

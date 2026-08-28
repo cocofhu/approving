@@ -621,6 +621,12 @@ func (h *Host) callWorkflowRead(projectID, name string, args map[string]any) (an
 		}
 		limit := platformmcp.IntArg(args, "limit", 50)
 		items, total := h.runs.PendingInboxItems("", projectID, nil, 0, limit)
+		if h.eng != nil {
+			services.AttachInboxReplyingState(items, func(runID, nodeID string) bool {
+				waiting, thinking := h.eng.ReviewSessionState(runID, nodeID)
+				return thinking || waiting > 0
+			})
+		}
 		return map[string]any{"items": items, "count": len(items), "total": total}, false
 	case "pm_get_artifact":
 		if h.arts == nil {

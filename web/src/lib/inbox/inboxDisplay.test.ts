@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyInboxReplyingState,
   inboxBadgeLabelKey,
   inboxBadgeTone,
   inboxRunLabel,
   inboxSecondaryLine,
+  isInboxProgressItem,
+  isReplyingInboxItem,
   isStartingInboxItem,
+  mergeInboxReplyingFromRemote,
 } from './inboxDisplay'
 
 describe('inboxRunLabel', () => {
@@ -62,6 +66,29 @@ describe('inboxBadgeLabelKey', () => {
       'pages.gatesInbox.startingType',
     )
   })
+
+  it('maps parked sessionBusy to replyingType (plan g1.2 / g2.2)', () => {
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'clarify', state: 'replying' })).toBe(
+      'pages.gatesInbox.replyingType',
+    )
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'review', state: 'replying' })).toBe(
+      'pages.gatesInbox.replyingType',
+    )
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'app_preview', state: 'replying' })).toBe(
+      'pages.gatesInbox.replyingType',
+    )
+  })
+
+  it('keeps starting above replying above type badges', () => {
+    expect(
+      inboxBadgeLabelKey({ type: 'clarify', kind: 'review', state: 'starting' }),
+    ).toBe('pages.gatesInbox.startingType')
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'review', state: 'replying' })).toBe(
+      'pages.gatesInbox.replyingType',
+    )
+    expect(inboxBadgeLabelKey({ type: 'clarify', kind: 'review' })).toBe('pages.gatesInbox.reviewType')
+    expect(inboxBadgeLabelKey({ type: 'gate', state: 'replying' })).toBe('pages.gatesInbox.gateType')
+  })
 })
 
 describe('isStartingInboxItem', () => {
@@ -73,11 +100,52 @@ describe('isStartingInboxItem', () => {
   })
 })
 
+describe('isReplyingInboxItem / isInboxProgressItem', () => {
+  it('is true for parked clarify state=replying and never for gates or starting', () => {
+    expect(isReplyingInboxItem({ type: 'clarify', state: 'replying' })).toBe(true)
+    expect(isReplyingInboxItem({ type: 'clarify', state: 'starting' })).toBe(false)
+    expect(isReplyingInboxItem({ type: 'clarify' })).toBe(false)
+    expect(isReplyingInboxItem({ type: 'gate', state: 'replying' })).toBe(false)
+    expect(isInboxProgressItem({ type: 'clarify', state: 'replying' })).toBe(true)
+    expect(isInboxProgressItem({ type: 'clarify', state: 'starting' })).toBe(true)
+    expect(isInboxProgressItem({ type: 'clarify' })).toBe(false)
+  })
+})
+
+describe('applyInboxReplyingState / mergeInboxReplyingFromRemote', () => {
+  it('sets and clears replying without touching starting', () => {
+    const idle = { type: 'clarify' as const, runId: 'r', nodeId: 'n', state: undefined }
+    expect(applyInboxReplyingState(idle, true).state).toBe('replying')
+    expect(applyInboxReplyingState({ ...idle, state: 'replying' }, false).state).toBeUndefined()
+    expect(applyInboxReplyingState({ ...idle, state: 'starting' }, true).state).toBe('starting')
+  })
+
+  it('merges remote replying onto matching keys only (plan g2.1)', () => {
+    const displayed = [
+      { type: 'clarify' as const, runId: 'run-a', nodeId: 'n-a' },
+      { type: 'clarify' as const, runId: 'run-b', nodeId: 'n-b', state: 'replying' as const },
+      { type: 'clarify' as const, runId: 'run-c', nodeId: 'n-c', state: 'starting' as const },
+    ]
+    const remote = [
+      { type: 'clarify' as const, runId: 'run-a', nodeId: 'n-a', state: 'replying' as const },
+      { type: 'clarify' as const, runId: 'run-b', nodeId: 'n-b' },
+      { type: 'clarify' as const, runId: 'run-c', nodeId: 'n-c', state: 'starting' as const },
+    ]
+    const merged = mergeInboxReplyingFromRemote(displayed, remote)
+    expect(merged[0].state).toBe('replying')
+    expect(merged[1].state).toBeUndefined()
+    expect(merged[2].state).toBe('starting')
+    expect(merged).toHaveLength(3)
+  })
+})
+
 describe('inboxBadgeTone', () => {
   it('splits gate / preview / review / clarify for Demo badge colors', () => {
     expect(inboxBadgeTone({ type: 'gate' })).toBe('gate')
     expect(inboxBadgeTone({ type: 'clarify', kind: 'app_preview' })).toBe('preview')
     expect(inboxBadgeTone({ type: 'clarify', kind: 'review' })).toBe('review')
     expect(inboxBadgeTone({ type: 'clarify', kind: 'clarify' })).toBe('clarify')
+    expect(inboxBadgeTone({ type: 'clarify', kind: 'clarify', state: 'replying' })).toBe('replying')
+    expect(inboxBadgeTone({ type: 'clarify', kind: 'clarify', state: 'starting' })).toBe('clarify')
   })
 })

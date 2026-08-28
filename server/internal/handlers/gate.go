@@ -7,6 +7,8 @@ import (
 	"github.com/cocofhu/approving/internal/engine"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/approving/internal/services"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -300,6 +302,7 @@ func (h *Handlers) ListGates(c *gin.Context) {
 	}
 	if !pg.Active {
 		items, _ := h.Runs.PendingInboxItems(wf, projectID, tags, 0, 0)
+		h.attachInboxReplying(items)
 		if h.GateShare != nil {
 			h.GateShare.AttachInboxStatus(items)
 		}
@@ -308,8 +311,21 @@ func (h *Handlers) ListGates(c *gin.Context) {
 	}
 	offset := (pg.Page - 1) * pg.PageSize
 	items, total := h.Runs.PendingInboxItems(wf, projectID, tags, offset, pg.PageSize)
+	h.attachInboxReplying(items)
 	if h.GateShare != nil {
 		h.GateShare.AttachInboxStatus(items)
 	}
 	c.JSON(http.StatusOK, paginatedResponse(items, total, pg.Page, pg.PageSize))
+}
+
+// attachInboxReplying derives ClarifyInboxItem.state=replying from the live
+// review session (busy or waiting>0), matching sessionBusy. starting wins.
+func (h *Handlers) attachInboxReplying(items []any) {
+	if h.Eng == nil {
+		return
+	}
+	services.AttachInboxReplyingState(items, func(runID, nodeID string) bool {
+		waiting, thinking := h.Eng.ReviewSessionState(runID, nodeID)
+		return thinking || waiting > 0
+	})
 }

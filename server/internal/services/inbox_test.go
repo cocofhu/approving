@@ -598,6 +598,78 @@ func TestReactAutoEnabled(t *testing.T) {
 	}
 }
 
+func TestAttachInboxReplyingState(t *testing.T) {
+	busy := func(runID, nodeID string) bool {
+		return runID == "run-busy" && nodeID == "react"
+	}
+	items := []any{
+		ClarifyInboxItem{Type: "clarify", Kind: "clarify", RunID: "run-busy", NodeID: "react"},
+		ClarifyInboxItem{Type: "clarify", Kind: "review", RunID: "run-idle", NodeID: "research"},
+		ClarifyInboxItem{Type: "clarify", Kind: "clarify", State: "starting", RunID: "run-busy", NodeID: "react"},
+		ClarifyInboxItem{Type: "clarify", Kind: "app_preview", State: "replying", RunID: "run-idle", NodeID: "preview"},
+		GateInboxItem{Type: "gate", RunID: "run-busy", NodeID: "hg1", Title: "门禁"},
+	}
+	AttachInboxReplyingState(items, busy)
+
+	if got := items[0].(ClarifyInboxItem); got.State != "replying" {
+		t.Fatalf("busy parked item state=%q, want replying", got.State)
+	}
+	if got := items[1].(ClarifyInboxItem); got.State != "" {
+		t.Fatalf("idle parked item state=%q, want empty", got.State)
+	}
+	if got := items[2].(ClarifyInboxItem); got.State != "starting" {
+		t.Fatalf("starting wins over busy: state=%q", got.State)
+	}
+	if got := items[3].(ClarifyInboxItem); got.State != "" {
+		t.Fatalf("idle must clear stale replying, got %q", got.State)
+	}
+	if _, ok := items[4].(GateInboxItem); !ok {
+		t.Fatalf("gate must stay a gate, got %T", items[4])
+	}
+	if len(items) != 5 {
+		t.Fatalf("busy must not unlist items, len=%d", len(items))
+	}
+
+	AttachInboxReplyingState(items, nil)
+	if got := items[0].(ClarifyInboxItem); got.State != "replying" {
+		t.Fatalf("nil lookup is a no-op, state=%q", got.State)
+	}
+}
+
+func TestPendingInboxItemsStayListedWhenReplying(t *testing.T) {
+	db := newTestDB(t)
+	s := NewRunService(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	db.Create(&models.Run{
+		ID: "run-reply", WorkflowID: "wf-r", WorkflowName: "WF",
+		Title: "回复中仍在列表", Status: "waiting_human", StartedAt: now, Graph: reactGraph(""),
+	})
+	db.Create(&models.ReactConversation{
+		RunID: "run-reply", NodeID: "react", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "agent", Text: "q", At: now.Format(time.RFC3339)}},
+	})
+	db.Create(&models.StateRun{RunID: "run-reply", NodeID: "react", Iteration: 1, Status: "waiting_human"})
+
+	items := s.AllPendingInboxItems()
+	if len(items) != 1 {
+		t.Fatalf("parked clarify must stay listed, got %d", len(items))
+	}
+	c, ok := items[0].(ClarifyInboxItem)
+	if !ok || c.State != "" {
+		t.Fatalf("list DTO idle state empty before attach: %+v %v", items[0], ok)
+	}
+	AttachInboxReplyingState(items, func(runID, nodeID string) bool {
+		return runID == "run-reply" && nodeID == "react"
+	})
+	got := items[0].(ClarifyInboxItem)
+	if got.State != "replying" {
+		t.Fatalf("busy attach state=%q, want replying", got.State)
+	}
+	if got.RunID != "run-reply" {
+		t.Fatalf("item unlisted or replaced: %+v", got)
+	}
+}
+
 func TestLatestMessageAt(t *testing.T) {
 	fallback := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	later := fallback.Add(time.Hour)

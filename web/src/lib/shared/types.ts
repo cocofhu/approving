@@ -792,10 +792,12 @@ export interface ClarifyInboxItem {
   kind?: 'clarify' | 'review' | 'app_preview'
   /**
    * `starting` = the node's sandbox is still booting: no transcript yet and no
-   * reply accepted, so the card renders as a loading row. Absent = parked at
-   * waiting_human and fully actionable.
+   * reply accepted, so the card renders as a loading row.
+   * `replying` = parked at waiting_human and the review/clarify session is busy
+   * (sessionBusy / queue waiting>0). Absent = parked and idle.
+   * starting takes priority over replying.
    */
-  state?: 'starting'
+  state?: 'starting' | 'replying'
   runId: string
   nodeId: string
   iteration?: number

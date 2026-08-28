@@ -4,6 +4,8 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enCommon from '@/locales/en/common.json'
+import enPages from '@/locales/en/pages.json'
 import InboxPendingCard from './InboxPendingCard.vue'
 import type { ClarifyInboxItem, GateInboxItem } from '@/lib/shared/types'
 
@@ -221,6 +223,61 @@ describe('InboxPendingCard share entry', () => {
     expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(false)
     expect(w.findComponent({ name: 'Icon' }).props('name')).toBe('spinner')
     expect(w.findComponent({ name: 'Icon' }).classes()).toContain('animate-spin')
+  })
+
+  it('marks a busy parked session with the replying badge, spinner, and share row (plan g1.2)', () => {
+    const w = mount(InboxPendingCard, {
+      props: {
+        item: clarify({
+          state: 'replying',
+          kind: 'clarify',
+          label: '把登录做清楚',
+          shareLink: { state: 'none', canCreate: true },
+        }),
+      },
+      global: { plugins: [i18n] },
+    })
+    const card = w.get('[data-testid="inbox-item-card"]')
+    expect(card.attributes('data-replying')).toBe('true')
+    expect(card.attributes('data-starting')).toBeUndefined()
+    expect(card.text()).toContain('正在回复中')
+    expect(card.text()).not.toContain('待澄清')
+    expect(card.text()).not.toContain('启动中')
+    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(true)
+    expect(w.get('[data-testid="gate-share-copy-btn"]').text()).toContain('复制临时链接')
+    expect(w.findComponent({ name: 'Icon' }).props('name')).toBe('spinner')
+    expect(w.findComponent({ name: 'Icon' }).classes()).toContain('animate-spin')
+    expect(w.find('.text-n-artifact').exists()).toBe(true)
+  })
+
+  it('renders English Replying for state=replying', () => {
+    const en = createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: { en: { ...enCommon, ...enPages } },
+    })
+    const w = mount(InboxPendingCard, {
+      props: { item: clarify({ state: 'replying', kind: 'clarify' }) },
+      global: { plugins: [en] },
+    })
+    expect(w.get('[data-testid="inbox-item-card"]').text()).toContain('Replying')
+    expect(w.get('[data-testid="inbox-item-card"]').text()).not.toContain('Needs clarify')
+  })
+
+  it('keeps starting above replying and still hides the share row', () => {
+    const w = mount(InboxPendingCard, {
+      props: {
+        item: clarify({
+          state: 'starting',
+          kind: 'clarify',
+          shareLink: { state: 'none', canCreate: true },
+        }),
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(w.get('[data-testid="inbox-item-card"]').text()).toContain('启动中')
+    expect(w.get('[data-testid="inbox-item-card"]').text()).not.toContain('正在回复中')
+    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(false)
   })
 
   it('shows remaining time for active links', () => {

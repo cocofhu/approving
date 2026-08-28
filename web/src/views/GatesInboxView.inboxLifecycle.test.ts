@@ -1765,4 +1765,41 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     ])
     wrapper.unmount()
   })
+
+  it('queue_state busy patches the visible card to 正在回复中 without the update banner (plan g2.1)', async () => {
+    const a = clarifyItem('a')
+    mocks.listGates.mockResolvedValue(paged([a]))
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    // Mount peek may flag membership vs the empty beforeEach snapshot. Sync first
+    // so the busy patch itself is the only change under test.
+    usePendingGates().applyPending()
+    await nextTick()
+
+    const card = wrapper.get('[data-testid="inbox-item-card"]')
+    expect(card.text()).toContain('待澄清')
+    expect(card.attributes('data-replying')).toBeUndefined()
+    expect(usePendingGates().hasPendingUpdate.value).toBe(false)
+
+    const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-a'))
+    expect(ws).toBeTruthy()
+    ws!.emit('review', { event: 'turn_begin', nodeId: 'clarify-a' })
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="inbox-item-card"]').attributes('data-replying')).toBe('true')
+    expect(wrapper.get('[data-testid="inbox-item-card"]').text()).toContain('正在回复中')
+    expect(wrapper.get('[data-testid="inbox-item-card"]').text()).not.toContain('待澄清')
+    expect(usePendingGates().hasPendingUpdate.value).toBe(false)
+
+    ws!.emit('review', { event: 'queue_state', nodeId: 'clarify-a', busy: false, waiting: 0 })
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.get('[data-testid="inbox-item-card"]').attributes('data-replying')).toBeUndefined()
+    expect(wrapper.get('[data-testid="inbox-item-card"]').text()).toContain('待澄清')
+    expect(usePendingGates().hasPendingUpdate.value).toBe(false)
+    wrapper.unmount()
+  })
 })

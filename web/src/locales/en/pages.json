@@ -1244,6 +1244,7 @@
       "reviewType": "Needs review",
       "previewType": "App Preview",
       "startingType": "Starting",
+      "replyingType": "Replying",
       "startFailedTitle": "Sandbox failed to start",
       "startFailedDesc": "This approval's sandbox never came up and the run stopped. Open the run detail to see why.",
       "startFailedDismiss": "Dismiss",

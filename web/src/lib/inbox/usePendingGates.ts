@@ -4,6 +4,7 @@ import { i18n } from '@/lib/shared/i18n'
 import { beginRefresh, endRefresh } from '@/lib/shared/refreshChrome'
 import { createTimeoutController, isAbortError } from '@/lib/shared/loadingRequest'
 import { DEFAULT_LOADING_TIMEOUT_MS } from '@/lib/shared/loadingTypes'
+import { applyInboxReplyingState, mergeInboxReplyingFromRemote } from '@/lib/inbox/inboxDisplay'
 import type { InboxItem } from '@/lib/shared/types'
 
 export type RefreshSource =
@@ -92,10 +93,29 @@ function setPending(remote: InboxItem[], total: number) {
   if (meta.added > 0 || meta.removed > 0) {
     hasPendingUpdate.value = true
     pendingMeta.value = meta
-  } else {
-    hasPendingUpdate.value = false
-    pendingMeta.value = null
+    return
   }
+  // Same membership: merge badge-level state (replying) in place. Do not treat
+  // session busy as an add/remove — that would hang the 待刷新 banner.
+  hasPendingUpdate.value = false
+  pendingMeta.value = null
+  displayedItems.value = mergeInboxReplyingFromRemote(displayedItems.value, remote, itemKey)
+}
+
+/** Patch one visible/sidebar card's sessionBusy-derived state without peek diffs. */
+function patchItemReplying(key: string, busy: boolean): void {
+  const apply = (arr: InboxItem[]) => {
+    let changed = false
+    const next = arr.map((it) => {
+      if (itemKey(it) !== key || it.type !== 'clarify') return it
+      const patched = applyInboxReplyingState(it, busy)
+      if (patched !== it) changed = true
+      return patched
+    })
+    return changed ? next : arr
+  }
+  displayedItems.value = apply(displayedItems.value)
+  remoteItems.value = apply(remoteItems.value)
 }
 
 function applyRemoteToDisplayed(remote: InboxItem[], total: number) {
@@ -271,6 +291,7 @@ export function usePendingGates() {
     applyPending,
     removeItemLocally,
     restoreItemLocally,
+    patchItemReplying,
     itemKey,
   }
 }
