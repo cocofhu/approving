@@ -318,7 +318,8 @@ func (c *acpProvider) templateVars(req NodeReq) map[string]string {
 // present. Existing base keys (APPROVING_*, vars.*, …) win. Env values are
 // substituted against base only so ${vars.x} / ${APPROVING_*} still resolve.
 func MergeEnvIntoTemplateVars(base, env map[string]string) map[string]string {
-	out := make(map[string]string, len(base)+len(env))
+	// Preallocate from one side only — avoid len(base)+len(env) (CodeQL go/allocation-size-overflow).
+	out := make(map[string]string, len(base))
 	for k, v := range base {
 		out[k] = v
 	}
