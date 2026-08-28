@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { registerECharts } from '@/components/charts/echartsSetup'
-import { BOARD_CHART_TOOLTIP } from '@/components/charts/chartTheme'
+import { statsTooltip } from '@/components/charts/chartTheme'
 import type { TokenStatsModel } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount, shouldShowUnknownVisual } from '@/lib/run/tokenUsage'
 import UnknownModelBadge from '@/components/ui/UnknownModelBadge.vue'
@@ -30,11 +30,10 @@ function rowChartOption(m: TokenStatsModel, i: number) {
     grid: { left: 0, right: 0, top: 0, bottom: 0 },
     xAxis: { type: 'value', show: false, max: maxTotal.value },
     yAxis: { type: 'category', data: [''], show: false },
-    tooltip: {
+    tooltip: statsTooltip({
       trigger: 'item',
-      ...BOARD_CHART_TOOLTIP,
-      formatter: () => fmtTokenCount(m.total),
-    },
+      formatter: () => fmtCompactTokenCount(m.total),
+    }),
     series: [
       {
         type: 'bar',

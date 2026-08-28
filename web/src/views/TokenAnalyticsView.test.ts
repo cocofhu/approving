@@ -173,6 +173,8 @@ describe('TokenAnalyticsView', () => {
     expect(option.series?.[0]?.center?.[0]).toBe('38%')
     expect(typeof option.tooltip?.formatter).toBe('function')
     expect(option.tooltip?.appendToBody).toBe(true)
+    expect((option.tooltip as { borderRadius?: number })?.borderRadius).toBe(0)
+    expect(JSON.stringify(option.tooltip)).not.toContain('#1a1d23')
     wrapper.unmount()
   })
 

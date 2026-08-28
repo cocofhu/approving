@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nextTick } from 'vue'
+import { describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import TokenTrendChart from './TokenTrendChart.vue'
 import TokenDonutChart from './TokenDonutChart.vue'
 import TokenWorkflowRank from './TokenWorkflowRank.vue'
 import { TOKEN_SOURCE_COLORS } from './tokenStatsShared'
+import { setTheme } from '@/lib/shared/theme'
+import { pieTooltipFormatter } from '@/components/charts/chartTheme'
 
 vi.mock('vue-echarts', () => ({
   default: {
@@ -48,6 +49,42 @@ function sampleTrend(n: number) {
   })
 }
 
+type PieOption = {
+  legend?: { orient?: string; right?: number; bottom?: number }
+  tooltip?: {
+    borderRadius?: number
+    backgroundColor?: string
+    appendToBody?: boolean
+    confine?: boolean
+    formatter?: (p: unknown) => string
+  }
+  series?: { type?: string; label?: { show?: boolean; formatter?: string }; center?: string[] }[]
+}
+
+type TrendOption = {
+  legend?: { top?: number; left?: number }
+  tooltip?: {
+    borderRadius?: number
+    backgroundColor?: string
+    appendToBody?: boolean
+    confine?: boolean
+    className?: string
+    formatter?: (p: unknown) => string
+    valueFormatter?: (v: number) => string
+  }
+  xAxis?: { axisLabel?: { color?: string; maxInterval?: number } }
+  yAxis?: { splitLine?: { lineStyle?: { color?: string } }; axisLabel?: { color?: string } }
+  series?: { name?: string; lineStyle?: { type?: unknown } }[]
+}
+
+function expectSquareThemeTooltip(tip: PieOption['tooltip'] | TrendOption['tooltip'], theme: 'dark' | 'light') {
+  expect(tip?.borderRadius).toBe(0)
+  expect(tip?.appendToBody).toBe(true)
+  expect(tip?.confine).toBe(false)
+  expect(JSON.stringify(tip)).not.toContain('#1a1d23')
+  expect(tip?.backgroundColor).toBe(theme === 'dark' ? '#27272a' : '#ffffff')
+}
+
 describe('Token charts (g2.3/g2.4)', () => {
   it('renders ECharts trend from buckets including a zero day (g2.1)', () => {
     const wrapper = mount(TokenTrendChart, {
@@ -80,24 +117,24 @@ describe('Token charts (g2.3/g2.4)', () => {
     })
     expect(wrapper.find('[data-testid="token-trend-wrap"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-trend-chart"]').exists()).toBe(true)
-    const legend = wrapper.find('[data-testid="token-trend-legend"]')
-    expect(legend.find('[data-kind="workflow"]').text()).toContain('工作流')
-    expect(legend.find('[data-kind="pm"]').text()).toContain('项目管理')
-    expect(legend.find('[data-kind="workflow"]').text()).not.toMatch(/^\s*workflow\s*$/i)
-    expect(legend.find('[data-kind="pm"]').text()).not.toMatch(/^\s*pm\s*$/i)
-    // ECharts renders canvas inside the chart host
+    expect(wrapper.find('[data-testid="token-trend-legend"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="token-trend-chart"] canvas').exists()).toBe(true)
     expect(wrapper.find('[data-testid="token-trend-svg"]').exists()).toBe(false)
     expect(wrapper.html()).not.toMatch(/preserveAspectRatio\s*=\s*["']none["']/)
     const exposed = wrapper.vm as unknown as {
       chartData: { datasets: { label: string; data: number[] }[] }
+      chartOption: TrendOption
     }
     expect(exposed.chartData.datasets).toHaveLength(2)
     expect(exposed.chartData.datasets.map((d) => d.label)).toEqual(['workflow', 'pm'])
+    expect(exposed.chartOption.legend?.top).toBe(0)
+    expect(exposed.chartOption.legend?.left).toBe(0)
+    expect(exposed.chartOption.series?.map((s) => s.name)).toEqual(['工作流', '项目管理'])
     wrapper.unmount()
   })
 
-  it('tooltip source names use i18n labels with data-tip-row (g2.2/g3.1)', async () => {
+  it('trend tooltip is ECharts axis tooltip with i18n compact values (g2.2)', () => {
+    setTheme('dark')
     const wrapper = mount(TokenTrendChart, {
       props: {
         bucketWidth: 'day',
@@ -115,37 +152,19 @@ describe('Token charts (g2.3/g2.4)', () => {
         ],
       },
       global: { plugins: [i18n()] },
-      attachTo: document.body,
     })
-    const wrapEl = wrapper.find('[data-testid="token-trend-wrap"]').element as HTMLElement
-    const exposed = wrapper.vm as unknown as {
-      chartOptions: {
-        plugins?: { tooltip?: { external?: (ctx: unknown) => void } }
-      }
-    }
-    const external = exposed.chartOptions.plugins?.tooltip?.external
-    expect(typeof external).toBe('function')
-    const canvas = document.createElement('canvas')
-    wrapEl.appendChild(canvas)
-    Object.defineProperty(canvas, 'getBoundingClientRect', {
-      value: () => ({ left: 0, top: 0, width: 200, height: 200, right: 200, bottom: 200 }),
-    })
-    Object.defineProperty(wrapEl, 'getBoundingClientRect', {
-      value: () => ({ left: 0, top: 0, width: 400, height: 200, right: 400, bottom: 200 }),
-    })
-    external?.({
-      chart: { canvas },
-      tooltip: { opacity: 1, dataPoints: [{ dataIndex: 0 }], caretX: 40, caretY: 40 },
-    })
-    await wrapper.vm.$nextTick()
-    const tip = document.querySelector('[data-testid="token-trend-tooltip"]')
-    expect(tip).toBeTruthy()
-    const workflowRow = tip?.querySelector('[data-tip-row="workflow"]')
-    const pmRow = tip?.querySelector('[data-tip-row="pm"]')
-    expect(workflowRow?.textContent).toContain('工作流')
-    expect(pmRow?.textContent).toContain('项目管理')
-    expect(workflowRow?.textContent).not.toMatch(/\bworkflow\b/)
-    expect(pmRow?.textContent).not.toMatch(/(?<![A-Za-z0-9_-])pm(?![A-Za-z0-9_-])/i)
+    const option = (wrapper.vm as unknown as { chartOption: TrendOption }).chartOption
+    expectSquareThemeTooltip(option.tooltip, 'dark')
+    expect(option.tooltip?.className).toMatch(/token-trend-tooltip/)
+    expect(typeof option.tooltip?.formatter).toBe('function')
+    const html = option.tooltip!.formatter!({ dataIndex: 0 })
+    expect(html).toContain('07-24')
+    expect(html).toContain('工作流')
+    expect(html).toContain('项目管理')
+    expect(html).toMatch(/data-tip-row="workflow"/)
+    expect(html).toMatch(/data-tip-row="pm"/)
+    expect(wrapper.find('[data-testid="token-trend-tooltip"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toMatch(/rounded-lg/)
     wrapper.unmount()
   })
 
@@ -163,7 +182,6 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect((wrap.element as HTMLElement).style.height).toBe('200px')
     expect(wrapper.find('svg[preserveAspectRatio="none"]').exists()).toBe(false)
     expect(wrapper.html()).not.toContain('preserveAspectRatio="none"')
-    // Wide container must still host ECharts canvas
     ;(wrap.element as HTMLElement).style.width = '1280px'
     expect(wrapper.find('[data-testid="token-trend-chart"] canvas').exists()).toBe(true)
     wrapper.unmount()
@@ -183,7 +201,7 @@ describe('Token charts (g2.3/g2.4)', () => {
     wrapper.unmount()
   })
 
-  it('maps 30-day labels with tick thinning options (maxTicksLimit≈8) (g2.2)', () => {
+  it('maps 30-day labels with tick thinning (maxInterval≈8) (g2.2)', () => {
     const wrapper = mount(TokenTrendChart, {
       props: {
         bucketWidth: 'day',
@@ -192,25 +210,17 @@ describe('Token charts (g2.3/g2.4)', () => {
       global: { plugins: [i18n()] },
     })
     const exposed = wrapper.vm as unknown as {
-      chartOptions: {
-        maintainAspectRatio?: boolean
-        scales?: { x?: { ticks?: { maxTicksLimit?: number; autoSkip?: boolean } } }
-        plugins?: { tooltip?: { enabled?: boolean; external?: unknown } }
-      }
+      chartOption: TrendOption
       chartData: { labels: string[]; datasets: { data: number[] }[] }
     }
-    const opts = exposed.chartOptions
-    expect(opts.maintainAspectRatio).toBe(false)
-    expect(opts.scales?.x?.ticks?.maxTicksLimit).toBe(8)
-    expect(opts.scales?.x?.ticks?.autoSkip).toBe(true)
-    expect(opts.plugins?.tooltip?.enabled).toBe(false)
-    expect(typeof opts.plugins?.tooltip?.external).toBe('function')
+    expect(exposed.chartOption.xAxis?.axisLabel?.maxInterval).toBe(Math.ceil(30 / 8))
+    expect(exposed.chartOption.tooltip?.appendToBody).toBe(true)
     expect(exposed.chartData.labels).toHaveLength(30)
     expect(exposed.chartData.datasets[0]?.data).toHaveLength(30)
     wrapper.unmount()
   })
 
-  it('renders donut ring with legend and center total', () => {
+  it('renders donut/pie with right legend, visible labels, no HTML legend or center total (g2.1)', () => {
     const wrapper = mount(TokenDonutChart, {
       props: {
         composition: {
@@ -224,23 +234,28 @@ describe('Token charts (g2.3/g2.4)', () => {
       global: { plugins: [i18n()] },
     })
     expect(wrapper.find('[data-testid="token-donut-chart"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('输入')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('输出')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('缓存读')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('缓存写')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).not.toMatch(/\binput\b/)
-    // g3.3: share math unchanged for 70/55/35/20 over total 180
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('38.9%')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('30.6%')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('19.4%')
-    expect(wrapper.find('[data-testid="token-donut-legend"]').text()).toContain('11.1%')
-    expect(wrapper.text()).toContain('总量')
-    expect(wrapper.find('[data-testid="token-donut-chart"]').text()).toContain('180')
+    expect(wrapper.find('[data-testid="token-donut-legend"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('总量')
     expect(wrapper.find('[data-testid="token-donut-chart"]').attributes('aria-label')).toBe('用量构成')
+    const option = (wrapper.vm as unknown as { chartOption: PieOption }).chartOption
+    expect(option.legend?.orient).toBe('vertical')
+    expect(option.legend?.right).toBe(0)
+    expect(option.legend?.bottom).toBeUndefined()
+    expect(option.series?.[0]?.label?.show).toBe(true)
+    expect(option.series?.[0]?.label?.formatter).toBe('{b} {d}%')
+    expect(option.series?.[0]?.center?.[0]).toBe('38%')
+    const names = (
+      option.series?.[0] as unknown as { data: { name: string; value: number }[] }
+    ).data.map((d) => d.name)
+    expect(names).toEqual(['输入', '输出', '缓存读', '缓存写'])
+    expect(names.join(' ')).not.toMatch(/\binput\b/)
+    const parts = (wrapper.vm as unknown as { parts: { pct: number }[] }).parts
+    expect(parts.map((p) => p.pct)).toEqual([38.9, 30.6, 19.4, 11.1])
     wrapper.unmount()
   })
 
-  it('donut tooltip uses the same part* labels as the legend (g2.2)', async () => {
+  it('donut tooltip uses compact i18n formatter and square theme chrome (g2.2)', () => {
+    setTheme('light')
     const wrapper = mount(TokenDonutChart, {
       props: {
         composition: {
@@ -253,18 +268,18 @@ describe('Token charts (g2.3/g2.4)', () => {
       },
       global: { plugins: [i18n()] },
     })
-    const legend = wrapper.find('[data-testid="token-donut-legend"]')
-    expect(legend.find('li').exists()).toBe(true)
-    await legend.find('li').trigger('click', { clientX: 40, clientY: 40 })
-    const tip = wrapper.find('[data-testid="token-donut-tooltip"]')
-    expect(tip.exists()).toBe(true)
-    expect(tip.text()).toContain('输入')
-    expect(tip.text()).not.toMatch(/\binput\b/)
-    expect(tip.text()).toContain('38.9%')
+    const option = (wrapper.vm as unknown as { chartOption: PieOption }).chartOption
+    expectSquareThemeTooltip(option.tooltip, 'light')
+    expect(typeof option.tooltip?.formatter).toBe('function')
+    expect(option.tooltip?.formatter?.({ name: '输入', value: 396_400, percent: 38.9 })).toBe(
+      pieTooltipFormatter({ name: '输入', value: 396_400, percent: 38.9 }),
+    )
+    expect(wrapper.find('[data-testid="token-donut-tooltip"]').exists()).toBe(false)
+    expect(wrapper.html()).not.toMatch(/#1a1d23/)
     wrapper.unmount()
   })
 
-  it('narrow donut stacks ring above legend and shrinks ring (~120px) (g4.1/g4.2)', () => {
+  it('donut plot is full-width overflow-visible (g4.1/g4.2)', () => {
     const wrapper = mount(TokenDonutChart, {
       props: {
         composition: {
@@ -278,18 +293,15 @@ describe('Token charts (g2.3/g2.4)', () => {
       global: { plugins: [i18n()] },
     })
     const row = wrapper.find('[data-testid="token-donut-row"]')
-    expect(row.classes()).toEqual(expect.arrayContaining(['flex-col', 'sm:flex-row']))
+    expect(row.classes()).toEqual(expect.arrayContaining(['w-full', 'overflow-visible']))
     const chart = wrapper.find('[data-testid="token-donut-chart"]')
-    expect(chart.classes()).toEqual(expect.arrayContaining(['h-[120px]', 'w-[120px]', 'sm:h-[150px]', 'sm:w-[150px]']))
-    const legend = wrapper.find('[data-testid="token-donut-legend"]')
-    expect(legend.classes()).toEqual(expect.arrayContaining(['w-full']))
+    expect(chart.classes()).toEqual(expect.arrayContaining(['h-[168px]', 'w-full']))
     wrapper.unmount()
   })
 
   it('renders consumption rank with continuous numeric badges for workflow+PM (no 12PM34)', () => {
     const wrapper = mount(TokenWorkflowRank, {
       props: {
-        // Fixed API order: Top workflows → PM → other
         workflows: [
           { workflowId: 'a', name: 'approve-main', total: 1_020_000, kind: 'workflow' },
           { workflowId: 'b', name: 'doc-review', total: 40_000, kind: 'workflow' },
@@ -309,12 +321,10 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(wrapper.text()).toContain('项目管理')
     expect(wrapper.text()).toContain('其他')
 
-    // Continuous numeric badges for workflow+PM; other stays "·" (Demo: 1→2→3→·)
     const pmRow = wrapper.find('[data-kind="pm"]')
     const badges = wrapper.findAll('li').map((li) => li.find('span').text())
     expect(badges).toEqual(['1', '2', '3', '·'])
     expect(pmRow.find('span').text()).toBe('3')
-    // PM badge style matches workflow numeric badge (accent for rank ≤3); no special w-auto/min-w
     const pmBadge = pmRow.find('span')
     expect(pmBadge.classes()).toEqual(
       expect.arrayContaining(['w-[22px]', 'bg-accent-dim', 'text-accent-2']),
@@ -323,9 +333,6 @@ describe('Token charts (g2.3/g2.4)', () => {
     const wfBadge = items[0]!.find('span')
     expect(wfBadge.classes()).toEqual(pmBadge.classes())
 
-    // Same purple bar as workflow — gradient #6d5cff → #9b8cff
-    const pmBar = pmRow.find('[data-testid="token-rank-bar"]')
-    expect(pmBar.exists()).toBe(true)
     const barColorFn = (
       wrapper.vm as unknown as {
         barColor: (w: { kind?: string; other?: boolean; name: string; total: number }) => {
@@ -338,10 +345,15 @@ describe('Token charts (g2.3/g2.4)', () => {
     expect(pmGradient.colorStops[1]!.color).toBe('#9b8cff')
     expect(pmGradient.colorStops.map((s) => s.color)).not.toContain('#f59e0b')
 
-    // Compact K/M main values remain visible on the right
     const values = wrapper.findAll('[data-testid="token-rank-value"]').map((v) => v.text())
     expect(values).toEqual(['1.02M', '40K', '80K', '20K'])
     expect(wrapper.find('[data-testid="token-rank-value"]').attributes('title')).toBeTruthy()
+    expect(wrapper.find('[data-testid="token-rank-tooltip"]').exists()).toBe(false)
+    const rowTip = (
+      wrapper.vm as unknown as { rowOptions: { tooltip: { borderRadius?: number; backgroundColor?: string } }[] }
+    ).rowOptions[0]!.tooltip
+    expect(rowTip.borderRadius).toBe(0)
+    expect(JSON.stringify(rowTip)).not.toContain('#1a1d23')
     wrapper.unmount()
   })
 
@@ -362,7 +374,6 @@ describe('Token charts (g2.3/g2.4)', () => {
     const badges = wrapper.findAll('li').map((li) => li.find('span').text())
     expect(badges).toEqual(['1', '2', '3', '4', '5', '·'])
     expect(wrapper.find('[data-kind="pm"]').find('span').text()).toBe('5')
-    // rank 5 uses dim elevated style same as a workflow at #5 would
     expect(wrapper.find('[data-kind="pm"]').find('span').classes()).toEqual(
       expect.arrayContaining(['w-[22px]', 'bg-elevated', 'text-txt3']),
     )
@@ -432,197 +443,44 @@ describe('Token charts (g2.3/g2.4)', () => {
   })
 })
 
-type ExternalTooltip = (ctx: {
-  chart: { canvas: HTMLCanvasElement }
-  tooltip: {
-    opacity: number
-    caretX: number
-    caretY: number
-    dataPoints?: { dataIndex: number }[]
-  }
-}) => void | Promise<void>
+describe('TokenTrendChart tooltip / theme chrome (g2.3/g2.4)', () => {
+  it('light and dark option tones follow 用量统计 shell', () => {
+    const trend = [
+      {
+        bucket: '2026-07-11',
+        total: 0,
+        workflowTotal: 0,
+        pmTotal: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    ]
 
-const TIP_W = 168
-const TIP_H = 72
-
-function mockTipBoxSize() {
-  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-    configurable: true,
-    get() {
-      return (this as HTMLElement).getAttribute?.('data-testid') === 'token-trend-tooltip' ? TIP_W : 600
-    },
-  })
-  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-    configurable: true,
-    get() {
-      return (this as HTMLElement).getAttribute?.('data-testid') === 'token-trend-tooltip' ? TIP_H : 200
-    },
-  })
-}
-
-function restoreTipBoxSize() {
-  delete (HTMLElement.prototype as { offsetWidth?: unknown }).offsetWidth
-  delete (HTMLElement.prototype as { offsetHeight?: unknown }).offsetHeight
-}
-
-function leftZeroTrend() {
-  return [
-    {
-      bucket: '2026-07-11',
-      total: 0,
-      workflowTotal: 0,
-      pmTotal: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    },
-    {
-      bucket: '2026-07-12',
-      total: 1_200_000,
-      workflowTotal: 900_000,
-      pmTotal: 300_000,
-      inputTokens: 400,
-      outputTokens: 300,
-      cacheReadTokens: 200,
-      cacheWriteTokens: 100,
-    },
-    {
-      bucket: '2026-08-09',
-      total: 96_000_000,
-      workflowTotal: 72_000_000,
-      pmTotal: 24_000_000,
-      inputTokens: 400,
-      outputTokens: 300,
-      cacheReadTokens: 200,
-      cacheWriteTokens: 100,
-    },
-  ]
-}
-
-function tipBoxInViewport(el: HTMLElement) {
-  const left = parseFloat(el.style.left || '0')
-  const top = parseFloat(el.style.top || '0')
-  const right = left + (el.offsetWidth || TIP_W)
-  const bottom = top + (el.offsetHeight || TIP_H)
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  expect(left).toBeGreaterThanOrEqual(0)
-  expect(top).toBeGreaterThanOrEqual(0)
-  expect(right).toBeLessThanOrEqual(vw)
-  expect(bottom).toBeLessThanOrEqual(vh)
-  return { left, top, right, bottom }
-}
-
-async function fireExternalTooltip(
-  wrapper: ReturnType<typeof mount>,
-  opts: { caretX: number; caretY: number; dataIndex?: number; opacity?: number; canvasLeft?: number; canvasTop?: number },
-) {
-  const canvas = wrapper.find('canvas').element as HTMLCanvasElement
-  const canvasLeft = opts.canvasLeft ?? 40
-  const canvasTop = opts.canvasTop ?? 80
-  vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
-    x: canvasLeft,
-    y: canvasTop,
-    left: canvasLeft,
-    top: canvasTop,
-    right: canvasLeft + 600,
-    bottom: canvasTop + 178,
-    width: 600,
-    height: 178,
-    toJSON() {
-      return {}
-    },
-  } as DOMRect)
-
-  const vm = wrapper.vm as unknown as { externalTooltip: ExternalTooltip; hideTip: () => void }
-  await vm.externalTooltip({
-    chart: { canvas },
-    tooltip: {
-      opacity: opts.opacity ?? 1,
-      caretX: opts.caretX,
-      caretY: opts.caretY,
-      dataPoints: opts.opacity === 0 ? [] : [{ dataIndex: opts.dataIndex ?? 0 }],
-    },
-  })
-  await nextTick()
-  await nextTick()
-  return vm
-}
-
-describe('TokenTrendChart tooltip visibility (g4.1/g4.2/g4.3/g1.1)', () => {
-  afterEach(() => {
-    restoreTipBoxSize()
-    vi.restoreAllMocks()
-    document.querySelectorAll('[data-testid="token-trend-tooltip"]').forEach((n) => n.remove())
-  })
-
-  it('left-edge total=0 shows full MM-DD · 0 and box stays in viewport (g4.1)', async () => {
-    mockTipBoxSize()
-    const wrapper = mount(TokenTrendChart, {
-      props: { bucketWidth: 'day', trend: leftZeroTrend() },
+    setTheme('dark')
+    const darkWrap = mount(TokenTrendChart, {
+      props: { bucketWidth: 'day', trend },
       global: { plugins: [i18n()] },
-      attachTo: document.body,
     })
+    const darkOpt = (darkWrap.vm as unknown as { chartOption: TrendOption }).chartOption
+    expectSquareThemeTooltip(darkOpt.tooltip, 'dark')
+    expect(darkOpt.yAxis?.splitLine?.lineStyle?.color).toBe('rgba(255,255,255,0.08)')
+    expect(darkOpt.xAxis?.axisLabel?.color).toBe('#a1a1aa')
+    const html = darkOpt.tooltip!.formatter!({ dataIndex: 0 })
+    expect(html).toMatch(/07-11\s*·\s*0/)
+    expect(html).not.toMatch(/(^|\s)-11\s*·/)
+    darkWrap.unmount()
 
-    await fireExternalTooltip(wrapper, { caretX: 8, caretY: 160, dataIndex: 0 })
-    const tip = document.querySelector('[data-testid="token-trend-tooltip"]') as HTMLElement | null
-    expect(tip).toBeTruthy()
-    const text = (tip!.textContent || '').replace(/\s+/g, ' ')
-    expect(text).toContain('07-11')
-    expect(text).toMatch(/07-11\s*·\s*0/)
-    expect(text).not.toMatch(/(^|\s)-11\s*·/)
-    expect(text).toContain('工作流')
-    expect(text).toContain('项目管理')
-    tipBoxInViewport(tip!)
-
-    const wrap = wrapper.find('[data-testid="token-trend-wrap"]').element
-    expect(wrap.contains(tip!)).toBe(false)
-    expect(tip!.className).toMatch(/fixed/)
-    expect(tip!.className).toMatch(/z-\[100\]/)
-    expect(tip!.className).toMatch(/pointer-events-none/)
-    expect(tip!.className).toMatch(/rounded-lg/)
-    expect(tip!.className).toMatch(/bg-\[#1a1d23\]/)
-    wrapper.unmount()
-  })
-
-  it('right-edge / high caret flip or clamp keeps box in viewport (g4.2)', async () => {
-    mockTipBoxSize()
-    const wrapper = mount(TokenTrendChart, {
-      props: { bucketWidth: 'day', trend: leftZeroTrend() },
+    setTheme('light')
+    const lightWrap = mount(TokenTrendChart, {
+      props: { bucketWidth: 'day', trend },
       global: { plugins: [i18n()] },
-      attachTo: document.body,
     })
-
-    await fireExternalTooltip(wrapper, { caretX: 590, caretY: 8, dataIndex: 2, canvasLeft: 40, canvasTop: 20 })
-    const tip = document.querySelector('[data-testid="token-trend-tooltip"]') as HTMLElement | null
-    expect(tip).toBeTruthy()
-    const text = (tip!.textContent || '').replace(/\s+/g, ' ')
-    expect(text).toContain('08-09')
-    expect(text).not.toMatch(/translate\(-50%/)
-    tipBoxInViewport(tip!)
-    wrapper.unmount()
-  })
-
-  it('hides tooltip after leaving the trend wrap (g4.3)', async () => {
-    mockTipBoxSize()
-    const wrapper = mount(TokenTrendChart, {
-      props: { bucketWidth: 'day', trend: leftZeroTrend() },
-      global: { plugins: [i18n()] },
-      attachTo: document.body,
-    })
-
-    await fireExternalTooltip(wrapper, { caretX: 80, caretY: 100, dataIndex: 1 })
-    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeTruthy()
-
-    await wrapper.find('[data-testid="token-trend-wrap"]').trigger('mouseleave')
-    await nextTick()
-    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeNull()
-
-    await fireExternalTooltip(wrapper, { caretX: 80, caretY: 100, dataIndex: 1 })
-    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeTruthy()
-    await fireExternalTooltip(wrapper, { caretX: 80, caretY: 100, opacity: 0 })
-    expect(document.querySelector('[data-testid="token-trend-tooltip"]')).toBeNull()
-    wrapper.unmount()
+    const lightOpt = (lightWrap.vm as unknown as { chartOption: TrendOption }).chartOption
+    expectSquareThemeTooltip(lightOpt.tooltip, 'light')
+    expect(lightOpt.yAxis?.splitLine?.lineStyle?.color).toBe('#eef0f3')
+    expect(lightOpt.xAxis?.axisLabel?.color).toBe('#71717a')
+    lightWrap.unmount()
   })
 })

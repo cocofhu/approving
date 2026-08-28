@@ -190,4 +190,28 @@ describe('TokenStatsPanel', () => {
     expect(wrapper.find('[data-testid="token-stats-charts"]').exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('chart cards are square-bordered like 用量统计 (g2.2)', async () => {
+    getProjectTokenStats.mockResolvedValue(sampleStats())
+    const wrapper = mountPanel()
+    await flushPromises()
+    const cards = [
+      wrapper.find('[data-testid="token-stats-trend-card"]'),
+      wrapper.find('[data-testid="token-stats-comp-card"]'),
+      wrapper.find('[data-testid="token-stats-rank-card"]'),
+      wrapper.find('[data-testid="token-stats-model-comp-card"]'),
+      wrapper.find('[data-testid="token-stats-model-rank-card"]'),
+    ]
+    for (const card of cards) {
+      expect(card.classes()).toEqual(expect.arrayContaining(['border', 'border-line', 'bg-surface']))
+      expect(card.classes().some((c) => c.startsWith('rounded'))).toBe(false)
+    }
+    wrapper.unmount()
+
+    getProjectTokenStats.mockResolvedValue(sampleStats({ empty: true, trend: [], workflows: [] }))
+    const empty = mountPanel()
+    await flushPromises()
+    expect(empty.find('[data-testid="token-stats-empty"]').html()).not.toMatch(/rounded-xl/)
+    empty.unmount()
+  })
 })
