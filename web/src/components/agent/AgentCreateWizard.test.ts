@@ -14,7 +14,7 @@ const createAgent = vi.fn(async (payload: unknown) => payload)
 const listProjectRunTags = vi.fn(async (_projectId: string) => {
   throw Object.assign(new Error('not found'), { status: 404 })
 })
-const getProjectSharedAgentConfig = vi.fn(async () => ({
+const getProjectSharedAgentConfig = vi.fn(async (_projectId?: string) => ({
   projectId: '',
   env: {},
   files: [],
@@ -25,7 +25,7 @@ vi.mock('@/lib/api/api', () => ({
   api: {
     createAgent: (payload: unknown) => createAgent(payload),
     listProjectRunTags: (projectId: string) => listProjectRunTags(projectId),
-    getProjectSharedAgentConfig: (...args: unknown[]) => getProjectSharedAgentConfig(...args),
+    getProjectSharedAgentConfig: (projectId: string) => getProjectSharedAgentConfig(projectId),
   },
 }))
 
