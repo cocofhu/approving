@@ -64,7 +64,7 @@ describe('HomePipelineSelect', () => {
     await wrapper.get('[data-testid="home-pipeline-select-search"]').setValue('内部副本')
     await flushPromises()
     expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-hidden"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="home-pipeline-select-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-pipeline-select-empty"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })

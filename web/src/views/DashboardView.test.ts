@@ -381,7 +381,7 @@ describe('DashboardView home composer', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="home-pipelines-empty"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="home-pipelines-empty"]').text()).not.toContain('选择项目')
-    expect(wrapper.get('[data-testid="home-go-projects"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-go-projects"]').exists()).toBe(true)
     await wrapper.get('[data-testid="home-go-projects"]').trigger('click')
     expect(mocks.push).toHaveBeenCalledWith('/projects')
     wrapper.unmount()
