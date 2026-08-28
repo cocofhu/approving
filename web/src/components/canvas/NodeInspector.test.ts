@@ -246,6 +246,46 @@ describe('NodeInspector', () => {
     wrapper.unmount()
   })
 
+  it('normalizes legacy skill_profile so the select and banner still work', async () => {
+    const agentNode: WFNode = {
+      id: 'agent',
+      type: 'agent',
+      label: 'Agent',
+      position: { x: 0, y: 0 },
+      config: { skill_profile: 'beta-runner' },
+    }
+    apiMocks.listAgents.mockResolvedValue([
+      { name: 'agent-a', projectId: 'proj-1' },
+      { name: 'beta-runner', projectId: 'proj-2' },
+    ])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages, ...nodes } },
+    })
+    const wrapper = mount(NodeInspector, {
+      props: {
+        node: agentNode,
+        allNodes: [agentNode],
+        edges: [] as WFEdge[],
+        projectId: 'proj-1',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Icon: true,
+          AppButton: { template: '<button><slot /></button>' },
+          OutputSourcesEditor: { template: '<div data-testid="output-sources" />' },
+        },
+      },
+    })
+    await flushPromises()
+    expect(agentNode.config.agent_profile).toBe('beta-runner')
+    expect(agentNode.config.skill_profile).toBeUndefined()
+    expect(wrapper.find('[data-testid="skill-profile-stale-banner"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('app_preview card shows auto_inject on by default', async () => {
     const node: WFNode = {
       id: 'preview',

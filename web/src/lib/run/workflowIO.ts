@@ -2,6 +2,41 @@ import type { WFEdge, WFNode, Workflow } from '../shared/types'
 
 const EXPORT_SCHEMA_VERSION = 1
 
+export const AGENT_PROFILE_KEY = 'agent_profile'
+export const LEGACY_AGENT_PROFILE_KEY = 'skill_profile'
+
+function asConfig(config?: Record<string, unknown> | null): Record<string, unknown> | null {
+  return config && typeof config === 'object' ? config : null
+}
+
+/** Read Agent name: non-empty agent_profile wins, else skill_profile. */
+export function getAgentProfile(config?: Record<string, unknown> | null): string {
+  const cfg = asConfig(config)
+  if (!cfg) return ''
+  const neu = typeof cfg[AGENT_PROFILE_KEY] === 'string' ? String(cfg[AGENT_PROFILE_KEY]).trim() : ''
+  if (neu) return neu
+  return typeof cfg[LEGACY_AGENT_PROFILE_KEY] === 'string' ? String(cfg[LEGACY_AGENT_PROFILE_KEY]).trim() : ''
+}
+
+/** Write agent_profile and drop the legacy key. */
+export function setAgentProfile(config: Record<string, unknown>, name: string): void {
+  config[AGENT_PROFILE_KEY] = String(name || '').trim()
+  delete config[LEGACY_AGENT_PROFILE_KEY]
+}
+
+/** Fold skill_profile into agent_profile. Returns whether the map changed. */
+export function normalizeAgentProfile(config?: Record<string, unknown> | null): boolean {
+  const cfg = asConfig(config)
+  if (!cfg || !(LEGACY_AGENT_PROFILE_KEY in cfg)) return false
+  const neu = typeof cfg[AGENT_PROFILE_KEY] === 'string' ? String(cfg[AGENT_PROFILE_KEY]).trim() : ''
+  if (!neu) {
+    const raw = cfg[LEGACY_AGENT_PROFILE_KEY]
+    cfg[AGENT_PROFILE_KEY] = typeof raw === 'string' ? raw.trim() : String(raw ?? '').trim()
+  }
+  delete cfg[LEGACY_AGENT_PROFILE_KEY]
+  return true
+}
+
 export interface ExportEnvelope {
   schemaVersion: number
   exportedAt: string
@@ -45,8 +80,9 @@ export function buildEnvelope(
     variables = [...(input.config.variables as any[])]
   }
   const nodes = exportNodes(graph.nodes).map((n) => {
-    if (n.type !== 'input') return n
-    const cfg = { ...n.config }
+    const cfg = { ...(n.config || {}) }
+    normalizeAgentProfile(cfg)
+    if (n.type !== 'input') return { ...n, config: cfg }
     delete cfg.variables
     delete cfg.inputs
     return { ...n, config: cfg }
@@ -83,8 +119,8 @@ export function collectAgentProfiles(nodes: WFNode[]): string[] {
   const out = new Set<string>()
   for (const n of nodes) {
     if (!agentTypes.has(n.type)) continue
-    const sp = n.config?.agent_profile
-    if (typeof sp === 'string' && sp.trim()) out.add(sp.trim())
+    const sp = getAgentProfile(n.config)
+    if (sp) out.add(sp)
   }
   return [...out]
 }

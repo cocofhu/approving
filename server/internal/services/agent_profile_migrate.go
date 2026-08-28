@@ -1,61 +1,16 @@
 package services
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/cocofhu/approving/internal/models"
 
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
-// Legacy node config key for Agent identity references. Kept only for the
-// one-shot startup/import migrator; runtime hot paths must not read it.
-const legacyAgentProfileKey = "skill_profile"
-
-// agentProfileConfigKey is the current node config key for Agent identity refs.
-const agentProfileConfigKey = "agent_profile"
-
-// MigrateAgentProfileInGraph rewrites nodes[].config from the legacy
-// skill_profile key to agent_profile in place:
-//   - only legacy key → copy value to agent_profile, delete legacy
-//   - both keys → keep agent_profile, delete legacy
-//   - only agent_profile → no-op
-// Empty-string values are preserved (empty still means "skip validation").
-// Returns whether any node config map was changed. Idempotent / reentrant.
+// MigrateAgentProfileInGraph folds legacy skill_profile into agent_profile.
+// Runtime also dual-reads via models.AgentProfile; this rewrite is for persist.
 func MigrateAgentProfileInGraph(g *models.Graph) bool {
-	if g == nil {
-		return false
-	}
-	changed := false
-	for i := range g.Nodes {
-		cfg := g.Nodes[i].Config
-		if cfg == nil {
-			continue
-		}
-		_, hasNew := cfg[agentProfileConfigKey]
-		oldRaw, hasOld := cfg[legacyAgentProfileKey]
-		if !hasOld {
-			continue
-		}
-		if !hasNew {
-			cfg[agentProfileConfigKey] = legacyProfileString(oldRaw)
-		}
-		delete(cfg, legacyAgentProfileKey)
-		changed = true
-	}
-	return changed
-}
-
-func legacyProfileString(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return strings.TrimSpace(fmt.Sprint(v))
+	return models.NormalizeGraphAgentProfiles(g)
 }
 
 // MigrateAgentProfilesOnce rewrites persisted WorkflowDef / WorkflowVersion /

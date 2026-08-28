@@ -83,11 +83,10 @@ func TestCheckAgentProfileProject(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy skill_profile alone treated as unconfigured", func(t *testing.T) {
-		// Hard-cut: runtime must not fall back to the legacy key.
+	t.Run("legacy skill_profile alone still resolves", func(t *testing.T) {
 		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "ok"}}
 		if err := eng.checkAgentProfileProject(c, n); err != nil {
-			t.Fatalf("legacy-only key must be ignored (empty), got %v", err)
+			t.Fatalf("legacy key should dual-read: %v", err)
 		}
 	})
 }

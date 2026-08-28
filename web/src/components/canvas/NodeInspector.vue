@@ -10,6 +10,7 @@ import { buildOutputSourceOptions } from '@/lib/run/outputSourceOptions'
 import OutputSourcesEditor from './OutputSourcesEditor.vue'
 import { api } from '@/lib/api/api'
 import { renderMarkdown } from '@/lib/shared/markdown'
+import { getAgentProfile, normalizeAgentProfile } from '@/lib/run/workflowIO'
 import type { WFNode, WFEdge, FieldSchema } from '@/lib/shared/types'
 
 const { t } = useI18n()
@@ -61,10 +62,18 @@ function classifyAgentProfile(name: string): { ok: boolean; label: string } {
   return { ok: true, label: '' }
 }
 
+watch(
+  () => props.node.id,
+  () => {
+    if (props.node?.config) normalizeAgentProfile(props.node.config)
+  },
+  { immediate: true },
+)
+
 const agentProfileStale = computed(() => {
   const hasField = def.value?.fields?.some((f) => f.key === 'agent_profile')
   if (!hasField) return null
-  const cur = String(props.node.config?.agent_profile || '').trim()
+  const cur = getAgentProfile(props.node.config)
   if (!cur) return null
   const st = classifyAgentProfile(cur)
   if (st.ok) return null
@@ -100,7 +109,7 @@ function fieldOptions(f: FieldSchema): { value: string; label: string }[] {
     for (const a of same) {
       opts.push({ value: a.name, label: a.name })
     }
-    const cur = String(props.node.config?.agent_profile || '').trim()
+    const cur = getAgentProfile(props.node.config)
     if (cur && !same.some((a) => a.name === cur)) {
       const st = classifyAgentProfile(cur)
       opts.push({

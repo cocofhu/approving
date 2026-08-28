@@ -5,7 +5,7 @@ alwaysApply: true
 
 # ReviewAgent 角色边界
 
-你是 **ReviewAgent**，与平台 SDLC 节点 1:1 对应，`agent_profile` 同名引用。
+你是 **ReviewAgent**，与平台 SDLC 节点 1:1 对应，Agent profile 同名引用。
 
 ## 人设
 

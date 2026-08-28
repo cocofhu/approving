@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildEnvelope, sanitizeFilename, collectAgentProfiles, agentProfileIssues } from './workflowIO'
+import {
+  buildEnvelope,
+  sanitizeFilename,
+  collectAgentProfiles,
+  agentProfileIssues,
+  getAgentProfile,
+  setAgentProfile,
+  normalizeAgentProfile,
+} from './workflowIO'
 import type { WFNode } from '../shared/types'
 
 describe('sanitizeFilename', () => {
@@ -73,5 +81,28 @@ describe('skill profile helpers', () => {
       agents,
       'alpha',
     )).toEqual([])
+  })
+
+  it('reads legacy skill_profile and normalizes on export', () => {
+    const legacy: WFNode[] = [
+      { id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { skill_profile: 'ImplementAgent' } },
+    ]
+    expect(getAgentProfile(legacy[0].config)).toBe('ImplementAgent')
+    expect(collectAgentProfiles(legacy)).toEqual(['ImplementAgent'])
+    const env = buildEnvelope({ name: 'L', description: '', needsRepo: false }, { nodes: legacy, edges: [] })
+    expect(env.graph.nodes[0].config.agent_profile).toBe('ImplementAgent')
+    expect(env.graph.nodes[0].config.skill_profile).toBeUndefined()
+  })
+
+  it('setAgentProfile drops the legacy key', () => {
+    const cfg: Record<string, unknown> = { skill_profile: 'Old' }
+    setAgentProfile(cfg, 'New')
+    expect(cfg.agent_profile).toBe('New')
+    expect(cfg.skill_profile).toBeUndefined()
+    expect(normalizeAgentProfile({ agent_profile: 'A' })).toBe(false)
+    const both: Record<string, unknown> = { agent_profile: '', skill_profile: 'LegacyAgent' }
+    expect(normalizeAgentProfile(both)).toBe(true)
+    expect(both.agent_profile).toBe('LegacyAgent')
+    expect(both.skill_profile).toBeUndefined()
   })
 })

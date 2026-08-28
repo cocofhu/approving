@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
@@ -46,7 +45,7 @@ func NewProviderRegistry(host *mcp.Host, opts Options) *ProviderRegistry {
 func (r *ProviderRegistry) Name() string { return "registry" }
 
 func (r *ProviderRegistry) backendFor(req NodeReq) AcpBackend {
-	profile := strings.TrimSpace(str2(req.Config["agent_profile"]))
+	profile := models.AgentProfile(req.Config)
 	if profile == "" || r.profilesRoot == "" {
 		return BackendCursor
 	}

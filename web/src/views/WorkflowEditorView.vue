@@ -19,6 +19,7 @@ import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
 import { useWorkflowAskInputs } from '@/lib/run/useWorkflowAskInputs'
 import { api } from '@/lib/api/api'
 import { useWorkflowImport } from '@/lib/run/useWorkflowImport'
+import { getAgentProfile } from '@/lib/run/workflowIO'
 import { cleanOutputConfigForSave, migrateAndCleanOutputNodes } from '@/lib/shared/migrateOutputConfig'
 import { fmtTime } from '@/lib/shared/format'
 import { clearRunDraft, mergeRunDraft, saveRunDraft } from '@/lib/run/runDraft'
@@ -356,7 +357,8 @@ const showOverview = ref(false)
 function nodeChips(n: WFNode): string[] {
   const c = (n.config || {}) as Record<string, any>
   const out: string[] = []
-  if (c.agent_profile) out.push(t('pages.workflowEditor.nodeChips.agent', { name: c.agent_profile }))
+  const profile = getAgentProfile(c)
+  if (profile) out.push(t('pages.workflowEditor.nodeChips.agent', { name: profile }))
   if (c.produces) out.push(t('pages.workflowEditor.nodeChips.artifact', { name: c.produces }))
   if (n.type === 'branch') out.push(t('pages.workflowEditor.nodeChips.routes', { n: c.cases?.length || 0 }))
   if (n.type === 'input') out.push(t('pages.workflowEditor.nodeChips.variables', { n: (c.variables || []).filter((v: any) => v?.name).length }))

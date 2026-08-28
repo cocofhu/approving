@@ -420,15 +420,10 @@ func renameAgentProfileInGraph(g *models.Graph, oldName, newName string) bool {
 		if cfg == nil {
 			continue
 		}
-		v, ok := cfg["agent_profile"]
-		if !ok {
+		if models.AgentProfile(cfg) != oldName {
 			continue
 		}
-		s, ok := v.(string)
-		if !ok || s != oldName {
-			continue
-		}
-		cfg["agent_profile"] = newName
+		models.SetAgentProfile(cfg, newName)
 		changed = true
 	}
 	return changed
@@ -489,8 +484,7 @@ func ValidateAgentProfilesProject(skills AgentGetter, projectID string, g models
 		if n.Config == nil {
 			continue
 		}
-		raw, _ := n.Config["agent_profile"].(string)
-		profile := strings.TrimSpace(raw)
+		profile := models.AgentProfile(n.Config)
 		if profile == "" {
 			continue
 		}
@@ -506,5 +500,5 @@ func ValidateAgentProfilesProject(skills AgentGetter, projectID string, g models
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("存在不可用 agent_profile，请改选有效 Agent 后再保存：%s", strings.Join(bad, "；"))
+	return fmt.Errorf("存在不可用 Agent profile，请改选有效 Agent 后再保存：%s", strings.Join(bad, "；"))
 }

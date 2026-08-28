@@ -4,6 +4,8 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- Workflow node config key `skill_profile` is now `agent_profile`. New writes and exports use the new key; old graphs and JSON exports still load (read fallback + import/save normalize).
+
 ## 0.3.2-beta — 2026-08-26
 
 - Public beta follow-up on [`v0.3.2-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.2-beta)
