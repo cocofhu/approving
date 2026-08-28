@@ -5,7 +5,7 @@
 ## 执行后端(ExecProvider)
 
 支持四类 ACP 后端(`cursor` / `claude_code` / `codebuddy` / `trae`),由 Agent 卡片
-`agent.json` 的 `acpBackend` 字段选择;`ProviderRegistry` 按 `agent_profile` 路由到
+`agent.json` 的 `acpBackend` 字段选择;`ProviderRegistry` 按 Agent profile (`agent_profile`) 路由到
 对应 Provider。统一沙箱镜像内 `acp-bridge` 按 `ACP_BACKEND` 单活启动 bridge(:8765)。
 兼容期容器内 `acp-gateway` / `cursor-acp` 为指向 `acp-bridge` 的软链(计划 0.2.0 移除)。
 
@@ -27,7 +27,7 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
   - 注入方式有两条、互为冗余:ACP `session/new` 的 `mcpServers`(URL+`Authorization: Bearer <token>`)+ 容器内 `{configRoot}/mcp.json`。
   - 容器经 `host.docker.internal:<APPROVING_PORT>` 回连平台(`--add-host host.docker.internal:host-gateway` 已设)。
   - 工具:`write_artifact` / `read_artifact` / `list_artifacts` / `node_complete` 等。Agent **原生调用** `write_artifact` 写回产物,结束前必须 `node_complete` 标记完成(已 live 验证:cursor-agent 完成 initialize→tools/list→tools/call 全链路)。
-- **`{configRoot}` 配置树(对齐 auto-coder)**:每个节点按 `agent_profile.acpBackend` 解析 configRoot(Agent 卡片可覆盖),在控制面生成一份配置树后注入沙箱:
+- **`{configRoot}` 配置树(对齐 auto-coder)**:每个节点按 Agent profile 的 `acpBackend` 解析 configRoot(Agent 卡片可覆盖),在控制面生成一份配置树后注入沙箱:
   - 默认映射:`cursor`→`/root/.cursor`、`claude_code`→`/root/.claude`、`codebuddy`→`/root/.codebuddy`、`trae`→`/root/.trae`;
   - `rules/base.md`(基础约束,alwaysApply)、`rules/artifact-store.md`(produces 契约 + MCP 用法)、`react` 节点附 `rules/react.md`;
   - `rules/<profile>.md` 来自平台 `AgentService`(`APPROVING_PROFILES_ROOT`);
@@ -189,7 +189,7 @@ Staging 示例:
 | `APPROVING_AGENT_TIMEOUT_SEC` | `600` | 单轮 agent/react 回合硬超时(全局默认);单节点可在其 Agent 卡片填「超时(分钟)」单独放宽 |
 | `APPROVING_CHAT_IDLE_SEC` | `600` | 回合内多久无事件即判卡死并中断 |
 | `APPROVING_MCP_ADVERTISE` | `http://host.docker.internal:<PORT>` | 沙箱内 agent/MCP 客户端回连 run 级 artifact-store MCP 的 base URL。K8s gateway 须改为沙箱可达且挂载 `/mcp` 的实例基址(如 `http://api.example.com`);勿用仅 SPA/无 `/mcp` 路由的入口域名。若误配 `spa.example.com`,加载配置与注入时会改写为 `api.example.com`(见 `RewriteMisconfiguredMCPAdvertise`) |
-| `APPROVING_PROFILES_ROOT` | `data/profiles` | agent_profile 规则根(挂入 `{configRoot}/rules`) |
+| `APPROVING_PROFILES_ROOT` | `data/profiles` | Agent profile 规则根(挂入 `{configRoot}/rules`) |
 
 > **GitLab 不是平台配置**:平台不依赖任何固定的 GitLab 地址或令牌。仓库地址由工作流
 > 全局变量 `repo_url` 提供;凭据(`GITLAB_TOKEN` / `GITLAB_URL` 等)在 **Agent 元信息的

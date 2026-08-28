@@ -48,9 +48,7 @@ func skillProfileOf(g models.Graph, nodeType string) string {
 		if n.Type != nodeType || n.Config == nil {
 			continue
 		}
-		if v, ok := n.Config["agent_profile"].(string); ok {
-			return v
-		}
+		return models.AgentProfile(n.Config)
 	}
 	return ""
 }
@@ -293,5 +291,41 @@ func TestRenameAgentProfileRefs_failHookAbortsTransaction(t *testing.T) {
 	got, _ := s.Get("wf-fail")
 	if skillProfileOf(got.Graph, "visual") != old {
 		t.Fatalf("graph should roll back to old name, got %q", skillProfileOf(got.Graph, "visual"))
+	}
+}
+
+func TestRenameAgentProfileRefs_legacyKey(t *testing.T) {
+	db := newTestDB(t)
+	s := NewWorkflowService(db)
+	wf := &models.WorkflowDef{
+		ID: "wf-legacy", ProjectID: models.DefaultProjectID, Name: "Legacy",
+		Graph: models.Graph{Nodes: []models.Node{
+			{ID: "in", Type: "input", Label: "S"},
+			{ID: "ag", Type: "agent", Label: "A", Config: map[string]any{"skill_profile": "old-bot"}},
+			{ID: "out", Type: "output", Label: "E"},
+		}, Edges: []models.Edge{
+			{ID: "e1", Source: "in", Target: "ag"},
+			{ID: "e2", Source: "ag", Target: "out"},
+		}},
+	}
+	if err := db.Create(wf).Error; err != nil {
+		t.Fatal(err)
+	}
+	n, err := s.RenameAgentProfileRefs("old-bot", "new-bot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("count=%d", n)
+	}
+	got, ok := s.Get("wf-legacy")
+	if !ok {
+		t.Fatal("missing")
+	}
+	if models.AgentProfile(got.Graph.Nodes[1].Config) != "new-bot" {
+		t.Fatalf("got %#v", got.Graph.Nodes[1].Config)
+	}
+	if _, ok := got.Graph.Nodes[1].Config["skill_profile"]; ok {
+		t.Fatal("legacy key should be dropped")
 	}
 }

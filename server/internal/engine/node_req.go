@@ -21,8 +21,7 @@ func (e *Engine) checkAgentProfileProject(c *execCtx, node *models.Node) error {
 	if e == nil || node == nil || node.Config == nil {
 		return nil
 	}
-	raw, _ := node.Config["agent_profile"].(string)
-	profile := strings.TrimSpace(raw)
+	profile := models.AgentProfile(node.Config)
 	if profile == "" {
 		return nil
 	}

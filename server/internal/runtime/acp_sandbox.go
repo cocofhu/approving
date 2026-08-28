@@ -162,7 +162,7 @@ func (c *acpProvider) beginRunSandbox(req NodeReq, name, home string) {
 	}
 	b.BeginRunSandbox(RunSandboxInfo{
 		Name:         name,
-		Profile:      str2(req.Config["agent_profile"]),
+		Profile:      models.AgentProfile(req.Config),
 		RunID:        req.RunID,
 		WorkflowID:   req.WorkflowID,
 		WorkflowName: req.WorkflowName,
@@ -182,7 +182,7 @@ func (c *acpProvider) registerRunSandbox(req NodeReq, sb *sandbox.Sandbox, home 
 	repo := firstRepoURL(req)
 	c.registry.RegisterRunSandbox(RunSandboxInfo{
 		Name:           sb.Name,
-		Profile:        str2(req.Config["agent_profile"]),
+		Profile:        models.AgentProfile(req.Config),
 		RunID:          req.RunID,
 		WorkflowID:     req.WorkflowID,
 		WorkflowName:   req.WorkflowName,
@@ -307,7 +307,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 		}
 		env[k] = v
 	}
-	profile := str2(req.Config["agent_profile"])
+	profile := models.AgentProfile(req.Config)
 	agentCfg := c.effectiveAgent(req)
 	vars := c.mcpVars(req)
 
