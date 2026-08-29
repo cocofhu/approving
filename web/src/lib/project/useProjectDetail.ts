@@ -362,6 +362,26 @@ async function toggleWorkflowNotifyEvent(w: Workflow, ev: 'waiting_human' | 'fai
   })
 }
 
+const savingHomeWfId = ref<string | null>(null)
+
+/** Optimistic Home-visibility toggle with rollback (plan g2.1). */
+async function toggleWorkflowShowOnHome(w: Workflow, next: boolean) {
+  const prev = !!w.showOnHome
+  if (prev === next) return
+  workflows.value = workflows.value.map((x) => (x.id === w.id ? { ...x, showOnHome: next } : x))
+  savingHomeWfId.value = w.id
+  try {
+    const saved = await api.patchWorkflowHomeVisibility(w.id, next)
+    workflows.value = workflows.value.map((x) => (x.id === w.id ? { ...x, ...saved } : x))
+    toast.success(t('pages.projectDetail.homeVisibility.updated'))
+  } catch (e: any) {
+    workflows.value = workflows.value.map((x) => (x.id === w.id ? { ...x, showOnHome: prev } : x))
+    toast.error(String(e?.message || e) || t('pages.projectDetail.homeVisibility.updateFailed'))
+  } finally {
+    savingHomeWfId.value = null
+  }
+}
+
 const VAR_TYPES = computed(() => [
   { value: 'string', label: t('common.varTypes.string') },
   { value: 'paragraph', label: t('common.varTypes.paragraph') },
@@ -877,6 +897,8 @@ onBeforeRouteUpdate(async (to, from) => {
   persistWorkflowNotify,
   setWorkflowNotifyMode,
   toggleWorkflowNotifyEvent,
+  savingHomeWfId,
+  toggleWorkflowShowOnHome,
   VAR_TYPES,
   existingNames,
   askFields,

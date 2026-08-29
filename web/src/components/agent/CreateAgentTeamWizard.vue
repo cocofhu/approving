@@ -28,10 +28,13 @@ import {
   stripAuthKeysFromEnv,
   type WizardAuthMode,
 } from '@/lib/agent/agentCreateWizard'
+import { useInheritedGitEnv } from '@/lib/agent/useInheritedGitEnv'
 
 const props = defineProps<{
   open: boolean
   existingNames: string[]
+  /** When set, Git step can inherit project shared Agent env for hide/infer. */
+  projectId?: string
 }>()
 
 const emit = defineEmits<{
@@ -40,6 +43,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const { inheritedEnv } = useInheritedGitEnv(() => props.projectId)
 const draft = ref<TeamWizardDraft>(freshTeamDraft())
 const fieldError = ref('')
 const submitError = ref('')
@@ -495,6 +499,8 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                   </label>
                   <AgentGitGuide
                     :env="draft.env"
+                    :inherited-env="inheritedEnv"
+                    :allow-token-recommend="false"
                     :upsert-env="(k, v) => upsertEnv(k, v)"
                     :credential-type="draft.gitCredentialType"
                     @update:credential-type="onGitCredentialType"

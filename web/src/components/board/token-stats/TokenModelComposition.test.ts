@@ -8,6 +8,7 @@ import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
 import TokenModelComposition from './TokenModelComposition.vue'
 import { colorForModel } from './tokenModelColors'
+import { setTheme } from '@/lib/shared/theme'
 
 vi.mock('vue-echarts', () => ({
   default: {
@@ -51,7 +52,30 @@ function chartData(vm: unknown) {
   return (vm as { chartData: { name: string; value: number; color?: string }[] }).chartData
 }
 
-describe('TokenModelComposition ECharts pie (g1.1)', () => {
+function chartOption(vm: unknown) {
+  return vm as {
+    chartOption: {
+      legend?: { orient?: string; right?: number }
+      tooltip?: { borderRadius?: number; backgroundColor?: string; appendToBody?: boolean }
+      series?: { label?: { show?: boolean; formatter?: string }; center?: string[] }[]
+    }
+  }
+}
+
+function expectPieShell(vm: unknown, theme: 'dark' | 'light') {
+  const option = chartOption(vm).chartOption
+  expect(option.legend?.orient).toBe('vertical')
+  expect(option.legend?.right).toBe(0)
+  expect(option.series?.[0]?.label?.show).toBe(true)
+  expect(option.series?.[0]?.label?.formatter).toBe('{b} {d}%')
+  expect(option.series?.[0]?.center?.[0]).toBe('38%')
+  expect(option.tooltip?.borderRadius).toBe(0)
+  expect(option.tooltip?.appendToBody).toBe(true)
+  expect(JSON.stringify(option.tooltip)).not.toContain('#1a1d23')
+  expect(option.tooltip?.backgroundColor).toBe(theme === 'dark' ? '#27272a' : '#ffffff')
+}
+
+describe('TokenModelComposition ECharts pie (g1.1/g2.1)', () => {
   it('renders ECharts pie host without svg path sectors (g1.1/g2.1)', () => {
     const wrapper = mount(TokenModelComposition, {
       props: {
@@ -69,10 +93,12 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     const data = chartData(wrapper.vm)
     expect(data).toHaveLength(1)
     expect(data[0]!.color).toBe('#71717A')
+    expect(data[0]!.name).toBe('未知模型')
+    expectPieShell(wrapper.vm, 'dark')
     wrapper.unmount()
   })
 
-  it('unknown-only near-full circle: #71717A sector + legend 100% (g1.2/g2.2)', () => {
+  it('unknown-only near-full circle: #71717A sector + 100% in option data (g1.2/g2.2)', () => {
     const unknown = { modelKey: '未知/未分桶', name: '未知模型', total: 1056240000, unknown: true }
     expect(colorForModel(unknown, 0)).toBe('#71717A')
 
@@ -84,10 +110,9 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     expect(pie.find('[data-testid="mock-vchart"]').exists()).toBe(true)
     const data = chartData(wrapper.vm)
     expect(data[0]!.color).toBe('#71717A')
-    const legend = wrapper.find('[data-testid="token-model-legend"]')
-    expect(legend.text()).toContain('未知模型')
-    expect(legend.text()).toContain('100%')
-    expect(legend.text()).toContain('1.06B')
+    expect(data[0]!.name).toBe('未知模型')
+    expect(data[0]!.value).toBe(1056240000)
+    expect(wrapper.find('[data-testid="token-model-legend"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -104,13 +129,8 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     expect(data).toHaveLength(2)
     expect(data[0]!.color).toBe(colorForModel(models[0]!, 0))
     expect(data[1]!.color).toBe('#71717A')
-    const legend = wrapper.find('[data-testid="token-model-legend"]').text()
-    expect(legend).toContain('4.5%')
-    expect(legend).toContain('95.5%')
-    expect(legend).toContain('50.09M')
-    expect(legend).toContain('1.06B')
-    expect(legend).toContain('cursor-grok-4.5-high-fast')
-    expectNoFilledTagCopy(legend)
+    expect(data.map((d) => d.name)).toEqual(['cursor-grok-4.5-high-fast', '未知模型'])
+    expectNoFilledTagCopy(wrapper.html())
     expect(colorForModel(models[0]!, 0)).toBe('#34D399')
     expect(wrapper.html()).not.toMatch(/conic-gradient/i)
     wrapper.unmount()
@@ -132,13 +152,14 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
     const colors = chartData(wrapper.vm).map((d) => d.color)
     expect(colors).toContain('#71717A')
     expect(colors).toContain('#A1A1AA')
-    const legend = wrapper.find('[data-testid="token-model-legend"]').text()
-    expect(legend).toContain('未知模型')
-    expect(legend).toContain('other')
-    expect(legend).toContain('claude-sonnet-4')
-    expect(wrapper.find('[data-testid="token-model-composition"]').classes()).toContain('sm:grid-cols-[120px_1fr]')
-    const swatch = wrapper.find('[data-testid="token-model-legend"] span.h-2\\.5')
-    expect(swatch.exists()).toBe(true)
+    const names = chartData(wrapper.vm).map((d) => d.name)
+    expect(names).toContain('未知模型')
+    expect(names).toContain('other')
+    expect(names).toContain('claude-sonnet-4')
+    expect(wrapper.find('[data-testid="token-model-composition"]').classes()).toContain('w-full')
+    expect(wrapper.find('[data-testid="token-model-composition"]').classes()).not.toContain(
+      'sm:grid-cols-[120px_1fr]',
+    )
     wrapper.unmount()
   })
 
@@ -157,7 +178,7 @@ describe('TokenModelComposition ECharts pie (g1.1)', () => {
 })
 
 describe('TokenModelComposition hides filledTag (g2.1)', () => {
-  it('zh-CN legend: swatch+name only, no 含补全; filled=#34D399 unknown=#71717A', () => {
+  it('zh-CN option data: names only, no 含补全; filled=#34D399 unknown=#71717A', () => {
     expect(colorForModel(screenshotLikeModels[0]!, 0)).toBe('#71717A')
     expect(colorForModel(screenshotLikeModels[1]!, 1)).toBe('#34D399')
     expect(colorForModel(screenshotLikeModels[2]!, 2)).toBe('#34D399')
@@ -166,33 +187,20 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
       props: { models: screenshotLikeModels },
       global: { plugins: [i18n()] },
     })
-    const legend = wrapper.find('[data-testid="token-model-legend"]')
-    const text = legend.text()
-    expect(text).toContain('未知模型')
-    expect(text).toContain('cursor-grok-4.5-high-fast')
-    expect(text).toContain('gpt-5.6-sol-medium')
-    expectNoFilledTagCopy(text)
+    expectNoFilledTagCopy(wrapper.html())
     expect(wrapper.html()).not.toContain('含补全')
-
-    const items = legend.findAll('li')
-    expect(items).toHaveLength(3)
-    const unknownSwatch = items[0]!.find('span.h-2\\.5')
-    const filledSwatch = items[1]!.find('span.h-2\\.5')
-    expect(unknownSwatch.attributes('style')).toMatch(/background:\s*#71717A/i)
-    expect(filledSwatch.attributes('style')).toMatch(/background:\s*#34D399/i)
-
-    const nameSpans = items.map((li) => li.findAll('span')[1]!)
-    expect(nameSpans[0]!.classes()).toContain('text-txt3')
-    expect(nameSpans[1]!.classes()).toContain('text-ok')
-    expect(nameSpans[2]!.classes()).toContain('text-ok')
-    expect(items[0]!.find('[data-testid="unknown-model-badge"]').exists()).toBe(true)
-
-    const fills = chartData(wrapper.vm).map((d) => d.color)
-    expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
+    const data = chartData(wrapper.vm)
+    expect(data.map((d) => d.name)).toEqual([
+      '未知模型',
+      'cursor-grok-4.5-high-fast',
+      'gpt-5.6-sol-medium',
+    ])
+    expect(data.map((d) => d.color)).toEqual(['#71717A', '#34D399', '#34D399'])
+    expectPieShell(wrapper.vm, 'dark')
     wrapper.unmount()
   })
 
-  it('configured alias: no unknown badge and not #71717A; same-name rows stay distinct (g4.1)', () => {
+  it('configured alias: no unknown gray; same-name rows stay distinct (g4.1)', () => {
     const models = [
       { modelKey: '未知/未分桶', name: 'gpt-5', total: 100, unknown: true },
       { modelKey: 'gpt-5', name: 'gpt-5', total: 80 },
@@ -203,20 +211,15 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
       props: { models },
       global: { plugins: [i18n()] },
     })
-    const legend = wrapper.find('[data-testid="token-model-legend"]')
-    expect(legend.text()).toContain('gpt-5')
-    expect(legend.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
-    const nameSpan = legend.findAll('li')[0]!.findAll('span')[1]!
-    expect(nameSpan.classes()).not.toContain('text-txt3')
-    expect(nameSpan.classes()).toContain('text-txt')
     const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills[0]).toBe('#7B61FF')
     expect(fills[0]).not.toBe('#71717A')
-    expect(legend.findAll('li')).toHaveLength(2)
+    expect(chartData(wrapper.vm)).toHaveLength(2)
+    expect(chartData(wrapper.vm).every((d) => d.name === 'gpt-5')).toBe(true)
     wrapper.unmount()
   })
 
-  it('configured alias + filled: sector/legend #34D399 and no badge (g4.1)', () => {
+  it('configured alias + filled: sector #34D399 (g4.1)', () => {
     const models = [
       { modelKey: '未知/未分桶', name: 'Auto', total: 100, unknown: true, filled: true },
       { modelKey: 'cursor-grok', name: 'cursor-grok-4.5-high-fast', total: 80, filled: true },
@@ -226,31 +229,34 @@ describe('TokenModelComposition hides filledTag (g2.1)', () => {
       props: { models },
       global: { plugins: [i18n()] },
     })
-    const legend = wrapper.find('[data-testid="token-model-legend"]')
-    expect(legend.text()).toContain('Auto')
-    expect(legend.find('[data-testid="unknown-model-badge"]').exists()).toBe(false)
-    const nameSpan = legend.findAll('li')[0]!.findAll('span')[1]!
-    expect(nameSpan.classes()).toContain('text-ok')
-    expect(nameSpan.classes()).not.toContain('text-txt3')
+    expect(chartData(wrapper.vm)[0]!.name).toBe('Auto')
     const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills).toEqual(['#34D399', '#34D399'])
     wrapper.unmount()
   })
 
-  it('en locale legend: no includes filled data; filled/#71717A colors unchanged', () => {
+  it('en locale option: no includes filled data; filled/#71717A colors unchanged', () => {
     const wrapper = mount(TokenModelComposition, {
       props: { models: screenshotLikeModels },
       global: { plugins: [i18nEn()] },
     })
-    const text = wrapper.find('[data-testid="token-model-legend"]').text()
-    expect(text).toContain('cursor-grok-4.5-high-fast')
-    expect(text).toContain('gpt-5.6-sol-medium')
-    expectNoFilledTagCopy(text)
+    expectNoFilledTagCopy(wrapper.html())
     expect(wrapper.html()).not.toContain('includes filled data')
     expect(wrapper.html()).not.toContain('含补全')
 
     const fills = chartData(wrapper.vm).map((d) => d.color)
     expect(fills).toEqual(['#71717A', '#34D399', '#34D399'])
     wrapper.unmount()
+  })
+
+  it('light theme pie tooltip follows shared shell (g2.3)', () => {
+    setTheme('light')
+    const wrapper = mount(TokenModelComposition, {
+      props: { models: screenshotLikeModels },
+      global: { plugins: [i18n()] },
+    })
+    expectPieShell(wrapper.vm, 'light')
+    wrapper.unmount()
+    setTheme('dark')
   })
 })

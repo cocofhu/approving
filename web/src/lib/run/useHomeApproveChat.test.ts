@@ -61,6 +61,7 @@ const approveWf: Workflow = {
   updatedAt: '',
   needsRepo: false,
   projectId: 'proj-1',
+  showOnHome: true,
   nodes: [
     { id: 'in', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
     { id: 'ap', type: 'approve', label: '澄清', position: { x: 0, y: 0 }, config: {} },
@@ -433,5 +434,55 @@ describe('useHomeApproveChat', () => {
     await chat.onLaunchStarted('run-99')
     expect(loadHomeComposerDraft()).toBeNull()
     expect(chat.draft.value).toBe('')
+  })
+
+  // plan g3.1 / g3.3 — showOnHome=false is hidden even when published approve-first
+  it('hides published approve-first pipelines when showOnHome is false or missing', async () => {
+    mocks.listWorkflows.mockResolvedValue([
+      { ...approveWf, id: 'wf-off', showOnHome: false },
+      { ...approveWf, id: 'wf-missing', showOnHome: undefined },
+      approveWf,
+    ])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap'])
+  })
+
+  // plan g3.3 — draft / non-approve-first stay hidden even when showOnHome is true
+  it('still hides draft and non-approve-first pipelines when showOnHome is true', async () => {
+    mocks.listWorkflows.mockResolvedValue([
+      { ...approveWf, id: 'wf-draft', status: 'draft' as const, showOnHome: true },
+      { ...reactWf, showOnHome: true },
+      approveWf,
+    ])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap'])
+  })
+
+  // plan g3.1 / g3.3 — remembered hidden id falls back to first visible
+  it('falls back when remembered pipeline is no longer showOnHome', async () => {
+    localStorage.setItem(HOME_PIPELINE_MEMORY_KEY, 'wf-lite')
+    mocks.listWorkflows.mockResolvedValue([
+      approveWf,
+      { ...approveWfB, showOnHome: false },
+    ])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.selectedId.value).toBe('wf-ap')
+    expect(chat.selected.value?.id).toBe('wf-ap')
+    expect(localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)).toBe('wf-ap')
+  })
+
+  // plan g3.3 — all hidden → empty pipelines (empty state / disabled select)
+  it('yields an empty pipeline list when every candidate is hidden', async () => {
+    mocks.listWorkflows.mockResolvedValue([
+      { ...approveWf, showOnHome: false },
+      { ...approveWfB, showOnHome: false },
+    ])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.pipelines.value).toHaveLength(0)
+    expect(chat.selected.value).toBeNull()
   })
 })

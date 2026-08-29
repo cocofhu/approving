@@ -4,7 +4,16 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { registerECharts } from '@/components/charts/echartsSetup'
-import { CHART_AXIS, fmtCompactAxis } from '@/components/charts/chartTheme'
+import {
+  STATS_CHART_GRID,
+  axisTooltip,
+  chartTone,
+  fmtCompactAxis,
+  pieChartOption,
+  statsAxis,
+  statsLegend,
+  statsTooltip,
+} from '@/components/charts/chartTheme'
 import { api } from '@/lib/api/api'
 import type { GlobalTokenStats, TokenStatsWindow } from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
@@ -19,7 +28,6 @@ import {
   type TokenPartKey,
 } from '@/components/board/token-stats/tokenStatsShared'
 import { useToast } from '@/lib/composables/useToast'
-import { theme } from '@/lib/shared/theme'
 registerECharts()
 
 const { t } = useI18n()
@@ -40,77 +48,6 @@ const data = ref<GlobalTokenStats | null>(null)
 
 let abort: AbortController | null = null
 let generation = 0
-
-const STATS_CHART_GRID = {
-  left: 56,
-  right: 16,
-  top: 40,
-  bottom: 52,
-  containLabel: true,
-}
-
-const chartTone = computed(() => {
-  void theme.value
-  const dark = theme.value === 'dark'
-  return {
-    axisLabel: dark ? '#a1a1aa' : '#71717a',
-    splitLine: dark ? 'rgba(255,255,255,0.08)' : '#eef0f3',
-    legend: dark ? '#a1a1aa' : '#8b8b96',
-    pieLabel: dark ? '#d4d4d8' : '#52525b',
-    heatLow: dark ? '#1f1f36' : '#efeaff',
-    heatHigh: '#5b4dff',
-  }
-})
-
-function statsAxis() {
-  const tone = chartTone.value
-  return {
-    ...CHART_AXIS,
-    axisLabel: { ...CHART_AXIS.axisLabel, color: tone.axisLabel, hideOverlap: true },
-    splitLine: { lineStyle: { color: tone.splitLine } },
-  }
-}
-
-function statsLegend() {
-  return {
-    top: 0,
-    left: 0,
-    itemWidth: 12,
-    itemHeight: 8,
-    itemStyle: { borderRadius: 0 },
-    textStyle: { fontSize: 11, color: chartTone.value.legend },
-  }
-}
-
-function statsTooltip(extra: Record<string, unknown> = {}) {
-  const dark = theme.value === 'dark'
-  return {
-    borderRadius: 0,
-    backgroundColor: dark ? '#27272a' : '#ffffff',
-    borderColor: dark ? '#3f3f46' : '#e4e4e7',
-    textStyle: { color: dark ? '#e4e4e7' : '#27272a', fontSize: 12 },
-    confine: false,
-    appendToBody: true,
-    extraCssText: 'z-index: 1000;',
-    ...extra,
-  }
-}
-
-function axisTooltip(extra: Record<string, unknown> = {}) {
-  return statsTooltip({
-    trigger: 'axis',
-    valueFormatter: (v: number) => fmtCompactTokenCount(v),
-    ...extra,
-  })
-}
-
-function pieTooltipFormatter(params: unknown): string {
-  const p = params as { name?: string; value?: number; percent?: number }
-  const name = p.name ?? ''
-  const value = fmtCompactTokenCount(p.value ?? 0)
-  const pct = p.percent != null ? p.percent.toFixed(1) : '0'
-  return `${name}: ${value} (${pct}%)`
-}
 
 const isEmpty = computed(() => !!data.value?.empty)
 
@@ -215,39 +152,7 @@ function pieOption(
   slices: { name: string; value: number; key?: string; color?: string }[],
   donut = false,
 ) {
-  if (!slices.length) return null
-  const colors = slices.map((s, i) => s.color || ['#4f46e5', '#7c6dff', '#a99cff', '#94a3b8'][i % 4])
-  return {
-    tooltip: statsTooltip({ trigger: 'item', formatter: pieTooltipFormatter }),
-    legend: {
-      show: true,
-      orient: 'vertical',
-      right: 0,
-      top: 'middle',
-      type: 'scroll',
-      itemWidth: 10,
-      itemHeight: 8,
-      itemStyle: { borderRadius: 0 },
-      textStyle: { fontSize: 10, color: chartTone.value.legend },
-    },
-    series: [
-      {
-        type: 'pie',
-        radius: donut ? ['36%', '54%'] : '54%',
-        center: ['38%', '50%'],
-        data: slices.map((s) => ({ name: s.name, value: s.value, key: s.key })),
-        itemStyle: { borderWidth: 0 },
-        color: colors,
-        label: {
-          show: true,
-          formatter: '{b} {d}%',
-          fontSize: 10,
-          color: chartTone.value.pieLabel,
-        },
-        labelLayout: { hideOverlap: true },
-      },
-    ],
-  }
+  return pieChartOption(slices, donut)
 }
 
 function buildPieSlices() {
@@ -410,6 +315,7 @@ function heatmapOption() {
     row.forEach((v, ci) => flat.push([ci, ri, v]))
   })
   const max = Math.max(1, ...flat.map((f) => f[2]))
+  const tone = chartTone()
   return {
     grid: { left: 176, right: 12, top: 12, bottom: 28, containLabel: false },
     tooltip: statsTooltip({
@@ -424,13 +330,13 @@ function heatmapOption() {
       type: 'category',
       data: hm.cols,
       splitArea: { show: true },
-      axisLabel: { fontSize: 10, color: chartTone.value.axisLabel },
+      axisLabel: { fontSize: 10, color: tone.axisLabel },
     },
     yAxis: {
       type: 'category',
       data: hm.rows,
       splitArea: { show: true },
-      axisLabel: { fontSize: 10, color: chartTone.value.axisLabel, width: 160, overflow: 'break' },
+      axisLabel: { fontSize: 10, color: tone.axisLabel, width: 160, overflow: 'break' },
     },
     visualMap: {
       min: 0,
@@ -440,14 +346,14 @@ function heatmapOption() {
       left: 'center',
       bottom: 0,
       show: false,
-      inRange: { color: [chartTone.value.heatLow, chartTone.value.heatHigh] },
+      inRange: { color: [tone.heatLow, tone.heatHigh] },
     },
     series: [{
       type: 'heatmap',
       data: flat,
       label: {
         show: true,
-        color: chartTone.value.pieLabel,
+        color: tone.pieLabel,
         formatter: (p: { data: [number, number, number] }) => fmtCompactTokenCount(p.data[2]),
       },
     }],

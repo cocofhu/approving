@@ -66,6 +66,7 @@ const approveWf: Workflow = {
   updatedAt: '',
   needsRepo: false,
   projectId: 'proj-1',
+  showOnHome: true,
   nodes: [
     { id: 'in', type: 'input', label: '开始', position: { x: 0, y: 0 }, config: {} },
     { id: 'ap', type: 'approve', label: '澄清', position: { x: 0, y: 0 }, config: {} },
@@ -380,8 +381,20 @@ describe('DashboardView home composer', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="home-pipelines-empty"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="home-pipelines-empty"]').text()).not.toContain('选择项目')
+    expect(wrapper.find('[data-testid="home-go-projects"]').exists()).toBe(true)
     await wrapper.get('[data-testid="home-go-projects"]').trigger('click')
     expect(mocks.push).toHaveBeenCalledWith('/projects')
+    wrapper.unmount()
+  })
+
+  it('shows empty state prompting project Show on Home when pipelines are hidden (g3.2 / g3.3)', async () => {
+    mocks.listWorkflows.mockResolvedValue([{ ...approveWf, showOnHome: false }])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const empty = wrapper.get('[data-testid="home-pipelines-empty"]')
+    expect(empty.text()).toContain('首页可见')
+    expect(empty.text()).not.toContain('丢失')
+    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').element).toHaveProperty('disabled', true)
     wrapper.unmount()
   })
 

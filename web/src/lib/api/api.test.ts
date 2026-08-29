@@ -408,6 +408,29 @@ describe('api.patchWorkflowNotifyPolicy', () => {
     expect(body.nodes).toBeUndefined()
     expect(body.edges).toBeUndefined()
   })
+})
+
+describe('api.patchWorkflowHomeVisibility', () => {
+  it('PATCHes showOnHome-only body without nodes/edges (plan g1.2 / g2.1)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: 'w1',
+        status: 'published',
+        showOnHome: true,
+      }),
+    )
+    await expect(api.patchWorkflowHomeVisibility('w1', true)).resolves.toMatchObject({
+      id: 'w1',
+      showOnHome: true,
+    })
+    const call = fetchMock.mock.calls[fetchMock.mock.calls.length - 1]
+    expect(String(call?.[0])).toMatch(/\/workflows\/w1\/home-visibility$/)
+    expect(call?.[1]).toMatchObject({ method: 'PATCH' })
+    const body = JSON.parse(String(call?.[1]?.body))
+    expect(body).toEqual({ showOnHome: true })
+    expect(body.nodes).toBeUndefined()
+    expect(body.edges).toBeUndefined()
+  })
 
   it('startRun sends title when provided', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'r1', status: 'queued' }))

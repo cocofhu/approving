@@ -46,6 +46,7 @@ const {
   onCustomConfigInput,
   onApiKeyInput,
   onGitCredentialType,
+  inheritedEnv,
   goPrev,
   goSkip,
   goNext,
@@ -230,6 +231,8 @@ const {
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.git.meta') }}</p>
                   <AgentGitGuide
                     :env="draft.env"
+                    :inherited-env="inheritedEnv"
+                    :allow-token-recommend="false"
                     :upsert-env="
                       (k, v) => {
                         upsertEnv(k, v)

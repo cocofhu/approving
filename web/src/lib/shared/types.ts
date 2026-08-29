@@ -64,6 +64,8 @@ export interface Workflow {
   updatedAt: string
   lastRunAt?: string
   needsRepo: boolean
+  /** Home cards + Home search; missing/false = hidden (plan g1.1). */
+  showOnHome?: boolean
   notifyPolicy?: WorkflowNotifyPolicy
   nodes: WFNode[]
   edges: WFEdge[]
