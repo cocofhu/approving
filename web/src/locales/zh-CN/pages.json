@@ -84,7 +84,8 @@
         "colTotal": "总量",
         "colInput": "输入",
         "colOutput": "输出",
-        "colDelta": "变化"
+        "colDelta": "变化",
+        "resizeCol": "拖动调整{col}列宽"
       },
       "filterApplied": "已筛选：{name}"
     },

@@ -84,7 +84,8 @@
         "colTotal": "Total",
         "colInput": "Input",
         "colOutput": "Output",
-        "colDelta": "Change"
+        "colDelta": "Change",
+        "resizeCol": "Drag to resize the {col} column"
       },
       "filterApplied": "Filtered: {name}"
     },
