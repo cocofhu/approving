@@ -1643,7 +1643,9 @@
         "connecting": "Connecting…"
       },
       "ideUnavailable": "This image has no code-server (8080). Use the Terminal tab.",
+      "ideLoading": "Starting IDE",
       "acpNativeUnavailable": "This sandbox has no ACP bridge service (8765).",
+      "acpLoading": "Connecting to ACP",
       "novncUnavailable": "Browser component not started",
       "novncUnavailableHint": "This sandbox has no VNC preview (VNC_PREVIEW not set), or the desktop failed to start. Use the Terminal / ACP tabs.",
       "novncConnecting": "Checking browser component…",

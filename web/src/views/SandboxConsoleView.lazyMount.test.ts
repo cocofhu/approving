@@ -6,6 +6,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
+import enPages from '@/locales/en/pages.json'
 import type { SandboxView } from '@/lib/api/api'
 
 const apiMocks = vi.hoisted(() => ({
@@ -118,13 +119,56 @@ class MockWebSocket {
   }
 }
 
-async function mountConsole(tabQuery?: string, opts?: { empty?: boolean }): Promise<VueWrapper> {
-  if (opts?.empty) {
+let heldMetaResolve: ((value: SandboxView) => void) | null = null
+
+function sandboxView(overrides?: Partial<SandboxView>): SandboxView {
+  return { ...MOCK_SANDBOX, ...overrides }
+}
+
+async function resolveHeldMeta(value: SandboxView = MOCK_SANDBOX) {
+  expect(heldMetaResolve).toBeTruthy()
+  heldMetaResolve!(value)
+  heldMetaResolve = null
+  await flushPromises()
+  await nextTick()
+}
+
+function clickTab(wrapper: VueWrapper, label: string) {
+  const btn = wrapper.findAll('button').find((b) => b.text().includes(label))
+  expect(btn).toBeTruthy()
+  return btn!.trigger('click')
+}
+
+function ideLayer(wrapper: VueWrapper) {
+  return wrapper.find('[data-testid="sandbox-console-ide-pane"] [data-testid="hard-load-layer"]')
+}
+
+function acpLayer(wrapper: VueWrapper) {
+  return wrapper.find('[data-testid="sandbox-console-acp-pane"] [data-testid="hard-load-layer"]')
+}
+
+async function mountConsole(
+  tabQuery?: string,
+  opts?: { empty?: boolean; holdMeta?: boolean; sandbox?: Partial<SandboxView> },
+): Promise<VueWrapper> {
+  const happy = (window as unknown as { happyDOM?: { settings: { disableIframePageLoading: boolean } } }).happyDOM
+  if (happy) happy.settings.disableIframePageLoading = true
+  heldMetaResolve = null
+  const sb = sandboxView(opts?.sandbox)
+  if (opts?.holdMeta) {
+    apiMocks.getSandbox.mockImplementation(
+      () =>
+        new Promise<SandboxView>((resolve) => {
+          heldMetaResolve = resolve
+        }),
+    )
+    apiMocks.listSandboxes.mockResolvedValue([sb])
+  } else if (opts?.empty) {
     apiMocks.getSandbox.mockRejectedValue(new Error('missing'))
     apiMocks.listSandboxes.mockResolvedValue([])
   } else {
-    apiMocks.getSandbox.mockResolvedValue(MOCK_SANDBOX)
-    apiMocks.listSandboxes.mockResolvedValue([MOCK_SANDBOX])
+    apiMocks.getSandbox.mockResolvedValue(sb)
+    apiMocks.listSandboxes.mockResolvedValue([sb])
   }
   apiMocks.sandboxLog.mockResolvedValue({ content: '', live: false, found: false })
 
@@ -166,6 +210,8 @@ async function mountConsole(tabQuery?: string, opts?: { empty?: boolean }): Prom
 }
 
 describe('SandboxConsoleView IDE/ACP lazy mount', () => {
+  let consoleErrorSpy: { mockRestore: () => void }
+
   beforeEach(() => {
     breakpointMocks.isMobile.value = false
     vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
@@ -177,11 +223,21 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
         unobserve() {}
       },
     )
+    const nativeError = console.error.bind(console)
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      const first = args[0] as { message?: string } | string
+      const text = typeof first === 'string' ? first : first?.message ?? String(first)
+      if (text.includes('Iframe page loading is disabled')) return
+      nativeError(...args)
+    })
   })
 
   afterEach(() => {
+    consoleErrorSpy.mockRestore()
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+    heldMetaResolve = null
     document.body.innerHTML = ''
   })
 
@@ -189,6 +245,8 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
     const wrapper = await mountConsole()
     expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(false)
     expect(wrapper.find('iframe[title="ACP bridge"]').exists()).toBe(false)
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    expect(acpLayer(wrapper).exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -255,6 +313,161 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
     expect(legacy.find('iframe[title="ACP bridge"]').exists()).toBe(false)
     expect(legacy.find('iframe[title="code-server"]').exists()).toBe(false)
     legacy.unmount()
+  })
+
+  it('syncs IDE/ACP loading copy in zh-CN and en (g1.5)', () => {
+    expect(pages.pages.sandboxConsole.ideLoading).toBe('正在启动 IDE')
+    expect(pages.pages.sandboxConsole.acpLoading).toBe('正在连接 ACP')
+    expect(enPages.pages.sandboxConsole.ideLoading).toBe('Starting IDE')
+    expect(enPages.pages.sandboxConsole.acpLoading).toBe('Connecting to ACP')
+  })
+
+  it('shows HardLoadLayer on IDE before iframe load and keeps the top bar usable (g1.1 g3.1)', async () => {
+    const wrapper = await mountConsole('ide', { holdMeta: true })
+    const layer = ideLayer(wrapper)
+    expect(layer.exists()).toBe(true)
+    expect(layer.attributes('role')).toBe('status')
+    expect(layer.attributes('aria-busy')).toBe('true')
+    expect(layer.get('[data-testid="hard-load-stage"]').text()).toBe('正在启动 IDE')
+    expect(wrapper.find('[data-testid="sandbox-console-ide-pane"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.find('[data-testid="sandbox-console-ide-unavailable"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('该沙箱镜像未提供 code-server')
+    expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(false)
+
+    await clickTab(wrapper, '终端')
+    await nextTick()
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('hides IDE loading after iframe load and does not replay on keep-alive switch (g1.2 g3.1)', async () => {
+    const wrapper = await mountConsole('ide')
+    await flushPromises()
+    expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(true)
+    expect(ideLayer(wrapper).exists()).toBe(true)
+
+    await wrapper.get('iframe[title="code-server"]').trigger('load')
+    await nextTick()
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sandbox-console-ide-pane"]').attributes('aria-busy')).toBe('false')
+
+    await clickTab(wrapper, '终端')
+    await nextTick()
+    await clickTab(wrapper, 'IDE')
+    await nextTick()
+    expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(true)
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not flash ideUnavailable while meta is pending (g1.3 g3.1)', async () => {
+    const wrapper = await mountConsole('ide', { holdMeta: true })
+    expect(ideLayer(wrapper).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sandbox-console-ide-unavailable"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('该沙箱镜像未提供 code-server')
+
+    await resolveHeldMeta(sandboxView({ hasCodeServer: false }))
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sandbox-console-ide-unavailable"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('该沙箱镜像未提供 code-server')
+    expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows only unavailable when hasCodeServer is false (g1.3 g3.1)', async () => {
+    const wrapper = await mountConsole('ide', { sandbox: { hasCodeServer: false } })
+    expect(wrapper.find('[data-testid="sandbox-console-ide-unavailable"]').exists()).toBe(true)
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    expect(wrapper.find('iframe[title="code-server"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows boot-class stuck retry after 60s and remounts the IDE iframe (g1.4)', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountConsole('ide')
+    await flushPromises()
+    expect(ideLayer(wrapper).exists()).toBe(true)
+    const iframeEl = wrapper.find('iframe[title="code-server"]').element
+    vi.advanceTimersByTime(59_000)
+    await nextTick()
+    expect(wrapper.find('[data-testid="hard-load-stuck"]').exists()).toBe(false)
+    vi.advanceTimersByTime(1_000)
+    await nextTick()
+    expect(wrapper.find('[data-testid="hard-load-stuck"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="hard-load-retry"]').text()).toBe('重试')
+
+    await wrapper.get('[data-testid="hard-load-retry"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="hard-load-stuck"]').exists()).toBe(false)
+    expect(ideLayer(wrapper).exists()).toBe(true)
+    expect(wrapper.find('iframe[title="code-server"]').element).not.toBe(iframeEl)
+    wrapper.unmount()
+  })
+
+  it('covers ACP overlay, load dismiss, unavailable mutex, retry, and independence from IDE (g2.1 g3.2)', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountConsole('ide')
+    await flushPromises()
+    await wrapper.get('iframe[title="code-server"]').trigger('load')
+    await nextTick()
+    expect(ideLayer(wrapper).exists()).toBe(false)
+
+    await clickTab(wrapper, 'ACP')
+    await flushPromises()
+    await nextTick()
+    expect(wrapper.find('iframe[title="ACP bridge"]').exists()).toBe(true)
+    expect(acpLayer(wrapper).exists()).toBe(true)
+    expect(acpLayer(wrapper).get('[data-testid="hard-load-stage"]').text()).toBe('正在连接 ACP')
+    expect(acpLayer(wrapper).attributes('role')).toBe('status')
+    expect(ideLayer(wrapper).exists()).toBe(false)
+
+    await clickTab(wrapper, 'IDE')
+    await nextTick()
+    expect(ideLayer(wrapper).exists()).toBe(false)
+    expect(acpLayer(wrapper).exists()).toBe(false)
+
+    await clickTab(wrapper, 'ACP')
+    await nextTick()
+    expect(acpLayer(wrapper).exists()).toBe(true)
+
+    vi.advanceTimersByTime(60_000)
+    await nextTick()
+    expect(wrapper.find('[data-testid="sandbox-console-acp-pane"] [data-testid="hard-load-stuck"]').exists()).toBe(true)
+    const acpIframe = wrapper.find('iframe[title="ACP bridge"]').element
+    await wrapper.get('[data-testid="sandbox-console-acp-pane"] [data-testid="hard-load-retry"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="sandbox-console-acp-pane"] [data-testid="hard-load-stuck"]').exists()).toBe(false)
+    expect(acpLayer(wrapper).exists()).toBe(true)
+    expect(wrapper.find('iframe[title="ACP bridge"]').element).not.toBe(acpIframe)
+
+    await wrapper.get('iframe[title="ACP bridge"]').trigger('load')
+    await nextTick()
+    expect(acpLayer(wrapper).exists()).toBe(false)
+
+    await clickTab(wrapper, 'IDE')
+    await nextTick()
+    await clickTab(wrapper, 'ACP')
+    await nextTick()
+    expect(acpLayer(wrapper).exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not flash acp unavailable while meta is pending and only shows it when hasAcp is false (g2.1 g3.2)', async () => {
+    const pending = await mountConsole('acp-native', { holdMeta: true })
+    expect(acpLayer(pending).exists()).toBe(true)
+    expect(pending.find('[data-testid="sandbox-console-acp-unavailable"]').exists()).toBe(false)
+    expect(pending.text()).not.toContain('该沙箱未提供 ACP 桥接服务')
+    await resolveHeldMeta(sandboxView({ hasAcp: false }))
+    expect(acpLayer(pending).exists()).toBe(false)
+    expect(pending.find('[data-testid="sandbox-console-acp-unavailable"]').exists()).toBe(true)
+    expect(pending.find('iframe[title="ACP bridge"]').exists()).toBe(false)
+    pending.unmount()
+
+    const none = await mountConsole('acp-native', { sandbox: { hasAcp: false } })
+    expect(none.find('[data-testid="sandbox-console-acp-unavailable"]').exists()).toBe(true)
+    expect(acpLayer(none).exists()).toBe(false)
+    none.unmount()
   })
 })
 
