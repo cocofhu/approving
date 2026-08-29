@@ -166,6 +166,62 @@ describe('RunListView delete run and ops column', () => {
   })
 })
 
+describe('RunListView duration column layout (g1.1 / g1.2 / g2.1)', () => {
+  const desktopBlock = src.slice(src.indexOf('<!-- Desktop table (loading skeleton or rows) -->'))
+  const mobileBlock = src.slice(
+    src.indexOf('<!-- Mobile card list -->'),
+    src.indexOf('<!-- Desktop table -->'),
+  )
+
+  it('uses tabular-nums and whitespace-nowrap on the desktop duration td', () => {
+    expect(desktopBlock).toMatch(
+      /<td class="[^"]*\btabular-nums\b[^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+    )
+    expect(desktopBlock).toMatch(
+      /<td class="[^"]*\bwhitespace-nowrap\b[^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+    )
+    expect(src).toMatch(/\{\{ fmtDuration\(r\.durationSec\) \}\}/)
+  })
+
+  it('reserves hh:mm:ss min-width on duration th, td, and skeleton placeholder', () => {
+    expect(desktopBlock).toMatch(
+      /<th class="[^"]*min-w-\[6\.2em\][^"]*">\{\{ t\('common\.table\.duration'\) \}\}<\/th>/,
+    )
+    expect(desktopBlock).toMatch(
+      /<td class="[^"]*min-w-\[6\.2em\][^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+    )
+    const durationTh = desktopBlock.match(
+      /<th class="[^"]*">\{\{ t\('common\.table\.duration'\) \}\}<\/th>/,
+    )?.[0]
+    expect(durationTh).toBeTruthy()
+    expect(durationTh).toMatch(/min-w-\[6\.2em\]/)
+    expect(durationTh).toMatch(/whitespace-nowrap/)
+
+    const skelStart = desktopBlock.indexOf('v-if="initialLoading"')
+    const skelEnd = desktopBlock.indexOf('<template v-else>', skelStart)
+    const skeleton = desktopBlock.slice(skelStart, skelEnd)
+    expect(skeleton).toMatch(/min-w-\[6\.2em\]/)
+    expect(skeleton).toMatch(/w-\[6\.2em\]/)
+    expect(skeleton).not.toMatch(/w-\[40%\]/)
+  })
+
+  it('does not switch the table to fixed layout or change duration alignment', () => {
+    expect(desktopBlock).toMatch(/<table class="w-full text-sm">/)
+    expect(desktopBlock).not.toMatch(/table-layout/)
+    expect(desktopBlock).not.toMatch(/table-fixed/)
+    const durationTd = desktopBlock.match(
+      /<td class="[^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+    )?.[0]
+    expect(durationTd).toBeTruthy()
+    expect(durationTd).not.toMatch(/text-right|text-center/)
+  })
+
+  it('does not add duration display to mobile cards', () => {
+    expect(mobileBlock).not.toMatch(/fmtDuration/)
+    expect(mobileBlock).not.toMatch(/common\.table\.duration/)
+  })
+})
+
 describe('RunListView sorting', () => {
   it('exposes desktop sortable headers for start time and priority only', () => {
     expect(src).toMatch(/applySortClick\('started_at'\)/)
