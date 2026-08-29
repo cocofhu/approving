@@ -42,7 +42,7 @@ import { api } from '@/lib/api/api'
 import { displayRunTitle } from '@/lib/run/runTitle'
 
 const sampleData = {
-  window: '30d',
+  window: 'all',
   bucketWidth: 'day',
   timezone: 'Asia/Shanghai',
   empty: false,
@@ -106,7 +106,7 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('shows default input/output rows without cache labels or slash pairs', async () => {
+  it('shows default input/output rows without cache labels or slash pairs (g2.1)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     const merge = wrapper.find('[data-testid="token-analytics-kpi-merge"]')
@@ -123,7 +123,7 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('shows four-part KPI detail on hover and focus', async () => {
+  it('shows four-part KPI detail on hover and focus (g2.1)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     expect(wrapper.find('[data-testid="token-analytics-kpi-detail"]').exists()).toBe(true)
@@ -227,6 +227,7 @@ describe('TokenAnalyticsView', () => {
   })
 
   it('truncates long multiline run titles to a single line in top runs table', async () => {
+    // plan coverage: g2.1 — 60-char cap, single line, tooltip for overflow
     const longTitle =
       '5. 迁移编号须严格递增，不得重用历史编号；6. 所有新增表结构变更必须配套 SQLite migration，禁止只改 Go struct；7. 关键路径必须有可重现的 Go tests。\n\n三、接口与安全\n对外 HTTP 接口保持向后兼容；敏感字段不得出现在日志。\n\n四、验收测试\n须覆盖主流程与边界，PR 不得带未测试的 Sendable 变更。'
     vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
@@ -250,6 +251,7 @@ describe('TokenAnalyticsView', () => {
   })
 
   it('shows short run titles without ellipsis in top runs table', async () => {
+    // plan coverage: g2.1 — short titles keep full text, no tooltip
     const shortTitle = '我要讲解一个技术 或者一个产品 目前模板太少了'
     vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
       ...sampleData,
@@ -265,6 +267,7 @@ describe('TokenAnalyticsView', () => {
   })
 
   it('navigates to run detail when clicking truncated run title', async () => {
+    // plan coverage: g2.1 — click truncated title still goes to /runs/:id
     const longTitle = 'A'.repeat(80)
     vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
       ...sampleData,
@@ -278,18 +281,148 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('puts 近 24 小时 first, keeps default 30d, and requests window=24h on click (g2.1/g2.2)', async () => {
+  function firePointer(
+    el: Element,
+    type: 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel',
+    clientX: number,
+  ) {
+    el.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        pointerId: 1,
+      }),
+    )
+  }
+
+  it('renders header sashes with i18n aria-label even when topRuns is empty', async () => {
+    // plan coverage: g1.1 / f5 — empty topRuns still shows four draggable headers
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({ ...sampleData, topRuns: [] })
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const runsTable = wrapper.find('[data-testid="token-analytics-runs-table"]')
+    expect(runsTable.text()).toContain('运行')
+    expect(runsTable.text()).toContain('项目')
+    expect(runsTable.text()).toContain('模型')
+    expect(runsTable.text()).toContain('总量')
+    for (const key of ['run', 'project', 'model', 'total'] as const) {
+      const sash = runsTable.find(`[data-testid="token-analytics-runs-col-sash-${key}"]`)
+      expect(sash.exists()).toBe(true)
+      expect(sash.classes()).toContain('cursor-col-resize')
+      expect(sash.attributes('role')).toBe('separator')
+      expect(sash.attributes('aria-label')).toMatch(/拖动调整/)
+    }
+    wrapper.unmount()
+  })
+
+  it('dragging a header sash changes that column width', async () => {
+    // plan coverage: g1.2 / g2.2 — pointer drag updates col style width
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const sash = wrapper.find('[data-testid="token-analytics-runs-col-sash-run"]').element
+    const col = wrapper.find('[data-testid="token-analytics-runs-col-run"]')
+    expect(col.attributes('style')).toContain('220px')
+    firePointer(sash, 'pointerdown', 100)
+    firePointer(sash, 'pointermove', 160)
+    firePointer(sash, 'pointerup', 160)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="token-analytics-runs-col-run"]').attributes('style')).toContain('280px')
+    wrapper.unmount()
+  })
+
+  it('resizes each of the four runs-table columns independently', async () => {
+    // plan coverage: g1.2 — run/project/model/total each have their own pixel width
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const drags: Array<[string, number, number]> = [
+      ['run', 100, 150],
+      ['project', 100, 130],
+      ['model', 100, 90],
+      ['total', 100, 140],
+    ]
+    for (const [key, start, end] of drags) {
+      const sash = wrapper.find(`[data-testid="token-analytics-runs-col-sash-${key}"]`).element
+      firePointer(sash, 'pointerdown', start)
+      firePointer(sash, 'pointermove', end)
+      firePointer(sash, 'pointerup', end)
+    }
+    await flushPromises()
+    expect(wrapper.find('[data-testid="token-analytics-runs-col-run"]').attributes('style')).toContain('270px')
+    expect(wrapper.find('[data-testid="token-analytics-runs-col-project"]').attributes('style')).toContain('170px')
+    expect(wrapper.find('[data-testid="token-analytics-runs-col-model"]').attributes('style')).toContain('130px')
+    expect(wrapper.find('[data-testid="token-analytics-runs-col-total"]').attributes('style')).toContain('128px')
+    wrapper.unmount()
+  })
+
+  it('clamps column width at the minimum when dragging inward', async () => {
+    // plan coverage: g1.2 / g2.2 — drag below min width is clamped
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const sash = wrapper.find('[data-testid="token-analytics-runs-col-sash-run"]').element
+    firePointer(sash, 'pointerdown', 400)
+    firePointer(sash, 'pointermove', -4000)
+    firePointer(sash, 'pointerup', -4000)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="token-analytics-runs-col-run"]').attributes('style')).toContain('80px')
+    wrapper.unmount()
+  })
+
+  it('dragging a column sash does not navigate to the run', async () => {
+    // plan coverage: g1.3 / g2.2 — sash pointer drag must not call router.push
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const sash = wrapper.find('[data-testid="token-analytics-runs-col-sash-run"]').element
+    firePointer(sash, 'pointerdown', 100)
+    firePointer(sash, 'pointermove', 140)
+    firePointer(sash, 'pointerup', 140)
+    await flushPromises()
+    expect(pushMock).not.toHaveBeenCalled()
+    const runsTable = wrapper.find('[data-testid="token-analytics-runs-table"]')
+    await runsTable.find('tbody button.text-accent-2').trigger('click')
+    expect(pushMock).toHaveBeenCalledWith('/runs/r1')
+    wrapper.unmount()
+  })
+
+  it('defaults to 全部历史 and first request uses window=all (g1.1/g2.2)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     const group = wrapper.find('[data-testid="token-analytics-window"]')
     const labels = group.findAll('button').map((b) => b.text())
     expect(labels).toEqual(['近 24 小时', '近 7 天', '近 30 天', '近 90 天', '全部历史'])
-    expect(wrapper.find('[data-testid="token-analytics-window-30d"]').classes()).toContain('bg-surface')
-    expect(wrapper.find('[data-testid="token-analytics-window-24h"]').classes()).not.toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').classes()).toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').text()).toBe('全部历史')
+    expect(wrapper.find('[data-testid="token-analytics-window-30d"]').classes()).not.toContain('bg-surface')
     expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
-      expect.objectContaining({ window: '30d' }),
+      expect.objectContaining({ window: 'all' }),
       expect.anything(),
     )
+    wrapper.unmount()
+  })
+
+  it('keeps source/project/model filters defaulting to all (g2.1)', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const filters = wrapper.find('[data-testid="token-analytics-filters"]')
+    expect(filters.text()).toContain('来源：全部')
+    expect(filters.text()).toContain('项目：全部')
+    expect(filters.text()).toContain('模型：全部')
+    const sourceAll = filters.findAll('button').find((b) => b.text() === '来源：全部')
+    expect(sourceAll?.classes()).toContain('bg-accent-dim')
+    const selects = filters.findAll('select')
+    expect(selects).toHaveLength(2)
+    expect((selects[0].element as HTMLSelectElement).value).toBe('')
+    expect((selects[1].element as HTMLSelectElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('puts 近 24 小时 first, still switches windows, and requests window=24h on click (g2.1)', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const group = wrapper.find('[data-testid="token-analytics-window"]')
+    const labels = group.findAll('button').map((b) => b.text())
+    expect(labels).toEqual(['近 24 小时', '近 7 天', '近 30 天', '近 90 天', '全部历史'])
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').classes()).toContain('bg-surface')
 
     vi.mocked(api.getGlobalTokenStats).mockClear()
     vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
@@ -313,6 +446,17 @@ describe('TokenAnalyticsView', () => {
     await flushPromises()
     expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
       expect.objectContaining({ window: '24h' }),
+      expect.anything(),
+    )
+    expect(wrapper.find('[data-testid="token-analytics-window-24h"]').classes()).toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').classes()).not.toContain('bg-surface')
+
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({ ...sampleData, window: '30d' })
+    await wrapper.find('[data-testid="token-analytics-window-30d"]').trigger('click')
+    await flushPromises()
+    expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
+      expect.objectContaining({ window: '30d' }),
       expect.anything(),
     )
     wrapper.unmount()

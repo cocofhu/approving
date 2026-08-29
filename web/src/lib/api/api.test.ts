@@ -440,3 +440,20 @@ describe('api.patchWorkflowHomeVisibility', () => {
     expect(body.title).toBe('用户第一句话')
   })
 })
+
+describe('getGlobalTokenStats window fallback (g1.2)', () => {
+  it('omits window by falling back to all, not 30d', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ window: 'all', empty: true }))
+    await api.getGlobalTokenStats({})
+    const url = String(fetchMock.mock.calls[0]?.[0])
+    expect(url).toMatch(/\/stats\/token\?/)
+    expect(new URL(url, 'http://localhost').searchParams.get('window')).toBe('all')
+  })
+
+  it('passes an explicit window through', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ window: '30d', empty: true }))
+    await api.getGlobalTokenStats({ window: '30d' })
+    const url = String(fetchMock.mock.calls[0]?.[0])
+    expect(new URL(url, 'http://localhost').searchParams.get('window')).toBe('30d')
+  })
+})

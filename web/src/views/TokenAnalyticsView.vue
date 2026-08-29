@@ -36,7 +36,7 @@ const toast = useToast()
 
 const WINDOWS: TokenStatsWindow[] = ['24h', '7d', '30d', '90d', 'all']
 
-const windowSel = ref<TokenStatsWindow>('30d')
+const windowSel = ref<TokenStatsWindow>('all')
 const sourceSel = ref<'all' | 'workflow' | 'pm'>('all')
 const projectSel = ref('')
 const modelSel = ref('')
@@ -444,6 +444,63 @@ function goRun(runId: string) {
 
 const RUN_TITLE_MAX_DISPLAY = 60
 
+/** Session-only widths for the "highest-usage runs" table (g1.2). Refresh restores defaults. */
+type RunsColKey = 'run' | 'project' | 'model' | 'total'
+
+const RUNS_COL_DEFS = [
+  { key: 'run' as const, labelKey: 'pages.tokenAnalytics.tables.colRun', align: 'left' as const, defaultWidth: 220, minWidth: 80 },
+  { key: 'project' as const, labelKey: 'pages.tokenAnalytics.tables.colProject', align: 'left' as const, defaultWidth: 140, minWidth: 64 },
+  { key: 'model' as const, labelKey: 'pages.tokenAnalytics.tables.colModel', align: 'left' as const, defaultWidth: 140, minWidth: 64 },
+  { key: 'total' as const, labelKey: 'pages.tokenAnalytics.tables.colTotal', align: 'right' as const, defaultWidth: 88, minWidth: 56 },
+] as const
+
+const RUNS_COL_MIN: Record<RunsColKey, number> = {
+  run: 80,
+  project: 64,
+  model: 64,
+  total: 56,
+}
+
+const runsColWidths = ref<Record<RunsColKey, number>>({
+  run: 220,
+  project: 140,
+  model: 140,
+  total: 88,
+})
+const runsColDragging = ref<RunsColKey | null>(null)
+let runsColDragStartX = 0
+let runsColDragStartW = 0
+
+function clampRunsColWidth(key: RunsColKey, width: number): number {
+  return Math.max(RUNS_COL_MIN[key], width)
+}
+
+function runsColSashLabel(key: RunsColKey): string {
+  const def = RUNS_COL_DEFS.find((c) => c.key === key)!
+  return t('pages.tokenAnalytics.tables.resizeCol', { col: t(def.labelKey) })
+}
+
+function onRunsColSashPointerDown(key: RunsColKey, e: PointerEvent) {
+  runsColDragging.value = key
+  runsColDragStartX = e.clientX
+  runsColDragStartW = runsColWidths.value[key]
+  const el = e.currentTarget as HTMLElement
+  if (typeof el.setPointerCapture === 'function') el.setPointerCapture(e.pointerId)
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+function onRunsColSashPointerMove(e: PointerEvent) {
+  const key = runsColDragging.value
+  if (!key) return
+  runsColWidths.value[key] = clampRunsColWidth(key, runsColDragStartW + (e.clientX - runsColDragStartX))
+  e.preventDefault()
+}
+
+function onRunsColSashPointerUp() {
+  runsColDragging.value = null
+}
+
 function runTitleReadable(raw: string): string {
   return displayRunTitle(raw).replace(/\s+/g, ' ').trim()
 }
@@ -463,6 +520,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   abort?.abort()
+  runsColDragging.value = null
 })
 
 watch([windowSel], () => void load())
@@ -736,28 +794,60 @@ watch([windowSel], () => void load())
           <div class="flex max-h-[280px] min-h-0 flex-col border border-line bg-surface p-3.5" data-testid="token-analytics-runs-table">
             <h2 class="m-0 mb-2 shrink-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.runs') }}</h2>
             <div class="token-analytics-table-scroll min-h-0 flex-1 overflow-auto">
-              <table class="w-full border-collapse text-xs">
+              <!-- plan coverage: g1.1 / g1.2 / g1.3 — header sashes, session col widths, truncate without misfire -->
+              <table
+                class="token-analytics-runs-grid min-w-full border-collapse text-xs"
+                :class="runsColDragging ? 'select-none' : ''"
+                data-testid="token-analytics-runs-grid"
+              >
+                <colgroup>
+                  <col
+                    v-for="col in RUNS_COL_DEFS"
+                    :key="col.key"
+                    :data-testid="`token-analytics-runs-col-${col.key}`"
+                    :style="{ width: `${runsColWidths[col.key]}px` }"
+                  />
+                </colgroup>
                 <thead>
                   <tr class="text-txt3">
-                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colRun') }}</th>
-                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colProject') }}</th>
-                    <th class="border-b border-line py-1.5 text-left font-semibold">{{ t('pages.tokenAnalytics.tables.colModel') }}</th>
-                    <th class="border-b border-line py-1.5 text-right font-semibold">{{ t('pages.tokenAnalytics.tables.colTotal') }}</th>
+                    <th
+                      v-for="col in RUNS_COL_DEFS"
+                      :key="col.key"
+                      class="relative select-none border-b border-line py-1.5 font-semibold"
+                      :class="col.align === 'right' ? 'text-right' : 'text-left'"
+                    >
+                      {{ t(col.labelKey) }}
+                      <div
+                        class="token-analytics-runs-col-sash absolute top-0 z-[2] h-full w-1.5 cursor-col-resize touch-none hover:bg-accent"
+                        :class="runsColDragging === col.key ? 'bg-accent' : ''"
+                        role="separator"
+                        aria-orientation="vertical"
+                        :aria-valuemin="col.minWidth"
+                        :aria-valuenow="runsColWidths[col.key]"
+                        :aria-label="runsColSashLabel(col.key)"
+                        :title="runsColSashLabel(col.key)"
+                        :data-testid="`token-analytics-runs-col-sash-${col.key}`"
+                        @pointerdown="onRunsColSashPointerDown(col.key, $event)"
+                        @pointermove="onRunsColSashPointerMove"
+                        @pointerup="onRunsColSashPointerUp"
+                        @pointercancel="onRunsColSashPointerUp"
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="r in data.topRuns" :key="r.runId" class="hover:bg-accent-dim/40">
-                    <td class="max-w-0 border-b border-line/60 py-1.5">
+                    <td class="overflow-hidden text-ellipsis whitespace-nowrap border-b border-line/60 py-1.5">
                       <button
                         type="button"
-                        class="block max-w-full truncate text-left text-accent-2"
+                        class="block w-full max-w-full truncate text-left text-accent-2"
                         :title="runTitleTooltip(r.title)"
                         @click="goRun(r.runId)"
                       >{{ runTitleDisplay(r.title) }}</button>
                     </td>
-                    <td class="border-b border-line/60 py-1.5">{{ r.projectName }}</td>
-                    <td class="border-b border-line/60 py-1.5">{{ r.modelName || r.modelKey }}</td>
-                    <td class="border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(r.total) }}</td>
+                    <td class="overflow-hidden text-ellipsis whitespace-nowrap border-b border-line/60 py-1.5">{{ r.projectName }}</td>
+                    <td class="overflow-hidden text-ellipsis whitespace-nowrap border-b border-line/60 py-1.5">{{ r.modelName || r.modelKey }}</td>
+                    <td class="overflow-hidden whitespace-nowrap border-b border-line/60 py-1.5 text-right tabular-nums">{{ fmtCompactTokenCount(r.total) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -796,5 +886,12 @@ watch([windowSel], () => void load())
 .token-analytics-kpi-merge:focus .token-analytics-kpi-tip,
 .token-analytics-kpi-merge:focus-within .token-analytics-kpi-tip {
   display: block;
+}
+.token-analytics-runs-grid {
+  table-layout: fixed;
+  width: max-content;
+}
+.token-analytics-runs-col-sash {
+  right: -3px;
 }
 </style>

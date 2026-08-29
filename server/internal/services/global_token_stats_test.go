@@ -345,4 +345,26 @@ func TestGlobalTokenStats24hEmptyWindow(t *testing.T) {
 	}
 }
 
+func TestGlobalTokenStatsOmitsWindowDefaultsAll(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "global_token_omit_window.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	res, err := s.GlobalTokenStats(context.Background(), GlobalTokenStatsQuery{
+		Timezone: "UTC",
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Window != TokenStatsWindowAll {
+		t.Fatalf("omitted window want all, got %s", res.Window)
+	}
+	if res.BucketWidth != TokenStatsBucketWeek {
+		t.Fatalf("all should use week buckets, got %s", res.BucketWidth)
+	}
+}
+
 func aliasPtr(s string) *string { return &s }

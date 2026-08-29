@@ -13,7 +13,7 @@ export type GlobalTokenStatsParams = {
 export const statsClient = {
   getGlobalTokenStats: (params: GlobalTokenStatsParams, opts?: { signal?: AbortSignal }) => {
     const q = new URLSearchParams()
-    q.set('window', params.window || '30d')
+    q.set('window', params.window || 'all')
     if (params.timezone) q.set('timezone', params.timezone)
     if (params.utcOffsetMinutes != null && Number.isFinite(params.utcOffsetMinutes)) {
       q.set('utcOffsetMinutes', String(Math.round(params.utcOffsetMinutes)))
