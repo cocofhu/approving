@@ -175,34 +175,43 @@ describe('RunListView duration column layout (g1.1 / g1.2 / g2.1)', () => {
 
   it('uses tabular-nums and whitespace-nowrap on the desktop duration td', () => {
     expect(desktopBlock).toMatch(
-      /<td class="[^"]*\btabular-nums\b[^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+      /<td class="[^"]*\btabular-nums\b[^"]*">[\s\S]*\{\{ fmtDuration\(r\.durationSec\) \}\}/,
     )
     expect(desktopBlock).toMatch(
-      /<td class="[^"]*\bwhitespace-nowrap\b[^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+      /<td class="[^"]*\bwhitespace-nowrap\b[^"]*">[\s\S]*\{\{ fmtDuration\(r\.durationSec\) \}\}/,
     )
     expect(src).toMatch(/\{\{ fmtDuration\(r\.durationSec\) \}\}/)
   })
 
   it('reserves hh:mm:ss min-width on duration th, td, and skeleton placeholder', () => {
-    expect(desktopBlock).toMatch(
-      /<th class="[^"]*min-w-\[6\.2em\][^"]*">\{\{ t\('common\.table\.duration'\) \}\}<\/th>/,
-    )
-    expect(desktopBlock).toMatch(
-      /<td class="[^"]*min-w-\[6\.2em\][^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
-    )
+    // 8ch covers hh:mm:ss; +2.5rem matches px-5 so border-box min-width is not eaten by padding.
+    const durationMinW = /min-w-\[calc\(8ch\+2\.5rem\)\]/
+    const durationSlot = /min-w-\[8ch\]/
+
     const durationTh = desktopBlock.match(
-      /<th class="[^"]*">\{\{ t\('common\.table\.duration'\) \}\}<\/th>/,
+      /<th class="[^"]*">[\s\S]*?\{\{ t\('common\.table\.duration'\) \}\}[\s\S]*?<\/th>/,
     )?.[0]
     expect(durationTh).toBeTruthy()
-    expect(durationTh).toMatch(/min-w-\[6\.2em\]/)
+    expect(durationTh).toMatch(durationMinW)
+    expect(durationTh).toMatch(durationSlot)
     expect(durationTh).toMatch(/whitespace-nowrap/)
+
+    const durationTd = desktopBlock.match(
+      /<td class="[^"]*">[\s\S]*?\{\{ fmtDuration\(r\.durationSec\) \}\}[\s\S]*?<\/td>/,
+    )?.[0]
+    expect(durationTd).toBeTruthy()
+    expect(durationTd).toMatch(durationMinW)
+    expect(durationTd).toMatch(durationSlot)
+    expect(durationTd).toMatch(/inline-block min-w-\[8ch\]/)
 
     const skelStart = desktopBlock.indexOf('v-if="initialLoading"')
     const skelEnd = desktopBlock.indexOf('<template v-else>', skelStart)
     const skeleton = desktopBlock.slice(skelStart, skelEnd)
-    expect(skeleton).toMatch(/min-w-\[6\.2em\]/)
-    expect(skeleton).toMatch(/w-\[6\.2em\]/)
+    expect(skeleton).toMatch(durationMinW)
+    expect(skeleton).toMatch(/w-\[8ch\]/)
     expect(skeleton).not.toMatch(/w-\[40%\]/)
+    expect(skeleton).not.toMatch(/w-\[6\.2em\]/)
+    expect(skeleton).not.toMatch(/min-w-\[6\.2em\]/)
   })
 
   it('does not switch the table to fixed layout or change duration alignment', () => {
@@ -210,7 +219,7 @@ describe('RunListView duration column layout (g1.1 / g1.2 / g2.1)', () => {
     expect(desktopBlock).not.toMatch(/table-layout/)
     expect(desktopBlock).not.toMatch(/table-fixed/)
     const durationTd = desktopBlock.match(
-      /<td class="[^"]*">\{\{ fmtDuration\(r\.durationSec\) \}\}<\/td>/,
+      /<td class="[^"]*">[\s\S]*?\{\{ fmtDuration\(r\.durationSec\) \}\}[\s\S]*?<\/td>/,
     )?.[0]
     expect(durationTd).toBeTruthy()
     expect(durationTd).not.toMatch(/text-right|text-center/)
