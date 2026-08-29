@@ -66,10 +66,13 @@ const MOCK_STATS = {
 
 async function openStatsPage(page: import('@playwright/test').Page) {
   await routeApi(page, '**/api/stats/token**', async (route) => {
+    const url = new URL(route.request().url())
+    const w = url.searchParams.get('window') || '30d'
+    const bucketWidth = w === '24h' ? 'hour' : w === 'all' ? 'week' : 'day'
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(MOCK_STATS),
+      body: JSON.stringify({ ...MOCK_STATS, window: w, bucketWidth }),
     })
   })
   await page.goto('/token-analytics.html')

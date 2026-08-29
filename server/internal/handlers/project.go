@@ -180,7 +180,7 @@ func (h *Handlers) DeleteProject(c *gin.Context) {
 }
 
 // GetProjectTokenStats returns trend/composition/workflows for board Token charts.
-// Query: window=7d|30d|90d|all (default 30d), timezone=IANA (preferred),
+// Query: window=24h|7d|30d|90d|all (default 30d), timezone=IANA (preferred),
 // utcOffsetMinutes=int (fallback fixed offset, east of UTC positive).
 func (h *Handlers) GetProjectTokenStats(c *gin.Context) {
 	if h.Projects == nil {

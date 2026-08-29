@@ -100,6 +100,7 @@
         "title": "Token 统计",
         "windowAria": "时间窗",
         "windows": {
+          "24h": "近 24 小时",
           "7d": "近 7 天",
           "30d": "近 30 天",
           "90d": "近 90 天",
@@ -115,6 +116,7 @@
         "rankHint": "「其他」= 未进 Top 的其余工作流合计（不是项目管理）。项目管理单独成行。",
         "grainDay": "按日聚合 · 本地时区",
         "grainWeek": "按周聚合 · 本地时区",
+        "grainHour": "按小时聚合 · 本地时区",
         "compTotal": "合计 {n}",
         "donutCenter": "总量",
         "other": "其他",

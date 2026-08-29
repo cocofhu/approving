@@ -302,6 +302,76 @@ func TestTokenStatsAggregation(t *testing.T) {
 		if err != ErrInvalidTokenStatsWindow {
 			t.Fatalf("err=%v", err)
 		}
+		_, err = s.TokenStats(context.Background(), proj.ID, TokenStatsQuery{
+			Window: "1d", Timezone: "UTC", Now: now,
+		})
+		if err != ErrInvalidTokenStatsWindow {
+			t.Fatalf("1d err=%v", err)
+		}
+	})
+
+	t.Run("24h_rolling_hour_buckets_excludes_older", func(t *testing.T) {
+		// now = 2026-07-25 20:00 Shanghai; 24h start = 2026-07-24 20:00.
+		// dayIn (07-24 10:00) is outside; dayToday (07-25 08:00) is inside.
+		res, err := s.TokenStats(context.Background(), proj.ID, TokenStatsQuery{
+			Window: TokenStatsWindow24h, Timezone: "Asia/Shanghai", Now: now,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Empty {
+			t.Fatal("expected non-empty 24h window")
+		}
+		if res.Window != TokenStatsWindow24h {
+			t.Fatalf("window=%s", res.Window)
+		}
+		if res.BucketWidth != TokenStatsBucketHour {
+			t.Fatalf("bucketWidth=%s want hour", res.BucketWidth)
+		}
+		if res.Composition.Total != 8 {
+			t.Fatalf("24h composition.total=%d want 8 (only in-progress a2)", res.Composition.Total)
+		}
+		if len(res.Trend) != 25 {
+			t.Fatalf("want 25 hour buckets for rolling 24h, got %d", len(res.Trend))
+		}
+		if res.Trend[0].Bucket != "2026-07-24T20" {
+			t.Fatalf("first hour bucket=%s want 2026-07-24T20", res.Trend[0].Bucket)
+		}
+		if res.Trend[len(res.Trend)-1].Bucket != "2026-07-25T20" {
+			t.Fatalf("last hour bucket=%s want 2026-07-25T20", res.Trend[len(res.Trend)-1].Bucket)
+		}
+		var hour08 *TokenStatsBucket
+		var nonzero int
+		for i := range res.Trend {
+			b := &res.Trend[i]
+			if b.Total != 0 {
+				nonzero++
+			}
+			if b.Bucket == "2026-07-25T08" {
+				hour08 = b
+			}
+		}
+		if hour08 == nil || hour08.Total != 8 {
+			t.Fatalf("2026-07-25T08 = %+v want total 8", hour08)
+		}
+		if nonzero != 1 {
+			t.Fatalf("missing hours should fill 0; nonzero buckets=%d", nonzero)
+		}
+	})
+
+	t.Run("24h_empty_no_forged_series", func(t *testing.T) {
+		res, err := s.TokenStats(context.Background(), emptyProj.ID, TokenStatsQuery{
+			Window: TokenStatsWindow24h, Timezone: "Asia/Shanghai", Now: now,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Empty {
+			t.Fatal("expected empty")
+		}
+		if len(res.Trend) != 0 {
+			t.Fatalf("empty 24h must not forge zero trend, got %d buckets", len(res.Trend))
+		}
 	})
 
 	t.Run("pm_usage_in_trend_composition_rank", func(t *testing.T) {
@@ -526,7 +596,6 @@ func itoa(n int) string {
 	}
 	return string(b[i:])
 }
-
 
 func sumModelTotals(rows []TokenStatsModel) int64 {
 	var n int64
@@ -787,4 +856,179 @@ func TestBuildModelStatsUnknownAlias(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestParseTokenStatsWindow(t *testing.T) {
+	spec, err := parseTokenStatsWindow(TokenStatsWindow24h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.duration != 24*time.Hour || spec.bucketWidth != TokenStatsBucketHour || spec.days != 0 {
+		t.Fatalf("24h spec=%+v", spec)
+	}
+	spec, err = parseTokenStatsWindow(TokenStatsWindow7d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.days != 7 || spec.bucketWidth != TokenStatsBucketDay || spec.duration != 0 {
+		t.Fatalf("7d spec=%+v", spec)
+	}
+	spec, err = parseTokenStatsWindow("")
+	if err != ErrInvalidTokenStatsWindow {
+		t.Fatalf("empty window err=%v spec=%+v", err, spec)
+	}
+	for _, bad := range []string{"1d", "1y", "today"} {
+		if _, err := parseTokenStatsWindow(bad); err != ErrInvalidTokenStatsWindow {
+			t.Fatalf("%s err=%v", bad, err)
+		}
+	}
+}
+
+func TestBuildWindowSlice24h(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 25, 20, 30, 0, 0, loc)
+	spec := tokenStatsWindowSpec{duration: 24 * time.Hour, bucketWidth: TokenStatsBucketHour}
+	cur := buildWindowSlice(now, spec)
+	wantStart := time.Date(2026, 7, 24, 20, 30, 0, 0, loc)
+	if !cur.hasStart || !cur.start.Equal(wantStart) || !cur.end.Equal(now) {
+		t.Fatalf("24h cur=%+v want start=%v end=%v", cur, wantStart, now)
+	}
+	prev := buildPrevWindowSlice(cur, spec)
+	wantPrevStart := time.Date(2026, 7, 23, 20, 30, 0, 0, loc)
+	wantPrevEnd := wantStart.Add(-time.Nanosecond)
+	if !prev.hasStart || !prev.start.Equal(wantPrevStart) || !prev.end.Equal(wantPrevEnd) {
+		t.Fatalf("24h prev=%+v want start=%v end=%v", prev, wantPrevStart, wantPrevEnd)
+	}
+
+	spec7 := tokenStatsWindowSpec{days: 7, bucketWidth: TokenStatsBucketDay}
+	cur7 := buildWindowSlice(now, spec7)
+	want7Start := time.Date(2026, 7, 19, 0, 0, 0, 0, loc)
+	if !cur7.start.Equal(want7Start) {
+		t.Fatalf("7d calendar start=%v want %v", cur7.start, want7Start)
+	}
+}
+
+func TestFillBucketKeysHourCrossMidnight(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 7, 25, 2, 15, 0, 0, loc)
+	start := now.Add(-24 * time.Hour)
+	keys := fillBucketKeys(now, start, true, TokenStatsBucketHour, nil)
+	if len(keys) != 25 {
+		t.Fatalf("len=%d want 25", len(keys))
+	}
+	if keys[0] != "2026-07-24T02" {
+		t.Fatalf("first=%s want 2026-07-24T02", keys[0])
+	}
+	if keys[len(keys)-1] != "2026-07-25T02" {
+		t.Fatalf("last=%s want 2026-07-25T02", keys[len(keys)-1])
+	}
+	seen := map[string]struct{}{}
+	var has24, has25 bool
+	for _, k := range keys {
+		if _, ok := seen[k]; ok {
+			t.Fatalf("duplicate hour key %s", k)
+		}
+		seen[k] = struct{}{}
+		if len(k) >= 10 && k[:10] == "2026-07-24" {
+			has24 = true
+		}
+		if len(k) >= 10 && k[:10] == "2026-07-25" {
+			has25 = true
+		}
+	}
+	if !has24 || !has25 {
+		t.Fatalf("expected cross-midnight hour keys, got %v", keys)
+	}
+	if _, ok := seen["2026-07-24T23"]; !ok {
+		t.Fatal("missing 2026-07-24T23 (zero-fill hour across midnight)")
+	}
+}
+
+func TestTokenStats24hHourFillAcrossMidnight(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "token_stats_24h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	proj, err := s.Create("Tok24h", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	must := func(v any) {
+		t.Helper()
+		if err := db.Create(v).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ptr := func(tt time.Time) *time.Time { return &tt }
+	// now = 02:15 July 25 local → window [01:15 July 24, 02:15 July 25] wait: 02:15-24h = 02:15 July 24.
+	now := time.Date(2026, 7, 24, 18, 15, 0, 0, time.UTC) // 2026-07-25 02:15 Shanghai
+	must(&models.WorkflowDef{ID: "wf-24", ProjectID: proj.ID, Name: "hourly", Status: "draft", Version: 1})
+
+	before := time.Date(2026, 7, 24, 1, 0, 0, 0, loc).UTC() // 01:00 July 24 — outside
+	must(&models.Run{ID: "run-before", WorkflowID: "wf-24", WorkflowName: "hourly", Status: "completed", StartedAt: before})
+	must(&models.StateRun{
+		RunID: "run-before", NodeID: "n1", Status: "completed", StartedAt: ptr(before),
+		Usage: &models.TokenUsage{InputTokens: 999},
+	})
+
+	h22 := time.Date(2026, 7, 24, 22, 10, 0, 0, loc).UTC()
+	must(&models.Run{ID: "run-22", WorkflowID: "wf-24", WorkflowName: "hourly", Status: "completed", StartedAt: h22})
+	must(&models.StateRun{
+		RunID: "run-22", NodeID: "n1", Status: "completed", StartedAt: ptr(h22),
+		Usage: &models.TokenUsage{InputTokens: 100},
+	})
+
+	h01 := time.Date(2026, 7, 25, 1, 5, 0, 0, loc).UTC()
+	must(&models.Run{ID: "run-01", WorkflowID: "wf-24", WorkflowName: "hourly", Status: "completed", StartedAt: h01})
+	must(&models.StateRun{
+		RunID: "run-01", NodeID: "n1", Status: "completed", StartedAt: ptr(h01),
+		Usage: &models.TokenUsage{InputTokens: 50},
+	})
+
+	after := time.Date(2026, 7, 25, 3, 0, 0, 0, loc).UTC() // after now
+	must(&models.Run{ID: "run-after", WorkflowID: "wf-24", WorkflowName: "hourly", Status: "completed", StartedAt: after})
+	must(&models.StateRun{
+		RunID: "run-after", NodeID: "n1", Status: "completed", StartedAt: ptr(after),
+		Usage: &models.TokenUsage{InputTokens: 777},
+	})
+
+	res, err := s.TokenStats(context.Background(), proj.ID, TokenStatsQuery{
+		Window: TokenStatsWindow24h, Timezone: "Asia/Shanghai", Now: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Empty || res.Composition.Total != 150 {
+		t.Fatalf("total=%d empty=%v want 150", res.Composition.Total, res.Empty)
+	}
+	byKey := map[string]TokenStatsBucket{}
+	for _, b := range res.Trend {
+		byKey[b.Bucket] = b
+	}
+	if byKey["2026-07-24T22"].Total != 100 {
+		t.Fatalf("hour 22 = %+v", byKey["2026-07-24T22"])
+	}
+	if byKey["2026-07-25T01"].Total != 50 {
+		t.Fatalf("hour 01 = %+v", byKey["2026-07-25T01"])
+	}
+	if byKey["2026-07-24T23"].Total != 0 {
+		t.Fatalf("missing hour 23 should be 0, got %+v", byKey["2026-07-24T23"])
+	}
+	if _, ok := byKey["2026-07-24T01"]; ok && byKey["2026-07-24T01"].Total == 999 {
+		t.Fatal("usage before window start must be excluded")
+	}
+	if byKey["2026-07-25T03"].Total == 777 {
+		t.Fatal("usage after now must be excluded")
+	}
 }
