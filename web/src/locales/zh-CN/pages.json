@@ -101,6 +101,7 @@
         "title": "Token 统计",
         "windowAria": "时间窗",
         "windows": {
+          "24h": "近 24 小时",
           "7d": "近 7 天",
           "30d": "近 30 天",
           "90d": "近 90 天",
@@ -116,6 +117,7 @@
         "rankHint": "「其他」= 未进 Top 的其余工作流合计（不是项目管理）。项目管理单独成行。",
         "grainDay": "按日聚合 · 本地时区",
         "grainWeek": "按周聚合 · 本地时区",
+        "grainHour": "按小时聚合 · 本地时区",
         "compTotal": "合计 {n}",
         "donutCenter": "总量",
         "other": "其他",
@@ -1642,7 +1644,9 @@
         "connecting": "连接中…"
       },
       "ideUnavailable": "该沙箱镜像未提供 code-server(8080),无法内嵌 IDE。可使用终端标签进行操作。",
+      "ideLoading": "正在启动 IDE",
       "acpNativeUnavailable": "该沙箱未提供 ACP 桥接服务(8765),无法内嵌 ACP 页面。",
+      "acpLoading": "正在连接 ACP",
       "novncUnavailable": "未启动浏览器组件",
       "novncUnavailableHint": "当前沙箱未启用 VNC 预览（未设置 VNC_PREVIEW），或浏览器桌面启动失败。可使用终端 / ACP 标签操作。",
       "novncConnecting": "正在检测浏览器组件…",

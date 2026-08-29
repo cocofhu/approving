@@ -79,6 +79,45 @@ const STATS_7D = {
   ],
 }
 
+const STATS_24H = {
+  ...STATS_30D,
+  window: '24h',
+  bucketWidth: 'hour',
+  trend: [
+    {
+      bucket: '2026-07-24T20',
+      total: 40,
+      workflowTotal: 30,
+      pmTotal: 10,
+      inputTokens: 16,
+      outputTokens: 12,
+      cacheReadTokens: 8,
+      cacheWriteTokens: 4,
+    },
+    {
+      bucket: '2026-07-24T21',
+      total: 0,
+      workflowTotal: 0,
+      pmTotal: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    },
+    {
+      bucket: '2026-07-25T08',
+      total: 80,
+      workflowTotal: 60,
+      pmTotal: 20,
+      inputTokens: 32,
+      outputTokens: 24,
+      cacheReadTokens: 16,
+      cacheWriteTokens: 8,
+    },
+  ],
+  composition: { ...STATS_30D.composition, total: 120 },
+}
+
 const STATS_ALL = {
   window: 'all',
   bucketWidth: 'week',
@@ -181,6 +220,14 @@ test.describe('看板 Token 统计图', () => {
       if (failNext) {
         failNext = false
         await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'timeout' }) })
+        return
+      }
+      if (w === '24h') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(STATS_24H),
+        })
         return
       }
       if (w === '7d') {

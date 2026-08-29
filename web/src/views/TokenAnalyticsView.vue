@@ -34,7 +34,7 @@ const { t } = useI18n()
 const router = useRouter()
 const toast = useToast()
 
-const WINDOWS: TokenStatsWindow[] = ['7d', '30d', '90d', 'all']
+const WINDOWS: TokenStatsWindow[] = ['24h', '7d', '30d', '90d', 'all']
 
 const windowSel = ref<TokenStatsWindow>('30d')
 const sourceSel = ref<'all' | 'workflow' | 'pm'>('all')
@@ -546,6 +546,7 @@ watch([windowSel], () => void load())
             type="button"
             class="px-2.5 py-1.5 text-xs"
             :class="windowSel === w ? 'bg-surface font-semibold text-txt shadow-sm' : 'text-txt3'"
+            :data-testid="`token-analytics-window-${w}`"
             @click="windowSel = w"
           >
             {{ t(`pages.board.tokenStats.windows.${w}`) }}

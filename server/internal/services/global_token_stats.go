@@ -15,15 +15,15 @@ const (
 	GlobalTokenStatsSourceWorkflow = "workflow"
 	GlobalTokenStatsSourcePM       = "pm"
 
-	globalTokenStatsTopProjects = 10
-	globalTokenStatsTopModels   = 10
+	globalTokenStatsTopProjects  = 10
+	globalTokenStatsTopModels    = 10
 	globalTokenStatsTopWorkflows = 10
-	globalTokenStatsTopRuns     = 20
+	globalTokenStatsTopRuns      = 20
 )
 
 // GlobalTokenStatsQuery filters cross-project token aggregation.
 type GlobalTokenStatsQuery struct {
-	Window           string // 7d|30d|90d|all
+	Window           string // 24h|7d|30d|90d|all
 	Timezone         string
 	UTCOffsetMinutes *int
 	Source           string // all|workflow|pm
@@ -107,23 +107,23 @@ type GlobalTokenStatsFilterOptions struct {
 
 // GlobalTokenStatsResult is GET /api/stats/token payload.
 type GlobalTokenStatsResult struct {
-	Window         string                        `json:"window"`
-	BucketWidth    string                        `json:"bucketWidth"`
-	Timezone       string                        `json:"timezone"`
-	Empty          bool                          `json:"empty"`
-	KPI            GlobalTokenStatsKPI           `json:"kpi"`
-	Trend          []TokenStatsBucket            `json:"trend"`
-	PrevTrend      []TokenStatsBucket            `json:"prevTrend"`
-	Composition    TokenStatsComposition         `json:"composition"`
-	Projects       []GlobalTokenStatsProjectRow  `json:"projects"`
-	ModelRanking   []TokenStatsModel             `json:"modelRanking"`
-	NodeTypes      []GlobalTokenStatsNamedBucket `json:"nodeTypes"`
-	Workflows      []TokenStatsWorkflow          `json:"workflows"`
-	Heatmap        GlobalTokenStatsHeatmap       `json:"heatmap"`
-	TopRuns        []GlobalTokenStatsRunRow      `json:"topRuns"`
-	ProjectTrends  []GlobalTokenStatsSeries      `json:"projectTrends"`
-	ModelTrends    []GlobalTokenStatsSeries      `json:"modelTrends"`
-	FilterOptions  GlobalTokenStatsFilterOptions `json:"filterOptions"`
+	Window        string                        `json:"window"`
+	BucketWidth   string                        `json:"bucketWidth"`
+	Timezone      string                        `json:"timezone"`
+	Empty         bool                          `json:"empty"`
+	KPI           GlobalTokenStatsKPI           `json:"kpi"`
+	Trend         []TokenStatsBucket            `json:"trend"`
+	PrevTrend     []TokenStatsBucket            `json:"prevTrend"`
+	Composition   TokenStatsComposition         `json:"composition"`
+	Projects      []GlobalTokenStatsProjectRow  `json:"projects"`
+	ModelRanking  []TokenStatsModel             `json:"modelRanking"`
+	NodeTypes     []GlobalTokenStatsNamedBucket `json:"nodeTypes"`
+	Workflows     []TokenStatsWorkflow          `json:"workflows"`
+	Heatmap       GlobalTokenStatsHeatmap       `json:"heatmap"`
+	TopRuns       []GlobalTokenStatsRunRow      `json:"topRuns"`
+	ProjectTrends []GlobalTokenStatsSeries      `json:"projectTrends"`
+	ModelTrends   []GlobalTokenStatsSeries      `json:"modelTrends"`
+	FilterOptions GlobalTokenStatsFilterOptions `json:"filterOptions"`
 }
 
 type globalProjOpt struct {
@@ -162,10 +162,11 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 	if window == "" {
 		window = TokenStatsWindow30d
 	}
-	days, bucketWidth, err := parseTokenStatsWindow(window)
+	spec, err := parseTokenStatsWindow(window)
 	if err != nil {
 		return GlobalTokenStatsResult{}, err
 	}
+	bucketWidth := spec.bucketWidth
 
 	loc, tzLabel, err := resolveTokenStatsLocation(q.Timezone, q.UTCOffsetMinutes)
 	if err != nil {
@@ -185,8 +186,8 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 	projectFilter := strings.TrimSpace(q.ProjectID)
 	modelFilter := strings.TrimSpace(q.ModelKey)
 
-	curWin := buildWindowSlice(nowLocal, days)
-	prevWin := buildPrevWindowSlice(curWin, days)
+	curWin := buildWindowSlice(nowLocal, spec)
+	prevWin := buildPrevWindowSlice(curWin, spec)
 
 	rows, err := s.loadGlobalTokenUsageRows(ctx)
 	if err != nil {
@@ -228,19 +229,19 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 
 	if len(filtered) == 0 {
 		return GlobalTokenStatsResult{
-			Window:      window,
-			BucketWidth: bucketWidth,
-			Timezone:    tzLabel,
-			Empty:       true,
-			KPI:         GlobalTokenStatsKPI{},
-			Trend:       []TokenStatsBucket{},
-			PrevTrend:   []TokenStatsBucket{},
-			Projects:    []GlobalTokenStatsProjectRow{},
-			ModelRanking: []TokenStatsModel{},
-			NodeTypes:   []GlobalTokenStatsNamedBucket{},
-			Workflows:   []TokenStatsWorkflow{},
-			Heatmap:     GlobalTokenStatsHeatmap{Rows: []string{}, Cols: []string{}, Grid: [][]int64{}},
-			TopRuns:     []GlobalTokenStatsRunRow{},
+			Window:        window,
+			BucketWidth:   bucketWidth,
+			Timezone:      tzLabel,
+			Empty:         true,
+			KPI:           GlobalTokenStatsKPI{},
+			Trend:         []TokenStatsBucket{},
+			PrevTrend:     []TokenStatsBucket{},
+			Projects:      []GlobalTokenStatsProjectRow{},
+			ModelRanking:  []TokenStatsModel{},
+			NodeTypes:     []GlobalTokenStatsNamedBucket{},
+			Workflows:     []TokenStatsWorkflow{},
+			Heatmap:       GlobalTokenStatsHeatmap{Rows: []string{}, Cols: []string{}, Grid: [][]int64{}},
+			TopRuns:       []GlobalTokenStatsRunRow{},
 			ProjectTrends: []GlobalTokenStatsSeries{},
 			ModelTrends:   []GlobalTokenStatsSeries{},
 			FilterOptions: buildFilterOptions(projSeen, modelSeen),
@@ -252,10 +253,10 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 
 	if len(curRows) == 0 {
 		out := GlobalTokenStatsResult{
-			Window:      window,
-			BucketWidth: bucketWidth,
-			Timezone:    tzLabel,
-			Empty:       true,
+			Window:        window,
+			BucketWidth:   bucketWidth,
+			Timezone:      tzLabel,
+			Empty:         true,
 			FilterOptions: buildFilterOptions(projSeen, modelSeen),
 		}
 		out.Trend = fillTrendBuckets(nowLocal, curWin, bucketWidth, map[string]*tokenBucketAgg{})
@@ -267,7 +268,13 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 
 	kpi := buildGlobalKPI(curAgg, prevAgg)
 	trend := bucketsFromAgg(curAgg.buckets, nowLocal, curWin, bucketWidth)
-	prevTrend := bucketsFromAgg(prevAgg.buckets, nowLocal.AddDate(0, 0, -days), prevWin, bucketWidth)
+	prevNow := nowLocal
+	if spec.duration > 0 {
+		prevNow = nowLocal.Add(-spec.duration)
+	} else if spec.days > 0 {
+		prevNow = nowLocal.AddDate(0, 0, -spec.days)
+	}
+	prevTrend := bucketsFromAgg(prevAgg.buckets, prevNow, prevWin, bucketWidth)
 
 	projRows, projTrends := buildProjectStats(curAgg, prevAgg, globalTokenStatsTopProjects)
 	modelRank, modelTrends := buildGlobalModelStats(curAgg, prevAgg, unknownAliases, globalTokenStatsTopModels)
@@ -297,21 +304,32 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 	}, nil
 }
 
-func buildWindowSlice(nowLocal time.Time, days int) windowSlice {
-	if days <= 0 {
+func buildWindowSlice(nowLocal time.Time, spec tokenStatsWindowSpec) windowSlice {
+	if spec.duration > 0 {
+		return windowSlice{start: nowLocal.Add(-spec.duration), end: nowLocal, hasStart: true}
+	}
+	if spec.days <= 0 {
 		return windowSlice{hasStart: false}
 	}
-	startDay := truncateLocalDay(nowLocal).AddDate(0, 0, -(days - 1))
-	end := nowLocal
-	return windowSlice{start: startDay, end: end, hasStart: true}
+	// Inclusive local-day window: today and the previous (days-1) local days.
+	startDay := truncateLocalDay(nowLocal).AddDate(0, 0, -(spec.days - 1))
+	return windowSlice{start: startDay, end: nowLocal, hasStart: true}
 }
 
-func buildPrevWindowSlice(cur windowSlice, days int) windowSlice {
-	if !cur.hasStart || days <= 0 {
+func buildPrevWindowSlice(cur windowSlice, spec tokenStatsWindowSpec) windowSlice {
+	if !cur.hasStart {
+		return windowSlice{hasStart: false}
+	}
+	if spec.duration > 0 {
+		prevEnd := cur.start.Add(-time.Nanosecond)
+		prevStart := cur.start.Add(-spec.duration)
+		return windowSlice{start: prevStart, end: prevEnd, hasStart: true}
+	}
+	if spec.days <= 0 {
 		return windowSlice{hasStart: false}
 	}
 	prevEnd := cur.start.Add(-time.Nanosecond)
-	prevStart := truncateLocalDay(prevEnd).AddDate(0, 0, -(days - 1))
+	prevStart := truncateLocalDay(prevEnd).AddDate(0, 0, -(spec.days - 1))
 	return windowSlice{start: prevStart, end: prevEnd, hasStart: true}
 }
 
@@ -415,16 +433,16 @@ type globalAgg struct {
 }
 
 type globalProjectAgg struct {
-	name                    string
-	total                   int64
-	input, output           int64
-	cacheRead, cacheWrite   int64
+	name                  string
+	total                 int64
+	input, output         int64
+	cacheRead, cacheWrite int64
 }
 
 type globalRunAgg struct {
 	runID, title, projectID, projectName, workflowName string
-	total                                            int64
-	topModelKey, topModelName                        string
+	total                                              int64
+	topModelKey, topModelName                          string
 }
 
 // rebucketGlobalModelKey merges per-project unknown usage into the configured default model.
@@ -656,10 +674,10 @@ func buildGlobalKPI(cur, prev *globalAgg) GlobalTokenStatsKPI {
 
 func buildProjectStats(cur, prev *globalAgg, topN int) ([]GlobalTokenStatsProjectRow, []GlobalTokenStatsSeries) {
 	type item struct {
-		id              string
-		name            string
-		total           int64
-		in, out         int64
+		id                    string
+		name                  string
+		total                 int64
+		in, out               int64
 		cacheRead, cacheWrite int64
 	}
 	list := make([]item, 0, len(cur.projects))
@@ -715,10 +733,10 @@ func projectTrendFromBuckets(buckets map[string]*tokenBucketAgg) []TokenStatsBuc
 	for _, k := range keys {
 		b := buckets[k]
 		out = append(out, TokenStatsBucket{
-			Bucket: k,
-			Total:  b.input + b.output + b.cacheRead + b.cacheWrite,
+			Bucket:        k,
+			Total:         b.input + b.output + b.cacheRead + b.cacheWrite,
 			WorkflowTotal: b.workflow,
-			PmTotal: b.pm,
+			PmTotal:       b.pm,
 		})
 	}
 	return out
@@ -780,8 +798,14 @@ func buildGlobalWorkflowRank(cur *globalAgg) []TokenStatsWorkflow {
 }
 
 func buildHeatmap(cur *globalAgg, topModels, topProjects int) GlobalTokenStatsHeatmap {
-	type mItem struct{ key, name string; total int64 }
-	type pItem struct{ id, name string; total int64 }
+	type mItem struct {
+		key, name string
+		total     int64
+	}
+	type pItem struct {
+		id, name string
+		total    int64
+	}
 
 	modelList := make([]mItem, 0, len(cur.models))
 	for k, a := range cur.models {
@@ -925,7 +949,7 @@ func buildTopRuns(cur *globalAgg, unknownAliases map[string]string, topN int) []
 			RunID: it.runID, Title: title,
 			ProjectID: it.projectID, ProjectName: it.projectName,
 			WorkflowName: it.workflowName,
-			ModelKey: it.topModelKey, ModelName: name,
+			ModelKey:     it.topModelKey, ModelName: name,
 			Total: it.total,
 		})
 	}

@@ -214,4 +214,44 @@ describe('TokenStatsPanel', () => {
     expect(empty.find('[data-testid="token-stats-empty"]').html()).not.toMatch(/rounded-xl/)
     empty.unmount()
   })
+
+  it('puts 近 24 小时 first, keeps default 30d, requests window=24h, and shows grainHour (g2.3/g2.5)', async () => {
+    getProjectTokenStats.mockResolvedValue(sampleStats())
+    const wrapper = mountPanel()
+    await flushPromises()
+    const winBtns = wrapper.find('[data-testid="token-stats-windows"]').findAll('button')
+    expect(winBtns.map((b) => b.text())).toEqual(['近 24 小时', '近 7 天', '近 30 天', '近 90 天', '全部历史'])
+    expect(wrapper.find('[data-testid="token-stats-window-24h"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="token-stats-window-30d"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="token-stats-window-24h"]').attributes('aria-selected')).toBe('false')
+    expect(wrapper.text()).toContain('按日聚合 · 本地时区')
+
+    getProjectTokenStats.mockResolvedValueOnce(
+      sampleStats({
+        window: '24h',
+        bucketWidth: 'hour',
+        trend: [
+          {
+            bucket: '2026-07-24T20',
+            total: 12,
+            inputTokens: 6,
+            outputTokens: 4,
+            cacheReadTokens: 1,
+            cacheWriteTokens: 1,
+          },
+        ],
+      }),
+    )
+    await wrapper.find('[data-testid="token-stats-window-24h"]').trigger('click')
+    await flushPromises()
+    expect(getProjectTokenStats).toHaveBeenLastCalledWith(
+      'proj-1',
+      expect.objectContaining({ window: '24h' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(wrapper.find('[data-testid="token-stats-window-24h"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="token-stats-window-badge"]').text()).toContain('近 24 小时')
+    expect(wrapper.text()).toContain('按小时聚合 · 本地时区')
+    wrapper.unmount()
+  })
 })

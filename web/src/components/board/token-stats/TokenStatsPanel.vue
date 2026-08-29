@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-const WINDOWS: TokenStatsWindow[] = ['7d', '30d', '90d', 'all']
+const WINDOWS: TokenStatsWindow[] = ['24h', '7d', '30d', '90d', 'all']
 
 const windowSel = ref<TokenStatsWindow>('30d')
 const loading = ref(true)
@@ -31,9 +31,9 @@ const windowLabel = computed(() => t(`pages.board.tokenStats.windows.${windowSel
 
 const grainLabel = computed(() => {
   if (!data.value) return ''
-  return data.value.bucketWidth === 'week'
-    ? t('pages.board.tokenStats.grainWeek')
-    : t('pages.board.tokenStats.grainDay')
+  if (data.value.bucketWidth === 'hour') return t('pages.board.tokenStats.grainHour')
+  if (data.value.bucketWidth === 'week') return t('pages.board.tokenStats.grainWeek')
+  return t('pages.board.tokenStats.grainDay')
 })
 
 const isEmpty = computed(() => !!data.value?.empty)

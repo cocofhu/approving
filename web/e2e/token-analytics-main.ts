@@ -103,7 +103,10 @@ window.fetch = async (input: RequestInfo | URL) => {
     )
   }
   if (url.includes('/stats/token')) {
-    return new Response(JSON.stringify(MOCK_STATS), {
+    const parsed = new URL(url, 'http://localhost')
+    const w = parsed.searchParams.get('window') || '30d'
+    const bucketWidth = w === '24h' ? 'hour' : w === 'all' ? 'week' : 'day'
+    return new Response(JSON.stringify({ ...MOCK_STATS, window: w, bucketWidth }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     })

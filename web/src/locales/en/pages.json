@@ -101,6 +101,7 @@
         "title": "Token stats",
         "windowAria": "Time window",
         "windows": {
+          "24h": "Last 24 hours",
           "7d": "Last 7 days",
           "30d": "Last 30 days",
           "90d": "Last 90 days",
@@ -116,6 +117,7 @@
         "rankHint": "\"Other\" = remaining workflows outside the top (not Project Management). Project Management is a separate row.",
         "grainDay": "Daily · local timezone",
         "grainWeek": "Weekly · local timezone",
+        "grainHour": "Hourly · local timezone",
         "compTotal": "Total {n}",
         "donutCenter": "Total",
         "other": "Other",
@@ -1642,7 +1644,9 @@
         "connecting": "Connecting…"
       },
       "ideUnavailable": "This image has no code-server (8080). Use the Terminal tab.",
+      "ideLoading": "Starting IDE",
       "acpNativeUnavailable": "This sandbox has no ACP bridge service (8765).",
+      "acpLoading": "Connecting to ACP",
       "novncUnavailable": "Browser component not started",
       "novncUnavailableHint": "This sandbox has no VNC preview (VNC_PREVIEW not set), or the desktop failed to start. Use the Terminal / ACP tabs.",
       "novncConnecting": "Checking browser component…",

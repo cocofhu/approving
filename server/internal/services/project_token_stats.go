@@ -14,11 +14,13 @@ import (
 
 // Token-stats window presets and errors.
 const (
+	TokenStatsWindow24h = "24h"
 	TokenStatsWindow7d  = "7d"
 	TokenStatsWindow30d = "30d"
 	TokenStatsWindow90d = "90d"
 	TokenStatsWindowAll = "all"
 
+	TokenStatsBucketHour = "hour"
 	TokenStatsBucketDay  = "day"
 	TokenStatsBucketWeek = "week"
 
@@ -39,13 +41,13 @@ var (
 
 // TokenStatsQuery is the input for project-level token chart aggregation.
 type TokenStatsQuery struct {
-	Window           string // 7d|30d|90d|all
+	Window           string // 24h|7d|30d|90d|all
 	Timezone         string // preferred IANA name
 	UTCOffsetMinutes *int   // fallback fixed offset (east of UTC positive)
 	Now              time.Time
 }
 
-// TokenStatsBucket is one day or week bucket with totals, source split, and
+// TokenStatsBucket is one hour, day, or week bucket with totals, source split, and
 // four components (sum of all reported sources in the bucket).
 type TokenStatsBucket struct {
 	Bucket           string `json:"bucket"`
@@ -143,10 +145,11 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 	if window == "" {
 		window = TokenStatsWindow30d
 	}
-	days, bucketWidth, err := parseTokenStatsWindow(window)
+	spec, err := parseTokenStatsWindow(window)
 	if err != nil {
 		return TokenStatsResult{}, err
 	}
+	bucketWidth := spec.bucketWidth
 
 	loc, tzLabel, err := resolveTokenStatsLocation(q.Timezone, q.UTCOffsetMinutes)
 	if err != nil {
@@ -164,14 +167,11 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 		return TokenStatsResult{}, err
 	}
 
-	var windowStart time.Time
-	var hasStart bool
-	if days > 0 {
-		// Inclusive local-day window: today and the previous (days-1) local days.
-		startDay := truncateLocalDay(nowLocal).AddDate(0, 0, -(days - 1))
-		windowStart = startDay
-		hasStart = true
-	}
+	win := buildWindowSlice(nowLocal, spec)
+	windowStart := win.start
+	hasStart := win.hasStart
+	windowEnd := win.end
+	hasEnd := spec.duration > 0
 
 	type agg struct {
 		input, output, cacheRead, cacheWrite int64
@@ -193,6 +193,9 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 		}
 		local := row.ts.In(loc)
 		if hasStart && local.Before(windowStart) {
+			continue
+		}
+		if hasEnd && local.After(windowEnd) {
 			continue
 		}
 		hasAny = true
@@ -309,18 +312,28 @@ func (s *ProjectService) TokenStats(ctx context.Context, projectID string, q Tok
 	return out, nil
 }
 
-func parseTokenStatsWindow(window string) (days int, bucketWidth string, err error) {
+// tokenStatsWindowSpec is the parsed window preset.
+// Calendar windows (7d/30d/90d) use days; rolling 24h uses duration; all uses neither.
+type tokenStatsWindowSpec struct {
+	days        int
+	duration    time.Duration
+	bucketWidth string
+}
+
+func parseTokenStatsWindow(window string) (tokenStatsWindowSpec, error) {
 	switch window {
+	case TokenStatsWindow24h:
+		return tokenStatsWindowSpec{duration: 24 * time.Hour, bucketWidth: TokenStatsBucketHour}, nil
 	case TokenStatsWindow7d:
-		return 7, TokenStatsBucketDay, nil
+		return tokenStatsWindowSpec{days: 7, bucketWidth: TokenStatsBucketDay}, nil
 	case TokenStatsWindow30d:
-		return 30, TokenStatsBucketDay, nil
+		return tokenStatsWindowSpec{days: 30, bucketWidth: TokenStatsBucketDay}, nil
 	case TokenStatsWindow90d:
-		return 90, TokenStatsBucketDay, nil
+		return tokenStatsWindowSpec{days: 90, bucketWidth: TokenStatsBucketDay}, nil
 	case TokenStatsWindowAll:
-		return 0, TokenStatsBucketWeek, nil
+		return tokenStatsWindowSpec{bucketWidth: TokenStatsBucketWeek}, nil
 	default:
-		return 0, "", ErrInvalidTokenStatsWindow
+		return tokenStatsWindowSpec{}, ErrInvalidTokenStatsWindow
 	}
 }
 
@@ -355,7 +368,15 @@ func truncateLocalDay(t time.Time) time.Time {
 	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
 }
 
+func truncateLocalHour(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, t.Hour(), 0, 0, 0, t.Location())
+}
+
 func bucketKey(local time.Time, width string) string {
+	if width == TokenStatsBucketHour {
+		return local.Format("2006-01-02T15")
+	}
 	if width == TokenStatsBucketWeek {
 		y, w := local.ISOWeek()
 		return fmt.Sprintf("%04d-W%02d", y, w)
@@ -363,7 +384,41 @@ func bucketKey(local time.Time, width string) string {
 	return local.Format("2006-01-02")
 }
 
+func fillHourBucketKeys(nowLocal, windowStart time.Time, hasStart bool, present map[string]struct{}) []string {
+	start := truncateLocalHour(nowLocal)
+	if hasStart {
+		start = truncateLocalHour(windowStart)
+	} else {
+		for k := range present {
+			t, ok := parseHourKey(k, nowLocal.Location())
+			if !ok {
+				continue
+			}
+			if t.Before(start) {
+				start = t
+			}
+		}
+	}
+	end := truncateLocalHour(nowLocal)
+	var keys []string
+	for t := start; !t.After(end); t = t.Add(time.Hour) {
+		keys = append(keys, bucketKey(t, TokenStatsBucketHour))
+	}
+	return keys
+}
+
+func parseHourKey(key string, loc *time.Location) (time.Time, bool) {
+	t, err := time.ParseInLocation("2006-01-02T15", key, loc)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
 func fillBucketKeys(nowLocal, windowStart time.Time, hasStart bool, width string, present map[string]struct{}) []string {
+	if width == TokenStatsBucketHour {
+		return fillHourBucketKeys(nowLocal, windowStart, hasStart, present)
+	}
 	if width == TokenStatsBucketWeek {
 		var start time.Time
 		if hasStart {
