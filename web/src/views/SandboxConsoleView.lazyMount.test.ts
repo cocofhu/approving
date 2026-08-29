@@ -210,6 +210,8 @@ async function mountConsole(
 }
 
 describe('SandboxConsoleView IDE/ACP lazy mount', () => {
+  let consoleErrorSpy: { mockRestore: () => void }
+
   beforeEach(() => {
     breakpointMocks.isMobile.value = false
     vi.stubGlobal('WebSocket', MockWebSocket as unknown as typeof WebSocket)
@@ -222,7 +224,7 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
       },
     )
     const nativeError = console.error.bind(console)
-    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       const first = args[0] as { message?: string } | string
       const text = typeof first === 'string' ? first : first?.message ?? String(first)
       if (text.includes('Iframe page loading is disabled')) return
@@ -231,9 +233,7 @@ describe('SandboxConsoleView IDE/ACP lazy mount', () => {
   })
 
   afterEach(() => {
-    if (vi.isMockFunction(console.error)) {
-      console.error.mockRestore()
-    }
+    consoleErrorSpy.mockRestore()
     vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
