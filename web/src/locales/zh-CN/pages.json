@@ -1641,7 +1641,9 @@
         "connecting": "连接中…"
       },
       "ideUnavailable": "该沙箱镜像未提供 code-server(8080),无法内嵌 IDE。可使用终端标签进行操作。",
+      "ideLoading": "正在启动 IDE",
       "acpNativeUnavailable": "该沙箱未提供 ACP 桥接服务(8765),无法内嵌 ACP 页面。",
+      "acpLoading": "正在连接 ACP",
       "novncUnavailable": "未启动浏览器组件",
       "novncUnavailableHint": "当前沙箱未启用 VNC 预览（未设置 VNC_PREVIEW），或浏览器桌面启动失败。可使用终端 / ACP 标签操作。",
       "novncConnecting": "正在检测浏览器组件…",

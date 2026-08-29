@@ -47,6 +47,14 @@ const tab = ref<ConsoleTab>(initialConsoleTab())
 const novncMounted = ref(false)
 const ideMounted = ref(false)
 const acpMounted = ref(false)
+/** First iframe `load` — keep-alive tab switches must not replay loading. */
+const ideLoaded = ref(false)
+const acpLoaded = ref(false)
+/** Bumped on stuck-retry so the iframe remounts without tearing down keep-alive on tab switch. */
+const ideFrameKey = ref(0)
+const acpFrameKey = ref(0)
+/** Boot-class HardLoadLayer threshold (not the short REST 10s). */
+const IFRAME_BOOT_STUCK_MS = 60_000
 
 const tabItems = computed(() => [
   { k: 'terminal', l: t('pages.sandboxConsole.tabs.terminal'), i: 'terminal' },
@@ -213,6 +221,34 @@ function sendResize() {
   ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
 }
 
+const ideUnavailable = computed(
+  () => !metaLoading.value && !!sandbox.value && sandbox.value.hasCodeServer === false,
+)
+const acpUnavailable = computed(
+  () => !metaLoading.value && !!sandbox.value && sandbox.value.hasAcp === false,
+)
+const showIdeLoading = computed(
+  () => tab.value === 'ide' && !ideUnavailable.value && !ideLoaded.value,
+)
+const showAcpLoading = computed(
+  () => tab.value === 'acp' && !acpUnavailable.value && !acpLoaded.value,
+)
+
+function onIdeLoad() {
+  ideLoaded.value = true
+}
+function onAcpLoad() {
+  acpLoaded.value = true
+}
+function retryIde() {
+  ideLoaded.value = false
+  ideFrameKey.value += 1
+}
+function retryAcp() {
+  acpLoaded.value = false
+  acpFrameKey.value += 1
+}
+
 watch(tab, (t) => {
   if (t === 'terminal') nextTick(() => { initTerminal(); doFit() })
   if (t === 'ide') ideMounted.value = true
@@ -345,35 +381,65 @@ onBeforeUnmount(() => {
         <div ref="termHost" class="h-full w-full" />
       </div>
 
-      <div v-show="tab === 'ide'" class="h-full">
+      <div
+        v-show="tab === 'ide'"
+        class="relative h-full"
+        :aria-busy="showIdeLoading ? 'true' : 'false'"
+        data-testid="sandbox-console-ide-pane"
+      >
         <iframe
           v-if="ideMounted && sandbox?.hasCodeServer"
+          :key="ideFrameKey"
           :src="api.sandboxIdeUrl(id)"
           class="h-full w-full border-0 bg-white"
           title="code-server"
+          @load="onIdeLoad"
         />
         <div
-          v-else-if="ideMounted"
+          v-else-if="ideMounted && ideUnavailable"
           class="flex h-full items-center justify-center px-6 text-center text-sm text-txt3"
+          data-testid="sandbox-console-ide-unavailable"
         >
           {{ t('pages.sandboxConsole.ideUnavailable') }}
         </div>
+        <HardLoadLayer
+          v-if="showIdeLoading"
+          overlay
+          :stuck-after-ms="IFRAME_BOOT_STUCK_MS"
+          :stage="t('pages.sandboxConsole.ideLoading')"
+          @retry="retryIde"
+        />
       </div>
 
       <!-- ACP: in-container acp-bridge web UI (8765); was acp-native -->
-      <div v-show="tab === 'acp'" class="h-full">
+      <div
+        v-show="tab === 'acp'"
+        class="relative h-full"
+        :aria-busy="showAcpLoading ? 'true' : 'false'"
+        data-testid="sandbox-console-acp-pane"
+      >
         <iframe
           v-if="acpMounted && sandbox?.hasAcp"
+          :key="acpFrameKey"
           :src="api.sandboxBridgeUrl(id)"
           class="h-full w-full border-0 bg-white"
           title="ACP bridge"
+          @load="onAcpLoad"
         />
         <div
-          v-else-if="acpMounted"
+          v-else-if="acpMounted && acpUnavailable"
           class="flex h-full items-center justify-center px-6 text-center text-sm text-txt3"
+          data-testid="sandbox-console-acp-unavailable"
         >
           {{ t('pages.sandboxConsole.acpNativeUnavailable') }}
         </div>
+        <HardLoadLayer
+          v-if="showAcpLoading"
+          overlay
+          :stuck-after-ms="IFRAME_BOOT_STUCK_MS"
+          :stage="t('pages.sandboxConsole.acpLoading')"
+          @retry="retryAcp"
+        />
       </div>
 
       <!-- noVNC browser: sandbox-scoped desktop; lazy mount + keep-alive -->
