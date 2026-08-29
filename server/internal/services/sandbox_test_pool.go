@@ -185,7 +185,8 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 	}
 	backend := runtime.NormalizeBackend(agent.AcpBackend)
 	workDir := s.skills.WorkDir(profile)
-	merged, err := runtime.PrepareAuthEnv(backend, env, workDir)
+	// Align auth gate with BuildConfigHome: shared extend then Agent overlay.
+	merged, err := runtime.PrepareAuthEnv(backend, env, workDir, sharedWorkDir)
 	if err != nil {
 		fail(err)
 		return

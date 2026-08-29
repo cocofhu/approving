@@ -326,7 +326,8 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 			env[k] = e.Value
 		}
 	}
-	merged, err := PrepareAuthEnv(c.backend, env, c.workDir(profile))
+	// Align auth gate with buildConfigHome BaseWorkDirSrc (project-shared workspace).
+	merged, err := PrepareAuthEnv(c.backend, env, c.workDir(profile), c.sharedWorkDir(req))
 	if err != nil {
 		return sandbox.Spec{}, err
 	}
