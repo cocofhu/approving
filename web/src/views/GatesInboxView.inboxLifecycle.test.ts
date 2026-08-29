@@ -1785,6 +1785,8 @@ describe('GatesInboxView inbox-context lifecycle', () => {
 
     const ws = FakeWebSocket.instances.find((w) => w.url.includes('run-a'))
     expect(ws).toBeTruthy()
+    const contextCallsBeforeBusy = inboxCallsFor('run-a', 'clarify-a').length
+    expect(contextCallsBeforeBusy).toBeGreaterThan(0)
     ws!.emit('review', { event: 'turn_begin', nodeId: 'clarify-a' })
     await flushPromises()
     await nextTick()
@@ -1793,6 +1795,9 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.get('[data-testid="inbox-item-card"]').text()).toContain('正在回复中')
     expect(wrapper.get('[data-testid="inbox-item-card"]').text()).not.toContain('待澄清')
     expect(usePendingGates().hasPendingUpdate.value).toBe(false)
+    // Badge patch must not hard-reload context (would unmount live composer).
+    expect(inboxCallsFor('run-a', 'clarify-a')).toHaveLength(contextCallsBeforeBusy)
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(true)
 
     ws!.emit('review', { event: 'queue_state', nodeId: 'clarify-a', busy: false, waiting: 0 })
     await flushPromises()
@@ -1800,6 +1805,34 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     expect(wrapper.get('[data-testid="inbox-item-card"]').attributes('data-replying')).toBeUndefined()
     expect(wrapper.get('[data-testid="inbox-item-card"]').text()).toContain('待澄清')
     expect(usePendingGates().hasPendingUpdate.value).toBe(false)
+    expect(inboxCallsFor('run-a', 'clarify-a')).toHaveLength(contextCallsBeforeBusy)
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('ordinary clarify send marks the card replying without remounting the composer', async () => {
+    const a = clarifyItem('a')
+    mocks.listGates.mockResolvedValue(paged([a]))
+    const wrapper = mountInbox()
+    await flushPromises()
+    await nextTick()
+    await flushPromises()
+    usePendingGates().applyPending()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="inbox-item-card"]').text()).toContain('待澄清')
+    const contextCallsBeforeSend = inboxCallsFor('run-a', 'clarify-a').length
+    expect(wrapper.find('[data-testid="clarify-turn"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="clarify-turn"]').trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="inbox-item-card"]').attributes('data-replying')).toBe('true')
+    expect(wrapper.get('[data-testid="inbox-item-card"]').text()).toContain('正在回复中')
+    expect(usePendingGates().hasPendingUpdate.value).toBe(false)
+    expect(inboxCallsFor('run-a', 'clarify-a')).toHaveLength(contextCallsBeforeSend)
+    expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })

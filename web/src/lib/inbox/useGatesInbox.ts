@@ -475,12 +475,10 @@ function rebindActiveFromList(list: InboxItem[]) {
   if (!cur) return
   const fresh = list.find((it) => itemKey(it) === itemKey(cur))
   if (!fresh || fresh === cur) return
-  const startFlip = isStartingInboxItem(fresh) !== isStartingInboxItem(cur)
-  const stateFlip =
-    cur.type === 'clarify' &&
-    fresh.type === 'clarify' &&
-    (cur.state ?? '') !== (fresh.state ?? '')
-  if (startFlip || stateFlip) active.value = fresh
+  // Only starting↔parked needs a new active object (transcript now exists and
+  // watch(active) hard-reloads context). Badge-only state=replying must not
+  // replace active — that remounts ClarifyChat and wipes live stream bubbles.
+  if (isStartingInboxItem(fresh) !== isStartingInboxItem(cur)) active.value = fresh
 }
 
 /** Patch current-page + sidebar cards from sessionBusy without triggering the update banner. */
@@ -494,10 +492,8 @@ function patchVisibleCardBusy(runId: string, nodeId: string, busy: boolean) {
     return patched
   })
   if (listChanged) listItems.value = nextList
-  if (active.value && itemKey(active.value) === key && active.value.type === 'clarify') {
-    const patched = applyInboxReplyingState(active.value, busy)
-    if (patched !== active.value) active.value = patched
-  }
+  // Do not replace active.value here. watch(active) always loadActiveRun(true),
+  // which nulls activeRun and unmounts the live composer mid-turn.
   patchItemReplying(key, busy)
 }
 
