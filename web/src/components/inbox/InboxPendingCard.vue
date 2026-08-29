@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
+import AppSpinner from '@/components/ui/AppSpinner.vue'
 import { relTime } from '@/lib/shared/format'
 import {
   inboxBadgeLabelKey,
@@ -39,7 +40,6 @@ const starting = computed(() => isStartingInboxItem(props.item))
 const replying = computed(() => isReplyingInboxItem(props.item))
 const inProgress = computed(() => isInboxProgressItem(props.item))
 const iconName = computed(() => {
-  if (inProgress.value) return 'spinner'
   if (props.item.type === 'gate') return 'gate'
   if (props.item.kind === 'app_preview') return 'monitor'
   return 'chat'
@@ -83,7 +83,8 @@ function onOpenShare() {
         class="flex h-9 w-9 shrink-0 items-center justify-center"
         :class="iconClass"
       >
-        <Icon :name="iconName" :size="18" :class="inProgress ? 'animate-spin' : undefined" />
+        <AppSpinner v-if="inProgress" :size="18" />
+        <Icon v-else :name="iconName" :size="18" />
       </div>
       <div class="min-w-0 flex-1">
         <div class="truncate text-sm font-medium text-txt">{{ title }}</div>
