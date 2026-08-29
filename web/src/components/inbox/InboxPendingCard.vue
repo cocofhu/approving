@@ -9,6 +9,8 @@ import {
   inboxBadgeToneClass,
   inboxIconToneClass,
   inboxSecondaryLine,
+  isInboxProgressItem,
+  isReplyingInboxItem,
   isStartingInboxItem,
 } from '@/lib/inbox/inboxDisplay'
 import { isShareableInboxItem, shareStatusLabel } from '@/lib/inbox/gateShareLink'
@@ -34,8 +36,10 @@ const timeLabel = computed(() =>
   props.item.type === 'gate' ? relTime(props.item.requestedAt) : relTime(props.item.updatedAt),
 )
 const starting = computed(() => isStartingInboxItem(props.item))
+const replying = computed(() => isReplyingInboxItem(props.item))
+const inProgress = computed(() => isInboxProgressItem(props.item))
 const iconName = computed(() => {
-  if (starting.value) return 'spinner'
+  if (inProgress.value) return 'spinner'
   if (props.item.type === 'gate') return 'gate'
   if (props.item.kind === 'app_preview') return 'monitor'
   return 'chat'
@@ -66,6 +70,7 @@ function onOpenShare() {
     :class="active ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:bg-elevated'"
     data-testid="inbox-item-card"
     :data-starting="starting ? 'true' : undefined"
+    :data-replying="replying ? 'true' : undefined"
   >
     <button
       type="button"
@@ -78,7 +83,7 @@ function onOpenShare() {
         class="flex h-9 w-9 shrink-0 items-center justify-center"
         :class="iconClass"
       >
-        <Icon :name="iconName" :size="18" :class="starting ? 'animate-spin' : undefined" />
+        <Icon :name="iconName" :size="18" :class="inProgress ? 'animate-spin' : undefined" />
       </div>
       <div class="min-w-0 flex-1">
         <div class="truncate text-sm font-medium text-txt">{{ title }}</div>

@@ -11,7 +11,12 @@ import { usePendingGates } from '@/lib/inbox/usePendingGates'
 import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDraft'
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
-import { inboxSecondaryLine, isStartingInboxItem } from '@/lib/inbox/inboxDisplay'
+import {
+  applyInboxReplyingState,
+  inboxSecondaryLine,
+  isStartingInboxItem,
+  mergeInboxReplyingFromRemote,
+} from '@/lib/inbox/inboxDisplay'
 import {
   inboxComposerMode,
   pickInboxClarifySession,
@@ -67,6 +72,7 @@ const {
   applyPending,
   removeItemLocally,
   restoreItemLocally,
+  patchItemReplying,
   hasPendingUpdate,
   pendingMeta,
   lastPeekAt,
@@ -469,7 +475,26 @@ function rebindActiveFromList(list: InboxItem[]) {
   if (!cur) return
   const fresh = list.find((it) => itemKey(it) === itemKey(cur))
   if (!fresh || fresh === cur) return
+  // Only starting↔parked needs a new active object (transcript now exists and
+  // watch(active) hard-reloads context). Badge-only state=replying must not
+  // replace active — that remounts ClarifyChat and wipes live stream bubbles.
   if (isStartingInboxItem(fresh) !== isStartingInboxItem(cur)) active.value = fresh
+}
+
+/** Patch current-page + sidebar cards from sessionBusy without triggering the update banner. */
+function patchVisibleCardBusy(runId: string, nodeId: string, busy: boolean) {
+  const key = `${runId}:${nodeId}`
+  let listChanged = false
+  const nextList = listItems.value.map((row) => {
+    if (itemKey(row) !== key || row.type !== 'clarify') return row
+    const patched = applyInboxReplyingState(row, busy)
+    if (patched !== row) listChanged = true
+    return patched
+  })
+  if (listChanged) listItems.value = nextList
+  // Do not replace active.value here. watch(active) always loadActiveRun(true),
+  // which nulls activeRun and unmounts the live composer mid-turn.
+  patchItemReplying(key, busy)
 }
 
 /** Keep the retained failure card visible until it is dismissed or reappears. */
@@ -869,6 +894,14 @@ watch(lastPeekAt, () => {
   checkProcessedWhileEditing()
 })
 
+// Peek/poll may only change state=replying on existing keys. Merge onto the
+// current page so badges follow sessionBusy without hanging the update banner.
+watch(remoteItems, (remote) => {
+  if (!remote.length) return
+  const merged = mergeInboxReplyingFromRemote(listItems.value, remote, itemKey)
+  if (merged !== listItems.value) listItems.value = merged
+})
+
 watch(isEditing, (editing) => {
   if (!editing) showProcessedBanner.value = false
   else checkProcessedWhileEditing()
@@ -1198,6 +1231,7 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
       nodeId?: string
       events?: any[]
       busy?: boolean
+      waiting?: number
       run?: { reactSessions?: Run['reactSessions'] }
       previewArtifact?: string
       name?: string
@@ -1230,6 +1264,19 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
       if (m.event === 'queue_state' && typeof m.busy === 'boolean') {
         clarifyLiveBusy.value = !!m.busy
         if (!m.busy) busySeedRetry.stop()
+      }
+      const cardNodeId = typeof m.nodeId === 'string' ? m.nodeId : ''
+      if (cardNodeId) {
+        if (m.event === 'turn_begin') {
+          patchVisibleCardBusy(runId, cardNodeId, true)
+        } else if (m.event === 'queue_state') {
+          const waiting = typeof m.waiting === 'number' ? m.waiting : 0
+          const sessionBusy = (typeof m.busy === 'boolean' ? m.busy : false) || waiting > 0
+          patchVisibleCardBusy(runId, cardNodeId, sessionBusy)
+        } else if (m.event === 'turn_done' || m.event === 'error') {
+          const waiting = typeof m.waiting === 'number' ? m.waiting : 0
+          patchVisibleCardBusy(runId, cardNodeId, waiting > 0)
+        }
       }
       applyOrBufferReviewFrame(m as Record<string, unknown>)
       if (m.event === 'turn_done' || m.event === 'error') {
@@ -1727,6 +1774,8 @@ async function onClarifySend(
 
   // Ordinary turn enqueue returns before the turn finishes — keep live
   // queue/stream bubbles (clarify + review shared session UX). No force refresh.
+  // Optimistic: this page's send is sessionBusy; WS queue_state confirms/clears.
+  if (ok) patchVisibleCardBusy(it.runId, it.nodeId, true)
 }
 
 // Review: confirm product & advance (same contract as RunDetailView.onClarifyFinish).
@@ -1992,6 +2041,7 @@ function itemSecondary(it: InboxItem) {
     pendingMeta,
     lastPeekAt,
     itemKey,
+    patchVisibleCardBusy,
     ariaBusy,
     isMobile,
     selected,

@@ -141,8 +141,10 @@ type ClarifyInboxItem struct {
 	Type string `json:"type"`
 	Kind string `json:"kind"` // clarify | review | app_preview
 	// State is "starting" while the node's sandbox is still booting (no
-	// conversation yet, so no transcript and no reply accepted). Empty means the
-	// item is parked at waiting_human and fully actionable.
+	// conversation yet, so no transcript and no reply accepted). "replying"
+	// means the item is parked at waiting_human and the review/clarify session
+	// is busy (in-flight turn or waiting>0, same as sessionBusy). Empty means
+	// parked and idle. starting takes priority over replying.
 	State        string                `json:"state,omitempty"`
 	RunID        string                `json:"runId"`
 	NodeID       string                `json:"nodeId"`
@@ -465,6 +467,37 @@ func (s *RunService) startingApproves(tags []string) []ClarifyInboxItem {
 		})
 	}
 	return out
+}
+
+// ReviewSessionBusy reports whether a parked review/clarify session is busy
+// (sessionBusy: in-flight turn or queue waiting > 0).
+type ReviewSessionBusy func(runID, nodeID string) bool
+
+// AttachInboxReplyingState writes state=replying onto parked clarify items whose
+// review session is busy. starting is left untouched (higher priority). Human
+// gates are ignored. Items stay in the slice — busy never unlists them.
+func AttachInboxReplyingState(items []any, busy ReviewSessionBusy) {
+	if busy == nil || len(items) == 0 {
+		return
+	}
+	for i, it := range items {
+		c, ok := it.(ClarifyInboxItem)
+		if !ok {
+			continue
+		}
+		if c.State == "starting" {
+			continue
+		}
+		if busy(c.RunID, c.NodeID) {
+			c.State = "replying"
+			items[i] = c
+			continue
+		}
+		if c.State == "replying" {
+			c.State = ""
+			items[i] = c
+		}
+	}
 }
 
 func (s *RunService) varsByRun(runIDs []string) map[string]map[string]any {
