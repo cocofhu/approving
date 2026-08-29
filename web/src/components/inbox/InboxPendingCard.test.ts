@@ -205,7 +205,7 @@ describe('InboxPendingCard share entry', () => {
     expect(w.emitted('open-share')).toBeFalsy()
   })
 
-  it('marks a booting sandbox with the starting badge, a spinner, and no share row', () => {
+  it('marks a booting sandbox with the starting badge, AppSpinner (not chat), and no share row (plan g2.1)', () => {
     const w = mount(InboxPendingCard, {
       props: {
         item: clarify({
@@ -221,11 +221,19 @@ describe('InboxPendingCard share entry', () => {
     expect(card.text()).toContain('启动中')
     expect(card.text()).not.toContain('待澄清')
     expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(false)
-    expect(w.findComponent({ name: 'Icon' }).props('name')).toBe('spinner')
-    expect(w.findComponent({ name: 'Icon' }).classes()).toContain('animate-spin')
+    const spinner = w.findComponent({ name: 'AppSpinner' })
+    expect(spinner.exists()).toBe(true)
+    expect(spinner.props('size')).toBe(18)
+    const svg = spinner.find('svg')
+    expect(svg.classes()).toContain('app-spinner')
+    expect(svg.classes().join(' ')).not.toContain('animate-spin')
+    // Not a rotating chat bubble (plan g2.2).
+    expect(svg.html()).not.toMatch(/M21 12a8 8 0 0 1-11\.3 7\.3/)
+    expect(svg.html()).not.toMatch(/L4 20/)
+    expect(svg.html()).toMatch(/<circle[^>]*r="9"/)
   })
 
-  it('marks a busy parked session with the replying badge, spinner, and share row (plan g1.2)', () => {
+  it('marks a busy parked session with the replying badge, AppSpinner, and share row (plan g2.1)', () => {
     const w = mount(InboxPendingCard, {
       props: {
         item: clarify({
@@ -245,11 +253,32 @@ describe('InboxPendingCard share entry', () => {
     expect(card.text()).not.toContain('启动中')
     expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(true)
     expect(w.get('[data-testid="gate-share-copy-btn"]').text()).toContain('复制临时链接')
-    expect(w.findComponent({ name: 'Icon' }).props('name')).toBe('spinner')
-    expect(w.findComponent({ name: 'Icon' }).classes()).toContain('animate-spin')
+    const spinner = w.findComponent({ name: 'AppSpinner' })
+    expect(spinner.exists()).toBe(true)
+    expect(spinner.props('size')).toBe(18)
+    const svg = spinner.find('svg')
+    expect(svg.classes()).toContain('app-spinner')
+    expect(svg.classes().join(' ')).not.toContain('animate-spin')
+    expect(svg.html()).not.toMatch(/L4 20/)
+    expect(svg.html()).toMatch(/M21 12a9 9 0 0 1-9 9/)
     expect(w.find('.text-n-artifact').exists()).toBe(true)
   })
 
+  it('idle clarify card keeps static chat icon without AppSpinner (plan g2.1 idle)', () => {
+    const w = mount(InboxPendingCard, {
+      props: {
+        item: clarify({
+          kind: 'clarify',
+          label: '澄清需求',
+          shareLink: { state: 'none', canCreate: true },
+        }),
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(w.findComponent({ name: 'AppSpinner' }).exists()).toBe(false)
+    expect(w.findComponent({ name: 'Icon' }).props('name')).toBe('chat')
+    expect(w.find('svg.app-spinner').exists()).toBe(false)
+  })
   it('renders English Replying for state=replying', () => {
     const en = createI18n({
       legacy: false,

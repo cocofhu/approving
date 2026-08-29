@@ -305,6 +305,8 @@ html:not(.light) *.is-scrolling::-webkit-scrollbar {
 }
 
 .app-spinner {
+  display: block;
+  transform-origin: center;
   animation: app-spin 0.7s linear infinite;
   flex-shrink: 0;
 }
