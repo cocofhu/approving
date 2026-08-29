@@ -166,6 +166,71 @@ describe('RunListView delete run and ops column', () => {
   })
 })
 
+describe('RunListView duration column layout (g1.1 / g1.2 / g2.1)', () => {
+  const desktopBlock = src.slice(src.indexOf('<!-- Desktop table (loading skeleton or rows) -->'))
+  const mobileBlock = src.slice(
+    src.indexOf('<!-- Mobile card list -->'),
+    src.indexOf('<!-- Desktop table -->'),
+  )
+
+  it('uses tabular-nums and whitespace-nowrap on the desktop duration td', () => {
+    expect(desktopBlock).toMatch(
+      /<td class="[^"]*\btabular-nums\b[^"]*">[\s\S]*\{\{ fmtDuration\(r\.durationSec\) \}\}/,
+    )
+    expect(desktopBlock).toMatch(
+      /<td class="[^"]*\bwhitespace-nowrap\b[^"]*">[\s\S]*\{\{ fmtDuration\(r\.durationSec\) \}\}/,
+    )
+    expect(src).toMatch(/\{\{ fmtDuration\(r\.durationSec\) \}\}/)
+  })
+
+  it('reserves hh:mm:ss min-width on duration th, td, and skeleton placeholder', () => {
+    // 8ch covers hh:mm:ss; +2.5rem matches px-5 so border-box min-width is not eaten by padding.
+    const durationMinW = /min-w-\[calc\(8ch\+2\.5rem\)\]/
+    const durationSlot = /min-w-\[8ch\]/
+
+    const durationTh = desktopBlock.match(
+      /<th class="[^"]*">[\s\S]*?\{\{ t\('common\.table\.duration'\) \}\}[\s\S]*?<\/th>/,
+    )?.[0]
+    expect(durationTh).toBeTruthy()
+    expect(durationTh).toMatch(durationMinW)
+    expect(durationTh).toMatch(durationSlot)
+    expect(durationTh).toMatch(/whitespace-nowrap/)
+
+    const durationTd = desktopBlock.match(
+      /<td class="[^"]*">[\s\S]*?\{\{ fmtDuration\(r\.durationSec\) \}\}[\s\S]*?<\/td>/,
+    )?.[0]
+    expect(durationTd).toBeTruthy()
+    expect(durationTd).toMatch(durationMinW)
+    expect(durationTd).toMatch(durationSlot)
+    expect(durationTd).toMatch(/inline-block min-w-\[8ch\]/)
+
+    const skelStart = desktopBlock.indexOf('v-if="initialLoading"')
+    const skelEnd = desktopBlock.indexOf('<template v-else>', skelStart)
+    const skeleton = desktopBlock.slice(skelStart, skelEnd)
+    expect(skeleton).toMatch(durationMinW)
+    expect(skeleton).toMatch(/w-\[8ch\]/)
+    expect(skeleton).not.toMatch(/w-\[40%\]/)
+    expect(skeleton).not.toMatch(/w-\[6\.2em\]/)
+    expect(skeleton).not.toMatch(/min-w-\[6\.2em\]/)
+  })
+
+  it('does not switch the table to fixed layout or change duration alignment', () => {
+    expect(desktopBlock).toMatch(/<table class="w-full text-sm">/)
+    expect(desktopBlock).not.toMatch(/table-layout/)
+    expect(desktopBlock).not.toMatch(/table-fixed/)
+    const durationTd = desktopBlock.match(
+      /<td class="[^"]*">[\s\S]*?\{\{ fmtDuration\(r\.durationSec\) \}\}[\s\S]*?<\/td>/,
+    )?.[0]
+    expect(durationTd).toBeTruthy()
+    expect(durationTd).not.toMatch(/text-right|text-center/)
+  })
+
+  it('does not add duration display to mobile cards', () => {
+    expect(mobileBlock).not.toMatch(/fmtDuration/)
+    expect(mobileBlock).not.toMatch(/common\.table\.duration/)
+  })
+})
+
 describe('RunListView sorting', () => {
   it('exposes desktop sortable headers for start time and priority only', () => {
     expect(src).toMatch(/applySortClick\('started_at'\)/)

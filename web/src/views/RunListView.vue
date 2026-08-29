@@ -665,7 +665,9 @@ onUnmounted(() => {
                 </span>
               </span>
             </th>
-            <th class="px-5 py-2.5 font-medium">{{ t('common.table.duration') }}</th>
+            <th class="w-0 min-w-[calc(8ch+2.5rem)] whitespace-nowrap px-5 py-2.5 font-medium">
+              <span class="inline-block min-w-[8ch]">{{ t('common.table.duration') }}</span>
+            </th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.progress') }}</th>
             <th class="px-5 py-2.5 font-medium">{{ t('common.table.status') }}</th>
             <th
@@ -706,8 +708,8 @@ onUnmounted(() => {
               <td class="px-5 py-3">
                 <div class="h-3 w-[72px] rounded bg-elevated animate-pulse" />
               </td>
-              <td class="px-5 py-3">
-                <div class="h-3 w-[40%] rounded bg-elevated animate-pulse" />
+              <td class="w-0 min-w-[calc(8ch+2.5rem)] whitespace-nowrap px-5 py-3">
+                <div class="h-3 w-[8ch] rounded bg-elevated animate-pulse" />
               </td>
               <td class="px-5 py-3">
                 <div class="h-3 w-[80%] rounded bg-elevated animate-pulse" />
@@ -768,7 +770,9 @@ onUnmounted(() => {
                   </template>
                   <template v-else>{{ fmtTime(r.startedAt) }}</template>
                 </td>
-                <td class="px-5 py-3 text-txt3">{{ fmtDuration(r.durationSec) }}</td>
+                <td class="w-0 min-w-[calc(8ch+2.5rem)] whitespace-nowrap px-5 py-3 tabular-nums text-txt3">
+                  <span class="inline-block min-w-[8ch]">{{ fmtDuration(r.durationSec) }}</span>
+                </td>
                 <td class="px-5 py-3">
                   <div class="min-w-[148px] max-w-[168px]">
                     <div class="flex items-center gap-2">
