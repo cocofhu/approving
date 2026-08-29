@@ -160,7 +160,7 @@ func (s *ProjectService) GlobalTokenStats(ctx context.Context, q GlobalTokenStat
 
 	window := strings.TrimSpace(q.Window)
 	if window == "" {
-		window = TokenStatsWindow30d
+		window = TokenStatsWindowAll
 	}
 	spec, err := parseTokenStatsWindow(window)
 	if err != nil {

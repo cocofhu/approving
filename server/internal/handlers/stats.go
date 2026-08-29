@@ -11,7 +11,7 @@ import (
 )
 
 // GetGlobalTokenStats returns cross-project token analytics for /stats.
-// Query: window=24h|7d|30d|90d|all (default 30d), timezone, utcOffsetMinutes,
+// Query: window=24h|7d|30d|90d|all (default all), timezone, utcOffsetMinutes,
 // source=all|workflow|pm, projectId, modelKey.
 func (h *Handlers) GetGlobalTokenStats(c *gin.Context) {
 	if h.Projects == nil {
@@ -20,7 +20,7 @@ func (h *Handlers) GetGlobalTokenStats(c *gin.Context) {
 	}
 
 	q := services.GlobalTokenStatsQuery{
-		Window:    c.DefaultQuery("window", services.TokenStatsWindow30d),
+		Window:    c.DefaultQuery("window", services.TokenStatsWindowAll),
 		Timezone:  c.Query("timezone"),
 		Source:    c.DefaultQuery("source", services.GlobalTokenStatsSourceAll),
 		ProjectID: strings.TrimSpace(c.Query("projectId")),

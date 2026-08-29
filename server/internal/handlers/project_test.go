@@ -239,6 +239,14 @@ func TestGetProjectTokenStats(t *testing.T) {
 		t.Fatalf("want empty true: %s", w.Body.String())
 	}
 
+	w = hn.do("GET", "/api/projects/"+id+"/token-stats?timezone=UTC", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("omit window: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"window":"30d"`) {
+		t.Fatalf("project token-stats omitted window must stay 30d: %s", w.Body.String())
+	}
+
 	must := func(err error) {
 		t.Helper()
 		if err != nil {
