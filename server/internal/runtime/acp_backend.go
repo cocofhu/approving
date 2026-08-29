@@ -135,7 +135,7 @@ func MergeAuthEnv(backend AcpBackend, env map[string]string) (map[string]string,
 }
 
 // SettingsFileExists reports whether settings.json is present at the root of the
-// Agent workspace. Dialog-test auth gate treats file presence as sufficient; content
+// given workspace. Auth gate treats file presence as sufficient; content
 // is not validated or rewritten by the gate.
 func SettingsFileExists(workDirSrc string) bool {
 	if workDirSrc == "" {
@@ -145,14 +145,37 @@ func SettingsFileExists(workDirSrc string) bool {
 	return err == nil
 }
 
-// PrepareAuthEnv merges auth keys from Agent workspace settings.json.env into env
+// ResolveSettingsWorkDir picks which workspace root's settings.json wins for the
+// auth gate, matching BuildConfigHome layering: Agent overlay if present, else
+// project-shared extend. Empty sharedWorkDir falls back to the Agent directory only.
+func ResolveSettingsWorkDir(agentWorkDir, sharedWorkDir string) string {
+	if SettingsFileExists(agentWorkDir) {
+		return agentWorkDir
+	}
+	if sharedWorkDir != "" && SettingsFileExists(sharedWorkDir) {
+		return sharedWorkDir
+	}
+	if agentWorkDir != "" {
+		return agentWorkDir
+	}
+	return sharedWorkDir
+}
+
+// PrepareAuthEnv merges auth keys from workspace settings.json.env into env
 // (explicit env wins, including empty overrides), then normalizes via mergeAuthEnv.
-// When settings.json exists in the workspace, the auth gate passes without requiring
+// Optional sharedWorkDir is the project-shared Agent workspace (extend layer);
+// when the Agent directory has no settings.json, the shared root is used instead.
+// When settings.json exists in either layer, the auth gate passes without requiring
 // Env keys; content is left to the backend/CLI.
-func PrepareAuthEnv(backend AcpBackend, env map[string]string, workDirSrc string) (map[string]string, error) {
-	settingsAuth := ReadSettingsAuthEnv(workDirSrc, backend)
+func PrepareAuthEnv(backend AcpBackend, env map[string]string, workDirSrc string, sharedWorkDir ...string) (map[string]string, error) {
+	base := ""
+	if len(sharedWorkDir) > 0 {
+		base = sharedWorkDir[0]
+	}
+	settingsDir := ResolveSettingsWorkDir(workDirSrc, base)
+	settingsAuth := ReadSettingsAuthEnv(settingsDir, backend)
 	merged := mergeSettingsAuthIntoEnv(env, settingsAuth)
-	requireAuth := !SettingsFileExists(workDirSrc)
+	requireAuth := !SettingsFileExists(settingsDir)
 	return mergeAuthEnv(backend, merged, requireAuth)
 }
 
@@ -251,7 +274,7 @@ func mergeAuthEnv(backend AcpBackend, env map[string]string, requireAuth bool) (
 	if val == "" {
 		if requireAuth {
 			return out, fmt.Errorf(
-				"鉴权未配置:请在 Agent 工作目录添加 settings.json，或在项目沙箱 env、Agent 环境变量中设置 %s",
+				"鉴权未配置:请在项目共享 Agent 工作目录或该 Agent 工作目录添加 settings.json，或在项目沙箱 env、Agent 环境变量中设置 %s",
 				strings.Join(spec.agentKeys, " 或 "),
 			)
 		}

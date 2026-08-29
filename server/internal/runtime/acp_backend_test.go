@@ -458,6 +458,9 @@ func TestPrepareAuthEnv_NeitherConfigured(t *testing.T) {
 	if !strings.Contains(err.Error(), "settings.json") {
 		t.Fatalf("error should mention settings.json: %v", err)
 	}
+	if !strings.Contains(err.Error(), "项目共享") {
+		t.Fatalf("error should mention 项目共享: %v", err)
+	}
 	if !strings.Contains(err.Error(), "APPROVING_CLAUDE_API_KEY") {
 		t.Fatalf("error should mention env keys: %v", err)
 	}
@@ -592,5 +595,111 @@ func TestPrepareAuthEnv_NoSettingsEnvConfigured(t *testing.T) {
 	}
 	if out["CURSOR_API_KEY"] != "crsr-env" {
 		t.Fatalf("CURSOR_API_KEY=%q", out["CURSOR_API_KEY"])
+	}
+}
+
+func TestResolveSettingsWorkDir(t *testing.T) {
+	agentDir := t.TempDir()
+	sharedDir := t.TempDir()
+
+	if got := ResolveSettingsWorkDir(agentDir, ""); got != agentDir {
+		t.Fatalf("empty shared: got %q want %q", got, agentDir)
+	}
+	if got := ResolveSettingsWorkDir(agentDir, sharedDir); got != agentDir {
+		t.Fatalf("neither file: got %q want agent %q", got, agentDir)
+	}
+
+	writeSettingsJSON(sharedDir, `{}`)
+	if got := ResolveSettingsWorkDir(agentDir, sharedDir); got != sharedDir {
+		t.Fatalf("shared only: got %q want %q", got, sharedDir)
+	}
+
+	writeSettingsJSON(agentDir, `{}`)
+	if got := ResolveSettingsWorkDir(agentDir, sharedDir); got != agentDir {
+		t.Fatalf("agent overlay wins: got %q want %q", got, agentDir)
+	}
+
+	if got := ResolveSettingsWorkDir("", sharedDir); got != sharedDir {
+		t.Fatalf("empty agent with shared file: got %q want %q", got, sharedDir)
+	}
+}
+
+func TestPrepareAuthEnv_SharedSettingsOnly(t *testing.T) {
+	agentDir := t.TempDir()
+	sharedDir := t.TempDir()
+	writeSettingsJSON(sharedDir, `{"env":{"ANTHROPIC_API_KEY":"sk-from-shared"}}`)
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, agentDir, sharedDir)
+	if err != nil {
+		t.Fatalf("shared settings.json must pass gate: %v", err)
+	}
+	if out["ANTHROPIC_API_KEY"] != "sk-from-shared" {
+		t.Fatalf("ANTHROPIC_API_KEY=%q", out["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestPrepareAuthEnv_AgentOverlayBeatsShared(t *testing.T) {
+	agentDir := t.TempDir()
+	sharedDir := t.TempDir()
+	writeSettingsJSON(sharedDir, `{"env":{"ANTHROPIC_API_KEY":"from-shared"}}`)
+	writeSettingsJSON(agentDir, `{"env":{"ANTHROPIC_API_KEY":"from-agent"}}`)
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, agentDir, sharedDir)
+	if err != nil {
+		t.Fatalf("PrepareAuthEnv: %v", err)
+	}
+	if out["ANTHROPIC_API_KEY"] != "from-agent" {
+		t.Fatalf("agent overlay should win: got %q", out["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestPrepareAuthEnv_AgentFileExistsIgnoresSharedKeys(t *testing.T) {
+	agentDir := t.TempDir()
+	sharedDir := t.TempDir()
+	// Agent file present but no auth keys; shared has keys — must NOT read shared keys
+	// (file-exists gate still passes via Agent file).
+	writeSettingsJSON(agentDir, `{"model":"claude-sonnet"}`)
+	writeSettingsJSON(sharedDir, `{"env":{"ANTHROPIC_API_KEY":"from-shared"}}`)
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, agentDir, sharedDir)
+	if err != nil {
+		t.Fatalf("agent settings.json presence must pass: %v", err)
+	}
+	if out["ANTHROPIC_API_KEY"] != "" {
+		t.Fatalf("must not read shared env keys when agent file exists: got %q", out["ANTHROPIC_API_KEY"])
+	}
+}
+
+func TestPrepareAuthEnv_NeitherLayerNorEnv(t *testing.T) {
+	agentDir := t.TempDir()
+	sharedDir := t.TempDir()
+	_, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, agentDir, sharedDir)
+	if err == nil {
+		t.Fatal("expected auth error when neither layer has settings.json")
+	}
+	if !strings.Contains(err.Error(), "项目共享") {
+		t.Fatalf("error should mention 项目共享: %v", err)
+	}
+	if !strings.Contains(err.Error(), "settings.json") {
+		t.Fatalf("error should mention settings.json: %v", err)
+	}
+}
+
+func TestPrepareAuthEnv_EmptySharedFallsBackToAgent(t *testing.T) {
+	agentDir := t.TempDir()
+	writeSettingsJSON(agentDir, `{"env":{"ANTHROPIC_API_KEY":"from-agent"}}`)
+
+	out, err := PrepareAuthEnv(BackendClaudeCode, map[string]string{}, agentDir, "")
+	if err != nil {
+		t.Fatalf("empty sharedWorkDir must fall back to agent: %v", err)
+	}
+	if out["ANTHROPIC_API_KEY"] != "from-agent" {
+		t.Fatalf("ANTHROPIC_API_KEY=%q", out["ANTHROPIC_API_KEY"])
+	}
+
+	emptyAgent := t.TempDir()
+	_, err = PrepareAuthEnv(BackendClaudeCode, map[string]string{}, emptyAgent, "")
+	if err == nil {
+		t.Fatal("expected error with empty shared and no agent settings")
 	}
 }
