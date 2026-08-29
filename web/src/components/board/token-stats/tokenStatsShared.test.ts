@@ -15,6 +15,13 @@ describe('formatBucketLabel', () => {
     expect(formatBucketLabel('2026-07-11', 'day')).toBe('07-11')
     expect(formatBucketLabel('2026-W30', 'week')).toBe('W30')
   })
+
+  it('formats hour buckets as HH:00 distinct from day/week (g2.4)', () => {
+    expect(formatBucketLabel('2026-07-24T14', 'hour')).toBe('14:00')
+    expect(formatBucketLabel('2026-07-25T00', 'hour')).toBe('00:00')
+    expect(formatBucketLabel('2026-07-24T14', 'hour')).not.toBe('07-24')
+    expect(formatBucketLabel('2026-07-24T14', 'day')).toBe('2026-07-24T14')
+  })
 })
 
 describe('placeTrendTooltipAfter (Demo placeAfter, g2.1–g2.4)', () => {

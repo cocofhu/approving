@@ -277,4 +277,44 @@ describe('TokenAnalyticsView', () => {
     expect(pushMock).toHaveBeenCalledWith('/runs/r-long')
     wrapper.unmount()
   })
+
+  it('puts 近 24 小时 first, keeps default 30d, and requests window=24h on click (g2.1/g2.2)', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const group = wrapper.find('[data-testid="token-analytics-window"]')
+    const labels = group.findAll('button').map((b) => b.text())
+    expect(labels).toEqual(['近 24 小时', '近 7 天', '近 30 天', '近 90 天', '全部历史'])
+    expect(wrapper.find('[data-testid="token-analytics-window-30d"]').classes()).toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-24h"]').classes()).not.toContain('bg-surface')
+    expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
+      expect.objectContaining({ window: '30d' }),
+      expect.anything(),
+    )
+
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
+      ...sampleData,
+      window: '24h',
+      bucketWidth: 'hour',
+      trend: [
+        {
+          bucket: '2026-07-24T20',
+          total: 40,
+          workflowTotal: 30,
+          pmTotal: 10,
+          inputTokens: 20,
+          outputTokens: 10,
+          cacheReadTokens: 5,
+          cacheWriteTokens: 5,
+        },
+      ],
+    })
+    await wrapper.find('[data-testid="token-analytics-window-24h"]').trigger('click')
+    await flushPromises()
+    expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
+      expect.objectContaining({ window: '24h' }),
+      expect.anything(),
+    )
+    wrapper.unmount()
+  })
 })

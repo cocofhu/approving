@@ -250,4 +250,99 @@ func TestGlobalTokenStatsModelFilterAfterRebucket(t *testing.T) {
 	}
 }
 
+func TestGlobalTokenStats24hPrevWindowDelta(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "global_token_24h.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	must := func(v any) {
+		t.Helper()
+		if err := db.Create(v).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ptr := func(tt time.Time) *time.Time { return &tt }
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC) // 20:00 Shanghai
+	proj, err := s.Create("G24h", "", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	must(&models.WorkflowDef{ID: "wf-g24", ProjectID: proj.ID, Name: "main", Status: "draft", Version: 1})
+
+	// Previous 24h: [Jul 23 20:00, Jul 24 20:00) Shanghai — 100 tokens at Jul 24 10:00.
+	prevTS := time.Date(2026, 7, 24, 10, 0, 0, 0, loc).UTC()
+	must(&models.Run{ID: "run-prev", WorkflowID: "wf-g24", WorkflowName: "main", Status: "completed", StartedAt: prevTS, Title: "Prev"})
+	must(&models.StateRun{
+		RunID: "run-prev", NodeID: "n1", NodeType: "agent", Status: "completed",
+		StartedAt: ptr(prevTS),
+		Usage:     &models.TokenUsage{InputTokens: 100},
+	})
+	// Current 24h: [Jul 24 20:00, Jul 25 20:00] — 200 tokens at Jul 25 08:00.
+	curTS := time.Date(2026, 7, 25, 8, 0, 0, 0, loc).UTC()
+	must(&models.Run{ID: "run-cur", WorkflowID: "wf-g24", WorkflowName: "main", Status: "completed", StartedAt: curTS, Title: "Cur"})
+	must(&models.StateRun{
+		RunID: "run-cur", NodeID: "n1", NodeType: "agent", Status: "completed",
+		StartedAt: ptr(curTS),
+		Usage:     &models.TokenUsage{InputTokens: 200},
+	})
+
+	res, err := s.GlobalTokenStats(context.Background(), GlobalTokenStatsQuery{
+		Window:   TokenStatsWindow24h,
+		Timezone: "Asia/Shanghai",
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Empty {
+		t.Fatal("expected non-empty")
+	}
+	if res.Window != TokenStatsWindow24h || res.BucketWidth != TokenStatsBucketHour {
+		t.Fatalf("window=%s bucketWidth=%s", res.Window, res.BucketWidth)
+	}
+	if res.KPI.Total != 200 {
+		t.Fatalf("kpi.total=%d want 200", res.KPI.Total)
+	}
+	if res.KPI.PrevTotal == nil || *res.KPI.PrevTotal != 100 {
+		t.Fatalf("kpi.prevTotal=%v want 100", res.KPI.PrevTotal)
+	}
+	if res.KPI.DeltaPct == nil || *res.KPI.DeltaPct != 100 {
+		t.Fatalf("kpi.deltaPct=%v want 100", res.KPI.DeltaPct)
+	}
+	if len(res.Trend) != 25 {
+		t.Fatalf("trend len=%d want 25 hour buckets", len(res.Trend))
+	}
+	if len(res.PrevTrend) != 25 {
+		t.Fatalf("prevTrend len=%d want 25", len(res.PrevTrend))
+	}
+}
+
+func TestGlobalTokenStats24hEmptyWindow(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "global_token_24h_empty.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewProjectService(db)
+	now := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	if _, err := s.Create("EmptyG24h", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.GlobalTokenStats(context.Background(), GlobalTokenStatsQuery{
+		Window:   TokenStatsWindow24h,
+		Timezone: "Asia/Shanghai",
+		Now:      now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Empty {
+		t.Fatalf("expected empty, got total=%d", res.KPI.Total)
+	}
+}
+
 func aliasPtr(s string) *string { return &s }

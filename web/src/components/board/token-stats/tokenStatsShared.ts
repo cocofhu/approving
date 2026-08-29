@@ -28,6 +28,12 @@ export function clientTimezoneParams(): { timezone?: string; utcOffsetMinutes: n
 }
 
 export function formatBucketLabel(bucket: string, bucketWidth: string): string {
+  if (bucketWidth === 'hour') {
+    // 2026-07-24T14 → 14:00 (distinct from day MM-DD / week Wxx)
+    const hour = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})$/.exec(bucket)
+    if (hour) return `${hour[4]}:00`
+    return bucket
+  }
   if (bucketWidth === 'week') {
     // 2026-W30 → W30
     const m = /^(\d{4})-W(\d{2})$/.exec(bucket)

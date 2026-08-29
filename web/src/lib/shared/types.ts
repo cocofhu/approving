@@ -196,7 +196,7 @@ export interface ProjectAuditStats {
 }
 
 /** Preset windows for board TokenStatsPanel (matches GET /token-stats). */
-export type TokenStatsWindow = '7d' | '30d' | '90d' | 'all'
+export type TokenStatsWindow = '24h' | '7d' | '30d' | '90d' | 'all'
 
 export interface TokenStatsBucket {
   bucket: string
@@ -248,7 +248,7 @@ export interface TokenStatsModel {
 /** Response of GET /projects/:id/token-stats */
 export interface ProjectTokenStats {
   window: TokenStatsWindow | string
-  bucketWidth: 'day' | 'week' | string
+  bucketWidth: 'hour' | 'day' | 'week' | string
   timezone: string
   /** true when no reported Usage in the window — do not draw forged zero charts */
   empty: boolean
@@ -322,7 +322,7 @@ export interface GlobalTokenStatsFilterOption {
 
 export interface GlobalTokenStats {
   window: TokenStatsWindow | string
-  bucketWidth: 'day' | 'week' | string
+  bucketWidth: 'hour' | 'day' | 'week' | string
   timezone: string
   empty: boolean
   kpi: GlobalTokenStatsKPI
