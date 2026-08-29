@@ -36,7 +36,7 @@ const toast = useToast()
 
 const WINDOWS: TokenStatsWindow[] = ['24h', '7d', '30d', '90d', 'all']
 
-const windowSel = ref<TokenStatsWindow>('30d')
+const windowSel = ref<TokenStatsWindow>('all')
 const sourceSel = ref<'all' | 'workflow' | 'pm'>('all')
 const projectSel = ref('')
 const modelSel = ref('')

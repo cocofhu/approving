@@ -42,7 +42,7 @@ import { api } from '@/lib/api/api'
 import { displayRunTitle } from '@/lib/run/runTitle'
 
 const sampleData = {
-  window: '30d',
+  window: 'all',
   bucketWidth: 'day',
   timezone: 'Asia/Shanghai',
   empty: false,
@@ -106,7 +106,7 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('shows default input/output rows without cache labels or slash pairs', async () => {
+  it('shows default input/output rows without cache labels or slash pairs (g2.1)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     const merge = wrapper.find('[data-testid="token-analytics-kpi-merge"]')
@@ -123,7 +123,7 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('shows four-part KPI detail on hover and focus', async () => {
+  it('shows four-part KPI detail on hover and focus (g2.1)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     expect(wrapper.find('[data-testid="token-analytics-kpi-detail"]').exists()).toBe(true)
@@ -278,18 +278,45 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('puts 近 24 小时 first, keeps default 30d, and requests window=24h on click (g2.1/g2.2)', async () => {
+  it('defaults to 全部历史 and first request uses window=all (g1.1/g2.2)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     const group = wrapper.find('[data-testid="token-analytics-window"]')
     const labels = group.findAll('button').map((b) => b.text())
     expect(labels).toEqual(['近 24 小时', '近 7 天', '近 30 天', '近 90 天', '全部历史'])
-    expect(wrapper.find('[data-testid="token-analytics-window-30d"]').classes()).toContain('bg-surface')
-    expect(wrapper.find('[data-testid="token-analytics-window-24h"]').classes()).not.toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').classes()).toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').text()).toBe('全部历史')
+    expect(wrapper.find('[data-testid="token-analytics-window-30d"]').classes()).not.toContain('bg-surface')
     expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
-      expect.objectContaining({ window: '30d' }),
+      expect.objectContaining({ window: 'all' }),
       expect.anything(),
     )
+    wrapper.unmount()
+  })
+
+  it('keeps source/project/model filters defaulting to all (g2.1)', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const filters = wrapper.find('[data-testid="token-analytics-filters"]')
+    expect(filters.text()).toContain('来源：全部')
+    expect(filters.text()).toContain('项目：全部')
+    expect(filters.text()).toContain('模型：全部')
+    const sourceAll = filters.findAll('button').find((b) => b.text() === '来源：全部')
+    expect(sourceAll?.classes()).toContain('bg-accent-dim')
+    const selects = filters.findAll('select')
+    expect(selects).toHaveLength(2)
+    expect((selects[0].element as HTMLSelectElement).value).toBe('')
+    expect((selects[1].element as HTMLSelectElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('puts 近 24 小时 first, still switches windows, and requests window=24h on click (g2.1)', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const group = wrapper.find('[data-testid="token-analytics-window"]')
+    const labels = group.findAll('button').map((b) => b.text())
+    expect(labels).toEqual(['近 24 小时', '近 7 天', '近 30 天', '近 90 天', '全部历史'])
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').classes()).toContain('bg-surface')
 
     vi.mocked(api.getGlobalTokenStats).mockClear()
     vi.mocked(api.getGlobalTokenStats).mockResolvedValue({
@@ -313,6 +340,17 @@ describe('TokenAnalyticsView', () => {
     await flushPromises()
     expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
       expect.objectContaining({ window: '24h' }),
+      expect.anything(),
+    )
+    expect(wrapper.find('[data-testid="token-analytics-window-24h"]').classes()).toContain('bg-surface')
+    expect(wrapper.find('[data-testid="token-analytics-window-all"]').classes()).not.toContain('bg-surface')
+
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValue({ ...sampleData, window: '30d' })
+    await wrapper.find('[data-testid="token-analytics-window-30d"]').trigger('click')
+    await flushPromises()
+    expect(api.getGlobalTokenStats).toHaveBeenCalledWith(
+      expect.objectContaining({ window: '30d' }),
       expect.anything(),
     )
     wrapper.unmount()
