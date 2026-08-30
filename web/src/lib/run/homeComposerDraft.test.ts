@@ -144,6 +144,58 @@ describe('homeComposerDraft', () => {
     expect(result).toBe('partial')
   })
 
+  it('quota put failure keeps prior IDB attachments intact (review v1)', async () => {
+    await saveHomeComposerDraft(
+      'old draft',
+      [{ data: btoa('keep-me'), mimeType: 'image/png', name: 'old.png' }],
+      'wf-ap',
+    )
+    const failing: DraftIdbBackend = {
+      ...backend,
+      putHome: async () => {
+        const err = new Error('quota') as Error & { name: string; code: number }
+        err.name = 'QuotaExceededError'
+        err.code = 22
+        throw err
+      },
+    }
+    __setDraftIdbBackendForTests(failing)
+    const result = await saveHomeComposerDraft(
+      'newer text',
+      [{ data: btoa('huge'), mimeType: 'image/png' }],
+      'wf-ap',
+    )
+    expect(result).toBe('quota_exceeded')
+    // Direct IDB read still has previous attachments (atomic put rolled back / never mutated).
+    const packed = await backend.getHome()
+    expect(packed?.record.text).toBe('old draft')
+    expect(packed?.attachments).toHaveLength(1)
+    expect(await blobLikeToB64(packed!.attachments[0]!.data)).toBe(btoa('keep-me'))
+  })
+
+  it('load prefers newer LS text-fallback over stale IDB draft (review v2 / F4)', async () => {
+    await saveHomeComposerDraft(
+      'stale idb',
+      [{ data: btoa('img'), mimeType: 'image/png' }],
+      'wf-old',
+    )
+    const packed = await backend.getHome()
+    expect(packed).not.toBeNull()
+    // Simulate quota fallback writing newer text to LS while IDB keeps old complete draft.
+    store[HOME_COMPOSER_DRAFT_KEY] = JSON.stringify({
+      schemaVersion: '1',
+      savedAt: (packed!.record.savedAt || 0) + 1000,
+      pipelineId: 'wf-new',
+      text: 'fresh after quota',
+      attachments: [],
+    })
+    __resetHomeComposerDraftMigrationForTests()
+    const draft = await loadHomeComposerDraft()
+    expect(draft?.text).toBe('fresh after quota')
+    expect(draft?.pipelineId).toBe('wf-new')
+    expect(draft?.attachments).toEqual([])
+  })
+
   it('saves attachment within 50MiB gate without quota toast path (plan g3.1)', async () => {
     // ~64KiB payload — well under SITE_ATTACH_MAX_BYTES; proves IDB accepts binary attachments
     const data = btoa('x'.repeat(64 * 1024))
@@ -153,3 +205,11 @@ describe('homeComposerDraft', () => {
     expect(draft?.attachments[0]?.data).toBe(data)
   })
 })
+
+async function blobLikeToB64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!)
+  return btoa(binary)
+}

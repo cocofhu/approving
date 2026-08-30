@@ -63,15 +63,17 @@ export function __resetDraftIdbForTests(): void {
 
 export function createMemoryDraftIdb(): DraftIdbBackend {
   let home: HomeDraftRecord | null = null
-  const homeAtt: DraftAttachmentRecord[] = []
+  let homeAtt: DraftAttachmentRecord[] = []
   const runs = new Map<string, RunDraftRecord>()
   const runAtt = new Map<string, DraftAttachmentRecord[]>()
 
   return {
     async putHome(record, attachments) {
-      home = { ...record }
-      homeAtt.length = 0
-      homeAtt.push(...attachments.map((a) => ({ ...a })))
+      // Atomic snapshot replace (mirrors single-tx native put).
+      const nextHome = { ...record }
+      const nextAtt = attachments.map((a) => ({ ...a }))
+      home = nextHome
+      homeAtt = nextAtt
     },
     async getHome() {
       if (!home) return null
@@ -79,14 +81,13 @@ export function createMemoryDraftIdb(): DraftIdbBackend {
     },
     async deleteHome() {
       home = null
-      homeAtt.length = 0
+      homeAtt = []
     },
     async putRun(record, attachments) {
-      runs.set(record.workflowId, { ...record })
-      runAtt.set(
-        record.workflowId,
-        attachments.map((a) => ({ ...a })),
-      )
+      const nextRec = { ...record }
+      const nextAtt = attachments.map((a) => ({ ...a }))
+      runs.set(nextRec.workflowId, nextRec)
+      runAtt.set(nextRec.workflowId, nextAtt)
     },
     async getRun(workflowId) {
       const record = runs.get(workflowId)
@@ -194,17 +195,57 @@ function txDone(tx: IDBTransaction): Promise<void> {
   })
 }
 
-async function deleteAttachmentsFor(
+/**
+ * Replace owner attachments + main record in a single readwrite transaction.
+ * All mutations are queued in the getAllKeys onsuccess callback so the tx cannot
+ * auto-commit between delete and put (review v1 atomicity).
+ */
+function replaceDraftInTx(
   db: IDBDatabase,
+  storeNames: string[],
   ownerKind: DraftOwnerKind,
   ownerId: string,
+  putMain: (tx: IDBTransaction) => void,
+  attachments: DraftAttachmentRecord[],
 ): Promise<void> {
-  const tx = db.transaction(ATTACHMENTS_STORE, 'readwrite')
-  const store = tx.objectStore(ATTACHMENTS_STORE)
-  const index = store.index('byOwner')
-  const keys = await idbReq(index.getAllKeys([ownerKind, ownerId]))
-  for (const key of keys) store.delete(key)
-  await txDone(tx)
+  const tx = db.transaction(storeNames, 'readwrite')
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const fail = (err: unknown) => {
+      if (settled) return
+      settled = true
+      try {
+        tx.abort()
+      } catch {
+        /* already finished */
+      }
+      reject(err instanceof Error ? err : new Error(String(err)))
+    }
+    tx.oncomplete = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+    tx.onerror = () => fail(tx.error || new Error('idb tx failed'))
+    tx.onabort = () => {
+      if (settled) return
+      settled = true
+      reject(tx.error || new Error('idb tx aborted'))
+    }
+    const attStore = tx.objectStore(ATTACHMENTS_STORE)
+    const index = attStore.index('byOwner')
+    const keysReq = index.getAllKeys([ownerKind, ownerId])
+    keysReq.onerror = () => fail(keysReq.error || new Error('idb getAllKeys failed'))
+    keysReq.onsuccess = () => {
+      try {
+        for (const key of keysReq.result) attStore.delete(key)
+        putMain(tx)
+        for (const a of attachments) attStore.put(a)
+      } catch (e) {
+        fail(e)
+      }
+    }
+  })
 }
 
 async function loadAttachments(
@@ -219,17 +260,25 @@ async function loadAttachments(
   return rows.slice().sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
 }
 
+/**
+ * Replace home/run draft + attachments in one IDB transaction.
+ * Failure rolls back — previous attachments stay intact (review v1).
+ */
 function createNativeBackend(): DraftIdbBackend {
   return {
     async putHome(record, attachments) {
       const db = await openNativeDb()
       if (!db) throw new Error('IndexedDB unavailable')
-      await deleteAttachmentsFor(db, 'home', HOME_DRAFT_ID)
-      const tx = db.transaction([HOME_DRAFT_STORE, ATTACHMENTS_STORE], 'readwrite')
-      tx.objectStore(HOME_DRAFT_STORE).put(record)
-      const attStore = tx.objectStore(ATTACHMENTS_STORE)
-      for (const a of attachments) attStore.put(a)
-      await txDone(tx)
+      await replaceDraftInTx(
+        db,
+        [HOME_DRAFT_STORE, ATTACHMENTS_STORE],
+        'home',
+        HOME_DRAFT_ID,
+        (tx) => {
+          tx.objectStore(HOME_DRAFT_STORE).put(record)
+        },
+        attachments,
+      )
     },
     async getHome() {
       const db = await openNativeDb()
@@ -246,20 +295,30 @@ function createNativeBackend(): DraftIdbBackend {
     async deleteHome() {
       const db = await openNativeDb()
       if (!db) return
-      await deleteAttachmentsFor(db, 'home', HOME_DRAFT_ID)
-      const tx = db.transaction(HOME_DRAFT_STORE, 'readwrite')
-      tx.objectStore(HOME_DRAFT_STORE).delete(HOME_DRAFT_ID)
-      await txDone(tx)
+      await replaceDraftInTx(
+        db,
+        [HOME_DRAFT_STORE, ATTACHMENTS_STORE],
+        'home',
+        HOME_DRAFT_ID,
+        (tx) => {
+          tx.objectStore(HOME_DRAFT_STORE).delete(HOME_DRAFT_ID)
+        },
+        [],
+      )
     },
     async putRun(record, attachments) {
       const db = await openNativeDb()
       if (!db) throw new Error('IndexedDB unavailable')
-      await deleteAttachmentsFor(db, 'run', record.workflowId)
-      const tx = db.transaction([RUN_DRAFT_STORE, ATTACHMENTS_STORE], 'readwrite')
-      tx.objectStore(RUN_DRAFT_STORE).put(record)
-      const attStore = tx.objectStore(ATTACHMENTS_STORE)
-      for (const a of attachments) attStore.put(a)
-      await txDone(tx)
+      await replaceDraftInTx(
+        db,
+        [RUN_DRAFT_STORE, ATTACHMENTS_STORE],
+        'run',
+        record.workflowId,
+        (tx) => {
+          tx.objectStore(RUN_DRAFT_STORE).put(record)
+        },
+        attachments,
+      )
     },
     async getRun(workflowId) {
       const db = await openNativeDb()
@@ -276,10 +335,16 @@ function createNativeBackend(): DraftIdbBackend {
     async deleteRun(workflowId) {
       const db = await openNativeDb()
       if (!db) return
-      await deleteAttachmentsFor(db, 'run', workflowId)
-      const tx = db.transaction(RUN_DRAFT_STORE, 'readwrite')
-      tx.objectStore(RUN_DRAFT_STORE).delete(workflowId)
-      await txDone(tx)
+      await replaceDraftInTx(
+        db,
+        [RUN_DRAFT_STORE, ATTACHMENTS_STORE],
+        'run',
+        workflowId,
+        (tx) => {
+          tx.objectStore(RUN_DRAFT_STORE).delete(workflowId)
+        },
+        [],
+      )
     },
   }
 }

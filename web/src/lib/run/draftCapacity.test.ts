@@ -55,6 +55,47 @@ describe('draft capacity vs send gate (plan g3.1 / g3.2)', () => {
     expect(result).toBe('ok')
   })
 
+  it('MemoryBackend accepts near-SITE_ATTACH_MAX_BYTES Blob without materializing huge base64 (review v4 / g3.1)', async () => {
+    const idb = createMemoryDraftIdb()
+    __setDraftIdbBackendForTests(idb)
+    // Stub Blob sized near the send gate — avoids allocating ~50MiB or slow btoa (review v4).
+    const nearMax = SITE_ATTACH_MAX_BYTES - 1024
+    const data = {
+      size: nearMax,
+      type: 'application/octet-stream',
+      arrayBuffer: async () => new ArrayBuffer(0),
+      slice() {
+        return this
+      },
+    } as unknown as Blob
+    await idb.putHome(
+      {
+        id: 'current',
+        schemaVersion: '1',
+        savedAt: Date.now(),
+        pipelineId: 'wf-near',
+        text: 'near-max',
+      },
+      [
+        {
+          id: 'home:current:0',
+          ownerKind: 'home',
+          ownerId: 'current',
+          mimeType: 'application/octet-stream',
+          data,
+          sizeBytes: nearMax,
+          sortIndex: 0,
+        },
+      ],
+    )
+    const got = await idb.getHome()
+    expect(got?.record.text).toBe('near-max')
+    expect(got?.attachments[0]?.sizeBytes).toBe(nearMax)
+    expect(got?.attachments[0]?.data.size).toBe(nearMax)
+    expect(nearMax).toBeLessThan(SITE_ATTACH_MAX_BYTES)
+    expect(nearMax).toBeGreaterThan(SITE_ATTACH_MAX_BYTES * 0.9)
+  })
+
   it('send gate still rejects over SITE_ATTACH_MAX_BYTES', () => {
     const overB64 = 'A'.repeat(Math.ceil(((SITE_ATTACH_MAX_BYTES + 1024) * 4) / 3))
     const over: ClarifyImage = { data: overB64, mimeType: 'image/png' }

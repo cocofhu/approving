@@ -147,7 +147,10 @@ async function migrateLegacyRunIfNeeded(): Promise<void> {
     try {
       const existing = await idb.getRun(workflowId)
       if (existing) {
-        clearLegacy(workflowId)
+        // Keep newer LS text-fallback for load to prefer (review v2); only drop stale LS.
+        if ((legacy.savedAt || 0) <= existing.record.savedAt) {
+          clearLegacy(workflowId)
+        }
         continue
       }
       const record: RunDraftRecord = {
@@ -165,26 +168,42 @@ async function migrateLegacyRunIfNeeded(): Promise<void> {
 
 export async function loadRunDraft(workflowId: string): Promise<RunDraftPayload | null> {
   await migrateLegacyRunIfNeeded()
+  const legacy = readLegacy(workflowId)
   try {
     const packed = await getDraftIdb().getRun(workflowId)
+    if (packed && legacy) {
+      // Prefer newer savedAt so quota-fallback LS fields win over stale IDB (review v2 / F4).
+      if ((legacy.savedAt || 0) > packed.record.savedAt) {
+        return legacy
+      }
+      clearLegacy(workflowId)
+      return draftFromIdbRun(packed)
+    }
     if (packed) {
-      let inputs: Record<string, string> = {}
-      try {
-        inputs = JSON.parse(packed.record.inputsJson || '{}') as Record<string, string>
-      } catch {
-        inputs = {}
-      }
-      return {
-        workflowId: packed.record.workflowId,
-        savedAt: packed.record.savedAt,
-        inputs,
-        images: await inflateImages(packed.attachments),
-      }
+      return draftFromIdbRun(packed)
     }
   } catch {
     /* fall through */
   }
-  return readLegacy(workflowId)
+  return legacy
+}
+
+async function draftFromIdbRun(packed: {
+  record: RunDraftRecord
+  attachments: DraftAttachmentRecord[]
+}): Promise<RunDraftPayload> {
+  let inputs: Record<string, string> = {}
+  try {
+    inputs = JSON.parse(packed.record.inputsJson || '{}') as Record<string, string>
+  } catch {
+    inputs = {}
+  }
+  return {
+    workflowId: packed.record.workflowId,
+    savedAt: packed.record.savedAt,
+    inputs,
+    images: await inflateImages(packed.attachments),
+  }
 }
 
 export async function clearRunDraft(workflowId: string): Promise<void> {

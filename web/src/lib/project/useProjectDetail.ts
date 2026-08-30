@@ -680,7 +680,8 @@ async function saveRunDraftClick() {
   const result = await saveRunDraft(target.id, { ...runInputs.value }, images)
   if (result === 'ok') toast.success(t('common.toast.draftSaved'))
   else if (result === 'quota_exceeded' || result === 'partial') {
-    toast.error(t('common.toast.draftTooLarge'))
+    // Text already on disk / fields persisted — warn per F4 (review v3), not error.
+    toast.warn(t('common.toast.draftTooLarge'))
   } else toast.error(t('common.toast.draftSaveFailed'))
 }
 

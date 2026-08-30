@@ -178,7 +178,10 @@ async function migrateLegacyHomeIfNeeded(): Promise<void> {
     const idb = getDraftIdb()
     const existing = await idb.getHome()
     if (existing) {
-      clearLegacyLocalStorage()
+      // Keep newer LS text-fallback for load to prefer (review v2); only drop stale LS.
+      if (legacy.savedAt <= existing.record.savedAt) {
+        clearLegacyLocalStorage()
+      }
       return
     }
     const record: HomeDraftRecord = {
@@ -195,23 +198,39 @@ async function migrateLegacyHomeIfNeeded(): Promise<void> {
   }
 }
 
+async function draftFromIdb(packed: {
+  record: HomeDraftRecord
+  attachments: DraftAttachmentRecord[]
+}): Promise<HomeComposerDraft> {
+  return {
+    schemaVersion: packed.record.schemaVersion || HOME_COMPOSER_DRAFT_SCHEMA,
+    savedAt: packed.record.savedAt,
+    pipelineId: packed.record.pipelineId,
+    text: packed.record.text,
+    attachments: await fromIdbAttachments(packed.attachments),
+  }
+}
+
 export async function loadHomeComposerDraft(): Promise<HomeComposerDraft | null> {
   await migrateLegacyHomeIfNeeded()
+  const legacy = readLegacyLocalStorage()
   try {
     const packed = await getDraftIdb().getHome()
-    if (packed) {
-      return {
-        schemaVersion: packed.record.schemaVersion || HOME_COMPOSER_DRAFT_SCHEMA,
-        savedAt: packed.record.savedAt,
-        pipelineId: packed.record.pipelineId,
-        text: packed.record.text,
-        attachments: await fromIdbAttachments(packed.attachments),
+    if (packed && legacy) {
+      // Prefer newer savedAt so quota-fallback LS text wins over stale IDB (review v2 / F4).
+      if (legacy.savedAt > packed.record.savedAt) {
+        return legacy
       }
+      clearLegacyLocalStorage()
+      return draftFromIdb(packed)
+    }
+    if (packed) {
+      return draftFromIdb(packed)
     }
   } catch {
     /* fall through to legacy */
   }
-  return readLegacyLocalStorage()
+  return legacy
 }
 
 export async function clearHomeComposerDraft(): Promise<void> {

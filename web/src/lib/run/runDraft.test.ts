@@ -147,4 +147,47 @@ describe('runDraft (IndexedDB)', () => {
     expect(parsed.inputs.a).toBe('keep')
     expect(parsed.images).toEqual({})
   })
+
+  it('quota put failure keeps prior run attachments intact (review v1)', async () => {
+    await saveRunDraft(
+      WF,
+      { a: 'old' },
+      { p: [{ data: btoa('keep-run'), mimeType: 'image/png', name: 'r.png' }] },
+    )
+    const failing: DraftIdbBackend = {
+      ...backend,
+      putRun: async () => {
+        const err = new Error('quota') as Error & { name: string; code: number }
+        err.name = 'QuotaExceededError'
+        err.code = 22
+        throw err
+      },
+    }
+    __setDraftIdbBackendForTests(failing)
+    const result = await saveRunDraft(
+      WF,
+      { a: 'newer' },
+      { p: [{ data: btoa('huge'), mimeType: 'image/png' }] },
+    )
+    expect(result).toBe('quota_exceeded')
+    const packed = await backend.getRun(WF)
+    expect(packed?.record.inputsJson).toContain('old')
+    expect(packed?.attachments).toHaveLength(1)
+  })
+
+  it('load prefers newer LS fields over stale IDB run draft (review v2 / F4)', async () => {
+    await saveRunDraft(WF, { a: 'stale-idb' }, { p: [{ data: btoa('img'), mimeType: 'image/png' }] })
+    const packed = await backend.getRun(WF)
+    expect(packed).not.toBeNull()
+    store[`run-draft:${WF}`] = JSON.stringify({
+      workflowId: WF,
+      savedAt: packed!.record.savedAt + 1000,
+      inputs: { a: 'fresh-ls' },
+      images: {},
+    })
+    __resetRunDraftMigrationForTests()
+    const draft = await loadRunDraft(WF)
+    expect(draft?.inputs.a).toBe('fresh-ls')
+    expect(draft?.images).toEqual({})
+  })
 })
