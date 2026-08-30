@@ -7,13 +7,13 @@ import { useWorkflowRunLaunch } from './useWorkflowRunLaunch'
 import type { Workflow } from '@/lib/shared/types'
 
 vi.mock('@/lib/run/runDraft', () => ({
-  mergeRunDraft: (_id: string, seed: Record<string, string>, images: Record<string, unknown>) => ({
+  mergeRunDraft: async (_id: string, seed: Record<string, string>, images: Record<string, unknown>) => ({
     inputs: seed,
     images,
     restored: false,
   }),
-  saveRunDraft: vi.fn(() => 'ok'),
-  clearRunDraft: vi.fn(),
+  saveRunDraft: vi.fn(async () => 'ok'),
+  clearRunDraft: vi.fn(async () => {}),
 }))
 
 function withSetup<T>(fn: () => T): T {
@@ -66,18 +66,18 @@ beforeEach(() => {
 })
 
 describe('useWorkflowRunLaunch', () => {
-  it('openLaunch pre-fills ask fields and opens the modal without changing route', () => {
+  it('openLaunch pre-fills ask fields and opens the modal without changing route', async () => {
     const launch = withSetup(() => useWorkflowRunLaunch())
-    launch.openLaunch(baseWf())
+    await launch.openLaunch(baseWf())
     expect(launch.open.value).toBe(true)
     expect(launch.target.value?.id).toBe('wf-1')
     expect(launch.runFields.value.map((f) => f.key)).toEqual(['branch'])
     expect(launch.runInputs.value.branch).toBe('main')
   })
 
-  it('openLaunch still opens when there are no ask fields', () => {
+  it('openLaunch still opens when there are no ask fields', async () => {
     const launch = withSetup(() => useWorkflowRunLaunch())
-    launch.openLaunch(
+    await launch.openLaunch(
       baseWf({
         nodes: [{ id: 'n1', type: 'input', label: '输入', config: { variables: [] } } as any],
       }),

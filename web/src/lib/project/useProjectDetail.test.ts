@@ -45,9 +45,9 @@ vi.mock('@/lib/composables/useProjectContext', () => ({
 }))
 
 vi.mock('@/lib/run/runDraft', () => ({
-  mergeRunDraft: (_id: string, seed: Record<string, string>) => ({ inputs: seed, images: {}, restored: false }),
-  saveRunDraft: vi.fn(),
-  clearRunDraft: vi.fn(),
+  mergeRunDraft: async (_id: string, seed: Record<string, string>) => ({ inputs: seed, images: {}, restored: false }),
+  saveRunDraft: vi.fn(async () => 'ok'),
+  clearRunDraft: vi.fn(async () => {}),
 }))
 
 vi.mock('@/lib/run/useWorkflowImport', () => ({

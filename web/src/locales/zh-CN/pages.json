@@ -2523,7 +2523,7 @@
       "started": "工作流已启动",
       "startedLabel": "已启动的工作流",
       "enterHint": "按 Enter 查看运行详情",
-      "draftRestored": "已从 localStorage 恢复草稿（覆盖工作流默认值）",
+      "draftRestored": "已从本地草稿恢复（覆盖工作流默认值）",
       "noFields": "该工作流的「输入」节点未声明任何输入字段。",
       "noFieldsWithHint": "该工作流的「输入」节点未声明任何输入字段,将以空参数启动。",
       "locked": "锁定",

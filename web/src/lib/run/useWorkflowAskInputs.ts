@@ -47,12 +47,12 @@ export function missingRequiredAskField(wf: Pick<Workflow, 'nodes'>): InputField
   return askFieldsFromWorkflow(wf).find((f) => f.required && isAskValueBlank(f.type, f.default || ''))
 }
 
-export function seedAskLaunchFields(wf: Pick<Workflow, 'id' | 'nodes'>): {
+export async function seedAskLaunchFields(wf: Pick<Workflow, 'id' | 'nodes'>): Promise<{
   fields: InputField[]
   inputs: Record<string, string>
   images: Record<string, ClarifyImage[]>
   restored: boolean
-} {
+}> {
   const fields = askFieldsFromWorkflow(wf)
   const seed: Record<string, string> = {}
   const imgSeed: Record<string, ClarifyImage[]> = {}
@@ -60,7 +60,7 @@ export function seedAskLaunchFields(wf: Pick<Workflow, 'id' | 'nodes'>): {
     seed[f.key] = f.default || (f.type === 'select' ? fieldOptions(f)[0] || '' : '')
     imgSeed[f.key] = []
   }
-  const merged = mergeRunDraft(
+  const merged = await mergeRunDraft(
     wf.id,
     seed,
     imgSeed,

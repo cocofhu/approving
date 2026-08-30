@@ -2523,7 +2523,7 @@
       "started": "Workflow started",
       "startedLabel": "Started workflow",
       "enterHint": "Press Enter to view run details",
-      "draftRestored": "Draft restored from localStorage (overrides workflow defaults)",
+      "draftRestored": "Draft restored from local storage (overrides workflow defaults)",
       "noFields": "Input node declares no fields.",
       "noFieldsWithHint": "Input node declares no fields; starting with empty params.",
       "locked": "Locked",

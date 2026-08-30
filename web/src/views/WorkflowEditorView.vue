@@ -233,7 +233,7 @@ function askFields(): InputField[] {
   return askFieldsComputed.value
 }
 
-function openRun() {
+async function openRun() {
   if (graphError.value) {
     errorMsg.value = graphError.value
     return
@@ -247,23 +247,24 @@ function openRun() {
     imgSeed[f.key] = []
   }
   const keys = runFields.value.map((f) => f.key)
-  const merged = mergeRunDraft(wf.id, seed, imgSeed, keys)
+  const merged = await mergeRunDraft(wf.id, seed, imgSeed, keys)
   runInputs.value = merged.inputs
   runImages.value = merged.images
   draftRestored.value = merged.restored
   showRun.value = true
 }
 
-function saveRunDraftClick() {
+async function saveRunDraftClick() {
   if (!wf.id) return
   const images: Record<string, ClarifyImage[]> = {}
   for (const [k, v] of Object.entries(runImages.value)) {
     images[k] = v ? [...v] : []
   }
-  const result = saveRunDraft(wf.id, { ...runInputs.value }, images)
+  const result = await saveRunDraft(wf.id, { ...runInputs.value }, images)
   if (result === 'ok') toast.success(t('common.toast.draftSaved'))
-  else if (result === 'quota_exceeded') toast.error(t('common.toast.draftTooLarge'))
-  else toast.error(t('common.toast.draftSaveFailed'))
+  else if (result === 'quota_exceeded' || result === 'partial') {
+    toast.error(t('common.toast.draftTooLarge'))
+  } else toast.error(t('common.toast.draftSaveFailed'))
 }
 
 async function beforeRunStart() {
@@ -276,7 +277,7 @@ async function beforeRunStart() {
 }
 
 function onRunStarted() {
-  clearRunDraft(wf.id)
+  void clearRunDraft(wf.id)
 }
 
 function onViewRun(runId: string) {
