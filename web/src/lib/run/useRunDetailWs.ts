@@ -163,6 +163,9 @@ export function useRunDetailWs(opts: {
   }
 
   async function seedDialogueNodeOnce(nodeId: string): Promise<boolean> {
+    // Live seed rails are current-turn only (server AggregateLastTurnFrames /
+    // timeline). Applied as absolute snapshot onto the live bubble — never
+    // appended onto prior-turn transcript text.
     let events = eventPages[nodeId]?.events as AcpEvent[] | undefined
     if (!events?.length) {
       try {

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +13,10 @@ import (
 
 // acpTimelineEntry is the platform-side in-memory ACP timeline snapshot for one
 // run+node while the sandbox session is live. It is the authoritative read path
-// for nodeEvents during execution; cold FetchEventLog is a supplement only.
+// for nodeEvents during execution; cold FetchEventLogLastTurn is a supplement
+// only. Snapshots are current-turn rails (last prompt_begin), never a
+// full-session concatenation — otherwise hard-refresh seeds stitch prior turns
+// into the live streaming bubble.
 type acpTimelineEntry struct {
 	events    []models.AcpEvent
 	live      bool
@@ -49,6 +53,24 @@ func (s *acpTimelineStore) begin(runID, nodeID string) {
 	e.updatedAt = time.Now()
 }
 
+// replace unconditionally installs events (live streamChat absolute snapshots).
+func (s *acpTimelineStore) replace(runID, nodeID string, events []models.AcpEvent) {
+	if s == nil {
+		return
+	}
+	key := timelineKey(runID, nodeID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.entries[key]
+	if !ok {
+		e = &acpTimelineEntry{live: true}
+		s.entries[key] = e
+	}
+	e.ready = true
+	e.events = append([]models.AcpEvent(nil), events...)
+	e.updatedAt = time.Now()
+}
+
 func (s *acpTimelineStore) upsert(runID, nodeID string, events []models.AcpEvent) {
 	if s == nil {
 		return
@@ -62,30 +84,68 @@ func (s *acpTimelineStore) upsert(runID, nodeID string, events []models.AcpEvent
 		s.entries[key] = e
 	}
 	e.ready = true
-	e.events = pickLongerEvents(e.events, events)
+	e.events = mergeTurnEvents(e.events, events)
 	e.updatedAt = time.Now()
 }
 
-func pickLongerEvents(prev, incoming []models.AcpEvent) []models.AcpEvent {
-	if len(incoming) > len(prev) {
+// mergeTurnEvents merges timeline snapshots for the current ReAct turn.
+//
+// Within a turn, prefer the longer message/thought rails (growth / avoid stale
+// shorter ingest). Across turns — when the message rail resets to empty or
+// rails diverge (neither is a prefix of the other) — take incoming so a new
+// prompt's snapshot can replace the previous turn (or a stale full-session photo).
+func mergeTurnEvents(prev, incoming []models.AcpEvent) []models.AcpEvent {
+	if len(incoming) == 0 {
+		if len(prev) == 0 {
+			return nil
+		}
+		return prev
+	}
+	if len(prev) == 0 {
 		return append([]models.AcpEvent(nil), incoming...)
 	}
-	if len(incoming) == len(prev) && len(incoming) > 0 {
-		if lastT(incoming) >= lastT(prev) {
-			return append([]models.AcpEvent(nil), incoming...)
-		}
+
+	prevMsg, prevThought := eventRails(prev)
+	inMsg, inThought := eventRails(incoming)
+
+	// Strong reset: message rail emptied → new prompt_begin turn.
+	if prevMsg != "" && inMsg == "" {
+		return append([]models.AcpEvent(nil), incoming...)
 	}
-	if len(prev) == 0 && len(incoming) == 0 {
-		return nil
+
+	// Same-turn growth: prev rails are prefixes of incoming.
+	if strings.HasPrefix(inMsg, prevMsg) && strings.HasPrefix(inThought, prevThought) {
+		return append([]models.AcpEvent(nil), incoming...)
 	}
-	return prev
+	// Stale shorter snapshot of the same turn: incoming is a prefix of prev
+	// (also covers omitted thought/message on a partial re-read).
+	if strings.HasPrefix(prevMsg, inMsg) && strings.HasPrefix(prevThought, inThought) {
+		return prev
+	}
+	// Divergent rails (new turn content that does not continue prior text).
+	return append([]models.AcpEvent(nil), incoming...)
 }
 
-func lastT(events []models.AcpEvent) int {
-	if len(events) == 0 {
-		return 0
+// pickLongerEvents is retained for tests / callers that only need length-based
+// merge; prefer mergeTurnEvents for timeline ingest.
+func pickLongerEvents(prev, incoming []models.AcpEvent) []models.AcpEvent {
+	return mergeTurnEvents(prev, incoming)
+}
+
+func eventRails(events []models.AcpEvent) (message, thought string) {
+	for _, ev := range events {
+		switch ev.Kind {
+		case "message":
+			if ev.Text != "" {
+				message = ev.Text
+			}
+		case "thought":
+			if ev.Text != "" {
+				thought = ev.Text
+			}
+		}
 	}
-	return events[len(events)-1].T
+	return message, thought
 }
 
 func (s *acpTimelineStore) stop(runID, nodeID string) {
@@ -140,7 +200,9 @@ func (s *acpTimelineStore) ingestLoop(ctx context.Context, runID, nodeID, host s
 }
 
 func (s *acpTimelineStore) refreshFromSandbox(ctx context.Context, runID, nodeID, host string, port int) {
-	res, _, err := sandbox.FetchEventLog(ctx, host, port)
+	// Last turn only — full-session FetchEventLog would lock a concatenated
+	// photo into the timeline via upsert and poison hard-refresh seeds.
+	res, _, err := sandbox.FetchEventLogLastTurn(ctx, host, port)
 	if err != nil || res == nil {
 		return // keep existing snapshot on transient bridge failures
 	}

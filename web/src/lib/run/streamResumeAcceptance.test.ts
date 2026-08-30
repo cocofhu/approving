@@ -81,6 +81,19 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
     expect(gatePanel).not.toMatch(/正在恢复对话/)
   })
 
+  it('g2.1 multi-turn: seed writes absolute rails into live bubble only', () => {
+    const inbox = readSrc('lib/inbox/useGatesInbox.ts')
+    const runWs = readSrc('lib/run/useRunDetailWs.ts')
+    const clarify = readSrc('lib/inbox/useClarifyChat.ts')
+    expect(inbox).toMatch(/current turn only/)
+    expect(runWs).toMatch(/current-turn only/)
+    // Absolute snapshot assignment (not += / append onto prior text).
+    expect(clarify).toMatch(/if \(ev\.kind === 'message' && ev\.text\) msg = ev\.text/)
+    expect(clarify).toMatch(/if \(ev\.kind === 'thought' && ev\.text\) thought = ev\.text/)
+    expect(clarify).not.toMatch(/msg \+= /)
+    expect(clarify).not.toMatch(/thought \+= /)
+  })
+
   it('g3: busy seed retry stops on content / idle', async () => {
     let content = false
     const reason = await runBusySeedRetry({

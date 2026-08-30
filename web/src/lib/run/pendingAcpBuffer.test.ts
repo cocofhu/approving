@@ -18,6 +18,19 @@ describe('pickAcpRails', () => {
       ]),
     ).toEqual({ thought: 't1 extended', message: 'm1 more' })
   })
+
+  it('multi-turn seed: current-turn rails must not contain prior-turn text', () => {
+    // Server AggregateLastTurnFrames already drops turn1; client must treat
+    // seed events as absolute current-turn rails (overwrite, never concat).
+    const seed = pickAcpRails([
+      { kind: 'thought', text: 'think-2', t: 0 },
+      { kind: 'message', text: 'answer-2-partial', t: 1 },
+    ])
+    expect(seed.message).toBe('answer-2-partial')
+    expect(seed.thought).toBe('think-2')
+    expect(seed.message).not.toContain('answer-1')
+    expect(seed.thought).not.toContain('think-1')
+  })
 })
 
 describe('createPendingAcpBuffer', () => {
