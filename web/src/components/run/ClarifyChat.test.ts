@@ -1695,4 +1695,88 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
   })
+
+  // plan g2.1 / f1–f3: choice summary width chain — long answers wrap, short tags stay chips
+  describe('choice summary long-answer wrap (g1.1/g1.2/g2.1)', () => {
+    const longAnswer =
+      '先设计 token 体系(--ci 语义层 + 清理硬编码 hex 与像素),再抽出共享组件与布局约束，不把长句撕出气泡。'
+    const noSpaceToken =
+      'Harness--dsw-alias-tokens-with-very-long-continuous-css-classname-and--ci-flag'
+
+    it('long answer and question carry min-w-0 max-w-full overflow-wrap:anywhere (g1.1/g1.2)', () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text: `我的选择:\n- 重构路径怎么走? → ${longAnswer}`,
+            at: '2026-08-30T00:00:00Z',
+          },
+        ],
+      })
+      const summary = wrapper.find('[data-testid="clarify-choice-summary"]')
+      expect(summary.exists()).toBe(true)
+      expect(summary.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full']))
+
+      const row = wrapper.find('[data-testid="clarify-choice-row"]')
+      expect(row.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full']))
+
+      const q = row.find('.text-txt3')
+      expect(q.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full', 'break-words']))
+      expect(q.classes().join(' ')).toMatch(/overflow-wrap:anywhere/)
+
+      const answer = wrapper.find('[data-testid="clarify-choice-answer"]')
+      expect(answer.exists()).toBe(true)
+      expect(answer.text()).toBe(longAnswer)
+      expect(answer.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full', 'break-words']))
+      expect(answer.classes().join(' ')).toMatch(/overflow-wrap:anywhere/)
+      wrapper.unmount()
+    })
+
+    it('no-space token answer still gets overflow-wrap:anywhere (g2.1)', () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text: `我的选择:\n- 视觉风格的目标是什么? → ${noSpaceToken}`,
+            at: '2026-08-30T00:00:00Z',
+          },
+        ],
+      })
+      const answer = wrapper.find('[data-testid="clarify-choice-answer"]')
+      expect(answer.text()).toBe(noSpaceToken)
+      expect(answer.classes().join(' ')).toMatch(/overflow-wrap:anywhere/)
+      expect(answer.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full', 'break-words']))
+      wrapper.unmount()
+    })
+
+    it('multiple short answers remain independent tags with wrap constraints (f3/g2.1)', () => {
+      const wrapper = mountChat({
+        turns: [
+          {
+            role: 'human',
+            text:
+              '我的选择:\n- 这次「UI 统一/优化」覆盖哪些卡片? → Domain、Certificate、COS、TKE、CVM、CLB',
+            at: '2026-08-30T00:00:00Z',
+          },
+        ],
+      })
+      const answers = wrapper.findAll('[data-testid="clarify-choice-answer"]')
+      expect(answers).toHaveLength(6)
+      expect(answers.map((a) => a.text())).toEqual([
+        'Domain',
+        'Certificate',
+        'COS',
+        'TKE',
+        'CVM',
+        'CLB',
+      ])
+      for (const a of answers) {
+        expect(a.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full', 'break-words']))
+        expect(a.classes().join(' ')).toMatch(/overflow-wrap:anywhere/)
+      }
+      const wrapBox = wrapper.find('[data-testid="clarify-choice-row"] .flex.flex-wrap')
+      expect(wrapBox.classes()).toEqual(expect.arrayContaining(['min-w-0', 'max-w-full']))
+      wrapper.unmount()
+    })
+  })
 })
