@@ -1078,3 +1078,36 @@ func TestMergePromptImages(t *testing.T) {
 		}
 	})
 }
+
+// plan coverage: g1.2 — chatResultToEvents must stay a thin wrapper over
+// AcpEvents (no separate truncate copy). Long Thought equals full text.
+func TestChatResultToEventsSharesAcpEventsFullThought(t *testing.T) {
+	long := strings.Repeat("思", 2000) // >4000 UTF-8 bytes
+	if len(long) <= 4000 {
+		t.Fatalf("fixture too short: %d", len(long))
+	}
+	res := &sandbox.ChatResult{Thought: long, Narration: "ok"}
+	viaWrapper := chatResultToEvents(res)
+	viaShared := res.AcpEvents()
+	if len(viaWrapper) != len(viaShared) {
+		t.Fatalf("len wrapper=%d shared=%d", len(viaWrapper), len(viaShared))
+	}
+	for i := range viaWrapper {
+		if viaWrapper[i] != viaShared[i] {
+			t.Fatalf("event[%d] diverged: wrapper=%+v shared=%+v", i, viaWrapper[i], viaShared[i])
+		}
+	}
+	var thought string
+	for _, e := range viaWrapper {
+		if e.Kind == "thought" {
+			thought = e.Text
+			break
+		}
+	}
+	if thought != long {
+		t.Fatalf("wrapper thought len=%d want %d (must not re-truncate)", len(thought), len(long))
+	}
+	if strings.Contains(thought, "…(truncated)") {
+		t.Fatal("wrapper must not append truncated suffix")
+	}
+}

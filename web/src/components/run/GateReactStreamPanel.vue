@@ -165,7 +165,7 @@ function onThoughtToggle(e: Event) {
           :interrupted="!!interrupted && !streaming"
         />
       </summary>
-      <div class="whitespace-pre-wrap border-t border-dashed border-line px-2 pb-1.5 pt-1 font-mono leading-5">
+      <div class="whitespace-pre-wrap break-words border-t border-dashed border-line px-2 pb-1.5 pt-1 font-mono leading-5 [overflow-wrap:anywhere]">
         {{ revealedThought }}
       </div>
     </details>

@@ -125,7 +125,9 @@ func TestTruncateTextEvents(t *testing.T) {
 	}
 }
 
-func TestAcpEventsThoughtUTF8Boundary(t *testing.T) {
+func TestAcpEventsThoughtFullTextNoTruncate(t *testing.T) {
+	// plan coverage: g1.1 / g2.2 — Thought >4000 bytes must equal full text,
+	// with no …(truncated) / ...(truncated) suffix (Chinese UTF-8 sample).
 	sample := eventsChineseBoundarySample()
 	if len(sample) <= 4000 {
 		t.Fatalf("sample too short for boundary test: %d bytes", len(sample))
@@ -134,17 +136,48 @@ func TestAcpEventsThoughtUTF8Boundary(t *testing.T) {
 	if len(ev) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(ev))
 	}
+	if ev[0].Kind != "thought" {
+		t.Fatalf("kind = %q want thought", ev[0].Kind)
+	}
+	if ev[0].Text != sample {
+		t.Fatalf("thought text must equal full Thought (%d bytes), got %d bytes", len(sample), len(ev[0].Text))
+	}
 	if !utf8.ValidString(ev[0].Text) {
 		t.Fatalf("AcpEvents invalid UTF-8: %q", ev[0].Text)
 	}
-	for _, n := range []int{3998, 4000, 4001} {
-		got := textutil.TruncateBytes(sample, n, "…(truncated)")
-		if !utf8.ValidString(got) {
-			t.Fatalf("n=%d: invalid UTF-8: %q", n, got)
-		}
-		if strings.Contains(got, "\uFFFD") {
-			t.Fatalf("n=%d: contains replacement char: %q", n, got)
-		}
+	if strings.Contains(ev[0].Text, "…(truncated)") || strings.Contains(ev[0].Text, "...(truncated)") {
+		t.Fatalf("thought must not contain truncated suffix: %q", ev[0].Text[len(ev[0].Text)-32:])
+	}
+	// Exactly 4000 bytes: still full, no suffix.
+	exact := strings.Repeat("a", 4000)
+	evExact := (&ChatResult{Thought: exact}).AcpEvents()
+	if len(evExact) != 1 || evExact[0].Text != exact {
+		t.Fatalf("exactly-4000 thought must be unchanged")
+	}
+	// Short thought unchanged.
+	evShort := (&ChatResult{Thought: "short"}).AcpEvents()
+	if len(evShort) != 1 || evShort[0].Text != "short" {
+		t.Fatalf("short thought = %q", evShort[0].Text)
+	}
+	// Empty thought: no thought event.
+	if len((&ChatResult{}).AcpEvents()) != 0 {
+		t.Fatalf("empty ChatResult should yield no events")
+	}
+	// Message >8000 still truncated (out of scope for thought, regression lock).
+	longMsg := strings.Repeat("m", 8001)
+	evMsg := (&ChatResult{Narration: longMsg}).AcpEvents()
+	if len(evMsg) != 1 || evMsg[0].Kind != "message" {
+		t.Fatalf("expected 1 message event")
+	}
+	if evMsg[0].Text == longMsg {
+		t.Fatalf("message >8000 should still truncate")
+	}
+	if !strings.HasSuffix(evMsg[0].Text, "…(truncated)") {
+		t.Fatalf("message truncate suffix missing: %q", evMsg[0].Text[len(evMsg[0].Text)-20:])
+	}
+	wantMsg := textutil.TruncateBytes(longMsg, 8000, "…(truncated)")
+	if evMsg[0].Text != wantMsg {
+		t.Fatalf("message truncate mismatch")
 	}
 }
 

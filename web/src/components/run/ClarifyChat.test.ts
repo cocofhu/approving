@@ -1053,6 +1053,34 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
 
+    // plan coverage: g2.1 — frontend must render full Thought (>4000 bytes), no …(truncated)
+    it('renders full long thought without truncated suffix (g2.1)', async () => {
+      const longThought = `${'思'.repeat(2000)}结尾标记END`
+      expect(new TextEncoder().encode(longThought).length).toBeGreaterThan(4000)
+      const wrapper = mountChat({ draft: '请复审' })
+      await clickSend(wrapper)
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyAcpEvents: (e: { kind: string; text: string }[], nodeId?: string) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '请复审' },
+      })
+      await flushPromises()
+      vm.applyAcpEvents([{ kind: 'thought', text: longThought }], 'react-1')
+      await flushPromises()
+
+      const thoughtBody = wrapper.find('[data-testid="clarify-thought"] .whitespace-pre-wrap')
+      expect(thoughtBody.exists()).toBe(true)
+      expect(thoughtBody.text()).toBe(longThought)
+      expect(thoughtBody.text()).toContain('结尾标记END')
+      expect(thoughtBody.text()).not.toContain('…(truncated)')
+      expect(thoughtBody.text()).not.toContain('...(truncated)')
+      wrapper.unmount()
+    })
+
     it('turn_done removes 输出中 status while keeping thought+message', async () => {
       const wrapper = mountChat({ draft: '请复审' })
       await clickSend(wrapper)

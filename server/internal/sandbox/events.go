@@ -171,7 +171,10 @@ func (r *ChatResult) AcpEvents() []models.AcpEvent {
 	var ev []models.AcpEvent
 	t := 0
 	if r.Thought != "" {
-		ev = append(ev, models.AcpEvent{T: t, Kind: "thought", Text: textutil.TruncateBytes(r.Thought, 4000, "…(truncated)")})
+		// ReAct / timeline / hard-refresh seed all consume this event: keep the
+		// full Thought so UIs never see …(truncated). Message narration still
+		// truncates below (8000 bytes).
+		ev = append(ev, models.AcpEvent{T: t, Kind: "thought", Text: r.Thought})
 		t++
 	}
 	if r.Plan != nil && len(r.Plan.Entries) > 0 {
