@@ -206,6 +206,7 @@ func (s *acpTimelineStore) refreshFromSandbox(ctx context.Context, runID, nodeID
 	if err != nil || res == nil {
 		return // keep existing snapshot on transient bridge failures
 	}
+	// Same AcpEvents converter as live ReAct (plan g1.2) — full Thought, no fork.
 	s.upsert(runID, nodeID, res.AcpEvents())
 }
 

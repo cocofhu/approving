@@ -609,7 +609,8 @@ func reactCapReached(req NodeReq, history []models.ReactMessage) bool {
 
 // chatResultToEvents flattens a ChatResult into ordered AcpEvents for the run
 // timeline. Thin wrapper over the shared sandbox converter (single source of
-// truth for the event shape).
+// truth for the event shape). Do not add a second truncate path here — thought
+// fullness is owned by ChatResult.AcpEvents (plan g1.2).
 func chatResultToEvents(res *sandbox.ChatResult) []models.AcpEvent {
 	return res.AcpEvents()
 }

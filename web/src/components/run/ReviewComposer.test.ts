@@ -91,6 +91,25 @@ describe('ReviewComposer gate busy status (C-tier)', () => {
     wrapper.unmount()
   })
 
+  // plan coverage: g2.1 — GateReactStreamPanel renders full Thought, no secondary truncate
+  it('renders full long thought without truncated suffix (g2.1)', async () => {
+    const longThought = `${'思'.repeat(2000)}结尾标记END`
+    expect(new TextEncoder().encode(longThought).length).toBeGreaterThan(4000)
+    const wrapper = mountGate({
+      thinking: true,
+      streamThought: longThought,
+    })
+    await flushPromises()
+    const thoughtBody = wrapper.find('[data-testid="gate-react-thought"] .whitespace-pre-wrap')
+    expect(thoughtBody.exists()).toBe(true)
+    expect(thoughtBody.text()).toBe(longThought)
+    expect(thoughtBody.text()).toContain('结尾标记END')
+    expect(thoughtBody.text()).not.toContain('…(truncated)')
+    expect(thoughtBody.classes().join(' ')).toMatch(/overflow-wrap:anywhere/)
+    expect(thoughtBody.classes()).toContain('break-words')
+    wrapper.unmount()
+  })
+
   it('message switches status to 输出中, collapses thought, shows caret', async () => {
     const wrapper = mountGate({
       thinking: true,
