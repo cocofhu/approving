@@ -1040,6 +1040,11 @@ function flushPendingAcpFrames() {
 /**
  * One-shot REST seed from LiveNodeEvents / persisted snapshot.
  * Returns true only when non-empty rails were actually applied (not merely buffered).
+ *
+ * Contract (multi-turn hard refresh): platform nodeEvents live seed is the
+ * current turn only — pickAcpRails / applyAcpEvents write those absolute rails
+ * into the live streaming bubble. Historical turns stay in transcript bubbles
+ * rebuilt by queue_state / persisted turns, never concatenated here.
  */
 async function seedClarifyAcpFromNodeEventsOnce(
   runId: string,

@@ -123,7 +123,9 @@ func (c *acpProvider) streamChat(ctx context.Context, acp *sandbox.ACPClient, re
 		}
 		events := chatResultToEvents(r)
 		if c.timeline != nil {
-			c.timeline.upsert(req.RunID, req.NodeID, events)
+			// Absolute current-turn snapshot from streamChat — always replace so
+			// a fresh turn cannot be blocked by a longer prior-turn photo.
+			c.timeline.replace(req.RunID, req.NodeID, events)
 		}
 		c.emit(req.RunID, req.NodeID, events, busy)
 	})

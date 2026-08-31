@@ -60,8 +60,62 @@ func TestPickLongerEvents(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("want longer incoming, got %d", len(got))
 	}
-	if len(pickLongerEvents(in, prev)) != 2 {
-		t.Fatal("shorter incoming must not shrink snapshot")
+	// Same-turn stale shorter must not shrink.
+	if got := pickLongerEvents(in, prev); len(got) != 2 {
+		t.Fatalf("shorter same-turn incoming must not shrink snapshot, got %d", len(got))
+	}
+}
+
+func TestMergeTurnEventsAllowsNewTurnToReplace(t *testing.T) {
+	prev := []models.AcpEvent{
+		{T: 0, Kind: "thought", Text: "turn1-thought"},
+		{T: 1, Kind: "message", Text: "turn1-full-session-or-prior"},
+	}
+	incoming := []models.AcpEvent{
+		{T: 0, Kind: "thought", Text: "turn2-thought"},
+		{T: 1, Kind: "message", Text: "turn2-partial"},
+	}
+	got := mergeTurnEvents(prev, incoming)
+	if len(got) != 2 || got[1].Text != "turn2-partial" {
+		t.Fatalf("divergent new turn must replace prior photo, got %+v", got)
+	}
+
+	// Empty rails after a prior turn (prompt just began) must also replace.
+	emptyTurn := []models.AcpEvent{}
+	// empty incoming keeps prev (no seed yet) — use explicit empty message event set via replace path.
+	reset := []models.AcpEvent{{T: 0, Kind: "message", Text: ""}}
+	// Text "" is ignored by eventRails; simulate reset with thought-only new turn:
+	thoughtOnly := []models.AcpEvent{{T: 0, Kind: "thought", Text: "new"}}
+	got = mergeTurnEvents(prev, thoughtOnly)
+	if len(got) != 1 || got[0].Text != "new" {
+		t.Fatalf("new-turn thought-only must replace prior message photo, got %+v", got)
+	}
+	_ = emptyTurn
+	_ = reset
+}
+
+func TestMergeTurnEventsEmptyMessageResetsPrior(t *testing.T) {
+	prev := []models.AcpEvent{{T: 0, Kind: "message", Text: "prior-turn-body"}}
+	// Incoming has thought but cleared message rail → new turn.
+	incoming := []models.AcpEvent{{T: 0, Kind: "thought", Text: "thinking-now"}}
+	got := mergeTurnEvents(prev, incoming)
+	msg, thought := eventRails(got)
+	if msg != "" || thought != "thinking-now" {
+		t.Fatalf("want message cleared and thought current, got msg=%q thought=%q", msg, thought)
+	}
+}
+
+func TestTimelineReplaceOverridesLongerPrior(t *testing.T) {
+	s := newAcpTimelineStore()
+	s.upsert("r", "n", []models.AcpEvent{
+		{T: 0, Kind: "message", Text: "stitched-turn1-turn2-photo"},
+	})
+	s.replace("r", "n", []models.AcpEvent{
+		{T: 0, Kind: "message", Text: "turn2-only"},
+	})
+	e, ok := s.get("r", "n")
+	if !ok || len(e.events) != 1 || e.events[0].Text != "turn2-only" {
+		t.Fatalf("replace must install current-turn snapshot, got %+v ok=%v", e.events, ok)
 	}
 }
 

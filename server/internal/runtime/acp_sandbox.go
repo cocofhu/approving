@@ -44,10 +44,10 @@ func (c *acpProvider) deregisterLive(req NodeReq) {
 	}
 }
 
-// LiveNodeEvents reads the in-flight sandbox's full event log directly and
-// returns it as the run timeline. ok=false, err=nil when the node is not
-// currently running in a live sandbox (finished / never started here), so
-// callers fall back to the persisted snapshot. When a live sandbox is
+// LiveNodeEvents reads the in-flight sandbox's current-turn event snapshot
+// (last prompt_begin) for streaming bubble seeds. ok=false, err=nil when the
+// node is not currently running in a live sandbox (finished / never started
+// here), so callers fall back to the persisted snapshot. When a live sandbox is
 // registered but the bridge read fails, ok=false with a non-nil err so
 // callers can surface a distinguishable failure (never pretend live+empty).
 func (c *acpProvider) LiveNodeEvents(ctx context.Context, runID, nodeID string) ([]models.AcpEvent, bool, error) {
@@ -62,7 +62,7 @@ func (c *acpProvider) LiveNodeEvents(ctx context.Context, runID, nodeID string) 
 	if sb == nil {
 		return nil, false, nil
 	}
-	res, _, err := sandbox.FetchEventLog(ctx, sb.Host, sb.Port)
+	res, _, err := sandbox.FetchEventLogLastTurn(ctx, sb.Host, sb.Port)
 	if err != nil {
 		return nil, false, err
 	}
@@ -76,9 +76,10 @@ func (c *acpProvider) LiveNodeEvents(ctx context.Context, runID, nodeID string) 
 	return events, true, nil
 }
 
-// LiveNodeEventsPage reads a page of events from the in-flight sandbox.
-// Fetch failures return ok=false with a non-nil err (aligned with
-// LiveNodeEvents) — never live=true with an empty page that masks the error.
+// LiveNodeEventsPage reads a page of current-turn events from the in-flight
+// sandbox (streaming seed path). Fetch failures return ok=false with a non-nil
+// err (aligned with LiveNodeEvents) — never live=true with an empty page that
+// masks the error.
 func (c *acpProvider) LiveNodeEventsPage(ctx context.Context, runID, nodeID, cursor string, limit int) ([]models.AcpEvent, string, bool, bool, error) {
 	if c.timeline != nil {
 		if ev, next, more, live, ok := c.timeline.page(runID, nodeID, cursor, limit); ok {
@@ -98,7 +99,8 @@ func (c *acpProvider) LiveNodeEventsPage(ctx context.Context, runID, nodeID, cur
 	if page == nil {
 		return nil, "", false, false, fmt.Errorf("event log page unavailable")
 	}
-	events := sandbox.AggregateFrames(page.Events)
+	// Page may span multiple recent turns; seed/timeline only keep the last.
+	events := sandbox.AggregateLastTurnFrames(page.Events)
 	if c.timeline != nil {
 		c.timeline.upsert(runID, nodeID, events)
 	}

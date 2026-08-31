@@ -24,6 +24,11 @@ import (
 //
 // Best-effort: callers treat a nil/empty result as "no live log available" and
 // fall back to the persisted final snapshot.
+//
+// NOTE: Full-session aggregation concatenates every turn's message/thought.
+// Streaming bubble seeds and timeline ingest must use FetchEventLogLastTurn /
+// AggregateLastTurnFrames instead — otherwise a hard refresh stitches the
+// previous turn into the live bubble.
 func FetchEventLog(ctx context.Context, host string, port int) (*ChatResult, string, error) {
 	all, sessionID, err := FetchEventLogRaw(ctx, host, port)
 	if err != nil {
@@ -31,6 +36,22 @@ func FetchEventLog(ctx context.Context, host string, port int) (*ChatResult, str
 	}
 	result := &ChatResult{}
 	for _, frame := range all {
+		dispatchFrame(frame, result)
+	}
+	return result, sessionID, nil
+}
+
+// FetchEventLogLastTurn is like FetchEventLog but only folds frames after the
+// last prompt_begin. Used for nodeEvents / timeline streaming seeds so the
+// live bubble never receives cross-turn narration. The sandbox still keeps the
+// full eventLog for console replay via FetchEventLog / FetchEventLogRaw.
+func FetchEventLogLastTurn(ctx context.Context, host string, port int) (*ChatResult, string, error) {
+	all, sessionID, err := FetchEventLogRaw(ctx, host, port)
+	if err != nil {
+		return nil, "", err
+	}
+	result := &ChatResult{}
+	for _, frame := range FramesAfterLastPromptBegin(all) {
 		dispatchFrame(frame, result)
 	}
 	return result, sessionID, nil
@@ -224,6 +245,47 @@ func AggregateFrames(frames []json.RawMessage) []models.AcpEvent {
 		dispatchFrame(frame, result)
 	}
 	return result.AcpEvents()
+}
+
+// AggregateLastTurnFrames folds only the last prompt_begin turn into AcpEvents.
+// Streaming seeds must use this (or FetchEventLogLastTurn) so message/thought
+// rails stay current-turn-only.
+func AggregateLastTurnFrames(frames []json.RawMessage) []models.AcpEvent {
+	return AggregateFrames(FramesAfterLastPromptBegin(frames))
+}
+
+// FramesAfterLastPromptBegin returns frames from the last prompt_begin onward
+// (inclusive). When no prompt_begin is present, frames are returned unchanged
+// (single-turn / legacy logs).
+func FramesAfterLastPromptBegin(frames []json.RawMessage) []json.RawMessage {
+	last := -1
+	for i, raw := range frames {
+		if frameIsPromptBegin(raw) {
+			last = i
+		}
+	}
+	if last < 0 {
+		return frames
+	}
+	return frames[last:]
+}
+
+func frameIsPromptBegin(raw json.RawMessage) bool {
+	data := raw
+	var env struct {
+		Op   string          `json:"op"`
+		Data json.RawMessage `json:"data"`
+	}
+	if json.Unmarshal(raw, &env) == nil && env.Op == "event" && len(env.Data) > 0 {
+		data = env.Data
+	}
+	var probe struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(data, &probe) != nil {
+		return false
+	}
+	return probe.Type == "prompt_begin"
 }
 
 // dispatchFrame folds one persisted event frame into the aggregate. Frames may
