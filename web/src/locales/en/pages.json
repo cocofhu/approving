@@ -20,6 +20,7 @@
       "noPipelineShort": "No pipeline",
       "needText": "Describe the goal or attach a file first",
       "send": "Send",
+      "sendShortcut": "Ctrl/⌘ + Enter to send",
       "missingRequired": "Fill required launch fields before starting",
       "cardFallback": "Approve pre-dev clarification",
       "scrollLeft": "Scroll left",

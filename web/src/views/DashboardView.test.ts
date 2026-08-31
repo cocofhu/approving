@@ -413,18 +413,55 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g2.3 — Enter submits; Shift+Enter does not
-  it('Enter submits and Shift+Enter keeps the draft for a new line', async () => {
+  // plan g1.1 / g2.2 — Ctrl/⌘+Enter submits; bare Enter / Shift+Enter do not
+  it('Ctrl/Meta+Enter submits; bare Enter and Shift+Enter keep the draft for a new line', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     const input = wrapper.get('[data-testid="home-composer-input"]')
     await input.setValue('一行需求')
+
     await input.trigger('keydown', { key: 'Enter', shiftKey: true })
     await flushPromises()
     expect(mocks.startRun).not.toHaveBeenCalled()
-    await input.trigger('keydown', { key: 'Enter', shiftKey: false })
+
+    await input.trigger('keydown', { key: 'Enter' })
     await flushPromises()
-    expect(mocks.startRun).toHaveBeenCalled()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+
+    await input.trigger('keydown', { key: 'Enter', metaKey: true })
+    await flushPromises()
+    expect(mocks.startRun).toHaveBeenCalledTimes(1)
+    mocks.startRun.mockClear()
+
+    await input.setValue('再发一条')
+    await input.trigger('keydown', { key: 'Enter', ctrlKey: true })
+    await flushPromises()
+    expect(mocks.startRun).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  // plan g1.2 — IME composing ignores Ctrl/⌘+Enter
+  it('does not submit while IME is composing even with Ctrl/Meta+Enter', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const input = wrapper.get('[data-testid="home-composer-input"]')
+    await input.setValue('组合输入中')
+    await input.trigger('compositionstart')
+    await input.trigger('keydown', { key: 'Enter', ctrlKey: true })
+    await flushPromises()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+    await input.trigger('keydown', { key: 'Enter', metaKey: true, isComposing: true })
+    await flushPromises()
+    expect(mocks.startRun).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  // plan g2.1 — send button exposes Ctrl/⌘+Enter shortcut title
+  it('send button title advertises Ctrl/⌘+Enter shortcut', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const send = wrapper.get('[data-testid="home-composer-send"]')
+    expect(send.attributes('title')).toMatch(/Ctrl\/⌘\s*\+\s*Enter/)
     wrapper.unmount()
   })
 

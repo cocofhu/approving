@@ -90,12 +90,15 @@ describe('DashboardView home chat layout', () => {
   })
 
   // plan g2 / g3 — no filter hint; caret opacity settle; placeholder typewriter
+  // plan g1.1 / g2.2 — Ctrl/Meta+Enter send (no shiftKey-only Enter-to-send)
   it('omits filter hint and keeps caret settle + placeholder typewriter', () => {
     expect(src).not.toMatch(/data-testid="home-filter-hint"/)
     expect(src).not.toMatch(/filterHint/)
     expect(src).toMatch(/home-brand__cursor--gone/)
     expect(src).toMatch(/data-testid="home-composer-placeholder"/)
-    expect(src).toMatch(/shiftKey/)
+    expect(src).toMatch(/ctrlKey\s*\|\|\s*e\.metaKey|e\.metaKey\s*\|\|\s*e\.ctrlKey/)
+    expect(src).toMatch(/sendShortcut/)
+    expect(src).not.toMatch(/if \(e\.key !== 'Enter' \|\| e\.shiftKey\) return/)
     expect(src).toMatch(/prefers-reduced-motion/)
   })
 

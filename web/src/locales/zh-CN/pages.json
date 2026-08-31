@@ -20,6 +20,7 @@
       "noPipelineShort": "未选择流水线",
       "needText": "请先描述目标或附加文件",
       "send": "发送",
+      "sendShortcut": "Ctrl/⌘ + Enter 发送",
       "missingRequired": "启动前还需填写必填项",
       "cardFallback": "Approve 开发前澄清",
       "scrollLeft": "向左滚动",
