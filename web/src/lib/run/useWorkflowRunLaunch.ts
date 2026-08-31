@@ -20,8 +20,8 @@ export function useWorkflowRunLaunch() {
   const toast = useToast()
   const { t } = useI18n()
 
-  function openLaunch(workflow: Workflow) {
-    const seeded = seedAskLaunchFields(workflow)
+  async function openLaunch(workflow: Workflow) {
+    const seeded = await seedAskLaunchFields(workflow)
     target.value = workflow
     runFields.value = seeded.fields
     runInputs.value = seeded.inputs
@@ -35,21 +35,23 @@ export function useWorkflowRunLaunch() {
     target.value = null
   }
 
-  function saveRunDraftClick() {
+  async function saveRunDraftClick() {
     const wf = target.value
     if (!wf) return
     const images: Record<string, ClarifyImage[]> = {}
     for (const [k, v] of Object.entries(runImages.value)) {
       images[k] = v ? [...v] : []
     }
-    const result = saveRunDraft(wf.id, { ...runInputs.value }, images)
+    const result = await saveRunDraft(wf.id, { ...runInputs.value }, images)
     if (result === 'ok') toast.success(t('common.toast.draftSaved'))
-    else if (result === 'quota_exceeded') toast.error(t('common.toast.draftTooLarge'))
-    else toast.error(t('common.toast.draftSaveFailed'))
+    else if (result === 'quota_exceeded' || result === 'partial') {
+      // Text already on disk / fields persisted — warn per F4 (review v3), not error.
+      toast.warn(t('common.toast.draftTooLarge'))
+    } else toast.error(t('common.toast.draftSaveFailed'))
   }
 
   function onStarted() {
-    if (target.value) clearRunDraft(target.value.id)
+    if (target.value) void clearRunDraft(target.value.id)
   }
 
   return {

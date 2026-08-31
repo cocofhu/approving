@@ -86,6 +86,7 @@
       "canvasLayout.ts",
       "canvasPath.ts",
       "dialogueAcpDelivery.ts",
+      "draftIdb.ts",
       "exportStructuredArtifact.ts",
       "homeApproveHandoff.ts",
       "homeComposerDraft.ts",
@@ -178,7 +179,7 @@
     "inbox": 20,
     "pm": 6,
     "project": 4,
-    "run": 52,
+    "run": 53,
     "shared": 37
   }
 }

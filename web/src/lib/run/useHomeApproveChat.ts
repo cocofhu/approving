@@ -83,6 +83,8 @@ export function useHomeApproveChat() {
   let preferredDraftPipelineId = ''
   /** Toast once after a non-empty restore. */
   let restoreToastShown = false
+  /** Auto-save quota / partial toast once per session (plan g2.2 / F4). */
+  let quotaToastShown = false
 
   const pipelines = computed(() =>
     workflows.value.filter((w) => isPublishedApproveFirst(w) && !!w.showOnHome),
@@ -102,15 +104,22 @@ export function useHomeApproveChat() {
   }))
   const canSend = computed(() => !!draft.value.trim() || attach.attachments.value.length > 0)
 
-  function flushComposerDraftSave() {
+  async function flushComposerDraftSave() {
     if (suppressSave) return
-    const result = saveHomeComposerDraft(
+    const result = await saveHomeComposerDraft(
       draft.value,
       attach.attachments.value,
       selectedId.value || preferredDraftPipelineId || '',
     )
-    if (result === 'quota_exceeded') toast.error(t('common.toast.draftTooLarge'))
-    else if (result === 'error') toast.error(t('common.toast.draftSaveFailed'))
+    if (result === 'ok') return
+    if (result === 'quota_exceeded' || result === 'partial') {
+      if (!quotaToastShown) {
+        quotaToastShown = true
+        toast.warn(t('common.toast.draftTooLarge'))
+      }
+    } else if (result === 'error') {
+      toast.error(t('common.toast.draftSaveFailed'))
+    }
   }
 
   function scheduleComposerDraftSave() {
@@ -118,7 +127,7 @@ export function useHomeApproveChat() {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       saveTimer = null
-      flushComposerDraftSave()
+      void flushComposerDraftSave()
     }, HOME_COMPOSER_DRAFT_DEBOUNCE_MS)
   }
 
@@ -127,20 +136,20 @@ export function useHomeApproveChat() {
       clearTimeout(saveTimer)
       saveTimer = null
     }
-    clearHomeComposerDraft()
+    void clearHomeComposerDraft()
     preferredDraftPipelineId = ''
   }
 
   /**
-   * Silent restore from localStorage (plan g2.1).
+   * Restore from IndexedDB (with legacy localStorage migration) (plan g2.1).
    * Pipeline selection: draft pipeline > lastPipeline memory > list default (g2.4).
    */
-  function hydrateComposerDraft() {
-    const stored = loadHomeComposerDraft()
+  async function hydrateComposerDraft() {
+    const stored = await loadHomeComposerDraft()
     if (!stored) return
     const hasContent = !!stored.text.trim() || stored.attachments.length > 0
     if (!hasContent) {
-      clearHomeComposerDraft()
+      await clearHomeComposerDraft()
       return
     }
 
@@ -149,8 +158,18 @@ export function useHomeApproveChat() {
       draft.value = stored.text
       attach.attachments.value = stored.attachments.map((im) => ({ ...im }))
       if (stored.pipelineId) {
-        preferredDraftPipelineId = stored.pipelineId
-        selectedId.value = stored.pipelineId
+        const list = pipelines.value
+        if (list.length === 0) {
+          // List not loaded yet — keep preference for pipelines watch (plan g2.4).
+          preferredDraftPipelineId = stored.pipelineId
+          selectedId.value = stored.pipelineId
+        } else if (list.some((w) => w.id === stored.pipelineId)) {
+          preferredDraftPipelineId = stored.pipelineId
+          selectedId.value = stored.pipelineId
+        } else {
+          // Stale draft pipeline after list is known — do not clobber current selection.
+          preferredDraftPipelineId = ''
+        }
       }
       if (!restoreToastShown) {
         restoreToastShown = true
@@ -217,8 +236,8 @@ export function useHomeApproveChat() {
     writeLastPipelineId(id)
   }
 
-  function seedLaunch(wf: Workflow) {
-    const seeded = seedAskLaunchFields(wf)
+  async function seedLaunch(wf: Workflow) {
+    const seeded = await seedAskLaunchFields(wf)
     launchTarget.value = wf
     runFields.value = seeded.fields
     runInputs.value = seeded.inputs
@@ -272,7 +291,7 @@ export function useHomeApproveChat() {
       const missing = missingRequiredAskField(wf)
       if (missing) {
         toast.warn(t('pages.dashboard.missingRequired'))
-        seedLaunch(wf)
+        await seedLaunch(wf)
         return
       }
       const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], {
@@ -290,7 +309,7 @@ export function useHomeApproveChat() {
       const msg = String(e?.message || e)
       if (msg.includes('缺少必填项')) {
         toast.warn(t('pages.dashboard.missingRequired'))
-        seedLaunch(wf)
+        await seedLaunch(wf)
         return
       }
       toast.error(msg)
@@ -318,8 +337,11 @@ export function useHomeApproveChat() {
   }
 
   onMounted(() => {
-    hydrateComposerDraft()
-    void load()
+    // Hydrate first so draft preference is set before the workflow list settles (plan g2.4).
+    void (async () => {
+      await hydrateComposerDraft()
+      await load()
+    })()
   })
   onUnmounted(() => {
     loadAbort?.abort()
@@ -327,7 +349,7 @@ export function useHomeApproveChat() {
     if (saveTimer) {
       clearTimeout(saveTimer)
       saveTimer = null
-      flushComposerDraftSave()
+      void flushComposerDraftSave()
     }
   })
 
