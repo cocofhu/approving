@@ -202,8 +202,10 @@ function onTextInput() {
 }
 
 function onComposerKeydown(e: KeyboardEvent) {
-  if (e.key !== 'Enter' || e.shiftKey) return
+  // plan g1.1 — Ctrl/⌘+Enter sends; bare Enter / Shift+Enter insert newline
+  if (e.key !== 'Enter') return
   if (composing.value || e.isComposing || e.keyCode === 229) return
+  if (!(e.ctrlKey || e.metaKey)) return
   e.preventDefault()
   void send()
 }
@@ -468,6 +470,7 @@ onBeforeUnmount(() => {
               data-testid="home-composer-send"
               :disabled="sending || !canSend"
               :aria-label="t('pages.dashboard.send')"
+              :title="t('pages.dashboard.sendShortcut')"
             >
               <Icon name="arrow-up" :size="16" />
             </button>
