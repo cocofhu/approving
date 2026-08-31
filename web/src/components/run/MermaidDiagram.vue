@@ -3,9 +3,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/lib/api/api'
 import type { Artifact } from '@/lib/shared/types'
+import AnnotateBtn from './product/AnnotateBtn.vue'
 import { mermaidThemeName, themeVars } from './mermaidTheme'
 
 export type PlanDiagram = {
+  kind?: string
+  title?: string
+  scope?: string
   format?: string
   source?: string
   fallback_artifact?: string
@@ -28,6 +32,7 @@ let themeObserver: MutationObserver | null = null
 const format = computed(() => (props.diagram.format || 'mermaid').trim().toLowerCase() || 'mermaid')
 const source = computed(() => (props.diagram.source || '').trim())
 const caption = computed(() => (props.diagram.caption || '').trim())
+const annotateLabel = computed(() => (props.diagram.title || '').trim() || props.jsonPath)
 
 const fallbackUrl = computed(() => {
   const name = (props.diagram.fallback_artifact || '').trim()
@@ -96,7 +101,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="mt-2 space-y-1.5" data-testid="plan-diagram">
+  <div class="group mt-2 space-y-1.5" data-testid="plan-diagram" :data-json-path="jsonPath">
+    <div class="flex items-center justify-end">
+      <AnnotateBtn :json-path="jsonPath" :label="annotateLabel" />
+    </div>
     <div v-show="!failed" ref="host" class="overflow-x-auto text-txt [&_svg]:max-w-full" />
     <div v-if="failed" class="space-y-2" data-testid="plan-diagram-fallback">
       <div class="text-[11px] text-txt2" data-testid="plan-diagram-fallback-hint">{{ t('pages.plan.diagramFallback') }}</div>

@@ -3201,6 +3201,13 @@
         "description": "Description"
       },
       "diagramFallback": "Diagram render failed; showing source",
+      "diagramKinds": {
+        "activity": "Activity",
+        "flowchart": "Flowchart",
+        "sequence": "Sequence",
+        "er": "ER",
+        "other": "Other"
+      },
       "status": {
         "done": "Done",
         "in_progress": "In progress",

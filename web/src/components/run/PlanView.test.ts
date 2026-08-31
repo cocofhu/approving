@@ -319,4 +319,78 @@ describe('PlanView', () => {
     expect(wrapper.find('[data-testid="plan-body-test"]').classes()).toContain('text-warn')
     wrapper.unmount()
   })
+
+  // g2.1 / g2.2 / g2.3 / g2.5: section diagram tabs
+  it('shows no diagram tabs for zero or one diagram (g2.3)', async () => {
+    const zero = mountPlan({
+      architecture: { summary: '无图' },
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    })
+    expect(zero.find('[data-testid="plan-diagram-tabs"]').exists()).toBe(false)
+    expect(zero.find('[data-testid="plan-diagram"]').exists()).toBe(false)
+    zero.unmount()
+
+    const one = mountPlan({
+      architecture: {
+        summary: '单图',
+        diagram: { source: 'flowchart LR\n  A-->B', title: '总览' },
+      },
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    })
+    await flushPromises()
+    expect(one.find('[data-testid="plan-diagram-tabs"]').exists()).toBe(false)
+    expect(one.find('[data-testid="plan-diagram"]').exists()).toBe(true)
+    // no sidebar catalog
+    expect(one.find('[data-testid="plan-diagram-sidebar"]').exists()).toBe(false)
+    one.unmount()
+  })
+
+  it('shows small tabs for multi diagrams and switches current figure (g2.1/g2.2)', async () => {
+    const doc: PlanDoc = {
+      architecture: {
+        summary: '多图',
+        diagrams: [
+          { kind: 'flowchart', title: '写入链路', source: 'flowchart LR\n  A-->B' },
+          { kind: 'activity', title: '审批活动', scope: 'approve', source: 'flowchart TD\n  S-->E' },
+          { kind: 'flowchart', title: '认证模块', scope: 'auth', source: 'flowchart LR\n  L-->R' },
+        ],
+      },
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    }
+    const wrapper = mountPlan(doc)
+    await flushPromises()
+    const tabs = wrapper.find('[data-testid="plan-diagram-tabs"]')
+    expect(tabs.exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid^="plan-diagram-tab-"]')).toHaveLength(3)
+    expect(tabs.text()).toContain('写入链路')
+    expect(tabs.text()).toContain('审批活动')
+    expect(tabs.text()).toContain('approve')
+    // only one mermaid host at a time
+    expect(wrapper.findAll('[data-testid="plan-diagram"]')).toHaveLength(1)
+    expect(mermaidRender).toHaveBeenCalledWith(expect.any(String), 'flowchart LR\n  A-->B')
+
+    await wrapper.find('[data-testid="plan-diagram-tab-1"]').trigger('click')
+    await flushPromises()
+    expect(mermaidRender).toHaveBeenCalledWith(expect.any(String), 'flowchart TD\n  S-->E')
+    // still no sidebar
+    expect(wrapper.find('[data-testid="plan-diagram-sidebar"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('merges diagrams[] with singular diagram for display (g2.1)', async () => {
+    const doc: PlanDoc = {
+      architecture: {
+        summary: '合并',
+        diagrams: [{ kind: 'activity', title: '活动', source: 'flowchart TD\n  S-->E' }],
+        diagram: { source: 'flowchart LR\n  A-->B', title: '兼容单图' },
+      },
+      goals: [{ id: 'g1', title: 'G', status: 'pending' }],
+    }
+    const wrapper = mountPlan(doc)
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid^="plan-diagram-tab-"]')).toHaveLength(2)
+    expect(wrapper.text()).toContain('活动')
+    expect(wrapper.text()).toContain('兼容单图')
+    wrapper.unmount()
+  })
 })

@@ -71,8 +71,8 @@ demoHtml 运行于 Gates HtmlPreview 的 sandbox iframe(sandbox="allow-scripts a
 
 - `goals[]` 大目标;每个大目标可含 `subgoals[]` 小目标(小目标是叶子,其下不能再嵌套)。
 - 每项只需给出 `title`(可选 `detail`);状态由平台初始化为 `pending`,无需你填写。
-- **设计区(可选,写入则须完整)**:`architecture` / `data_design` / `interfaces` / `components` / `interaction` / `test_design`。一旦写入设计区,六节应齐全;无实质内容显式写「不涉及」。可在 architecture/data_design/interaction 挂 Mermaid `diagram`(有对象则 source 必填)。纯 goals-only 仍合法。进度与 plan_coverage 只计 goals 叶子。
-- **实质 data_design 硬门禁**:当 `data_design.summary`(去空白)不是「不涉及」/「N/A」时,必须提供非空 ER 图、至少 1 个实体,且每个实体至少 1 个结构化 `fields[]`(`name`+`type` 必填);仅 legacy `attributes` 不足以通过。
+- **设计区(可选,写入则须完整)**:`architecture` / `data_design` / `interfaces` / `components` / `interaction` / `test_design`。一旦写入设计区,六节应齐全;无实质内容显式写「不涉及」。图按需、非强制:architecture/data_design/interaction 可挂 `diagrams[]`(及兼容单数 `diagram`,有对象则 source 必填);interfaces/components 项亦可选同结构。一等 kind:activity/flowchart/sequence/er——涉及则尽量都提供便于审批,缺可选图种不失败;禁止「必须四种图」。前端同节多图用节内小 Tab(不是左目录)。纯 goals-only 仍合法。进度与 plan_coverage 只计 goals 叶子。
+- **实质 data_design 硬门禁**:当 `data_design.summary`(去空白)不是「不涉及」/「N/A」时,必须提供至少一张 ER、至少 1 个实体,且每个实体至少 1 个结构化 `fields[]`(`name`+`type` 必填);仅 legacy `attributes` 不足以通过。
 - 先用 `list_artifacts` / `read_artifact` / `get_clarified_requirement` 读取已写入的需求(及可选调研/方案)再规划。
 
 ## 可选工具(不是完成条件)
