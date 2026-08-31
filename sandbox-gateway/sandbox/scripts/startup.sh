@@ -255,20 +255,29 @@ setup_repo_credentials() {
 }
 
 # 先按仓库 URL 配置 clone 所需凭据，再为所有已配置 token 补齐对端平台。
+# 末尾必须 return 0：set -e 下函数最后一行若是 `[ -n "$empty" ] && ...` 会以 1 退出，
+# 导致 startup.sh 在 glab 配置后直接崩掉（remote-dev 只注入 GITLAB_TOKEN 时必现）。
 configure_git_credentials() {
     if [ -n "$GIT_REPOS" ]; then
         IFS=',' read -ra _entries <<< "$GIT_REPOS"
         for _entry in "${_entries[@]}"; do
             [ -n "$_entry" ] || continue
             IFS='|' read -r _name _url _branch <<< "$_entry"
-            [ -n "$_url" ] && setup_repo_credentials "$_url"
+            if [ -n "$_url" ]; then
+                setup_repo_credentials "$_url"
+            fi
         done
         unset _entries _entry _name _url _branch
     elif [ -n "$GIT_CLONE_URL" ]; then
         setup_repo_credentials "$GIT_CLONE_URL"
     fi
-    [ -n "$GITLAB_TOKEN" ] && setup_bare_gitlab_credentials
-    [ -n "$GITHUB_TOKEN" ] && setup_bare_github_credentials
+    if [ -n "$GITLAB_TOKEN" ]; then
+        setup_bare_gitlab_credentials
+    fi
+    if [ -n "$GITHUB_TOKEN" ]; then
+        setup_bare_github_credentials
+    fi
+    return 0
 }
 
 repo_name_from_url() {
