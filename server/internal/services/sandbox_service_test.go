@@ -444,6 +444,7 @@ func TestSandboxReconcileOnStartup(t *testing.T) {
 
 	// run-purpose row -> destroyed on startup.
 	db.Create(&models.Sandbox{Name: "approving-sb-run", Purpose: "run", Status: "running", RunID: "rid"})
+	ds.setStatus("approving-sb-run", "running")
 	// test running -> attached and kept.
 	db.Create(&models.Sandbox{Name: "approving-sb-live", Purpose: "test", Status: "running"})
 	ds.setStatus("approving-sb-live", "running")
@@ -466,6 +467,101 @@ func TestSandboxReconcileOnStartup(t *testing.T) {
 	}
 	if err := db.Where("name = ?", "approving-sb-dead").First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
 		t.Fatal("dead row should be gone")
+	}
+	// g1.1/g1.2: recycled names are Destroy'd; g1.3: unmanaged orphans Destroy'd.
+	if ds.fg.Has("approving-sb-run") {
+		t.Fatal("run gateway sandbox should be destroyed (g1.1)")
+	}
+	if ds.fg.Has("approving-sb-orphan") {
+		t.Fatal("orphan gateway sandbox should be destroyed (g1.3)")
+	}
+	if !ds.fg.Has("approving-sb-live") {
+		t.Fatal("live gateway sandbox must remain")
+	}
+}
+
+// TestSandboxReconcileDestroysNonRunningGateway covers g1.1+g1.2: a non-running
+// local row whose Name is the gateway id must Destroy the gateway instance
+// before the list row is deleted, and must not leave the id in tracked so the
+// orphan pass cannot skip it.
+func TestSandboxReconcileDestroysNonRunningGateway(t *testing.T) {
+	db := newTestDB(t)
+	ds := &dockerState{}
+	s := newSandboxService(t, db, ds)
+	ctx := context.Background()
+
+	// error / stopped rows still have a control-plane record protecting resources.
+	db.Create(&models.Sandbox{Name: "gw-error", Purpose: "test", Status: "error"})
+	ds.setStatus("gw-error", "error")
+	db.Create(&models.Sandbox{Name: "gw-stopped", Purpose: "agent", Status: "stopped"})
+	ds.setStatus("gw-stopped", "stopped")
+	db.Create(&models.Sandbox{Name: "gw-pm-dead", Purpose: "pm", Status: "error"})
+	ds.setStatus("gw-pm-dead", "error")
+
+	s.ReconcileOnStartup(ctx)
+
+	for _, name := range []string{"gw-error", "gw-stopped", "gw-pm-dead"} {
+		if err := db.Where("name = ?", name).First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
+			t.Fatalf("%s local row should be gone", name)
+		}
+		if ds.fg.Has(name) {
+			t.Fatalf("%s gateway sandbox should be destroyed (g1.1/g1.2)", name)
+		}
+	}
+}
+
+// TestSandboxReconcileCreatingGrace covers g1.3 brief-window protection: a
+// young creating row with placeholder Name keeps its correlated gateway
+// sandbox (approving.name label) from orphan Destroy.
+func TestSandboxReconcileCreatingGrace(t *testing.T) {
+	db := newTestDB(t)
+	ds := &dockerState{}
+	s := newSandboxService(t, db, ds)
+	ctx := context.Background()
+
+	placeholder := "approving-sb-ph-young"
+	gwID := "gw-inflight-001"
+	db.Create(&models.Sandbox{
+		Name: placeholder, Purpose: "test", Status: "creating",
+		CreatedAt: time.Now(),
+	})
+	ds.setStatus(gwID, "pending")
+	ds.fg.SetLabel(gwID, sandbox.CorrelationNameKey(), placeholder)
+
+	s.ReconcileOnStartup(ctx)
+
+	if err := db.Where("name = ?", placeholder).First(&models.Sandbox{}).Error; err != nil {
+		t.Fatal("young creating row should be kept")
+	}
+	if !ds.fg.Has(gwID) {
+		t.Fatal("correlated in-flight gateway sandbox must not be destroyed")
+	}
+}
+
+// TestSandboxReconcileAbandonedCreating destroys stale creating rows and the
+// gateway sandbox still labeled with the placeholder Name.
+func TestSandboxReconcileAbandonedCreating(t *testing.T) {
+	db := newTestDB(t)
+	ds := &dockerState{}
+	s := newSandboxService(t, db, ds)
+	ctx := context.Background()
+
+	placeholder := "approving-sb-ph-old"
+	gwID := "gw-abandoned-001"
+	db.Create(&models.Sandbox{
+		Name: placeholder, Purpose: "test", Status: "creating",
+		CreatedAt: time.Now().Add(-time.Hour),
+	})
+	ds.setStatus(gwID, "running")
+	ds.fg.SetLabel(gwID, sandbox.CorrelationNameKey(), placeholder)
+
+	s.ReconcileOnStartup(ctx)
+
+	if err := db.Where("name = ?", placeholder).First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
+		t.Fatal("abandoned creating row should be gone")
+	}
+	if ds.fg.Has(gwID) {
+		t.Fatal("correlated abandoned gateway sandbox should be destroyed")
 	}
 }
 

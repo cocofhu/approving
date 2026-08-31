@@ -104,6 +104,27 @@ func (fg *FakeGateway) SetStatus(id, status string) {
 	r.status = status
 }
 
+// SetLabel sets a single label on an existing seeded sandbox (no-op if missing).
+func (fg *FakeGateway) SetLabel(id, key, value string) {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	rec := fg.recs[id]
+	if rec == nil {
+		return
+	}
+	if rec.labels == nil {
+		rec.labels = map[string]string{}
+	}
+	rec.labels[key] = value
+}
+
+// Has reports whether the fake still knows about id (not yet Destroyed).
+func (fg *FakeGateway) Has(id string) bool {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	return fg.recs[id] != nil
+}
+
 // Seed registers a running sandbox by id (convenience for SetStatus(id,"running")).
 func (fg *FakeGateway) Seed(id string) { fg.SetStatus(id, "running") }
 
