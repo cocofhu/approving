@@ -283,26 +283,29 @@ const {
               :ann="a"
             />
           </div>
-          <!-- submitted choice summary → structured cards -->
+          <!-- submitted choice summary → structured cards (min-w-0 + wrap: long answers stay in bubble) -->
           <div
             v-if="t.role === 'human' && parseChoiceSummary(t.text)"
-            class="rounded-lg border border-accent/30 bg-accent-dim/60 px-3 py-2"
+            class="min-w-0 max-w-full rounded-lg border border-accent/30 bg-accent-dim/60 px-3 py-2"
+            data-testid="clarify-choice-summary"
           >
             <div class="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-txt2">
               <Icon name="check" :size="12" class="text-accent" /> {{ translate('pages.clarify.myChoice') }}
             </div>
-            <div class="space-y-1.5">
+            <div class="min-w-0 max-w-full space-y-1.5">
               <div
                 v-for="(row, ri) in parseChoiceSummary(t.text)!"
                 :key="ri"
-                class="rounded-md border border-line bg-surface/70 px-2.5 py-1.5"
+                class="min-w-0 max-w-full rounded-md border border-line bg-surface/70 px-2.5 py-1.5"
+                data-testid="clarify-choice-row"
               >
-                <div class="mb-1 text-[11px] leading-snug text-txt3">{{ row.q }}</div>
-                <div class="flex flex-wrap gap-1">
+                <div class="mb-1 min-w-0 max-w-full break-words text-[11px] leading-snug text-txt3 [overflow-wrap:anywhere]">{{ row.q }}</div>
+                <div class="flex min-w-0 max-w-full flex-wrap gap-1">
                   <span
                     v-for="(a, ai) in row.answers"
                     :key="ai"
-                    class="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[12px] text-txt"
+                    class="min-w-0 max-w-full break-words rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[12px] text-txt [overflow-wrap:anywhere]"
+                    data-testid="clarify-choice-answer"
                   >{{ a }}</span>
                 </div>
               </div>
