@@ -549,12 +549,13 @@ func (m *Manager) Status(ctx context.Context, id string) string {
 // managedLabelFilter is the gateway ?label= filter for approving sandboxes.
 func managedLabelFilter() string { return managedByLabel + ":" + managedByValue }
 
+// CorrelationNameKey is the label that binds a gateway sandbox to the
+// pre-allocated local placeholder name (see NewContainerName / Spec.Name).
+func CorrelationNameKey() string { return cfNameLabel }
+
 // List returns the gateway ids of all approving-managed sandboxes.
 func (m *Manager) List(ctx context.Context) ([]string, error) {
-	if m.gw == nil {
-		return nil, nil
-	}
-	all, err := m.gw.List(ctx, managedLabelFilter())
+	all, err := m.ListManaged(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -565,12 +566,17 @@ func (m *Manager) List(ctx context.Context) ([]string, error) {
 	return ids, nil
 }
 
+// ListManaged returns approving-managed gateway sandboxes (id/status/labels).
+func (m *Manager) ListManaged(ctx context.Context) ([]GWSandbox, error) {
+	if m.gw == nil {
+		return nil, nil
+	}
+	return m.gw.List(ctx, managedLabelFilter())
+}
+
 // ListStatuses returns an id→status map for all approving-managed sandboxes.
 func (m *Manager) ListStatuses(ctx context.Context) (map[string]string, error) {
-	if m.gw == nil {
-		return map[string]string{}, nil
-	}
-	all, err := m.gw.List(ctx, managedLabelFilter())
+	all, err := m.ListManaged(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -579,6 +585,26 @@ func (m *Manager) ListStatuses(ctx context.Context) (map[string]string, error) {
 		out[all[i].ID] = normalizeGWStatus(all[i].Status)
 	}
 	return out, nil
+}
+
+// DestroyByCorrelationName destroys every managed gateway sandbox whose
+// approving.name label equals corr (best effort). Used when a local row still
+// carries the pre-adopt placeholder name so Status/DestroyByName cannot address
+// the real gateway id.
+func (m *Manager) DestroyByCorrelationName(ctx context.Context, corr string) {
+	corr = strings.TrimSpace(corr)
+	if m.gw == nil || corr == "" {
+		return
+	}
+	all, err := m.ListManaged(ctx)
+	if err != nil {
+		return
+	}
+	for i := range all {
+		if all[i].Labels[cfNameLabel] == corr {
+			_ = m.DestroyByName(ctx, all[i].ID)
+		}
+	}
 }
 
 // ExecPTY opens an interactive PTY shell on the sandbox over SSH. Caller must

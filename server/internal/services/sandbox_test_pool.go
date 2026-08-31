@@ -544,34 +544,47 @@ func (s *SandboxService) sweepOnce(ctx context.Context) {
 	}
 }
 
-// ReconcileOnStartup syncs DB rows with live Docker state after a restart and
-// drops orphan containers not tracked in the DB.
+// reconcileCreatingGrace keeps young "creating" rows (and their correlated
+// gateway sandboxes) through startup reconcile so an in-flight Create that
+// has not yet adopted the gateway id into Name is not destroyed. Aligns with
+// sandbox-gateway orphanGC.minAge (10m default).
+const reconcileCreatingGrace = 10 * time.Minute
+
+// ReconcileOnStartup syncs DB rows with live gateway state after a restart and
+// drops orphan managed sandboxes not tracked in the DB. Dropping a local row
+// always Destroy()s the gateway instance first so sandbox_gateway.sandboxes
+// (and the workload it protects) cannot outlive the platform list.
 func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 	var rows []models.Sandbox
 	if err := s.db.Find(&rows).Error; err != nil {
 		return
 	}
+	// tracked = gateway ids / names that must survive the orphan pass.
+	// Only rows we keep are recorded — recycled names must not block Destroy.
 	tracked := map[string]bool{}
+	// protectedCorr = placeholder Names of in-grace creating rows; orphan pass
+	// skips gateway sandboxes labeled approving.name=<placeholder>.
+	protectedCorr := map[string]bool{}
 	for i := range rows {
 		row := &rows[i]
-		tracked[row.Name] = true
 		// Per-run node sandboxes are owned by the runtime provider; after a
 		// restart their driving goroutine is gone, so any surviving container
 		// is an orphan. Destroy it and drop the record.
 		if row.Purpose == "run" {
-			s.archiveLog(ctx, row.Name)
-			_ = s.mgr.DestroyByName(ctx, row.Name)
-			if row.HomeDir != "" {
-				_ = os.RemoveAll(row.HomeDir)
-			}
-			if row.RunID != "" {
-				s.host.UnregisterRun(row.RunID)
-			}
-			s.db.Delete(&models.Sandbox{}, row.ID)
+			s.destroyLocalSandbox(ctx, row)
+			continue
+		}
+		// Young creating rows still use a placeholder Name; the gateway id is
+		// adopted only after Create succeeds. Keep them and protect the
+		// correlated gateway sandbox from the orphan sweep.
+		if row.Status == "creating" && time.Since(row.CreatedAt) < reconcileCreatingGrace {
+			tracked[row.Name] = true
+			protectedCorr[row.Name] = true
 			continue
 		}
 		switch s.mgr.Status(ctx, row.Name) {
 		case "running":
+			tracked[row.Name] = true
 			if sb, err := s.mgr.Attach(ctx, row.Name); err == nil {
 				upd := map[string]any{"status": "running", "host": sb.Host, "acp_port": sb.Port, "code_server_port": sb.CodeServerPort}
 				if row.DestroyAt == nil {
@@ -581,22 +594,45 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 				s.db.Model(&models.Sandbox{}).Where("id = ?", row.ID).Updates(upd)
 			}
 		default:
-			// Container gone: drop the record and free its run token.
-			if row.RunID != "" {
-				s.host.UnregisterRun(row.RunID)
-			}
-			s.db.Delete(&models.Sandbox{}, row.ID)
+			// Non-running (creating past grace / error / stopped / not_found):
+			// Destroy gateway first, then drop the list row (g1.1).
+			s.destroyLocalSandbox(ctx, row)
 		}
 	}
-	// Destroy orphan containers (present in docker, absent from DB).
-	if names, err := s.mgr.List(ctx); err == nil {
-		for _, n := range names {
-			if !tracked[n] {
-				_ = s.mgr.DestroyByName(ctx, n)
-				log.Info().Str("name", n).Msg("destroyed orphan sandbox container")
-			}
-		}
+	// Recycle managed gateway sandboxes with no surviving local Name (g1.3).
+	managed, err := s.mgr.ListManaged(ctx)
+	if err != nil {
+		return
 	}
+	corrKey := sandbox.CorrelationNameKey()
+	for i := range managed {
+		sb := &managed[i]
+		if tracked[sb.ID] {
+			continue
+		}
+		if corr := sb.Labels[corrKey]; corr != "" && protectedCorr[corr] {
+			continue
+		}
+		_ = s.mgr.DestroyByName(ctx, sb.ID)
+		log.Info().Str("name", sb.ID).Msg("destroyed orphan sandbox container")
+	}
+}
+
+// destroyLocalSandbox tears down the gateway instance (by Name and by
+// approving.name correlation) then deletes the local list row.
+func (s *SandboxService) destroyLocalSandbox(ctx context.Context, row *models.Sandbox) {
+	s.archiveLog(ctx, row.Name)
+	_ = s.mgr.DestroyByName(ctx, row.Name)
+	// Placeholder Name cannot address the real gateway id; also destroy by
+	// correlation label so leaked control-plane rows are not left behind.
+	s.mgr.DestroyByCorrelationName(ctx, row.Name)
+	if row.HomeDir != "" {
+		_ = os.RemoveAll(row.HomeDir)
+	}
+	if row.RunID != "" {
+		s.host.UnregisterRun(row.RunID)
+	}
+	s.db.Delete(&models.Sandbox{}, row.ID)
 }
 
 func (s *SandboxService) isBusyRow(row *models.Sandbox) bool {
