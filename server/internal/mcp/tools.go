@@ -539,15 +539,27 @@ func artifactTools() []map[string]any {
 	}
 	planDiagramSchema := func() map[string]any {
 		return map[string]any{
-			"type":        "object",
-			"description": "可选图:format 缺省 mermaid;出现对象则 source 必填非空;可选 fallback_artifact/caption",
+			"type": "object",
+			"description": "可选图:按需提供,非强制四种图。" +
+				"format 缺省 mermaid;出现对象则 source 必填非空;可选 kind/title/scope/fallback_artifact/caption。" +
+				"一等 kind: activity|flowchart|sequence|er;其它值归「其他」仍可渲染。",
 			"properties": map[string]any{
+				"kind":              strProp("可选:activity|flowchart|sequence|er;缺省按所在节推断"),
+				"title":             strProp("可选:图标题,多图 Tab 主文案"),
+				"scope":             strProp("可选:子模块/范围标注"),
 				"format":            strProp("缺省 mermaid;其它值可保留但不保证原生渲染"),
 				"source":            strProp("图源文本(对象存在时必填)"),
 				"fallback_artifact": strProp("可选:同 run 图片产物名,渲染失败时降级"),
 				"caption":           strProp("可选:图注"),
 			},
 			"required": []string{"source"},
+		}
+	}
+	planDiagramsSchema := func() map[string]any {
+		return map[string]any{
+			"type":        "array",
+			"description": "按需多图(可空);有项则每项 source 必填。与单数 diagram 并存且 source 不同时都保留。前端同节≥2 张用节内小 Tab,不是左目录。",
+			"items":       planDiagramSchema(),
 		}
 	}
 	return []map[string]any{
@@ -653,24 +665,29 @@ func artifactTools() []map[string]any {
 		{
 			"name": "set_plan",
 			"description": "仅计划(plan)或 Approve 节点可用:写入本次运行的全局结构化计划。计划最多两级:大目标 goals[] → 小目标 subgoals[](小目标是叶子,其下不能再有子目标)。" +
-				"可选 SDD 设计区(architecture/data_design/interfaces/components/interaction/test_design);写入设计区时应六节齐全,无内容用「不涉及」占位,可在 architecture/data_design/interaction 挂 Mermaid diagram。" +
-				"当 data_design.summary 非「不涉及」/N/A 时(实质数据设计),必须提供 ER 图(diagram.source)、至少 1 个实体,且每个实体至少 1 个结构化 fields[](name+type 必填;可选 pk/nullable/fk/description);仅 legacy attributes 不足以通过。流程:Agent 调用 set_plan → 解析与硬门禁 → 入库 → PlanView 展示。" +
-				"存量仅 goals 的计划仍合法。在计划节点这是唯一交付;在 Approve 节点这是两份强制交付之一(另一份是 set_clarified_requirement)。不要写代码或改仓库。",
+				"可选 SDD 设计区(architecture/data_design/interfaces/components/interaction/test_design);写入设计区时应六节齐全,无内容用「不涉及」占位。" +
+				"图按需、非强制:architecture/data_design/interaction 可挂 diagrams[](及兼容单数 diagram);interfaces/components 项亦可选同结构。" +
+				"一等图种 activity/flowchart/sequence/er——涉及活动/业务流/时序/数据时尽量都提供便于审批,缺可选图种不失败;禁止「必须四种图」。多子模块按需补图并写 scope。" +
+				"前端同节多图用节内小 Tab(不是左目录+右画布)。" +
+				"当 data_design.summary 非「不涉及」/N/A 时(实质数据设计),必须提供至少一张 ER(diagrams[] 中 kind=er 或兼容单数 diagram)、至少 1 个实体,且每个实体至少 1 个结构化 fields[](name+type 必填;可选 pk/nullable/fk/description);仅 legacy attributes 不足以通过。" +
+				"流程:Agent 调用 set_plan → 解析与硬门禁 → 入库 → PlanView 展示。存量仅 goals 的计划仍合法。" +
+				"在计划节点这是唯一交付;在 Approve 节点这是两份强制交付之一(另一份是 set_clarified_requirement)。不要写代码或改仓库。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"title": strProp("可选:计划标题"),
 					"architecture": map[string]any{
 						"type":        "object",
-						"description": "架构设计;summary 可为「不涉及」;可选 diagram(架构 flowchart)",
+						"description": "架构设计;summary 可为「不涉及」;按需 diagrams[]/diagram(默认 kind=flowchart)",
 						"properties": map[string]any{
-							"summary": strProp("架构摘要,可为「不涉及」"),
-							"diagram": planDiagramSchema(),
+							"summary":   strProp("架构摘要,可为「不涉及」"),
+							"diagrams":  planDiagramsSchema(),
+							"diagram":   planDiagramSchema(),
 						},
 					},
 					"data_design": map[string]any{
 						"type":        "object",
-						"description": "数据设计;summary 可为「不涉及」;实质启用时须 ER diagram + entities[].fields;legacy attributes 只读兼容",
+						"description": "数据设计;summary 可为「不涉及」;实质启用时须至少一张 ER + entities[].fields;legacy attributes 只读兼容;按需 diagrams[]",
 						"properties": map[string]any{
 							"summary": strProp("数据设计摘要,可为「不涉及」"),
 							"entities": map[string]any{
@@ -703,12 +720,13 @@ func artifactTools() []map[string]any {
 								},
 							},
 							"relationships": strList("可选:顶层关系说明"),
+							"diagrams":      planDiagramsSchema(),
 							"diagram":       planDiagramSchema(),
 						},
 					},
 					"interfaces": map[string]any{
 						"type":        "array",
-						"description": "接口列表;不涉及时用 [{name:\"不涉及\",summary:\"…\"}]",
+						"description": "接口列表;不涉及时用 [{name:\"不涉及\",summary:\"…\"}];项可选 diagrams[]",
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
@@ -717,13 +735,15 @@ func artifactTools() []map[string]any {
 								"direction": strProp("可选:in|out|inout"),
 								"summary":   strProp("可选:摘要"),
 								"detail":    strProp("可选:细节"),
+								"diagrams":  planDiagramsSchema(),
+								"diagram":   planDiagramSchema(),
 							},
 							"required": []string{"name"},
 						},
 					},
 					"components": map[string]any{
 						"type":        "array",
-						"description": "组件列表;不涉及时用 [{name:\"不涉及\"}]",
+						"description": "组件列表;不涉及时用 [{name:\"不涉及\"}];项可选 diagrams[]",
 						"items": map[string]any{
 							"type": "object",
 							"properties": map[string]any{
@@ -731,16 +751,19 @@ func artifactTools() []map[string]any {
 								"responsibility": strProp("可选:职责"),
 								"dependencies":   strList("可选:依赖"),
 								"detail":         strProp("可选:细节"),
+								"diagrams":       planDiagramsSchema(),
+								"diagram":        planDiagramSchema(),
 							},
 							"required": []string{"name"},
 						},
 					},
 					"interaction": map[string]any{
 						"type":        "object",
-						"description": "交互设计;summary 可为「不涉及」;可选时序 diagram",
+						"description": "交互设计;summary 可为「不涉及」;按需 diagrams[]/diagram(默认 kind=sequence)",
 						"properties": map[string]any{
-							"summary": strProp("交互摘要,可为「不涉及」"),
-							"diagram": planDiagramSchema(),
+							"summary":  strProp("交互摘要,可为「不涉及」"),
+							"diagrams": planDiagramsSchema(),
+							"diagram":  planDiagramSchema(),
 						},
 					},
 					"test_design": strProp("测试设计说明,可为「不涉及」"),

@@ -3201,6 +3201,13 @@
         "description": "说明"
       },
       "diagramFallback": "图渲染失败,显示源码",
+      "diagramKinds": {
+        "activity": "活动图",
+        "flowchart": "业务流",
+        "sequence": "时序图",
+        "er": "ER 图",
+        "other": "其他"
+      },
       "status": {
         "done": "完成",
         "in_progress": "进行中",

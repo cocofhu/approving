@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import AnnotateBtn from './product/AnnotateBtn.vue'
@@ -29,21 +29,26 @@ export type PlanInterfaceItem = {
   direction?: string
   summary?: string
   detail?: string
+  diagrams?: PlanDiagram[]
+  diagram?: PlanDiagram
 }
 export type PlanComponentItem = {
   name?: string
   responsibility?: string
   dependencies?: string[]
   detail?: string
+  diagrams?: PlanDiagram[]
+  diagram?: PlanDiagram
 }
-export type PlanArchitecture = { summary?: string; diagram?: PlanDiagram }
+export type PlanArchitecture = { summary?: string; diagrams?: PlanDiagram[]; diagram?: PlanDiagram }
 export type PlanDataDesign = {
   summary?: string
   entities?: PlanEntity[]
   relationships?: string[]
+  diagrams?: PlanDiagram[]
   diagram?: PlanDiagram
 }
-export type PlanInteraction = { summary?: string; diagram?: PlanDiagram }
+export type PlanInteraction = { summary?: string; diagrams?: PlanDiagram[]; diagram?: PlanDiagram }
 export type PlanDoc = {
   title?: string
   architecture?: PlanArchitecture
@@ -109,6 +114,93 @@ function st(s?: string) {
   const meta = STATUS[key] || STATUS.pending
   return { label: t(meta.labelKey), cls: meta.cls, dot: meta.dot }
 }
+
+/** Collect diagrams[] + legacy singular diagram (dedupe by source). Evidence: g2.1 */
+function collectSectionDiagrams(diagrams?: PlanDiagram[], diagram?: PlanDiagram): PlanDiagram[] {
+  const out: PlanDiagram[] = []
+  const seen = new Set<string>()
+  const push = (d?: PlanDiagram) => {
+    const src = (d?.source || '').trim()
+    if (!d || !src || seen.has(src)) return
+    seen.add(src)
+    out.push(d)
+  }
+  for (const d of diagrams || []) push(d)
+  push(diagram)
+  return out
+}
+
+function kindLabel(kind?: string) {
+  const k = (kind || '').trim().toLowerCase()
+  if (k === 'activity' || k === 'flowchart' || k === 'sequence' || k === 'er') {
+    return t(`pages.plan.diagramKinds.${k}`)
+  }
+  if (!k) return ''
+  return t('pages.plan.diagramKinds.other')
+}
+
+function tabLabel(d: PlanDiagram, index: number) {
+  const title = (d.title || '').trim()
+  if (title) return title
+  const kind = kindLabel(d.kind)
+  if (kind) return kind
+  return `${index + 1}`
+}
+
+const archDiagrams = computed(() => collectSectionDiagrams(props.doc.architecture?.diagrams, props.doc.architecture?.diagram))
+const dataDiagrams = computed(() => collectSectionDiagrams(props.doc.data_design?.diagrams, props.doc.data_design?.diagram))
+const ixDiagrams = computed(() => collectSectionDiagrams(props.doc.interaction?.diagrams, props.doc.interaction?.diagram))
+
+/** Active tab index per section key. Reset when diagram set identity changes. */
+const activeTab = reactive<Record<string, number>>({})
+
+function ensureTab(key: string, count: number) {
+  if (count <= 0) {
+    delete activeTab[key]
+    return
+  }
+  const cur = activeTab[key] ?? 0
+  if (cur < 0 || cur >= count) activeTab[key] = 0
+  else if (activeTab[key] == null) activeTab[key] = 0
+}
+
+watch(
+  [archDiagrams, dataDiagrams, ixDiagrams],
+  () => {
+    ensureTab('architecture', archDiagrams.value.length)
+    ensureTab('data_design', dataDiagrams.value.length)
+    ensureTab('interaction', ixDiagrams.value.length)
+  },
+  { immediate: true },
+)
+
+function selectTab(key: string, index: number) {
+  activeTab[key] = index
+}
+
+function currentDiagram(key: string, list: PlanDiagram[]): PlanDiagram | undefined {
+  if (!list.length) return undefined
+  const i = activeTab[key] ?? 0
+  return list[Math.min(Math.max(i, 0), list.length - 1)]
+}
+
+function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagram | undefined): string {
+  if (!active) return `${section}.diagram`
+  const fromArr = (list === archDiagrams.value && section === 'architecture') ||
+    (list === dataDiagrams.value && section === 'data_design') ||
+    (list === ixDiagrams.value && section === 'interaction')
+  // Prefer diagrams[i] when the active item lives in diagrams[]
+  const diagramsField =
+    section === 'architecture'
+      ? props.doc.architecture?.diagrams
+      : section === 'data_design'
+        ? props.doc.data_design?.diagrams
+        : props.doc.interaction?.diagrams
+  const idx = (diagramsField || []).findIndex((d) => (d.source || '').trim() === (active.source || '').trim())
+  if (idx >= 0) return `${section}.diagrams[${idx}]`
+  void fromArr
+  return `${section}.diagram`
+}
 </script>
 
 <template>
@@ -148,10 +240,37 @@ function st(s?: string) {
         >
           {{ displaySummary(doc.architecture.summary) }}
         </div>
+        <!-- g2.2/g2.3: ≥2 小 Tab; 1 张无 Tab; 0 张无图位 -->
+        <div
+          v-if="archDiagrams.length >= 2"
+          class="mt-2.5 flex gap-1.5 overflow-x-auto"
+          data-testid="plan-diagram-tabs"
+          role="tablist"
+        >
+          <button
+            v-for="(d, di) in archDiagrams"
+            :key="(d.source || '') + di"
+            type="button"
+            role="tab"
+            class="shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-tight transition-colors"
+            :class="(activeTab.architecture ?? 0) === di ? '' : 'bg-base text-txt3'"
+            :style="
+              (activeTab.architecture ?? 0) === di
+                ? { background: hex + '22', color: hex }
+                : undefined
+            "
+            :aria-selected="(activeTab.architecture ?? 0) === di"
+            :data-testid="`plan-diagram-tab-${di}`"
+            @click="selectTab('architecture', di)"
+          >
+            <span>{{ tabLabel(d, di) }}</span>
+            <span v-if="d.scope" class="ml-1 text-[10px] opacity-70">{{ d.scope }}</span>
+          </button>
+        </div>
         <MermaidDiagram
-          v-if="doc.architecture.diagram?.source"
-          :diagram="doc.architecture.diagram"
-          json-path="architecture.diagram"
+          v-if="currentDiagram('architecture', archDiagrams)"
+          :diagram="currentDiagram('architecture', archDiagrams)!"
+          :json-path="diagramJsonPath('architecture', archDiagrams, currentDiagram('architecture', archDiagrams))"
           :artifacts="artifacts"
         />
       </section>
@@ -235,10 +354,36 @@ function st(s?: string) {
             class="text-[12px] text-txt2"
           >{{ r }}</li>
         </ul>
+        <div
+          v-if="dataDiagrams.length >= 2"
+          class="mt-2.5 flex gap-1.5 overflow-x-auto"
+          data-testid="plan-diagram-tabs"
+          role="tablist"
+        >
+          <button
+            v-for="(d, di) in dataDiagrams"
+            :key="(d.source || '') + di"
+            type="button"
+            role="tab"
+            class="shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-tight transition-colors"
+            :class="(activeTab.data_design ?? 0) === di ? '' : 'bg-base text-txt3'"
+            :style="
+              (activeTab.data_design ?? 0) === di
+                ? { background: hex + '22', color: hex }
+                : undefined
+            "
+            :aria-selected="(activeTab.data_design ?? 0) === di"
+            :data-testid="`plan-diagram-tab-${di}`"
+            @click="selectTab('data_design', di)"
+          >
+            <span>{{ tabLabel(d, di) }}</span>
+            <span v-if="d.scope" class="ml-1 text-[10px] opacity-70">{{ d.scope }}</span>
+          </button>
+        </div>
         <MermaidDiagram
-          v-if="doc.data_design.diagram?.source"
-          :diagram="doc.data_design.diagram"
-          json-path="data_design.diagram"
+          v-if="currentDiagram('data_design', dataDiagrams)"
+          :diagram="currentDiagram('data_design', dataDiagrams)!"
+          :json-path="diagramJsonPath('data_design', dataDiagrams, currentDiagram('data_design', dataDiagrams))"
           :artifacts="artifacts"
         />
       </section>
@@ -289,10 +434,36 @@ function st(s?: string) {
         >
           {{ displaySummary(doc.interaction.summary) }}
         </div>
+        <div
+          v-if="ixDiagrams.length >= 2"
+          class="mt-2.5 flex gap-1.5 overflow-x-auto"
+          data-testid="plan-diagram-tabs"
+          role="tablist"
+        >
+          <button
+            v-for="(d, di) in ixDiagrams"
+            :key="(d.source || '') + di"
+            type="button"
+            role="tab"
+            class="shrink-0 rounded-full px-2 py-0.5 text-[11px] leading-tight transition-colors"
+            :class="(activeTab.interaction ?? 0) === di ? '' : 'bg-base text-txt3'"
+            :style="
+              (activeTab.interaction ?? 0) === di
+                ? { background: hex + '22', color: hex }
+                : undefined
+            "
+            :aria-selected="(activeTab.interaction ?? 0) === di"
+            :data-testid="`plan-diagram-tab-${di}`"
+            @click="selectTab('interaction', di)"
+          >
+            <span>{{ tabLabel(d, di) }}</span>
+            <span v-if="d.scope" class="ml-1 text-[10px] opacity-70">{{ d.scope }}</span>
+          </button>
+        </div>
         <MermaidDiagram
-          v-if="doc.interaction.diagram?.source"
-          :diagram="doc.interaction.diagram"
-          json-path="interaction.diagram"
+          v-if="currentDiagram('interaction', ixDiagrams)"
+          :diagram="currentDiagram('interaction', ixDiagrams)!"
+          :json-path="diagramJsonPath('interaction', ixDiagrams, currentDiagram('interaction', ixDiagrams))"
           :artifacts="artifacts"
         />
       </section>

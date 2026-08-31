@@ -254,8 +254,43 @@ func TestParsePlanDataDesignHardGate(t *testing.T) {
 		dd := copyMap(substantive)
 		delete(dd, "diagram")
 		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
-		if err == nil || !strings.Contains(err.Error(), "data_design.diagram.source") {
-			t.Fatalf("want diagram error, got %v", err)
+		if err == nil || !strings.Contains(err.Error(), "ER") {
+			t.Fatalf("want ER diagram error, got %v", err)
+		}
+	})
+
+	t.Run("diagrams er only ok", func(t *testing.T) {
+		dd := copyMap(substantive)
+		delete(dd, "diagram")
+		dd["diagrams"] = []any{map[string]any{
+			"kind": "er", "title": "模型", "source": "erDiagram\n  USER ||--o{ ORDER : places",
+		}}
+		doc, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err != nil {
+			t.Fatalf("diagrams er: %v", err)
+		}
+		if len(doc.DataDesign.Diagrams) != 1 || doc.DataDesign.Diagrams[0].Kind != "er" {
+			t.Fatalf("diagrams: %+v", doc.DataDesign.Diagrams)
+		}
+	})
+
+	t.Run("missing optional kinds still ok", func(t *testing.T) {
+		// Only ER present — no activity/flowchart/sequence required.
+		args := map[string]any{"data_design": substantive, "goals": base["goals"]}
+		if _, err := parsePlan(args); err != nil {
+			t.Fatalf("optional kinds absent should pass: %v", err)
+		}
+	})
+
+	t.Run("substantive without er kind fails", func(t *testing.T) {
+		dd := copyMap(substantive)
+		delete(dd, "diagram")
+		dd["diagrams"] = []any{map[string]any{
+			"kind": "flowchart", "source": "flowchart LR\n  A-->B",
+		}}
+		_, err := parsePlan(map[string]any{"data_design": dd, "goals": base["goals"]})
+		if err == nil || !strings.Contains(err.Error(), "ER") {
+			t.Fatalf("want ER required, got %v", err)
 		}
 	})
 
@@ -329,3 +364,106 @@ func mustPlanJSON(doc planDoc) []byte {
 	}
 	return b
 }
+
+func TestParsePlanMultiDiagrams(t *testing.T) {
+	t.Run("singular promotes with inferred kind", func(t *testing.T) {
+		doc, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary": "a",
+				"diagram": map[string]any{"source": "flowchart LR\n  A-->B", "title": "总览"},
+			},
+			"interaction": map[string]any{
+				"summary": "i",
+				"diagram": map[string]any{"source": "sequenceDiagram\n  A->>B: hi"},
+			},
+			"goals": []any{map[string]any{"title": "G"}},
+		})
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if len(doc.Architecture.Diagrams) != 1 || doc.Architecture.Diagrams[0].Kind != "flowchart" {
+			t.Fatalf("arch diagrams: %+v", doc.Architecture.Diagrams)
+		}
+		if doc.Architecture.Diagram == nil || doc.Architecture.Diagram.Title != "总览" {
+			t.Fatalf("legacy singular: %+v", doc.Architecture.Diagram)
+		}
+		if len(doc.Interaction.Diagrams) != 1 || doc.Interaction.Diagrams[0].Kind != "sequence" {
+			t.Fatalf("ix diagrams: %+v", doc.Interaction.Diagrams)
+		}
+		md := RenderPlanMarkdown(string(mustPlanJSON(doc)))
+		if !strings.Contains(md, "flowchart") || !strings.Contains(md, "总览") {
+			t.Fatalf("markdown should list kind/title:\n%s", md)
+		}
+	})
+
+	t.Run("diagrams and singular different sources both kept", func(t *testing.T) {
+		doc, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary": "a",
+				"diagrams": []any{
+					map[string]any{"kind": "activity", "title": "审批活动", "scope": "approve", "source": "flowchart TD\n  S-->E"},
+				},
+				"diagram": map[string]any{"source": "flowchart LR\n  A-->B"},
+			},
+			"goals": []any{map[string]any{"title": "G"}},
+		})
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if len(doc.Architecture.Diagrams) != 2 {
+			t.Fatalf("want 2 diagrams, got %+v", doc.Architecture.Diagrams)
+		}
+		md := RenderPlanMarkdown(string(mustPlanJSON(doc)))
+		if !strings.Contains(md, "activity") || !strings.Contains(md, "审批活动") || !strings.Contains(md, "approve") {
+			t.Fatalf("markdown missing kind/title/scope:\n%s", md)
+		}
+		if !strings.Contains(md, "architecture.diagrams[0]") {
+			t.Fatalf("markdown should list diagrams path:\n%s", md)
+		}
+	})
+
+	t.Run("same source deduped", func(t *testing.T) {
+		src := "flowchart LR\n  A-->B"
+		doc, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary":  "a",
+				"diagrams": []any{map[string]any{"kind": "flowchart", "source": src}},
+				"diagram":  map[string]any{"source": src},
+			},
+			"goals": []any{map[string]any{"title": "G"}},
+		})
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if len(doc.Architecture.Diagrams) != 1 {
+			t.Fatalf("want 1 after dedupe, got %+v", doc.Architecture.Diagrams)
+		}
+	})
+
+	t.Run("empty diagrams array with no singular ok", func(t *testing.T) {
+		doc, err := parsePlan(map[string]any{
+			"architecture": map[string]any{"summary": "纯文字", "diagrams": []any{}},
+			"goals":        []any{map[string]any{"title": "G"}},
+		})
+		if err != nil {
+			t.Fatalf("empty diagrams: %v", err)
+		}
+		if len(doc.Architecture.Diagrams) != 0 || doc.Architecture.Diagram != nil {
+			t.Fatalf("want no diagrams: %+v", doc.Architecture)
+		}
+	})
+
+	t.Run("diagrams empty source rejected", func(t *testing.T) {
+		_, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary":  "a",
+				"diagrams": []any{map[string]any{"kind": "flowchart", "source": "  "}},
+			},
+			"goals": []any{map[string]any{"title": "G"}},
+		})
+		if err == nil || !strings.Contains(err.Error(), "diagrams[0].source") {
+			t.Fatalf("want empty source error, got %v", err)
+		}
+	})
+}
+
