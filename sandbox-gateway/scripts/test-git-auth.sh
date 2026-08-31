@@ -155,4 +155,59 @@ if grep -q 'oauth2:.*@github.com' "$TMP/root/.git-credentials"; then
 fi
 echo "OK: mis-derived GITLAB_URL=https://github.com falls back to gitlab.com"
 
+# Single-sided tokens must not abort under set -e (function last-line && pitfall).
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN=""
+GITLAB_TOKEN="gl_only"
+GITHUB_URL=""
+GITLAB_URL="https://git.cocofhu.cc"
+GIT_REPOS="api|https://git.cocofhu.cc/team/api.git|main"
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+grep -q 'oauth2:gl_only@git.cocofhu.cc' "$TMP/root/.git-credentials"
+grep -q 'argv:auth login --hostname git.cocofhu.cc --token gl_only' "$HOME/glab.last"
+if [ -f "$HOME/gh.last" ]; then
+  echo "FAIL: GitLab-only should not invoke gh" >&2
+  exit 1
+fi
+echo "OK: GitLab-only token + GitLab clone does not abort"
+
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN="gh_only"
+GITLAB_TOKEN=""
+GITHUB_URL=""
+GITLAB_URL=""
+GIT_REPOS="app|https://github.com/acme/app.git|main"
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+grep -q 'x-access-token:gh_only@github.com' "$TMP/root/.git-credentials"
+grep -q 'argv:auth login --hostname github.com --with-token' "$HOME/gh.last"
+if [ -f "$HOME/glab.last" ]; then
+  echo "FAIL: GitHub-only should not invoke glab" >&2
+  exit 1
+fi
+echo "OK: GitHub-only token + GitHub clone does not abort"
+
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN=""
+GITLAB_TOKEN=""
+GITHUB_URL=""
+GITLAB_URL=""
+GIT_REPOS="pub|https://example.com/pub.git|"
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+echo "OK: empty tokens + GIT_REPOS does not abort"
+
+rm -f "$HOME/gh.last" "$HOME/gh.token" "$HOME/glab.last" "$TMP/root/.git-credentials"
+GITHUB_TOKEN=""
+GITLAB_TOKEN=""
+GIT_REPOS=""
+GIT_CLONE_URL=""
+_GIT_CRED_RESET=0
+configure_git_credentials
+echo "OK: empty tokens without repos does not abort"
+
 echo "OK: git auth unit smoke passed"
