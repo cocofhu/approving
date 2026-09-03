@@ -467,3 +467,116 @@ func TestParsePlanMultiDiagrams(t *testing.T) {
 	})
 }
 
+
+func TestParsePlanMermaidSyntaxGate(t *testing.T) {
+	goals := []any{map[string]any{"title": "G"}}
+
+	t.Run("legal flowchart passes", func(t *testing.T) {
+		_, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary": "a",
+				"diagram": map[string]any{"source": "flowchart LR\n  A-->B"},
+			},
+			"goals": goals,
+		})
+		if err != nil {
+			t.Fatalf("legal flowchart: %v", err)
+		}
+	})
+
+	t.Run("legal er and sequence pass", func(t *testing.T) {
+		_, err := parsePlan(map[string]any{
+			"data_design": map[string]any{
+				"summary": "不涉及",
+				"diagram": map[string]any{"format": "mermaid", "source": "erDiagram\n  A ||--o{ B : has"},
+			},
+			"interaction": map[string]any{
+				"summary": "i",
+				"diagram": map[string]any{"source": "sequenceDiagram\n  A->>B: hi"},
+			},
+			"goals": goals,
+		})
+		if err != nil {
+			t.Fatalf("legal er/seq: %v", err)
+		}
+	})
+
+	t.Run("illegal source rejected with jsonPath", func(t *testing.T) {
+		_, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary": "a",
+				"diagrams": []any{map[string]any{
+					"kind": "flowchart", "source": "flowchart LR\n  A-->[",
+				}},
+			},
+			"goals": goals,
+		})
+		if err == nil {
+			t.Fatal("want mermaid syntax error")
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "architecture.diagrams[0].source") {
+			t.Fatalf("want jsonPath in error, got %v", err)
+		}
+		if !strings.Contains(msg, "mermaid 语法错误") {
+			t.Fatalf("want mermaid 语法错误, got %v", err)
+		}
+	})
+
+	t.Run("singular diagram path in error", func(t *testing.T) {
+		_, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary": "a",
+				"diagram": map[string]any{"source": "notadiagram {{{"},
+			},
+			"goals": goals,
+		})
+		if err == nil || !strings.Contains(err.Error(), "architecture.diagram.source") {
+			t.Fatalf("want architecture.diagram.source error, got %v", err)
+		}
+	})
+
+	t.Run("non-mermaid format skips syntax parse", func(t *testing.T) {
+		doc, err := parsePlan(map[string]any{
+			"architecture": map[string]any{
+				"summary": "a",
+				"diagram": map[string]any{
+					"format": "plantuml",
+					"source": "@startuml\nAlice -> Bob\n@enduml",
+				},
+			},
+			"goals": goals,
+		})
+		if err != nil {
+			t.Fatalf("non-mermaid should skip mermaid parse: %v", err)
+		}
+		if doc.Architecture.Diagram.Format != "plantuml" {
+			t.Fatalf("format=%q", doc.Architecture.Diagram.Format)
+		}
+	})
+
+	t.Run("interfaces and components diagrams gated", func(t *testing.T) {
+		_, err := parsePlan(map[string]any{
+			"interfaces": []any{map[string]any{
+				"name": "set_plan",
+				"diagrams": []any{map[string]any{
+					"source": "flowchart LR\n  A-->[",
+				}},
+			}},
+			"goals": goals,
+		})
+		if err == nil || !strings.Contains(err.Error(), "interfaces[0].diagrams[0].source") {
+			t.Fatalf("want interfaces path error, got %v", err)
+		}
+		_, err = parsePlan(map[string]any{
+			"components": []any{map[string]any{
+				"name": "MermaidDiagram.vue",
+				"diagram": map[string]any{"source": "flowchart LR\n  A-->["},
+			}},
+			"goals": goals,
+		})
+		if err == nil || !strings.Contains(err.Error(), "components[0].diagram.source") {
+			t.Fatalf("want components path error, got %v", err)
+		}
+	})
+}

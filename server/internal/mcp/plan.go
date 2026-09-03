@@ -5,7 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/cocofhu/approving/internal/mcp/mermaidvalidate"
 )
+
+// mermaidSyntaxCheck validates a mermaid diagram source. Tests may override.
+var mermaidSyntaxCheck = mermaidvalidate.Check
 
 // --- structured plan (set_plan / get_plan / update_plan_status) ------------
 
@@ -144,6 +149,13 @@ func parsePlanDiagram(path string, d *planDiagram) (*planDiagram, error) {
 	format := strings.TrimSpace(d.Format)
 	if format == "" {
 		format = "mermaid"
+	}
+	// Mermaid (default) sources must be parseable by the same Mermaid 11.x engine
+	// the PlanView frontend uses; non-mermaid formats stay non-empty-only.
+	if strings.EqualFold(format, "mermaid") {
+		if err := mermaidSyntaxCheck(src); err != nil {
+			return nil, fmt.Errorf("%s.source mermaid 语法错误: %v", path, err)
+		}
 	}
 	out := &planDiagram{
 		Kind:             strings.TrimSpace(d.Kind),
