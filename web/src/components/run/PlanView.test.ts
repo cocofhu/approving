@@ -9,10 +9,12 @@ import pagesEn from '@/locales/en/pages.json'
 import PlanView, { type PlanDoc } from './PlanView.vue'
 
 const mermaidRender = vi.fn()
+const mermaidParse = vi.fn()
 
 vi.mock('mermaid', () => ({
   default: {
     initialize: vi.fn(),
+    parse: (...args: unknown[]) => mermaidParse(...args),
     render: (...args: unknown[]) => mermaidRender(...args),
   },
 }))
@@ -78,7 +80,9 @@ function mountPlan(doc: PlanDoc, accent?: string, locale: 'zh-CN' | 'en' = 'zh-C
 
 describe('PlanView', () => {
   beforeEach(() => {
+    mermaidParse.mockReset()
     mermaidRender.mockReset()
+    mermaidParse.mockResolvedValue(true)
     mermaidRender.mockResolvedValue({ svg: '<svg data-ok="1"></svg>' })
   })
 
