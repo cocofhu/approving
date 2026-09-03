@@ -189,7 +189,8 @@ describe('MermaidDiagram parse-first and single fallback (g2.1 / g2.2 / g2.3 / g
     await flushPromises()
     expect(mermaidParse).toHaveBeenCalledWith('flowchart LR\n  A-->B')
     expect(mermaidRender).toHaveBeenCalled()
-    const cfg = mermaidInitialize.mock.calls.at(-1)?.[0] as { suppressErrorRendering?: boolean }
+    const g21Calls = mermaidInitialize.mock.calls
+    const cfg = g21Calls[g21Calls.length - 1]?.[0] as { suppressErrorRendering?: boolean }
     expect(cfg.suppressErrorRendering).toBe(true)
     expect(wrapper.find('svg[data-ok="1"]').exists()).toBe(true)
     wrapper.unmount()
