@@ -59,7 +59,8 @@
   "overrides": {
     "brace-expansion": "^5.0.9",
     "minimatch": "^10.2.5",
-    "js-yaml": "^4.3.1"
+    "js-yaml": "^4.3.1",
+    "browserslist": "^4.28.7"
   },
   "license": "MIT"
 }
