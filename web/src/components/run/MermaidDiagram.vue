@@ -5,6 +5,7 @@ import { api } from '@/lib/api/api'
 import type { Artifact } from '@/lib/shared/types'
 import AnnotateBtn from './product/AnnotateBtn.vue'
 import { mermaidThemeName, themeVars } from './mermaidTheme'
+import { nextMermaidRenderId } from './mermaidRenderId'
 
 export type PlanDiagram = {
   kind?: string
@@ -51,16 +52,13 @@ function clearHost() {
   if (host.value) host.value.innerHTML = ''
 }
 
-/** Remove mermaid temporary render nodes and stray default error blocks. */
+/** Remove this render's temp node and stray default error blocks.
+ *  Do not sweep all `[id^="dplan-mmd-"]` — concurrent MermaidDiagram instances
+ *  may still own in-flight temp nodes (PlanView multi-diagram). */
 function cleanupMermaidDom(renderId?: string) {
   if (typeof document === 'undefined') return
-  const selectors = [
-    renderId ? `#${CSS.escape(renderId)}` : '',
-    '[id^="dplan-mmd-"]',
-    '[id^="dmermaid-"]',
-  ].filter(Boolean)
-  for (const sel of selectors) {
-    document.querySelectorAll(sel).forEach((el) => el.remove())
+  if (renderId) {
+    document.getElementById(renderId)?.remove()
   }
   for (const el of Array.from(document.body.children)) {
     if (el.closest?.('[data-testid="plan-diagram"]')) continue
@@ -107,7 +105,7 @@ async function render() {
     // Parse first so illegal sources never call render() (avoids error SVG / DOM inject).
     await mermaid.parse(source.value)
     if (gen !== renderGen) return
-    renderId = `plan-mmd-${Date.now()}-${gen}`
+    renderId = nextMermaidRenderId(gen)
     const { svg } = await mermaid.render(renderId, source.value)
     if (gen !== renderGen) return
     await nextTick()
