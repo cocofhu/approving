@@ -541,7 +541,8 @@ func artifactTools() []map[string]any {
 		return map[string]any{
 			"type": "object",
 			"description": "可选图:按需提供,非强制四种图。" +
-				"format 缺省 mermaid;出现对象则 source 必填非空;可选 kind/title/scope/fallback_artifact/caption。" +
+				"format 缺省 mermaid;出现对象则 source 必填非空;format 为 mermaid(含缺省)时按 Mermaid 11.x 做语法校验,失败则整份 set_plan 拒绝;" +
+				"可选 kind/title/scope/fallback_artifact/caption。" +
 				"一等 kind: activity|flowchart|sequence|er;其它值归「其他」仍可渲染。",
 			"properties": map[string]any{
 				"kind":              strProp("可选:activity|flowchart|sequence|er;缺省按所在节推断"),

@@ -28,6 +28,8 @@ const failed = ref(false)
 const rendering = ref(false)
 let renderGen = 0
 let themeObserver: MutationObserver | null = null
+/** Last format+source that already failed — theme toggles must not re-enter. */
+let failedSourceKey = ''
 
 const format = computed(() => (props.diagram.format || 'mermaid').trim().toLowerCase() || 'mermaid')
 const source = computed(() => (props.diagram.source || '').trim())
@@ -41,18 +43,55 @@ const fallbackUrl = computed(() => {
   return hit?.id ? api.artifactDownloadUrl(hit.id) : ''
 })
 
+function sourceKey() {
+  return `${format.value}\n${source.value}`
+}
+
+function clearHost() {
+  if (host.value) host.value.innerHTML = ''
+}
+
+/** Remove mermaid temporary render nodes and stray default error blocks. */
+function cleanupMermaidDom(renderId?: string) {
+  if (typeof document === 'undefined') return
+  const selectors = [
+    renderId ? `#${CSS.escape(renderId)}` : '',
+    '[id^="dplan-mmd-"]',
+    '[id^="dmermaid-"]',
+  ].filter(Boolean)
+  for (const sel of selectors) {
+    document.querySelectorAll(sel).forEach((el) => el.remove())
+  }
+  for (const el of Array.from(document.body.children)) {
+    if (el.closest?.('[data-testid="plan-diagram"]')) continue
+    const text = (el.textContent || '').trim()
+    if (text.startsWith('Syntax error in text')) el.remove()
+  }
+}
+
 async function render() {
   const gen = ++renderGen
-  failed.value = false
+  const sk = sourceKey()
   if (!source.value) {
     failed.value = true
+    failedSourceKey = sk
+    clearHost()
     return
   }
   if (format.value !== 'mermaid') {
     failed.value = true
+    failedSourceKey = sk
+    clearHost()
     return
   }
+  // Same illegal source: keep a single fallback; theme changes must not re-enter.
+  if (failed.value && failedSourceKey === sk) {
+    return
+  }
+  failed.value = false
   rendering.value = true
+  clearHost()
+  let renderId = ''
   try {
     const mod = await import('mermaid')
     if (gen !== renderGen) return
@@ -60,20 +99,30 @@ async function render() {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
+      // Prevent Mermaid from injecting "Syntax error in text" nodes into the document.
+      suppressErrorRendering: true,
       theme: mermaidThemeName(),
       themeVariables: themeVars(),
     })
-    const id = `plan-mmd-${Date.now()}-${gen}`
-    const { svg } = await mermaid.render(id, source.value)
+    // Parse first so illegal sources never call render() (avoids error SVG / DOM inject).
+    await mermaid.parse(source.value)
+    if (gen !== renderGen) return
+    renderId = `plan-mmd-${Date.now()}-${gen}`
+    const { svg } = await mermaid.render(renderId, source.value)
     if (gen !== renderGen) return
     await nextTick()
+    if (gen !== renderGen) return
     if (host.value) host.value.innerHTML = svg
+    failedSourceKey = ''
   } catch {
     if (gen === renderGen) {
       failed.value = true
-      if (host.value) host.value.innerHTML = ''
+      failedSourceKey = sk
+      clearHost()
+      cleanupMermaidDom(renderId ? `d${renderId}` : undefined)
     }
   } finally {
+    if (renderId) cleanupMermaidDom(`d${renderId}`)
     if (gen === renderGen) rendering.value = false
   }
 }
@@ -97,6 +146,8 @@ onBeforeUnmount(() => {
   renderGen++
   themeObserver?.disconnect()
   themeObserver = null
+  clearHost()
+  cleanupMermaidDom()
 })
 </script>
 

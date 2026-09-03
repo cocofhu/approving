@@ -6,17 +6,19 @@ import MermaidDiagram from './MermaidDiagram.vue'
 import { cssTokenColor, isLightTheme, mermaidThemeName, themeVars } from './mermaidTheme'
 
 const mermaidInitialize = vi.fn()
+const mermaidParse = vi.fn()
 const mermaidRender = vi.fn()
 
 vi.mock('mermaid', () => ({
   default: {
     initialize: (...args: unknown[]) => mermaidInitialize(...args),
+    parse: (...args: unknown[]) => mermaidParse(...args),
     render: (...args: unknown[]) => mermaidRender(...args),
   },
 }))
 
-function mountDiagram(source = 'flowchart LR\n  A-->B') {
-  const i18n = createI18n({
+function createI18nPlugin() {
+  return createI18n({
     legacy: false,
     locale: 'zh-CN',
     messages: {
@@ -25,12 +27,15 @@ function mountDiagram(source = 'flowchart LR\n  A-->B') {
       },
     },
   })
+}
+
+function mountDiagram(source = 'flowchart LR\n  A-->B', extra?: { format?: string }) {
   return mount(MermaidDiagram, {
     props: {
-      diagram: { format: 'mermaid', source },
+      diagram: { format: extra?.format ?? 'mermaid', source },
       jsonPath: 'architecture.diagram',
     },
-    global: { plugins: [i18n] },
+    global: { plugins: [createI18nPlugin()] },
   })
 }
 
@@ -39,7 +44,9 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     document.documentElement.classList.remove('light')
     document.documentElement.style.cssText = ''
     mermaidInitialize.mockReset()
+    mermaidParse.mockReset()
     mermaidRender.mockReset()
+    mermaidParse.mockResolvedValue(true)
     mermaidRender.mockResolvedValue({ svg: '<svg data-ok="1"></svg>' })
   })
 
@@ -105,9 +112,11 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     const cfg = lightCalls[lightCalls.length - 1]?.[0] as {
       theme: string
       themeVariables: Record<string, string>
+      suppressErrorRendering?: boolean
     }
     expect(cfg.theme).toBe('base')
     expect(cfg.theme).not.toBe('dark')
+    expect(cfg.suppressErrorRendering).toBe(true)
     expect(cfg.themeVariables.background).toBe('rgb(250, 250, 251)')
     expect(cfg.themeVariables.primaryTextColor).toBe('rgb(24, 24, 27)')
     expect(cfg.themeVariables.nodeTextColor).toBe('rgb(24, 24, 27)')
@@ -135,7 +144,6 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     const callsBefore = mermaidInitialize.mock.calls.length
     document.documentElement.classList.add('light')
     await flushPromises()
-    // MutationObserver is async; allow a tick
     await new Promise((r) => setTimeout(r, 0))
     await flushPromises()
     expect(mermaidInitialize.mock.calls.length).toBeGreaterThan(callsBefore)
@@ -157,5 +165,104 @@ describe('MermaidDiagram theme helpers (g2.1/g2.3)', () => {
     expect(hint.classes()).not.toContain('text-txt3')
     expect(source.classes()).toContain('text-txt2')
     wrapper.unmount()
+  })
+})
+
+describe('MermaidDiagram parse-first and single fallback (g2.1 / g2.2 / g2.3 / g3.1)', () => {
+  beforeEach(() => {
+    document.documentElement.classList.remove('light')
+    document.body.innerHTML = ''
+    mermaidInitialize.mockReset()
+    mermaidParse.mockReset()
+    mermaidRender.mockReset()
+    mermaidParse.mockResolvedValue(true)
+    mermaidRender.mockResolvedValue({ svg: '<svg data-ok="1"></svg>' })
+  })
+
+  afterEach(() => {
+    document.documentElement.classList.remove('light')
+    document.body.innerHTML = ''
+  })
+
+  it('g2.1: enables suppressErrorRendering and parses before render', async () => {
+    const wrapper = mountDiagram()
+    await flushPromises()
+    expect(mermaidParse).toHaveBeenCalledWith('flowchart LR\n  A-->B')
+    expect(mermaidRender).toHaveBeenCalled()
+    const cfg = mermaidInitialize.mock.calls.at(-1)?.[0] as { suppressErrorRendering?: boolean }
+    expect(cfg.suppressErrorRendering).toBe(true)
+    expect(wrapper.find('svg[data-ok="1"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('g2.1/g2.2: illegal source falls back once and never calls render', async () => {
+    mermaidParse.mockRejectedValue(new Error('Parse error on line 2'))
+    const wrapper = mountDiagram('flowchart LR\n  A-->[')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plan-diagram-fallback"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="plan-diagram-fallback"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('A-->[')
+    expect(mermaidRender).not.toHaveBeenCalled()
+    expect(document.body.textContent || '').not.toContain('Syntax error in text')
+    // Theme toggle must not re-enter parse/render for the same failed source.
+    const parseCalls = mermaidParse.mock.calls.length
+    document.documentElement.classList.add('light')
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
+    expect(mermaidParse.mock.calls.length).toBe(parseCalls)
+    expect(mermaidRender).not.toHaveBeenCalled()
+    expect(wrapper.findAll('[data-testid="plan-diagram-fallback"]')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
+  it('g2.2: cleans temporary #d{id} nodes after failure', async () => {
+    mermaidParse.mockResolvedValue(true)
+    mermaidRender.mockImplementation(async (id: string) => {
+      const tmp = document.createElement('div')
+      tmp.id = `d${id}`
+      tmp.textContent = 'Syntax error in text'
+      document.body.appendChild(tmp)
+      throw new Error('render failed')
+    })
+    const wrapper = mountDiagram('flowchart LR\n  BAD-->X')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plan-diagram-fallback"]').exists()).toBe(true)
+    expect(document.querySelectorAll('[id^="dplan-mmd-"]').length).toBe(0)
+    expect(document.body.textContent || '').not.toMatch(/Syntax error in text/)
+    wrapper.unmount()
+  })
+
+  it('g2.3: legal diagram still renders SVG; theme toggle re-draws', async () => {
+    const wrapper = mountDiagram('flowchart LR\n  OK-->YES')
+    await flushPromises()
+    expect(wrapper.find('svg[data-ok="1"]').exists()).toBe(true)
+    const rendersBefore = mermaidRender.mock.calls.length
+    document.documentElement.classList.add('light')
+    await flushPromises()
+    await new Promise((r) => setTimeout(r, 0))
+    await flushPromises()
+    expect(mermaidRender.mock.calls.length).toBeGreaterThan(rendersBefore)
+    wrapper.unmount()
+  })
+
+  it('g3.1: illegal diagram falls back while a subsequent legal diagram still renders', async () => {
+    mermaidParse.mockImplementation(async (src: string) => {
+      if (String(src).includes('BAD')) throw new Error('bad')
+      return true
+    })
+    mermaidRender.mockImplementation(async (_id: string, src: string) => ({
+      svg: `<svg data-src="${String(src).includes('GOOD') ? 'good' : 'other'}"></svg>`,
+    }))
+    const bad = mountDiagram('flowchart LR\n  BAD-->X')
+    await flushPromises()
+    expect(bad.find('[data-testid="plan-diagram-fallback"]').exists()).toBe(true)
+    bad.unmount()
+
+    const good = mountDiagram('flowchart LR\n  GOOD-->Y')
+    await flushPromises()
+    expect(good.find('[data-testid="plan-diagram-fallback"]').exists()).toBe(false)
+    expect(good.html()).toContain('data-src="good"')
+    good.unmount()
   })
 })
