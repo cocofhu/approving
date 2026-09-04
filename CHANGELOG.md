@@ -4,7 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
-- Workflow node config key `skill_profile` is now `agent_profile`. New writes and exports use the new key; old graphs and JSON exports still load (read fallback + import/save normalize).
+## 0.3.3-beta — 2026-09-04
+
+- Public beta follow-up on [`v0.3.3-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.3-beta)
+  (relative to `v0.3.2-beta`: PRs #441–#483). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.3-beta` (tag publish does not rewrite these files).
+- Highlights: global Token analytics; Agent workspace VCS + file history;
+  SSH credentials in Agent meta with pre-clone inject; Plan multi-diagram tabs
+  and mermaid validate; composer drafts in IndexedDB; `skill_profile` →
+  `agent_profile` with legacy compat.
 
 ## 0.3.2-beta — 2026-08-26
 
