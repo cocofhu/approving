@@ -89,6 +89,8 @@ func (s *SandboxService) OpenAgentSandbox(ctx context.Context, opts AgentSandbox
 	} else if home != runtimePID {
 		return nil, false, fmt.Errorf("agent %q 主项目为 %q，与运行项目 %q 不一致", profile, home, runtimePID)
 	}
+	// Merge SharedAgent SSH meta / Token env (Agent → Shared → env 选源).
+	agent = s.effectiveAgent(agent, runtimePID)
 
 	if opts.Reuse {
 		var existing models.Sandbox

@@ -309,6 +309,7 @@ func main() {
 		TTL:               cfg.TestSandboxTTL(),
 		RunTTL:            cfg.RunSandboxTTL(),
 		Max:               cfg.Sandbox.MaxTestSandboxes,
+		SharedAgent:       sharedAgentSvc,
 	})
 	// Let the exec provider record per-run node sandboxes in the same store so
 	// they show up in the sandbox UI alongside interactive test sandboxes.

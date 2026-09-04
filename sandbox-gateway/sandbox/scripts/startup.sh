@@ -273,12 +273,19 @@ setup_repo_credentials() {
     local url="$1"
     case "$(repo_scheme "$url")" in
         https) setup_https_credentials "$url" || true ;;
-        ssh)   setup_ssh_credentials "$url" || true ;;
+        # SSH: 缺私钥/known_hosts 必须 fail-fast（验收 f4），不可 || true 软吞。
+        ssh)
+            if ! setup_ssh_credentials "$url"; then
+                echo "startup.sh: SSH 凭据校验失败，fail-fast (url=${url})" >&2
+                return 1
+            fi
+            ;;
         *)     echo "startup.sh: 无法识别 clone url scheme: ${url}" >&2 ;;
     esac
 }
 
 # 先按仓库 URL 配置 clone 所需凭据，再为所有已配置 token 补齐对端平台。
+# SSH 凭据失败时 return 1（set -e 下中止 startup）；HTTPS 仍软失败以兼容旧行为。
 # 末尾必须 return 0：set -e 下函数最后一行若是 `[ -n "$empty" ] && ...` 会以 1 退出，
 # 导致 startup.sh 在 glab 配置后直接崩掉（remote-dev 只注入 GITLAB_TOKEN 时必现）。
 configure_git_credentials() {
@@ -288,12 +295,12 @@ configure_git_credentials() {
             [ -n "$_entry" ] || continue
             IFS='|' read -r _name _url _branch <<< "$_entry"
             if [ -n "$_url" ]; then
-                setup_repo_credentials "$_url"
+                setup_repo_credentials "$_url" || return 1
             fi
         done
         unset _entries _entry _name _url _branch
     elif [ -n "$GIT_CLONE_URL" ]; then
-        setup_repo_credentials "$GIT_CLONE_URL"
+        setup_repo_credentials "$GIT_CLONE_URL" || return 1
     fi
     if [ -n "$GITLAB_TOKEN" ]; then
         setup_bare_gitlab_credentials
@@ -463,7 +470,13 @@ if [ -n "$GIT_REPOS" ]; then
             rm -rf "$_dest"; mkdir -p "$_dest"
             if ! git clone "$_url" "$_dest"; then
                 echo "Failed to clone ${_name} from ${_url}" >&2
-                rm -rf "$_dest"; continue
+                rm -rf "$_dest"
+                # SSH clone 失败 fail-fast；HTTPS 仍 continue 以兼容旧行为。
+                if [ "$(repo_scheme "$_url")" = "ssh" ]; then
+                    echo "startup.sh: SSH clone 失败，fail-fast" >&2
+                    exit 1
+                fi
+                continue
             fi
         fi
         if [ -n "$_branch" ] && git -C "$_dest" rev-parse --git-dir >/dev/null 2>&1; then
@@ -497,6 +510,10 @@ elif [ -n "$GIT_CLONE_URL" ]; then
             echo "Repository cloned successfully to ${WORKSPACE_DIR}"
         else
             echo "Failed to clone repository, using default workspace directory" >&2
+            if [ "$(repo_scheme "$GIT_CLONE_URL")" = "ssh" ]; then
+                echo "startup.sh: SSH clone 失败，fail-fast" >&2
+                exit 1
+            fi
         fi
     fi
 else

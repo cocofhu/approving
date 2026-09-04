@@ -1967,8 +1967,8 @@
       },
       "git": {
         "title": "Git connection",
-        "subtitle": "How should this Agent pull the repo? Pick one.",
-        "choiceHint": "How should this Agent pull the repo? Pick one.",
+        "subtitle": "Pick a recommended setup; it can coexist with existing Tokens and SSH meta — runtime is not mutually exclusive.",
+        "choiceHint": "Pick a recommended setup; it can coexist with existing Tokens and SSH meta — runtime is not mutually exclusive.",
         "openWizard": "Configuration wizard",
         "adjustType": "Adjust type",
         "chooseTitle": "Choose Git credential type",

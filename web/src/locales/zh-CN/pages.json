@@ -1967,8 +1967,8 @@
       },
       "git": {
         "title": "Git 连接方式",
-        "subtitle": "这次拉仓库用哪种方式？点一个即可。",
-        "choiceHint": "这次拉仓库用哪种方式？点一个即可。",
+        "subtitle": "选择引导推荐项；可与已有 Token / SSH 元信息并存，运行时不互斥。",
+        "choiceHint": "选择引导推荐项；可与已有 Token / SSH 元信息并存，运行时不互斥。",
         "openWizard": "配置向导",
         "adjustType": "调整类型",
         "chooseTitle": "选择 Git 凭据类型",

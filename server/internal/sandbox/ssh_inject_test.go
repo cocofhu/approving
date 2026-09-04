@@ -77,6 +77,18 @@ func TestApplySSHCredentialsStripsEnv(t *testing.T) {
 	}
 }
 
+func TestApplySSHCredentialsSkipsEmpty(t *testing.T) {
+	spec := &Spec{SSHPrivateKey: "keep-key", SSHKnownHosts: "keep-hosts"}
+	ApplySSHCredentials(spec, "  ", "")
+	if spec.SSHPrivateKey != "keep-key" || spec.SSHKnownHosts != "keep-hosts" {
+		t.Fatalf("empty must not clear: %+v", spec)
+	}
+	ApplySSHCredentials(spec, "new-key", "new-hosts")
+	if spec.SSHPrivateKey != "new-key" || spec.SSHKnownHosts != "new-hosts" {
+		t.Fatalf("non-empty should set: %+v", spec)
+	}
+}
+
 func TestBundleStorePutWithTokenShared(t *testing.T) {
 	s := NewBundleStore()
 	token := "shared-token-xyz"

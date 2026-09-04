@@ -1,6 +1,7 @@
 package services
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,9 @@ type SandboxService struct {
 	mgr    *sandbox.Manager
 	skills *AgentService
 	host   *mcp.Host
+	// shared is optional project SharedAgent baseline (SSH meta / Token env).
+	// When set, Open / OpenAgentSandbox merge via ExtendOverlay before inject.
+	shared *SharedAgentService
 
 	profilesRoot      string
 	platformRulesRoot string
@@ -91,6 +95,8 @@ type SandboxOptions struct {
 	// for debugging before the idle sweeper reclaims it.
 	RunTTL time.Duration
 	Max    int
+	// SharedAgent optional project baseline used by Open / OpenAgentSandbox.
+	SharedAgent *SharedAgentService
 }
 
 // SandboxView is the API shape: the persisted record plus live-derived flags.
@@ -128,6 +134,7 @@ func NewSandboxService(db *gorm.DB, mgr *sandbox.Manager, skills *AgentService, 
 	}
 	s := &SandboxService{
 		db: db, mgr: mgr, skills: skills, host: host,
+		shared:            opts.SharedAgent,
 		profilesRoot:      opts.ProfilesRoot,
 		platformRulesRoot: opts.PlatformRulesRoot,
 		mcpEndpoint:       opts.MCPEndpoint,
@@ -140,6 +147,31 @@ func NewSandboxService(db *gorm.DB, mgr *sandbox.Manager, skills *AgentService, 
 	s.runTTL.Store(int64(opts.RunTTL))
 	s.max.Store(int64(opts.Max))
 	return s
+}
+
+// SetSharedAgent wires the project SharedAgent baseline (SSH meta / Token env).
+// Nil-safe; used by Open / OpenAgentSandbox ExtendOverlay before inject.
+func (s *SandboxService) SetSharedAgent(shared *SharedAgentService) {
+	if s == nil {
+		return
+	}
+	s.shared = shared
+}
+
+// effectiveAgent merges SharedAgent under Agent when a project id is known
+// (opts / Agent.ProjectID). Satisfies SSH 选源 Agent meta → Shared meta → env.
+func (s *SandboxService) effectiveAgent(agent Agent, projectID string) Agent {
+	if s == nil || s.shared == nil {
+		return agent
+	}
+	pid := strings.TrimSpace(projectID)
+	if pid == "" {
+		pid = strings.TrimSpace(agent.ProjectID)
+	}
+	if pid == "" {
+		return agent
+	}
+	return ExtendOverlay(s.shared.Get(pid), agent)
 }
 
 // TTL / RunTTL / MaxTestSandboxes return the live tunable values.

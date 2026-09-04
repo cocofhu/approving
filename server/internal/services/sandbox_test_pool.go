@@ -64,6 +64,8 @@ func (s *SandboxService) Open(ctx context.Context, profile string, repos []sandb
 	// Data ownership follows the Agent's home project, not the UI-selected one.
 	_ = projectID
 	projectID = strings.TrimSpace(agent.ProjectID)
+	// Merge SharedAgent so team bootstrap / Open paths inject shared SSH meta.
+	agent = s.effectiveAgent(agent, projectID)
 	// Reuse an existing test sandbox bound to the same agent when one is still
 	// alive, instead of spinning up a fresh container every time. The chat path
 	// (ensureConnected) transparently re-attaches if the live ACP connection was

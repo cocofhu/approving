@@ -385,23 +385,23 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	// Pre-start inject: pack SSH staging (+ ConfigHome) into SANDBOX_INJECT.
 	// SSH staging must land before git clone; startup.sh runs inject first.
 	// Prefer Env-based multi-inject so SSH + ConfigHome share one auth token.
-	bundleID := ""
+	var bundleIDs []string
 	if parts, headers, ids := m.buildMultiInject(spec.ConfigHome, configRoot, spec.SSHPrivateKey, spec.SSHKnownHosts); len(parts) > 0 {
 		env["SANDBOX_INJECT"] = strings.Join(parts, ",")
 		if headers != "" {
 			env["SANDBOX_INJECT_HEADERS"] = headers
 		}
 		req.Env = env
-		if len(ids) > 0 {
-			bundleID = ids[0]
-		}
+		bundleIDs = ids
 		log.Info().Str("sandbox_inject", env["SANDBOX_INJECT"]).
 			Bool("ssh", strings.TrimSpace(spec.SSHPrivateKey) != "" || strings.TrimSpace(spec.SSHKnownHosts) != "").
 			Msg("sandbox config+ssh inject via SANDBOX_INJECT")
 	} else if cfg := m.buildInjectConfig(spec.ConfigHome, configRoot); cfg != nil {
 		// Fallback single ConfigHome inject (no SSH).
 		req.Config = cfg
-		bundleID = bundleIDFromURL(cfg.BundleURL)
+		if id := bundleIDFromURL(cfg.BundleURL); id != "" {
+			bundleIDs = []string{id}
+		}
 		log.Info().Str("bundleUrl", cfg.BundleURL).Str("configRoot", configRoot).
 			Msg("sandbox config inject via bundleUrl")
 	}
@@ -412,9 +412,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	}
 	created, err := m.gw.Create(ctx, req)
 	if err != nil {
-		if bundleID != "" && m.bundles != nil {
-			m.bundles.Delete(bundleID)
-		}
+		m.deleteInjectBundles(bundleIDs)
 		return nil, fmt.Errorf("gateway create: %w", err)
 	}
 	log.Info().Str("id", created.ID).Str("cf_name", spec.Name).
@@ -423,9 +421,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	running, err := m.gw.WaitRunning(ctx, created.ID, m.createTimeout)
 	if err != nil {
 		_ = m.gw.Destroy(context.Background(), created.ID)
-		if bundleID != "" && m.bundles != nil {
-			m.bundles.Delete(bundleID)
-		}
+		m.deleteInjectBundles(bundleIDs)
 		return nil, fmt.Errorf("sandbox not ready: %w", err)
 	}
 	sb := m.sandboxFromGW(running, workspaceDir)
@@ -437,11 +433,11 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	} else {
 		sb.Password = strings.TrimSpace(env["PASSWORD"])
 	}
-	// Do NOT Delete the inject bundle here. WaitRunning can return before
+	// Do NOT Delete inject bundles here. WaitRunning can return before
 	// startup.sh finishes SANDBOX_INJECT fetch; early Delete → 401 and no
 	// mcp.json. Images without sshd also cannot SSH-heal. Bundles expire via
 	// DefaultInjectBundleTTL instead.
-	_ = bundleID
+	_ = bundleIDs
 	// If bundleUrl inject was skipped or failed in-image, SSH-sync as heal
 	// (no-op when the sandbox image has no sshd).
 	if spec.ConfigHome != "" && !m.configHomePresent(ctx, sb, configRoot) {
@@ -449,6 +445,19 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	}
 	m.EnsureHelpers(ctx, sb)
 	return sb, nil
+}
+
+// deleteInjectBundles removes all pre-start inject bundle ids on Create failure.
+func (m *Manager) deleteInjectBundles(ids []string) {
+	if m == nil || m.bundles == nil {
+		return
+	}
+	for _, id := range ids {
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		m.bundles.Delete(id)
+	}
 }
 
 func (m *Manager) configHomePresent(ctx context.Context, sb *Sandbox, configRoot string) bool {

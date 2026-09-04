@@ -147,4 +147,12 @@ describe('AgentGitGuide', () => {
     expect(added).toContain('GIT_REPOS')
     expect(added).toContain('GITLAB_TOKEN')
   })
+
+  it('向导文案强调并存不互斥，不含「点一个即可」（g1.3 / review v3）', () => {
+    const wrapper = mountGuide([])
+    const text = wrapper.text()
+    expect(text).toContain('并存')
+    expect(text).toContain('不互斥')
+    expect(text).not.toContain('点一个即可')
+  })
 })

@@ -1,6 +1,11 @@
 package services
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/cocofhu/approving/internal/sandbox"
+)
 
 func TestValidateSSHMetaLiteral(t *testing.T) {
 	if err := ValidateSSHMetaLiteral(""); err != nil {
@@ -126,5 +131,58 @@ func TestSharedAgentSSHMetaPersistAndRejectVars(t *testing.T) {
 	cfg.GitSshKnownHosts = "${vars.git_ssh_known_hosts}"
 	if err := svc.Save(cfg); err == nil {
 		t.Fatal("expected vars reject on known_hosts")
+	}
+}
+
+// TestEffectiveAgentSharedOnlySSH covers review v1 / g1.4: Agent meta empty,
+// Shared meta present → effective agent + Spec still carry inject fields
+// (OpenAgentSandbox / Open paths use effectiveAgent before ApplyAgentSSHToSpec).
+func TestEffectiveAgentSharedOnlySSH(t *testing.T) {
+	db := newTestDB(t)
+	ds := &dockerState{}
+	s := newSandboxService(t, db, ds)
+	shared := NewSharedAgentService(t.TempDir())
+	s.SetSharedAgent(shared)
+	const pid = "proj-shared-ssh"
+	if err := shared.Save(SharedAgentConfig{
+		ProjectID:        pid,
+		GitSshKnownHosts: "git.example.com ssh-ed25519 AAAA",
+		GitSshPrivateKey: "-----BEGIN OPENSSH PRIVATE KEY-----\nshared-only\n-----END OPENSSH PRIVATE KEY-----",
+		Env:              map[string]string{"GITHUB_TOKEN": "gh-shared", "GITLAB_TOKEN": "gl-shared"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	agent := Agent{Name: "agent-no-ssh", ProjectID: pid}
+	got := s.effectiveAgent(agent, pid)
+	if got.GitSshPrivateKey == "" || !strings.Contains(got.GitSshPrivateKey, "shared-only") {
+		t.Fatalf("expected shared private key, got %q", got.GitSshPrivateKey)
+	}
+	if got.GitSshKnownHosts != "git.example.com ssh-ed25519 AAAA" {
+		t.Fatalf("hosts=%q", got.GitSshKnownHosts)
+	}
+	if got.Env["GITHUB_TOKEN"] != "gh-shared" || got.Env["GITLAB_TOKEN"] != "gl-shared" {
+		t.Fatalf("tokens=%+v", got.Env)
+	}
+	spec := &sandbox.Spec{Env: map[string]string{"GIT_SSH_PRIVATE_KEY": "legacy-env"}}
+	ApplyAgentSSHToSpec(spec, got)
+	if !strings.Contains(spec.SSHPrivateKey, "shared-only") {
+		t.Fatalf("Spec.SSHPrivateKey=%q", spec.SSHPrivateKey)
+	}
+	if spec.SSHKnownHosts != "git.example.com ssh-ed25519 AAAA" {
+		t.Fatalf("Spec.SSHKnownHosts=%q", spec.SSHKnownHosts)
+	}
+	if _, ok := spec.Env["GIT_SSH_PRIVATE_KEY"]; ok {
+		t.Fatal("GIT_SSH_* must be stripped from Spec.Env")
+	}
+}
+
+func TestEffectiveAgentNoSharedLeavesAgent(t *testing.T) {
+	db := newTestDB(t)
+	ds := &dockerState{}
+	s := newSandboxService(t, db, ds)
+	agent := Agent{Name: "x", GitSshPrivateKey: "agent-key"}
+	got := s.effectiveAgent(agent, "no-such-project")
+	if got.GitSshPrivateKey != "agent-key" {
+		t.Fatalf("got %q", got.GitSshPrivateKey)
 	}
 }
