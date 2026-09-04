@@ -625,6 +625,9 @@ func (h *Handlers) publicReviewExtras(lookup *gateshare.LookupResult, visualHTML
 		ex.ProductKind = gateshare.ProductKindStructured
 		ex.ProductName = structName
 	}
+	if lookup.Node != nil && lookup.Node.Type == "approve" {
+		ex.Ports = h.publicAppPreviewPorts(runID, nodeID)
+	}
 	if conv := h.publicConversation(runID, nodeID); conv != nil {
 		ex.Turns = conv.Turns()
 	}

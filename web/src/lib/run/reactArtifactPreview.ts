@@ -392,6 +392,10 @@ export function resolveEffectivePreviewPin(opts: {
   return ''
 }
 
+export function isAppPreviewRemoteNode(type: string | null | undefined): boolean {
+  return type === 'app_preview' || type === 'approve'
+}
+
 export function isClarifyInteractiveGraphNode(run: Run | null | undefined, nodeId: string | null | undefined): boolean {
   if (!run?.nodes?.length || !nodeId) return false
   return run.nodes.some((n: WFNode) => n.id === nodeId && isClarifyInteractive(n.type))
@@ -403,6 +407,8 @@ export function inboxStageRemoteKind(opts: {
   nodeId?: string | null
 }): ReactStageRemoteKind {
   if (opts.appPreview) return 'app'
+  const n = opts.run?.nodes?.find((node: WFNode) => node.id === opts.nodeId)
+  if (isAppPreviewRemoteNode(n?.type)) return 'app'
   if (isClarifyInteractiveGraphNode(opts.run, opts.nodeId)) return 'sandbox'
   return 'off'
 }

@@ -1482,7 +1482,7 @@ const inboxAppPreviewActive = computed(() => {
   if (active.value?.type !== 'clarify') return false
   if (active.value.kind === 'app_preview') return true
   const n = activeRun.value?.nodes?.find((node) => node.id === active.value!.nodeId)
-  return n?.type === 'app_preview'
+  return n?.type === 'app_preview' || n?.type === 'approve'
 })
 
 const inboxRemoteKind = computed(() =>

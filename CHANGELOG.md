@@ -4,6 +4,9 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- Approve nodes can call `set_preview` to register a live app or external URL
+  on the ReAct preview stage (optional; does not park/finish the node).
+
 ## 0.3.3-beta — 2026-09-04
 
 - Public beta follow-up on [`v0.3.3-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.3-beta)

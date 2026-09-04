@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/nodereg"
 )
@@ -223,7 +224,7 @@ func submitMRRepoNote(req NodeReq) string {
 
 // previewNodePromptExtras overrides proxy/noVNC instructions when IP-direct is on.
 func previewNodePromptExtras(req NodeReq) string {
-	if req.NodeType != "app_preview" || !configTruthy(req.Config["direct_preview"]) {
+	if !mcp.SetPreviewAllowed(req.NodeType) || !configTruthy(req.Config["direct_preview"]) {
 		return ""
 	}
 	if !configDefaultOn(req.Config["auto_inject"]) {

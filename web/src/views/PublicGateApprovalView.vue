@@ -1176,7 +1176,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               :run="publicRunGraph"
               :node-type="preview?.nodeType"
               :annotatable="inspectable"
-              :remote-kind="productKind === 'app_preview' ? 'public' : 'off'"
+              :remote-kind="productKind === 'app_preview' || appPreviewPorts.length ? 'public' : 'off'"
               :token="token"
               :ports="appPreviewPorts"
               :public-active="isActive"

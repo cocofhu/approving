@@ -355,6 +355,19 @@ func TestTestNodePromptExtras(t *testing.T) {
 		}
 	})
 
+	t.Run("approve direct_preview extras", func(t *testing.T) {
+		got := p.buildAgentPrompt(NodeReq{
+			NodeType: "approve",
+			Config:   map[string]any{"direct_preview": true},
+		}, nil)
+		if !strings.Contains(got, "direct_preview") || !strings.Contains(got, "PREVIEW_PORT") {
+			t.Errorf("expected approve direct_preview injection: %q", got)
+		}
+		if !strings.Contains(got, "set_preview") {
+			t.Errorf("approve contract should mention set_preview: %q", got)
+		}
+	})
+
 	t.Run("direct_preview off no extras", func(t *testing.T) {
 		got := p.buildAgentPrompt(NodeReq{
 			NodeType: "app_preview",
@@ -443,6 +456,11 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	}
 	if manualEnv["PREVIEW_PICK_SCRIPT_URL"] != "http://app.example/preview-pick.js" {
 		t.Fatalf("manual pick script: %v", manualEnv)
+	}
+	approve := map[string]string{}
+	applyAppPreviewEnv(approve, "approve", nil, "http://app.example")
+	if approve["VNC_PREVIEW"] != "1" || approve["PREVIEW_DIRECT"] != "" {
+		t.Fatalf("approve default vnc: %v", approve)
 	}
 	other := map[string]string{}
 	applyAppPreviewEnv(other, "implement", map[string]any{"direct_preview": true}, "http://app.example")

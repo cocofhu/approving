@@ -16,7 +16,14 @@ const (
 	PreviewKindURL  = "url"
 )
 
-// PreviewPort is a registered preview endpoint for an app_preview node.
+// SetPreviewAllowed reports whether set_preview may run on this node type.
+// app_preview requires it; approve may register a live app as an optional preview
+// without parking the ReAct session.
+func SetPreviewAllowed(nodeType string) bool {
+	return nodeType == "app_preview" || nodeType == "approve"
+}
+
+// PreviewPort is a registered preview endpoint for an app_preview or approve node.
 type PreviewPort struct {
 	RunID       string `json:"runId"`
 	NodeID      string `json:"nodeId"`
@@ -365,7 +372,7 @@ func (h *Host) setPreviewPort(runID, nodeID string, port int, label string) (str
 	rec := PreviewPort{
 		RunID: runID, NodeID: nodeID, Kind: PreviewKindPort,
 		ItemKey: previewItemKey(PreviewKindPort, port, ""),
-		Port: port, Label: strings.TrimSpace(label),
+		Port:    port, Label: strings.TrimSpace(label),
 		ProxyURL: proxyURL, SandboxName: sandboxName, Host: host, Healthy: true,
 		KeepalivePID: keepalivePID, RegisteredAt: time.Now(),
 	}
@@ -397,7 +404,7 @@ func (h *Host) setPreviewURL(runID, nodeID, rawURL, label string) (string, error
 	rec := PreviewPort{
 		RunID: runID, NodeID: nodeID, Kind: PreviewKindURL,
 		ItemKey: previewItemKey(PreviewKindURL, 0, normalized),
-		URL: normalized, Label: strings.TrimSpace(label),
+		URL:     normalized, Label: strings.TrimSpace(label),
 		Healthy: true, RegisteredAt: time.Now(),
 	}
 	h.mu.Lock()
@@ -421,7 +428,7 @@ func (h *Host) PutPreviewPortForTest(runID, nodeID string, port int, label strin
 	rec := PreviewPort{
 		RunID: runID, NodeID: nodeID, Kind: PreviewKindPort,
 		ItemKey: previewItemKey(PreviewKindPort, port, ""),
-		Port: port, Label: strings.TrimSpace(label),
+		Port:    port, Label: strings.TrimSpace(label),
 		ProxyURL: h.previewProxyURL(runID, nodeID, port), Healthy: true,
 		// Non-zero sentinel so ListPreviewKeepalivePIDs / AbortRun whitelist
 		// paths exercise the same registration shape as real set_preview.

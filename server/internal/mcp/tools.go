@@ -220,8 +220,8 @@ func (h *Host) runTool(runID, token, name string, args map[string]any) (string, 
 		if !h.authorize(runID, token) {
 			return "set_preview failed: " + ErrUnauthorized.Error(), true
 		}
-		if h.ActiveNodeType(runID) != "app_preview" {
-			return "set_preview 仅在 app_preview 节点可用,当前节点不支持。", true
+		if !SetPreviewAllowed(h.ActiveNodeType(runID)) {
+			return "set_preview 仅在 app_preview 或 Approve 节点可用,当前节点不支持。", true
 		}
 		portRaw, hasPort := args["port"]
 		urlRaw := strings.TrimSpace(asString(args["url"]))
@@ -681,9 +681,9 @@ func artifactTools() []map[string]any {
 						"type":        "object",
 						"description": "架构设计;summary 可为「不涉及」;按需 diagrams[]/diagram(默认 kind=flowchart)",
 						"properties": map[string]any{
-							"summary":   strProp("架构摘要,可为「不涉及」"),
-							"diagrams":  planDiagramsSchema(),
-							"diagram":   planDiagramSchema(),
+							"summary":  strProp("架构摘要,可为「不涉及」"),
+							"diagrams": planDiagramsSchema(),
+							"diagram":  planDiagramSchema(),
 						},
 					},
 					"data_design": map[string]any{
@@ -1023,8 +1023,9 @@ func artifactTools() []map[string]any {
 		getTool("get_implementation_result", "读取本次运行的实现结果(implementation_result.json)。"),
 		{
 			"name": "set_preview",
-			"description": "仅 app_preview 节点可用:注册沙箱内应用预览端口或外部 http(s) URL。" +
-				"参数 port? 与 url? 二选一(恰好其一);label(可选)用于 UI 标签。可多次调用注册多项;同 port 或同规范化 url 再次调用可更新 label。外部 URL 由浏览器 iframe 直连,不做服务端探测,取点可能降级。",
+			"description": "仅 app_preview 或 Approve 节点可用:注册沙箱内应用预览端口或外部 http(s) URL。" +
+				"参数 port? 与 url? 二选一(恰好其一);label(可选)用于 UI 标签。可多次调用注册多项;同 port 或同规范化 url 再次调用可更新 label。外部 URL 由浏览器 iframe 直连,不做服务端探测,取点可能降级。" +
+				"在 Approve 上这是可选预览,不是完成条件,成功后不会结束本节点。",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{

@@ -74,6 +74,7 @@ const reviewChatRef = ref<{
 const artifacts = computed(() => props.run?.artifacts || [])
 const previewArtifact = computed(() => props.clarify?.previewArtifact || '')
 const nodeType = computed(() => props.run?.nodes?.find((n) => n.id === props.nodeId)?.type || '')
+const remoteKind = computed(() => (nodeType.value === 'approve' ? 'app' : 'sandbox'))
 
 function onRemotePick(payload: AppPreviewPickPayload) {
   if (!props.inputActive) return
@@ -133,7 +134,7 @@ defineExpose({
         :node-id="nodeId"
         :node-type="nodeType"
         :annotatable="inputActive"
-        remote-kind="sandbox"
+        :remote-kind="remoteKind"
         @pick="onRemotePick"
       />
     </template>

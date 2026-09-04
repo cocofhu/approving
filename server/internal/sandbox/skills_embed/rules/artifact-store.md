@@ -43,13 +43,14 @@ alwaysApply: true
 | 节点 | 写入 | 读取 |
 | --- | --- | --- |
 | 澄清 react | `set_clarified_requirement`(完整需求规格:背景/目标/范围/FR+验收/假设依赖约束等)。给人看的页面/文案可另 `write_artifact` + `set_artifact_preview` | `get_clarified_requirement` |
+| Approve | `set_clarified_requirement` + `set_plan`(强制);可选 `set_preview` 登记可运行应用 | `get_clarified_requirement` / `get_plan` |
 | 计划 plan | `set_plan` | `get_plan` |
 | 调研 research | `set_research` | `get_research` |
 | 方案 proposal | `set_proposals` | `get_proposals` |
 | 测试 test | `set_test_result` | `get_test_result` |
 | 评审 review | `set_review` | `get_review` |
 | 实现 implement | `set_implementation_result` | `get_implementation_result` |
-| 应用预览 app_preview | `set_preview` | — |
+| 应用预览 app_preview | `set_preview`(强制) | — |
 
-- 这些工具只在其对应节点类型可用;编号/状态由平台生成,无需自填 id。
+- 这些工具只在其对应节点类型可用(Approve 还可选 `set_preview`);编号/状态由平台生成,无需自填 id。
 - 需要消费上游的结构化产物时,用对应的 `get_*` 或 `read_artifact` 读取。
