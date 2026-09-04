@@ -45,16 +45,33 @@ func (s *BundleStore) Put(data []byte, ttl time.Duration) (id, token string) {
 	if s == nil {
 		return "", ""
 	}
+	token = randomHex(24)
+	id = s.PutWithToken(data, ttl, token)
+	if id == "" {
+		return "", ""
+	}
+	return id, token
+}
+
+// PutWithToken registers gzipped-tar bytes under a caller-supplied bearer token
+// so multiple inject bundles (e.g. SSH staging + ConfigHome) can share one
+// SANDBOX_INJECT_HEADERS value.
+func (s *BundleStore) PutWithToken(data []byte, ttl time.Duration, token string) (id string) {
+	if s == nil || len(data) == 0 || strings.TrimSpace(token) == "" {
+		return ""
+	}
 	if ttl <= 0 {
 		ttl = DefaultInjectBundleTTL
 	}
 	id = randomHex(16)
-	token = randomHex(24)
+	if id == "" {
+		return ""
+	}
 	s.mu.Lock()
 	s.sweepLocked(time.Now())
 	s.items[id] = bundleItem{token: token, data: data, exp: time.Now().Add(ttl)}
 	s.mu.Unlock()
-	return id, token
+	return id
 }
 
 // Get returns bundle bytes when id+token match and not expired.
@@ -197,5 +214,58 @@ func PackConfigHomeTarGz(hostDir string) ([]byte, error) {
 		return nil, err
 	}
 	log.Debug().Int("bytes", buf.Len()).Str("dir", hostDir).Msg("packed config-home inject bundle")
+	return buf.Bytes(), nil
+}
+
+// PackSSHInjectTarGz builds a .tar.gz containing optional id_rsa and/or
+// known_hosts entries for extraction into SSHInjectStagingDir. Returns
+// (nil, nil) when both inputs are empty after trim.
+func PackSSHInjectTarGz(privateKey, knownHosts string) ([]byte, error) {
+	key := strings.TrimSpace(privateKey)
+	hosts := strings.TrimSpace(knownHosts)
+	// Preserve trailing newline conventions for PEM / known_hosts bodies when
+	// the caller provided non-whitespace content (use original for write).
+	if key == "" && hosts == "" {
+		return nil, nil
+	}
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	writeFile := func(name, body string, mode int64) error {
+		if !strings.HasSuffix(body, "\n") {
+			body += "\n"
+		}
+		hdr := &tar.Header{
+			Name: name,
+			Mode: mode,
+			Size: int64(len(body)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		_, err := io.WriteString(tw, body)
+		return err
+	}
+	if key != "" {
+		if err := writeFile("id_rsa", privateKey, 0o600); err != nil {
+			_ = tw.Close()
+			_ = gz.Close()
+			return nil, err
+		}
+	}
+	if hosts != "" {
+		if err := writeFile("known_hosts", knownHosts, 0o644); err != nil {
+			_ = tw.Close()
+			_ = gz.Close()
+			return nil, err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		_ = gz.Close()
+		return nil, err
+	}
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }

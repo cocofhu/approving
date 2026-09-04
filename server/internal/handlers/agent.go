@@ -29,6 +29,8 @@ type agentBody struct {
 	ProjectID         *string              `json:"projectId"`
 	AcpBackend        string               `json:"acpBackend"`
 	GitCredentialType string               `json:"gitCredentialType"`
+	GitSshKnownHosts  string               `json:"gitSshKnownHosts"`
+	GitSshPrivateKey  string               `json:"gitSshPrivateKey"`
 	Files             []services.AgentFile `json:"files"`
 	MCP               []services.MCPServer `json:"mcp"`
 	Env               map[string]string    `json:"env"`
@@ -48,6 +50,8 @@ func (b agentBody) toAgent(name, prevProjectID string) services.Agent {
 	return services.Agent{
 		Name: name, ProjectID: projectID, AcpBackend: b.AcpBackend,
 		GitCredentialType: b.GitCredentialType,
+		GitSshKnownHosts:  b.GitSshKnownHosts,
+		GitSshPrivateKey:  b.GitSshPrivateKey,
 		Files:             b.Files, MCP: b.MCP, Env: b.Env, Layout: b.Layout, Prompts: b.Prompts,
 	}
 }
@@ -99,7 +103,11 @@ func (h *Handlers) CreateAgent(c *gin.Context) {
 	}
 	if err := h.Agents.Save(agent); err != nil {
 		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, services.ErrSSHMetaVarsRef) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
 	a, _ := h.Agents.Get(name)
@@ -181,7 +189,11 @@ func (h *Handlers) SaveAgent(c *gin.Context) {
 	}
 	if _, err := h.Agents.SaveAgentWithVcs(agent, sessionUsername(c), reason, true); err != nil {
 		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, services.ErrSSHMetaVarsRef) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "saved"})

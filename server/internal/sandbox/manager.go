@@ -131,7 +131,16 @@ type Spec struct {
 	WorkspaceDir string
 	// Resources are optional per-sandbox CPU/memory/disk limits for the gateway.
 	Resources *GWResources
+	// SSHPrivateKey / SSHKnownHosts are optional literals injected as files
+	// under /tmp/approving-ssh-inject before git clone (not via ordinary env).
+	// Empty fields are omitted (do not create/clear the corresponding file).
+	SSHPrivateKey  string
+	SSHKnownHosts  string
 }
+
+// SSHInjectStagingDir is the in-sandbox destination for the SSH file inject
+// bundle. startup.sh applies these files to ~/.ssh before configure_git_credentials.
+const SSHInjectStagingDir = "/tmp/approving-ssh-inject"
 
 // RepoSpec is one repository cloned into the sandbox at <workspace>/<Name>/.
 type RepoSpec struct {
@@ -373,13 +382,26 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 		Mounts:       spec.Mounts,
 		Resources:    spec.Resources,
 	}
-	// Pre-start inject: pack ConfigHome → bundleUrl. Gateway sets SANDBOX_INJECT
-	// so startup.sh extracts into configRoot before acp-bridge/agent start.
-	// Never use config.hostPath on remote K8s (empty volume race).
-	bundleID := ""
-	if cfg := m.buildInjectConfig(spec.ConfigHome, configRoot); cfg != nil {
+	// Pre-start inject: pack SSH staging (+ ConfigHome) into SANDBOX_INJECT.
+	// SSH staging must land before git clone; startup.sh runs inject first.
+	// Prefer Env-based multi-inject so SSH + ConfigHome share one auth token.
+	var bundleIDs []string
+	if parts, headers, ids := m.buildMultiInject(spec.ConfigHome, configRoot, spec.SSHPrivateKey, spec.SSHKnownHosts); len(parts) > 0 {
+		env["SANDBOX_INJECT"] = strings.Join(parts, ",")
+		if headers != "" {
+			env["SANDBOX_INJECT_HEADERS"] = headers
+		}
+		req.Env = env
+		bundleIDs = ids
+		log.Info().Str("sandbox_inject", env["SANDBOX_INJECT"]).
+			Bool("ssh", strings.TrimSpace(spec.SSHPrivateKey) != "" || strings.TrimSpace(spec.SSHKnownHosts) != "").
+			Msg("sandbox config+ssh inject via SANDBOX_INJECT")
+	} else if cfg := m.buildInjectConfig(spec.ConfigHome, configRoot); cfg != nil {
+		// Fallback single ConfigHome inject (no SSH).
 		req.Config = cfg
-		bundleID = bundleIDFromURL(cfg.BundleURL)
+		if id := bundleIDFromURL(cfg.BundleURL); id != "" {
+			bundleIDs = []string{id}
+		}
 		log.Info().Str("bundleUrl", cfg.BundleURL).Str("configRoot", configRoot).
 			Msg("sandbox config inject via bundleUrl")
 	}
@@ -390,9 +412,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	}
 	created, err := m.gw.Create(ctx, req)
 	if err != nil {
-		if bundleID != "" && m.bundles != nil {
-			m.bundles.Delete(bundleID)
-		}
+		m.deleteInjectBundles(bundleIDs)
 		return nil, fmt.Errorf("gateway create: %w", err)
 	}
 	log.Info().Str("id", created.ID).Str("cf_name", spec.Name).
@@ -401,9 +421,7 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	running, err := m.gw.WaitRunning(ctx, created.ID, m.createTimeout)
 	if err != nil {
 		_ = m.gw.Destroy(context.Background(), created.ID)
-		if bundleID != "" && m.bundles != nil {
-			m.bundles.Delete(bundleID)
-		}
+		m.deleteInjectBundles(bundleIDs)
 		return nil, fmt.Errorf("sandbox not ready: %w", err)
 	}
 	sb := m.sandboxFromGW(running, workspaceDir)
@@ -415,11 +433,11 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	} else {
 		sb.Password = strings.TrimSpace(env["PASSWORD"])
 	}
-	// Do NOT Delete the inject bundle here. WaitRunning can return before
+	// Do NOT Delete inject bundles here. WaitRunning can return before
 	// startup.sh finishes SANDBOX_INJECT fetch; early Delete → 401 and no
 	// mcp.json. Images without sshd also cannot SSH-heal. Bundles expire via
 	// DefaultInjectBundleTTL instead.
-	_ = bundleID
+	_ = bundleIDs
 	// If bundleUrl inject was skipped or failed in-image, SSH-sync as heal
 	// (no-op when the sandbox image has no sshd).
 	if spec.ConfigHome != "" && !m.configHomePresent(ctx, sb, configRoot) {
@@ -427,6 +445,19 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 	}
 	m.EnsureHelpers(ctx, sb)
 	return sb, nil
+}
+
+// deleteInjectBundles removes all pre-start inject bundle ids on Create failure.
+func (m *Manager) deleteInjectBundles(ids []string) {
+	if m == nil || m.bundles == nil {
+		return
+	}
+	for _, id := range ids {
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		m.bundles.Delete(id)
+	}
 }
 
 func (m *Manager) configHomePresent(ctx context.Context, sb *Sandbox, configRoot string) bool {
@@ -466,6 +497,56 @@ func (m *Manager) buildInjectConfig(hostDir, configRoot string) *GWConfigInject 
 		BundleURL:  base + "/sandbox-inject/" + id + ".tgz",
 		Headers:    "Authorization: Bearer " + token,
 	}
+}
+
+// buildMultiInject packs optional SSH staging + ConfigHome bundles that share one
+// bearer token, returning SANDBOX_INJECT parts (SSH first) and Authorization header.
+func (m *Manager) buildMultiInject(configHome, configRoot, sshKey, sshHosts string) (parts []string, headers string, ids []string) {
+	if m.bundles == nil {
+		return nil, "", nil
+	}
+	base := strings.TrimRight(config.ResolveMCPAdvertise(m.injectAdvertiseFallback), "/")
+	if base == "" {
+		return nil, "", nil
+	}
+	token := randomHex(24)
+	if token == "" {
+		return nil, "", nil
+	}
+	put := func(data []byte, dest string) bool {
+		id := m.bundles.PutWithToken(data, DefaultInjectBundleTTL, token)
+		if id == "" {
+			return false
+		}
+		parts = append(parts, base+"/sandbox-inject/"+id+".tgz|"+dest)
+		ids = append(ids, id)
+		return true
+	}
+	if sshData, err := PackSSHInjectTarGz(sshKey, sshHosts); err != nil {
+		log.Warn().Err(err).Msg("pack ssh inject bundle failed")
+	} else if sshData != nil {
+		if !put(sshData, SSHInjectStagingDir) {
+			return nil, "", nil
+		}
+	}
+	if strings.TrimSpace(configHome) != "" {
+		data, err := PackConfigHomeTarGz(configHome)
+		if err != nil {
+			log.Warn().Err(err).Str("dir", configHome).Msg("pack config-home inject bundle failed")
+		} else if data != nil {
+			dest := configRoot
+			if dest == "" {
+				dest = "/root/.cursor"
+			}
+			if !put(data, dest) {
+				return nil, "", nil
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return nil, "", nil
+	}
+	return parts, "Authorization: Bearer " + token, ids
 }
 
 func bundleIDFromURL(u string) string {

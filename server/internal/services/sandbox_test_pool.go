@@ -64,6 +64,8 @@ func (s *SandboxService) Open(ctx context.Context, profile string, repos []sandb
 	// Data ownership follows the Agent's home project, not the UI-selected one.
 	_ = projectID
 	projectID = strings.TrimSpace(agent.ProjectID)
+	// Merge SharedAgent so team bootstrap / Open paths inject shared SSH meta.
+	agent = s.effectiveAgent(agent, projectID)
 	// Reuse an existing test sandbox bound to the same agent when one is still
 	// alive, instead of spinning up a fresh container every time. The chat path
 	// (ensureConnected) transparently re-attaches if the live ACP connection was
@@ -228,14 +230,16 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 	// Agent env may carry (unresolved in this path).
 	env["GIT_REPOS"] = sandbox.EncodeRepos(repos)
 
-	sb, err := s.mgr.Create(ctx, sandbox.Spec{
+	spec := sandbox.Spec{
 		Name:         name,
 		Image:        resolveSandboxImage(string(backend)),
 		Env:          env,
 		ConfigHome:   home,
 		ConfigRoot:   agent.Layout.ConfigRoot,
 		WorkspaceDir: agent.Layout.WorkspaceDir,
-	})
+	}
+	ApplyAgentSSHToSpec(&spec, agent)
+	sb, err := s.mgr.Create(ctx, spec)
 	if err != nil {
 		_ = os.RemoveAll(home)
 		fail(fmt.Errorf("create sandbox: %w", err))

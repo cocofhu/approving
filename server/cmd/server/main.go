@@ -196,9 +196,11 @@ func main() {
 				})
 			}
 			return runtime.SharedAgentView{
-				AcpBackend: cfg.AcpBackend,
-				MCP:        mcp,
-				Env:        cfg.Env,
+				AcpBackend:       cfg.AcpBackend,
+				GitSshKnownHosts: cfg.GitSshKnownHosts,
+				GitSshPrivateKey: cfg.GitSshPrivateKey,
+				MCP:              mcp,
+				Env:              cfg.Env,
 				Layout: runtime.SharedLayoutView{
 					ConfigRoot: cfg.Layout.ConfigRoot, WorkspaceDir: cfg.Layout.WorkspaceDir,
 				},
@@ -307,6 +309,7 @@ func main() {
 		TTL:               cfg.TestSandboxTTL(),
 		RunTTL:            cfg.RunSandboxTTL(),
 		Max:               cfg.Sandbox.MaxTestSandboxes,
+		SharedAgent:       sharedAgentSvc,
 	})
 	// Let the exec provider record per-run node sandboxes in the same store so
 	// they show up in the sandbox UI alongside interactive test sandboxes.

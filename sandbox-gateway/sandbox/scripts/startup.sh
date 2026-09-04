@@ -10,10 +10,11 @@ set -e
 #   不依赖当前 clone 仓库属于哪个平台。
 #   HTTPS clone 仍按仓库 URL 的 host 匹配（github.com→GITHUB_TOKEN; gitlab.com→GITLAB_TOKEN;
 #           自建实例通过 GITHUB_URL / GITLAB_URL 与 repo host 精确匹配）。
-#   SSH   — GIT_SSH_PRIVATE_KEY 写入 ~/.ssh/id_rsa (600); GIT_SSH_KNOWN_HOSTS 必填。
+#   SSH   — 元信息原文特殊注入 ~/.ssh（或兼容旧 env GIT_SSH_*）；id_rsa 600；known_hosts 按行追加。
 # 主要环境变量：WORKSPACE_DIR, ROOT_PASSWORD, CODE_SERVER_PORT, SSH_KEY, SKIP_INNER_DOCKER,
 #   GIT_REPOS(多仓 name|url|branch) / GIT_CLONE_URL(单仓兼容),
-#   GITHUB_TOKEN, GITHUB_URL, GITLAB_TOKEN, GITLAB_URL, GIT_SSH_PRIVATE_KEY, GIT_SSH_KNOWN_HOSTS,
+#   GITHUB_TOKEN, GITHUB_URL, GITLAB_TOKEN, GITLAB_URL, GIT_SSH_PRIVATE_KEY, GIT_SSH_KNOWN_HOSTS（兼容回退）,
+#   SANDBOX_INJECT（含 SSH staging + ConfigHome，须早于 clone）,
 #   ACP_BACKEND, ACP_BRIDGE_PORT, ACP_BRIDGE_PASSWORD, ACP_BRIDGE_MODEL
 
 # PVC subPath 挂上来的 /tmp 目录默认不是 1777；补 sticky bit，避免 mktemp/多用户写入失败。
@@ -190,26 +191,49 @@ setup_ssh_credentials() {
     local clone_url="$1"
     local host; host=$(repo_host "$clone_url")
 
-    if [ -z "$GIT_SSH_PRIVATE_KEY" ]; then
-        echo "startup.sh: SSH repo_url 需要 GIT_SSH_PRIVATE_KEY (host=${host:-unknown})" >&2
+    # Prefer files already applied from meta inject / prior env write.
+    local has_key=0 has_hosts=0
+    if [ -f /root/.ssh/id_rsa ] && [ -s /root/.ssh/id_rsa ]; then
+        has_key=1
+    fi
+    if [ -f /root/.ssh/known_hosts ] && [ -s /root/.ssh/known_hosts ]; then
+        has_hosts=1
+    fi
+
+    if [ "$has_key" != "1" ] && [ -z "$GIT_SSH_PRIVATE_KEY" ]; then
+        echo "startup.sh: SSH repo_url 需要私钥 (meta 注入或 GIT_SSH_PRIVATE_KEY; host=${host:-unknown})" >&2
         return 1
     fi
-    if [ -z "$GIT_SSH_KNOWN_HOSTS" ]; then
-        echo "startup.sh: SSH repo_url 需要 GIT_SSH_KNOWN_HOSTS (host=${host:-unknown})" >&2
+    if [ "$has_hosts" != "1" ] && [ -z "$GIT_SSH_KNOWN_HOSTS" ]; then
+        echo "startup.sh: SSH repo_url 需要 known_hosts (meta 注入或 GIT_SSH_KNOWN_HOSTS; host=${host:-unknown})" >&2
         echo "  获取指纹示例: ssh-keyscan -t ed25519,rsa ${host}" >&2
         return 1
     fi
 
     mkdir -p /root/.ssh
     chmod 700 /root/.ssh
-    cat > /root/.ssh/id_rsa <<EOF
+    # id_rsa: whole-file write when env provides it (does not concatenate PEMs).
+    if [ -n "$GIT_SSH_PRIVATE_KEY" ]; then
+        cat > /root/.ssh/id_rsa <<EOF
 ${GIT_SSH_PRIVATE_KEY}
 EOF
-    chmod 600 /root/.ssh/id_rsa
-    cat > /root/.ssh/known_hosts <<EOF
+        chmod 600 /root/.ssh/id_rsa
+    fi
+    # known_hosts: append unique lines when env provides content.
+    if [ -n "$GIT_SSH_KNOWN_HOSTS" ]; then
+        touch /root/.ssh/known_hosts
+        while IFS= read -r _kh_line || [ -n "$_kh_line" ]; do
+            [ -n "$_kh_line" ] || continue
+            grep -qxF "$_kh_line" /root/.ssh/known_hosts 2>/dev/null || printf '%s\n' "$_kh_line" >> /root/.ssh/known_hosts
+        done <<EOF
 ${GIT_SSH_KNOWN_HOSTS}
 EOF
-    chmod 644 /root/.ssh/known_hosts
+        unset _kh_line
+        chmod 644 /root/.ssh/known_hosts
+    fi
+    if [ -f /root/.ssh/id_rsa ]; then
+        chmod 600 /root/.ssh/id_rsa
+    fi
     echo "Git SSH credentials configured for ${host:-ssh remote}"
     return 0
 }
@@ -249,12 +273,19 @@ setup_repo_credentials() {
     local url="$1"
     case "$(repo_scheme "$url")" in
         https) setup_https_credentials "$url" || true ;;
-        ssh)   setup_ssh_credentials "$url" || true ;;
+        # SSH: 缺私钥/known_hosts 必须 fail-fast（验收 f4），不可 || true 软吞。
+        ssh)
+            if ! setup_ssh_credentials "$url"; then
+                echo "startup.sh: SSH 凭据校验失败，fail-fast (url=${url})" >&2
+                return 1
+            fi
+            ;;
         *)     echo "startup.sh: 无法识别 clone url scheme: ${url}" >&2 ;;
     esac
 }
 
 # 先按仓库 URL 配置 clone 所需凭据，再为所有已配置 token 补齐对端平台。
+# SSH 凭据失败时 return 1（set -e 下中止 startup）；HTTPS 仍软失败以兼容旧行为。
 # 末尾必须 return 0：set -e 下函数最后一行若是 `[ -n "$empty" ] && ...` 会以 1 退出，
 # 导致 startup.sh 在 glab 配置后直接崩掉（remote-dev 只注入 GITLAB_TOKEN 时必现）。
 configure_git_credentials() {
@@ -264,12 +295,12 @@ configure_git_credentials() {
             [ -n "$_entry" ] || continue
             IFS='|' read -r _name _url _branch <<< "$_entry"
             if [ -n "$_url" ]; then
-                setup_repo_credentials "$_url"
+                setup_repo_credentials "$_url" || return 1
             fi
         done
         unset _entries _entry _name _url _branch
     elif [ -n "$GIT_CLONE_URL" ]; then
-        setup_repo_credentials "$GIT_CLONE_URL"
+        setup_repo_credentials "$GIT_CLONE_URL" || return 1
     fi
     if [ -n "$GITLAB_TOKEN" ]; then
         setup_bare_gitlab_credentials
@@ -286,88 +317,13 @@ repo_name_from_url() {
     printf '%s' "${u%.git}"
 }
 
-# --- 凭据配置（clone 前）----------------------------------------------------
-configure_git_credentials
-
-# 配置 Git 用户信息（通用中性默认，可由环境变量覆盖）
-GIT_USER_EMAIL=${GIT_USER_EMAIL:-sandbox@localhost}
-GIT_USER_NAME=${GIT_USER_NAME:-sandbox}
-git config --global user.email "${GIT_USER_EMAIL}"
-git config --global user.name "${GIT_USER_NAME}"
-echo "Git user configured: ${GIT_USER_NAME} <${GIT_USER_EMAIL}>"
-
-# --- 克隆代码仓库 -----------------------------------------------------------
-if [ -n "$GIT_REPOS" ]; then
-    # 多仓平级布局：每个仓库（即使只有一个）clone 到 $WORKSPACE_DIR/<name>/，
-    # 并写 /root/.sandbox/repos.json 记录已克隆仓库清单（name+path，供业务方/工具发现）。
-    mkdir -p "$WORKSPACE_DIR" /root/.sandbox
-    _manifest=""
-    IFS=',' read -ra _entries <<< "$GIT_REPOS"
-    for _entry in "${_entries[@]}"; do
-        [ -n "$_entry" ] || continue
-        IFS='|' read -r _name _url _branch <<< "$_entry"
-        [ -n "$_url" ] || continue
-        [ -n "$_name" ] || _name=$(repo_name_from_url "$_url")
-        [ -n "$_name" ] || continue
-        # 防御：仓名用作平级子目录名,拒绝路径分隔符与 . / .. 以防逃逸 WORKSPACE_DIR
-        case "$_name" in
-            */*|*\\*|.|..) echo "startup.sh: 跳过不安全的仓名: ${_name}" >&2; continue ;;
-        esac
-        _dest="$WORKSPACE_DIR/$_name"
-        if [ -d "$_dest/.git" ]; then
-            echo "Repo ${_name} already exists in ${_dest}, skipping clone"
-        else
-            echo "Cloning ${_name} from ${_url}..."
-            rm -rf "$_dest"; mkdir -p "$_dest"
-            if ! git clone "$_url" "$_dest"; then
-                echo "Failed to clone ${_name} from ${_url}" >&2
-                rm -rf "$_dest"; continue
-            fi
-        fi
-        if [ -n "$_branch" ] && git -C "$_dest" rev-parse --git-dir >/dev/null 2>&1; then
-            git -C "$_dest" fetch origin "$_branch" 2>/dev/null || true
-            if git -C "$_dest" checkout "$_branch" 2>/dev/null; then
-                echo "  ${_name} on branch ${_branch}"
-            else
-                echo "  ${_name}: branch ${_branch} not found on remote; staying on default"
-            fi
-        fi
-        if git -C "$_dest" rev-parse --git-dir >/dev/null 2>&1; then
-            _entry_json="{\"name\":\"$_name\",\"path\":\"$_dest\"}"
-            if [ -n "$_manifest" ]; then _manifest="$_manifest,$_entry_json"; else _manifest="$_entry_json"; fi
-        fi
-    done
-    mkdir -p /root/.sandbox
-    printf '[%s]' "$_manifest" > /root/.sandbox/repos.json
-    echo "Recorded repo manifest: $(cat /root/.sandbox/repos.json)"
-    unset _entries _entry _manifest _name _url _branch _dest _entry_json
-elif [ -n "$GIT_CLONE_URL" ]; then
-    # 单仓兼容：clone 到 $WORKSPACE_DIR 根（兼容 K8S PVC 空挂载点）
-    if [ -d "$WORKSPACE_DIR/.git" ]; then
-        echo "Repository already exists in ${WORKSPACE_DIR}, skipping clone"
-    elif [ -d "$WORKSPACE_DIR" ] && [ -n "$(ls -A "$WORKSPACE_DIR" 2>/dev/null)" ]; then
-        echo "Workspace directory ${WORKSPACE_DIR} is not empty, skipping clone"
-    else
-        echo "Cloning repository from ${GIT_CLONE_URL}..."
-        rm -rf "$WORKSPACE_DIR"/{..?*,.[!.]*,*} 2>/dev/null || true
-        mkdir -p "$WORKSPACE_DIR"
-        if git clone "$GIT_CLONE_URL" "$WORKSPACE_DIR"; then
-            echo "Repository cloned successfully to ${WORKSPACE_DIR}"
-        else
-            echo "Failed to clone repository, using default workspace directory" >&2
-        fi
-    fi
-else
-    mkdir -p "$WORKSPACE_DIR"
-    echo "Using workspace directory: ${WORKSPACE_DIR}"
-fi
-
-# --- 契约注入（务必早于 backend / code-server / SSH / noVNC 等服务启动）--------
+# --- 契约注入（须早于 git 凭据 / clone：SSH meta 文件要在 clone 前落地）--------
 # 业务方在服务启动前把配置/文件注入沙箱。两种方式：
 #   1) 声明式 SANDBOX_INJECT="src[|dest],src2[|dest2],..."
 #      - src：容器内已存在的文件/目录/归档，或 http(s):// URL；
 #      - 归档（.tar/.tar.gz/.tgz/.tar.bz2/.tar.xz/.zip）解压到 dest，其余直接复制到 dest；
 #      - dest 省略时默认 $CONFIG_ROOT（agent 配置根，含 mcp.json / rules/ / skills/）。
+#      - SSH 原文注入目标为 /tmp/approving-ssh-inject，随后 apply_ssh_file_inject 写入 ~/.ssh。
 #   2) 钩子式 /root/.sandbox/init.d/*.sh：按文件名排序、在服务启动前依次 source 执行。
 #
 # 鉴权：本地文件/目录/归档不需要——由「谁能拉起沙箱/挂载文件」隐式授权。
@@ -450,6 +406,119 @@ if [ -d /root/.sandbox/init.d ]; then
         . "$_hook" || echo "inject: 钩子非零退出（忽略）${_hook}" >&2
     done
     unset _hook
+fi
+
+
+# Apply SSH meta/file inject from staging dir (empty fields omitted by packer).
+# id_rsa: whole-file overwrite; known_hosts: append unique lines.
+apply_ssh_file_inject() {
+    local staging="${1:-/tmp/approving-ssh-inject}"
+    [ -d "$staging" ] || return 0
+    mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    if [ -f "$staging/id_rsa" ] && [ -s "$staging/id_rsa" ]; then
+        cp -f "$staging/id_rsa" /root/.ssh/id_rsa
+        chmod 600 /root/.ssh/id_rsa
+        echo "SSH inject: wrote /root/.ssh/id_rsa (600)"
+    fi
+    if [ -f "$staging/known_hosts" ] && [ -s "$staging/known_hosts" ]; then
+        touch /root/.ssh/known_hosts
+        while IFS= read -r _kh_line || [ -n "$_kh_line" ]; do
+            [ -n "$_kh_line" ] || continue
+            grep -qxF "$_kh_line" /root/.ssh/known_hosts 2>/dev/null || printf '%s\n' "$_kh_line" >> /root/.ssh/known_hosts
+        done < "$staging/known_hosts"
+        unset _kh_line
+        chmod 644 /root/.ssh/known_hosts
+        echo "SSH inject: appended /root/.ssh/known_hosts"
+    fi
+    return 0
+}
+apply_ssh_file_inject /tmp/approving-ssh-inject
+
+# --- 凭据配置（clone 前；此时 SSH 文件与 Token env 均已就绪）----------------
+configure_git_credentials
+
+# 配置 Git 用户信息（通用中性默认，可由环境变量覆盖）
+GIT_USER_EMAIL=${GIT_USER_EMAIL:-sandbox@localhost}
+GIT_USER_NAME=${GIT_USER_NAME:-sandbox}
+git config --global user.email "${GIT_USER_EMAIL}"
+git config --global user.name "${GIT_USER_NAME}"
+echo "Git user configured: ${GIT_USER_NAME} <${GIT_USER_EMAIL}>"
+
+# --- 克隆代码仓库 -----------------------------------------------------------
+if [ -n "$GIT_REPOS" ]; then
+    # 多仓平级布局：每个仓库（即使只有一个）clone 到 $WORKSPACE_DIR/<name>/，
+    # 并写 /root/.sandbox/repos.json 记录已克隆仓库清单（name+path，供业务方/工具发现）。
+    mkdir -p "$WORKSPACE_DIR" /root/.sandbox
+    _manifest=""
+    IFS=',' read -ra _entries <<< "$GIT_REPOS"
+    for _entry in "${_entries[@]}"; do
+        [ -n "$_entry" ] || continue
+        IFS='|' read -r _name _url _branch <<< "$_entry"
+        [ -n "$_url" ] || continue
+        [ -n "$_name" ] || _name=$(repo_name_from_url "$_url")
+        [ -n "$_name" ] || continue
+        # 防御：仓名用作平级子目录名,拒绝路径分隔符与 . / .. 以防逃逸 WORKSPACE_DIR
+        case "$_name" in
+            */*|*\\*|.|..) echo "startup.sh: 跳过不安全的仓名: ${_name}" >&2; continue ;;
+        esac
+        _dest="$WORKSPACE_DIR/$_name"
+        if [ -d "$_dest/.git" ]; then
+            echo "Repo ${_name} already exists in ${_dest}, skipping clone"
+        else
+            echo "Cloning ${_name} from ${_url}..."
+            rm -rf "$_dest"; mkdir -p "$_dest"
+            if ! git clone "$_url" "$_dest"; then
+                echo "Failed to clone ${_name} from ${_url}" >&2
+                rm -rf "$_dest"
+                # SSH clone 失败 fail-fast；HTTPS 仍 continue 以兼容旧行为。
+                if [ "$(repo_scheme "$_url")" = "ssh" ]; then
+                    echo "startup.sh: SSH clone 失败，fail-fast" >&2
+                    exit 1
+                fi
+                continue
+            fi
+        fi
+        if [ -n "$_branch" ] && git -C "$_dest" rev-parse --git-dir >/dev/null 2>&1; then
+            git -C "$_dest" fetch origin "$_branch" 2>/dev/null || true
+            if git -C "$_dest" checkout "$_branch" 2>/dev/null; then
+                echo "  ${_name} on branch ${_branch}"
+            else
+                echo "  ${_name}: branch ${_branch} not found on remote; staying on default"
+            fi
+        fi
+        if git -C "$_dest" rev-parse --git-dir >/dev/null 2>&1; then
+            _entry_json="{\"name\":\"$_name\",\"path\":\"$_dest\"}"
+            if [ -n "$_manifest" ]; then _manifest="$_manifest,$_entry_json"; else _manifest="$_entry_json"; fi
+        fi
+    done
+    mkdir -p /root/.sandbox
+    printf '[%s]' "$_manifest" > /root/.sandbox/repos.json
+    echo "Recorded repo manifest: $(cat /root/.sandbox/repos.json)"
+    unset _entries _entry _manifest _name _url _branch _dest _entry_json
+elif [ -n "$GIT_CLONE_URL" ]; then
+    # 单仓兼容：clone 到 $WORKSPACE_DIR 根（兼容 K8S PVC 空挂载点）
+    if [ -d "$WORKSPACE_DIR/.git" ]; then
+        echo "Repository already exists in ${WORKSPACE_DIR}, skipping clone"
+    elif [ -d "$WORKSPACE_DIR" ] && [ -n "$(ls -A "$WORKSPACE_DIR" 2>/dev/null)" ]; then
+        echo "Workspace directory ${WORKSPACE_DIR} is not empty, skipping clone"
+    else
+        echo "Cloning repository from ${GIT_CLONE_URL}..."
+        rm -rf "$WORKSPACE_DIR"/{..?*,.[!.]*,*} 2>/dev/null || true
+        mkdir -p "$WORKSPACE_DIR"
+        if git clone "$GIT_CLONE_URL" "$WORKSPACE_DIR"; then
+            echo "Repository cloned successfully to ${WORKSPACE_DIR}"
+        else
+            echo "Failed to clone repository, using default workspace directory" >&2
+            if [ "$(repo_scheme "$GIT_CLONE_URL")" = "ssh" ]; then
+                echo "startup.sh: SSH clone 失败，fail-fast" >&2
+                exit 1
+            fi
+        fi
+    fi
+else
+    mkdir -p "$WORKSPACE_DIR"
+    echo "Using workspace directory: ${WORKSPACE_DIR}"
 fi
 
 # --- 浏览器 MCP（可选，BROWSER_MCP=1）----------------------------------------

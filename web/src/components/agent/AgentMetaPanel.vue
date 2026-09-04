@@ -289,6 +289,43 @@ const derivedPaths = computed(() => {
       </label>
     </div>
 
+    <div class="mt-8 max-w-3xl border-t border-line pt-5">
+      <h3 class="text-sm font-semibold text-txt">{{ t('pages.agentStudio.meta.sshTitle') }}</h3>
+      <p class="mt-1 text-[12px] leading-6 text-txt3">{{ t('pages.agentStudio.meta.sshIntro') }}</p>
+      <p class="mt-2 border-l-2 border-accent-2 bg-accent-dim px-2.5 py-1.5 text-[11px] leading-5 text-txt2">
+        {{ t('pages.agentStudio.meta.sshNoVars') }}
+      </p>
+      <div class="mt-4 space-y-4">
+        <label class="block">
+          <span class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.sshKnownHosts') }}</span>
+          <p class="mb-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.sshKnownHostsDesc') }}</p>
+          <textarea
+            :value="draft.gitSshKnownHosts || ''"
+            data-test="agent-ssh-known-hosts"
+            rows="4"
+            spellcheck="false"
+            class="w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+            :placeholder="t('pages.agentStudio.meta.sshKnownHostsPh')"
+            @input="draft.gitSshKnownHosts = ($event.target as HTMLTextAreaElement).value"
+          />
+        </label>
+        <label class="block">
+          <span class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.sshPrivateKey') }}</span>
+          <p class="mb-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.sshPrivateKeyDesc') }}</p>
+          <textarea
+            :value="draft.gitSshPrivateKey || ''"
+            data-test="agent-ssh-private-key"
+            rows="5"
+            spellcheck="false"
+            class="w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+            :placeholder="t('pages.agentStudio.meta.sshPrivateKeyPh')"
+            :style="draft.gitSshPrivateKey ? { WebkitTextSecurity: 'disc' } as Record<string, string> : undefined"
+            @input="draft.gitSshPrivateKey = ($event.target as HTMLTextAreaElement).value"
+          />
+        </label>
+      </div>
+    </div>
+
     <div class="mt-5 max-w-3xl">
       <div class="mb-1.5 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.agentStudio.meta.derivedPaths') }}</div>
       <div class="overflow-hidden rounded-lg border border-line">

@@ -20,6 +20,8 @@ const AgentExportSchemaVersion = 1
 type agentExportJSON struct {
 	Name              string               `json:"name"`
 	GitCredentialType string               `json:"gitCredentialType,omitempty"`
+	GitSshKnownHosts  string               `json:"gitSshKnownHosts,omitempty"`
+	GitSshPrivateKey  string               `json:"gitSshPrivateKey,omitempty"`
 	AcpBackend        string               `json:"acpBackend,omitempty"`
 	MCP               []MCPServer          `json:"mcp,omitempty"`
 	Env               map[string]string    `json:"env,omitempty"`
@@ -57,6 +59,8 @@ func (s *AgentService) writeAgentToZip(zw *zip.Writer, name, prefix string) erro
 	export := agentExportJSON{
 		Name:              name,
 		GitCredentialType: a.GitCredentialType,
+		GitSshKnownHosts:  a.GitSshKnownHosts,
+		GitSshPrivateKey:  a.GitSshPrivateKey,
 		AcpBackend:        a.AcpBackend,
 		MCP:               a.MCP,
 		Env:               a.Env,
@@ -258,6 +262,8 @@ func (s *AgentService) applyAgentExport(export agentExportJSON, files []AgentFil
 		ProjectID:         projectID,
 		AcpBackend:        export.AcpBackend,
 		GitCredentialType: export.GitCredentialType,
+		GitSshKnownHosts:  export.GitSshKnownHosts,
+		GitSshPrivateKey:  export.GitSshPrivateKey,
 		Files:             files,
 		MCP:               export.MCP,
 		Env:               export.Env,

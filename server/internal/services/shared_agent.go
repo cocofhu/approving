@@ -23,6 +23,8 @@ type SharedAgentConfig struct {
 	AcpBackend        string               `json:"acpBackend,omitempty"`
 	DefaultProjectID  string               `json:"defaultProjectId,omitempty"`
 	GitCredentialType string               `json:"gitCredentialType,omitempty"`
+	GitSshKnownHosts  string               `json:"gitSshKnownHosts,omitempty"`
+	GitSshPrivateKey  string               `json:"gitSshPrivateKey,omitempty"`
 	Files             []AgentFile          `json:"files"`
 	MCP               []MCPServer          `json:"mcp"`
 	Env               map[string]string    `json:"env"`
@@ -35,6 +37,8 @@ type sharedAgentDisk struct {
 	AcpBackend        string               `json:"acpBackend,omitempty"`
 	DefaultProjectID  string               `json:"defaultProjectId,omitempty"`
 	GitCredentialType string               `json:"gitCredentialType,omitempty"`
+	GitSshKnownHosts  string               `json:"gitSshKnownHosts,omitempty"`
+	GitSshPrivateKey  string               `json:"gitSshPrivateKey,omitempty"`
 	MCP               []MCPServer          `json:"mcp,omitempty"`
 	Env               map[string]string    `json:"env,omitempty"`
 	Layout            *AgentLayout         `json:"layout,omitempty"`
@@ -111,6 +115,8 @@ func (s *SharedAgentService) Get(projectID string) SharedAgentConfig {
 		AcpBackend:        backend,
 		DefaultProjectID:  strings.TrimSpace(cfg.DefaultProjectID),
 		GitCredentialType: normalizeGitCredentialType(cfg.GitCredentialType),
+		GitSshKnownHosts:  cfg.GitSshKnownHosts,
+		GitSshPrivateKey:  cfg.GitSshPrivateKey,
 		Files:             s.readFiles(pid),
 		MCP:               cfg.MCP,
 		Env:               env,
@@ -127,6 +133,10 @@ func (s *SharedAgentService) Save(cfg SharedAgentConfig) error {
 	if pid == "" {
 		return fmt.Errorf("invalid project id")
 	}
+	if err := ValidateAgentSSHMeta(cfg.GitSshKnownHosts, cfg.GitSshPrivateKey); err != nil {
+		return err
+	}
+	StripSSHEnvKeys(cfg.Env)
 	dir := filepath.Join(s.root, pid)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -143,6 +153,8 @@ func (s *SharedAgentService) Save(cfg SharedAgentConfig) error {
 		AcpBackend:        backend,
 		DefaultProjectID:  strings.TrimSpace(cfg.DefaultProjectID),
 		GitCredentialType: normalizeGitCredentialType(cfg.GitCredentialType),
+		GitSshKnownHosts:  cfg.GitSshKnownHosts,
+		GitSshPrivateKey:  cfg.GitSshPrivateKey,
 		MCP:               cfg.MCP,
 		Env:               cfg.Env,
 		Layout:            &layout,
@@ -209,6 +221,8 @@ func (c SharedAgentConfig) AsAgent() Agent {
 		ProjectID:         projectID,
 		AcpBackend:        c.AcpBackend,
 		GitCredentialType: c.GitCredentialType,
+		GitSshKnownHosts:  c.GitSshKnownHosts,
+		GitSshPrivateKey:  c.GitSshPrivateKey,
 		Files:             c.Files,
 		MCP:               c.MCP,
 		Env:               env,
@@ -220,6 +234,7 @@ func (c SharedAgentConfig) AsAgent() Agent {
 // ExtendOverlay merges shared (base) then agent (overlay).
 // Non-Token same-key: Agent wins. Token-class keys: shared wins when present;
 // if shared lacks the key, Agent stock value is kept so legacy agents keep auth.
+// SSH meta literals: Agent wins when non-empty, else shared (same as other meta).
 // projectId: only fill when Agent.ProjectID is empty (does not persist back).
 func ExtendOverlay(shared SharedAgentConfig, agent Agent) Agent {
 	base := shared.AsAgent()
@@ -228,6 +243,8 @@ func ExtendOverlay(shared SharedAgentConfig, agent Agent) Agent {
 		ProjectID:         strings.TrimSpace(agent.ProjectID),
 		AcpBackend:        pickNonEmpty(agent.AcpBackend, base.AcpBackend),
 		GitCredentialType: pickNonEmpty(agent.GitCredentialType, base.GitCredentialType),
+		GitSshKnownHosts:  pickNonEmpty(agent.GitSshKnownHosts, base.GitSshKnownHosts),
+		GitSshPrivateKey:  pickNonEmpty(agent.GitSshPrivateKey, base.GitSshPrivateKey),
 		Files:             mergeFiles(base.Files, agent.Files),
 		MCP:               mergeMCP(base.MCP, agent.MCP),
 		Env:               mergeEnvSharedTokenPriority(base.Env, agent.Env),

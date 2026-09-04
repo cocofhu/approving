@@ -95,11 +95,13 @@ type agentLayout struct {
 // agentFile mirrors <ProfilesRoot>/<profile>/agent.json (mcp + env + layout +
 // per-Agent prompt overrides).
 type agentFile struct {
-	AcpBackend string               `json:"acpBackend"`
-	MCP        []agentMCP           `json:"mcp"`
-	Env        map[string]string    `json:"env"`
-	Layout     agentLayout          `json:"layout"`
-	Prompts    *models.AgentPrompts `json:"prompts"`
+	AcpBackend       string               `json:"acpBackend"`
+	GitSshKnownHosts string               `json:"gitSshKnownHosts,omitempty"`
+	GitSshPrivateKey string               `json:"gitSshPrivateKey,omitempty"`
+	MCP              []agentMCP           `json:"mcp"`
+	Env              map[string]string    `json:"env"`
+	Layout           agentLayout          `json:"layout"`
+	Prompts          *models.AgentPrompts `json:"prompts"`
 }
 
 // agentConfig reads the Agent's agent.json (best effort; empty on miss).
@@ -205,6 +207,13 @@ func overlayAgentFile(shared SharedAgentView, agent agentFile) agentFile {
 		out.Layout.WorkspaceDir = shared.Layout.WorkspaceDir
 	}
 	out.Prompts = mergePromptPtrs(shared.Prompts, agent.Prompts)
+	// SSH meta literals: non-empty agent wins (same as other meta).
+	if strings.TrimSpace(agent.GitSshKnownHosts) == "" && strings.TrimSpace(shared.GitSshKnownHosts) != "" {
+		out.GitSshKnownHosts = shared.GitSshKnownHosts
+	}
+	if strings.TrimSpace(agent.GitSshPrivateKey) == "" && strings.TrimSpace(shared.GitSshPrivateKey) != "" {
+		out.GitSshPrivateKey = shared.GitSshPrivateKey
+	}
 	return out
 }
 

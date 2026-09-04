@@ -51,8 +51,6 @@ const recommendations: Record<GitCredentialType, { key: string; value: string }[
   ],
   ssh: [
     { key: 'GIT_REPOS', value: '${vars.repos}' },
-    { key: 'GIT_SSH_PRIVATE_KEY', value: '${vars.git_ssh_private_key}' },
-    { key: 'GIT_SSH_KNOWN_HOSTS', value: '${vars.git_ssh_known_hosts}' },
   ],
 }
 

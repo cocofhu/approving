@@ -54,6 +54,10 @@ function openEnvHelp(section: EnvCredentialHelpSection) {
 }
 
 function upsertEnv(key: string, value: string) {
+  if (key === 'GIT_SSH_PRIVATE_KEY' || key === 'GIT_SSH_KNOWN_HOSTS') {
+    emit('toast', t('pages.agentStudio.env.sshMetaOnly'))
+    return
+  }
   const row = props.draft.env.find((e) => e.k === key)
   if (row) row.v = value
   else props.draft.env.push({ k: key, v: value })
@@ -69,6 +73,11 @@ function updateEnvKey(i: number, value: string) {
   if (isManagedRegionKey(value)) {
     props.draft.env[i].k = ''
     emit('toast', t('pages.agentStudio.region.managedConflict'))
+    return
+  }
+  if (value === 'GIT_SSH_PRIVATE_KEY' || value === 'GIT_SSH_KNOWN_HOSTS') {
+    props.draft.env[i].k = ''
+    emit('toast', t('pages.agentStudio.env.sshMetaOnly'))
     return
   }
   props.draft.env[i].k = value

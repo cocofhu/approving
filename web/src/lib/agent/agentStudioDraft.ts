@@ -24,6 +24,8 @@ export type AgentStudioDraft = {
   projectId: string
   acpBackend: BackendId
   gitCredentialType?: GitCredentialType
+  gitSshKnownHosts?: string
+  gitSshPrivateKey?: string
   files: DraftFile[]
   mcp: DraftMCP[]
   env: KV[]
@@ -125,6 +127,8 @@ export function toDraft(a: Agent): AgentStudioDraft {
     projectId: a.projectId || '',
     acpBackend: (a.acpBackend as BackendId) || 'cursor',
     gitCredentialType: a.gitCredentialType,
+    gitSshKnownHosts: a.gitSshKnownHosts || '',
+    gitSshPrivateKey: a.gitSshPrivateKey || '',
     files: (a.files || []).map((f) => ({ path: f.path, content: f.content })),
     mcp: (a.mcp || []).map(apiMcpToDraft),
     env: recToKV(a.env),
@@ -154,6 +158,8 @@ export function fromDraftRaw(d: AgentStudioDraft): Agent {
     projectId: d.projectId?.trim() || '',
     acpBackend: d.acpBackend || 'cursor',
     ...(d.gitCredentialType ? { gitCredentialType: d.gitCredentialType } : {}),
+    gitSshKnownHosts: d.gitSshKnownHosts || '',
+    gitSshPrivateKey: d.gitSshPrivateKey || '',
     files: d.files.filter((f) => f.path.trim()).map((f) => ({ path: f.path.trim(), content: f.content })),
     mcp: d.mcp.filter((m) => m.name.trim()).map(draftMcpToApi),
     env: kvToRec(d.env),
@@ -168,6 +174,11 @@ export function fromDraftRaw(d: AgentStudioDraft): Agent {
 export function fromDraft(d: AgentStudioDraft): Agent {
   const payload = fromDraftRaw(d)
   payload.env = normalizeRegions(payload.env || {}, d.acpBackend, 'preserve-special').env
+  // SSH credentials live in meta; do not persist GIT_SSH_* in ordinary env.
+  if (payload.env) {
+    delete payload.env.GIT_SSH_PRIVATE_KEY
+    delete payload.env.GIT_SSH_KNOWN_HOSTS
+  }
   return payload
 }
 
