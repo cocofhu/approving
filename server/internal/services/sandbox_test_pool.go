@@ -228,14 +228,16 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 	// Agent env may carry (unresolved in this path).
 	env["GIT_REPOS"] = sandbox.EncodeRepos(repos)
 
-	sb, err := s.mgr.Create(ctx, sandbox.Spec{
+	spec := sandbox.Spec{
 		Name:         name,
 		Image:        resolveSandboxImage(string(backend)),
 		Env:          env,
 		ConfigHome:   home,
 		ConfigRoot:   agent.Layout.ConfigRoot,
 		WorkspaceDir: agent.Layout.WorkspaceDir,
-	})
+	}
+	ApplyAgentSSHToSpec(&spec, agent)
+	sb, err := s.mgr.Create(ctx, spec)
 	if err != nil {
 		_ = os.RemoveAll(home)
 		fail(fmt.Errorf("create sandbox: %w", err))

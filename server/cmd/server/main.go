@@ -196,9 +196,11 @@ func main() {
 				})
 			}
 			return runtime.SharedAgentView{
-				AcpBackend: cfg.AcpBackend,
-				MCP:        mcp,
-				Env:        cfg.Env,
+				AcpBackend:       cfg.AcpBackend,
+				GitSshKnownHosts: cfg.GitSshKnownHosts,
+				GitSshPrivateKey: cfg.GitSshPrivateKey,
+				MCP:              mcp,
+				Env:              cfg.Env,
 				Layout: runtime.SharedLayoutView{
 					ConfigRoot: cfg.Layout.ConfigRoot, WorkspaceDir: cfg.Layout.WorkspaceDir,
 				},

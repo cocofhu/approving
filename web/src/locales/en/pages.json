@@ -1929,6 +1929,7 @@
         "add": "Add env var",
         "parseError": "Invalid env JSON:",
         "customConfigCallout": "Besides Env keys, auth / params can go in the backend config file: {path}.",
+        "sshMetaOnly": "Configure GIT_SSH_PRIVATE_KEY / GIT_SSH_KNOWN_HOSTS as meta literals, not Env rows.",
         "openSettingsFile": "Open in Files"
       },
       "mcpHelp": {
@@ -2067,7 +2068,16 @@
         "regionHintCodebuddyInternal": "copilot.tencent.com",
         "regionHintCodebuddyPublic": "codebuddy.ai",
         "regionHintTraeCn": "docs.trae.cn",
-        "regionHintTraeIntl": "www.trae.ai"
+        "regionHintTraeIntl": "www.trae.ai",
+        "sshTitle": "Git SSH credentials (meta literals)",
+        "sshIntro": "Private key and known_hosts are stored as literals in metadata and file-injected into ~/.ssh at sandbox start. They can coexist with GitHub / GitLab tokens.",
+        "sshNoVars": "${vars.*} references are not supported. Paste full literals; a whole-string ${vars.xxx} value is rejected.",
+        "sshKnownHosts": "SSH known_hosts",
+        "sshKnownHostsDesc": "Plaintext, multi-line. New lines are appended when the file already exists.",
+        "sshKnownHostsPh": "host.example.com ssh-ed25519 AAAA…",
+        "sshPrivateKey": "SSH private key",
+        "sshPrivateKeyDesc": "Full PEM literal; written to ~/.ssh/id_rsa (mode 600), never concatenated with other PEMs.",
+        "sshPrivateKeyPh": "-----BEGIN OPENSSH PRIVATE KEY-----"
       },
       "mobile": {
         "back": "Back",

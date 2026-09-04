@@ -131,7 +131,16 @@ type Spec struct {
 	WorkspaceDir string
 	// Resources are optional per-sandbox CPU/memory/disk limits for the gateway.
 	Resources *GWResources
+	// SSHPrivateKey / SSHKnownHosts are optional literals injected as files
+	// under /tmp/approving-ssh-inject before git clone (not via ordinary env).
+	// Empty fields are omitted (do not create/clear the corresponding file).
+	SSHPrivateKey  string
+	SSHKnownHosts  string
 }
+
+// SSHInjectStagingDir is the in-sandbox destination for the SSH file inject
+// bundle. startup.sh applies these files to ~/.ssh before configure_git_credentials.
+const SSHInjectStagingDir = "/tmp/approving-ssh-inject"
 
 // RepoSpec is one repository cloned into the sandbox at <workspace>/<Name>/.
 type RepoSpec struct {
@@ -373,11 +382,24 @@ func (m *Manager) Create(ctx context.Context, spec Spec) (*Sandbox, error) {
 		Mounts:       spec.Mounts,
 		Resources:    spec.Resources,
 	}
-	// Pre-start inject: pack ConfigHome → bundleUrl. Gateway sets SANDBOX_INJECT
-	// so startup.sh extracts into configRoot before acp-bridge/agent start.
-	// Never use config.hostPath on remote K8s (empty volume race).
+	// Pre-start inject: pack SSH staging (+ ConfigHome) into SANDBOX_INJECT.
+	// SSH staging must land before git clone; startup.sh runs inject first.
+	// Prefer Env-based multi-inject so SSH + ConfigHome share one auth token.
 	bundleID := ""
-	if cfg := m.buildInjectConfig(spec.ConfigHome, configRoot); cfg != nil {
+	if parts, headers, ids := m.buildMultiInject(spec.ConfigHome, configRoot, spec.SSHPrivateKey, spec.SSHKnownHosts); len(parts) > 0 {
+		env["SANDBOX_INJECT"] = strings.Join(parts, ",")
+		if headers != "" {
+			env["SANDBOX_INJECT_HEADERS"] = headers
+		}
+		req.Env = env
+		if len(ids) > 0 {
+			bundleID = ids[0]
+		}
+		log.Info().Str("sandbox_inject", env["SANDBOX_INJECT"]).
+			Bool("ssh", strings.TrimSpace(spec.SSHPrivateKey) != "" || strings.TrimSpace(spec.SSHKnownHosts) != "").
+			Msg("sandbox config+ssh inject via SANDBOX_INJECT")
+	} else if cfg := m.buildInjectConfig(spec.ConfigHome, configRoot); cfg != nil {
+		// Fallback single ConfigHome inject (no SSH).
 		req.Config = cfg
 		bundleID = bundleIDFromURL(cfg.BundleURL)
 		log.Info().Str("bundleUrl", cfg.BundleURL).Str("configRoot", configRoot).
@@ -466,6 +488,56 @@ func (m *Manager) buildInjectConfig(hostDir, configRoot string) *GWConfigInject 
 		BundleURL:  base + "/sandbox-inject/" + id + ".tgz",
 		Headers:    "Authorization: Bearer " + token,
 	}
+}
+
+// buildMultiInject packs optional SSH staging + ConfigHome bundles that share one
+// bearer token, returning SANDBOX_INJECT parts (SSH first) and Authorization header.
+func (m *Manager) buildMultiInject(configHome, configRoot, sshKey, sshHosts string) (parts []string, headers string, ids []string) {
+	if m.bundles == nil {
+		return nil, "", nil
+	}
+	base := strings.TrimRight(config.ResolveMCPAdvertise(m.injectAdvertiseFallback), "/")
+	if base == "" {
+		return nil, "", nil
+	}
+	token := randomHex(24)
+	if token == "" {
+		return nil, "", nil
+	}
+	put := func(data []byte, dest string) bool {
+		id := m.bundles.PutWithToken(data, DefaultInjectBundleTTL, token)
+		if id == "" {
+			return false
+		}
+		parts = append(parts, base+"/sandbox-inject/"+id+".tgz|"+dest)
+		ids = append(ids, id)
+		return true
+	}
+	if sshData, err := PackSSHInjectTarGz(sshKey, sshHosts); err != nil {
+		log.Warn().Err(err).Msg("pack ssh inject bundle failed")
+	} else if sshData != nil {
+		if !put(sshData, SSHInjectStagingDir) {
+			return nil, "", nil
+		}
+	}
+	if strings.TrimSpace(configHome) != "" {
+		data, err := PackConfigHomeTarGz(configHome)
+		if err != nil {
+			log.Warn().Err(err).Str("dir", configHome).Msg("pack config-home inject bundle failed")
+		} else if data != nil {
+			dest := configRoot
+			if dest == "" {
+				dest = "/root/.cursor"
+			}
+			if !put(data, dest) {
+				return nil, "", nil
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return nil, "", nil
+	}
+	return parts, "Authorization: Bearer " + token, ids
 }
 
 func bundleIDFromURL(u string) string {

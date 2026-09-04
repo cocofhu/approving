@@ -367,6 +367,16 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 		ConfigRoot:   layout.ConfigRoot,
 		WorkspaceDir: layout.WorkspaceDir,
 	}
+	// SSH: meta literal preferred; env fallback already vars-expanded above.
+	key := agentCfg.GitSshPrivateKey
+	if strings.TrimSpace(key) == "" {
+		key = env["GIT_SSH_PRIVATE_KEY"]
+	}
+	hosts := agentCfg.GitSshKnownHosts
+	if strings.TrimSpace(hosts) == "" {
+		hosts = env["GIT_SSH_KNOWN_HOSTS"]
+	}
+	sandbox.ApplySSHCredentials(&spec, key, hosts)
 	if req.NodeType == "app_preview" {
 
 		spec.Resources = &sandbox.GWResources{CPUCores: 2, MemoryMB: 8192, DiskGi: 40}

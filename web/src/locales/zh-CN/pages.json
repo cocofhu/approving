@@ -1929,6 +1929,7 @@
         "add": "添加环境变量",
         "parseError": "环境变量 JSON 无法解析:",
         "customConfigCallout": "除 Env Key 外，可通过 Backend 配置文件完成鉴权 / 参数：{path}。",
+        "sshMetaOnly": "GIT_SSH_PRIVATE_KEY / GIT_SSH_KNOWN_HOSTS 请在元信息中配置原文，不再写入 Env。",
         "openSettingsFile": "在 Files 中打开"
       },
       "mcpHelp": {
@@ -2067,7 +2068,16 @@
         "regionHintCodebuddyInternal": "copilot.tencent.com",
         "regionHintCodebuddyPublic": "codebuddy.ai",
         "regionHintTraeCn": "docs.trae.cn",
-        "regionHintTraeIntl": "www.trae.ai"
+        "regionHintTraeIntl": "www.trae.ai",
+        "sshTitle": "Git SSH 凭据（元信息原文）",
+        "sshIntro": "私钥与 known_hosts 以原文保存在元信息，沙箱启动时特殊注入到 ~/.ssh，可与 GitHub / GitLab Token 同时生效。",
+        "sshNoVars": "不支持 ${vars.*} 引用或替换；请粘贴完整原文。整段填写 ${vars.xxx} 将拒存。",
+        "sshKnownHosts": "SSH known_hosts",
+        "sshKnownHostsDesc": "多行明文；已有文件时按行追加，不覆盖旧行。",
+        "sshKnownHostsPh": "host.example.com ssh-ed25519 AAAA…",
+        "sshPrivateKey": "SSH 私钥",
+        "sshPrivateKeyDesc": "整份 PEM 原文；注入为 ~/.ssh/id_rsa（权限 600），不与其它 PEM 拼接。",
+        "sshPrivateKeyPh": "-----BEGIN OPENSSH PRIVATE KEY-----"
       },
       "mobile": {
         "back": "返回",

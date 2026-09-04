@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -14,6 +15,8 @@ type sharedAgentBody struct {
 	AcpBackend        string               `json:"acpBackend"`
 	DefaultProjectID  string               `json:"defaultProjectId"`
 	GitCredentialType string               `json:"gitCredentialType"`
+	GitSshKnownHosts  string               `json:"gitSshKnownHosts"`
+	GitSshPrivateKey  string               `json:"gitSshPrivateKey"`
 	Files             []services.AgentFile `json:"files"`
 	MCP               []services.MCPServer `json:"mcp"`
 	Env               map[string]string    `json:"env"`
@@ -39,6 +42,8 @@ func sharedAgentDTO(cfg services.SharedAgentConfig) gin.H {
 		"acpBackend":        cfg.AcpBackend,
 		"defaultProjectId":  cfg.DefaultProjectID,
 		"gitCredentialType": cfg.GitCredentialType,
+		"gitSshKnownHosts":  cfg.GitSshKnownHosts,
+		"gitSshPrivateKey":  cfg.GitSshPrivateKey,
 		"files":             files,
 		"mcp":               mcp,
 		"env":               env,
@@ -82,6 +87,8 @@ func (h *Handlers) PutProjectSharedAgent(c *gin.Context) {
 		AcpBackend:        b.AcpBackend,
 		DefaultProjectID:  strings.TrimSpace(b.DefaultProjectID),
 		GitCredentialType: b.GitCredentialType,
+		GitSshKnownHosts:  b.GitSshKnownHosts,
+		GitSshPrivateKey:  b.GitSshPrivateKey,
 		Files:             b.Files,
 		MCP:               b.MCP,
 		Env:               b.Env,
@@ -93,7 +100,11 @@ func (h *Handlers) PutProjectSharedAgent(c *gin.Context) {
 	}
 	if err := h.SharedAgent.Save(cfg); err != nil {
 		_ = c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		status := http.StatusInternalServerError
+		if errors.Is(err, services.ErrSSHMetaVarsRef) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, sharedAgentDTO(h.SharedAgent.Get(pid)))

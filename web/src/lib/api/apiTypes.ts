@@ -115,6 +115,10 @@ export interface Agent {
   projectId?: string
   acpBackend?: 'cursor' | 'claude_code' | 'codebuddy' | 'trae'
   gitCredentialType?: 'github_https' | 'gitlab_https' | 'ssh'
+  /** known_hosts literal (may contain newlines); no ${vars.*}. */
+  gitSshKnownHosts?: string
+  /** SSH private key literal; masked in UI; no ${vars.*}. */
+  gitSshPrivateKey?: string
   files?: AgentFile[]
   mcp?: MCPServer[]
   env?: Record<string, string>
@@ -128,6 +132,8 @@ export interface ProjectSharedAgentConfig {
   acpBackend?: string
   defaultProjectId?: string
   gitCredentialType?: string
+  gitSshKnownHosts?: string
+  gitSshPrivateKey?: string
   files: AgentFile[]
   mcp: MCPServer[]
   env: Record<string, string>

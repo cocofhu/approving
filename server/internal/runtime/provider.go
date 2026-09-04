@@ -86,13 +86,15 @@ type Options struct {
 // SharedAgentView is the runtime-facing slice of project shared Agent config
 // needed for extend→overlay (avoids importing services into every call site).
 type SharedAgentView struct {
-	AcpBackend string
-	MCP        []SharedMCPView
-	Env        map[string]string
-	Layout     SharedLayoutView
-	Prompts    *models.AgentPrompts
-	WorkDir    string // host path to shared workspace/, empty if none
-	ProjectID  string // defaultProjectId or project id for fill-empty
+	AcpBackend       string
+	GitSshKnownHosts string
+	GitSshPrivateKey string
+	MCP              []SharedMCPView
+	Env              map[string]string
+	Layout           SharedLayoutView
+	Prompts          *models.AgentPrompts
+	WorkDir          string // host path to shared workspace/, empty if none
+	ProjectID        string // defaultProjectId or project id for fill-empty
 }
 
 // SharedMCPView mirrors one MCP entry from shared agent.json.

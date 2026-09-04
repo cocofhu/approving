@@ -173,8 +173,14 @@ type Agent struct {
 	// Empty defaults to cursor for backward compatibility.
 	AcpBackend string `json:"acpBackend,omitempty"`
 	// GitCredentialType is the Agent-level credential contract selected in Studio.
-	// Runtime credential injection continues to use Env; this field is UI metadata.
+	// Runtime writes GitHub/GitLab/SSH by "configured → write"; this field is UI hint only.
 	GitCredentialType string `json:"gitCredentialType,omitempty"`
+	// GitSshKnownHosts is known_hosts literal text (may contain newlines). Stored as
+	// meta, never ${vars.*}; injected as a file before git clone.
+	GitSshKnownHosts string `json:"gitSshKnownHosts,omitempty"`
+	// GitSshPrivateKey is the SSH private key literal. Stored as meta, never
+	// ${vars.*}; injected as ~/.ssh/id_rsa (600) before git clone.
+	GitSshPrivateKey string `json:"gitSshPrivateKey,omitempty"`
 	// Files is the agent's working directory, copied into ConfigRoot at run.
 	Files []AgentFile `json:"files"`
 	// MCP lists the MCP servers wired into the sandbox for this agent.
@@ -195,6 +201,8 @@ type agentConfig struct {
 	ProjectID         string               `json:"projectId,omitempty"`
 	AcpBackend        string               `json:"acpBackend,omitempty"`
 	GitCredentialType string               `json:"gitCredentialType,omitempty"`
+	GitSshKnownHosts  string               `json:"gitSshKnownHosts,omitempty"`
+	GitSshPrivateKey  string               `json:"gitSshPrivateKey,omitempty"`
 	MCP               []MCPServer          `json:"mcp,omitempty"`
 	Env               map[string]string    `json:"env,omitempty"`
 	Layout            *AgentLayout         `json:"layout,omitempty"`
@@ -323,6 +331,8 @@ func (s *AgentService) Get(name string) (Agent, bool) {
 		ProjectID:         strings.TrimSpace(cfg.ProjectID),
 		AcpBackend:        backend,
 		GitCredentialType: normalizeGitCredentialType(cfg.GitCredentialType),
+		GitSshKnownHosts:  cfg.GitSshKnownHosts,
+		GitSshPrivateKey:  cfg.GitSshPrivateKey,
 		Files:             s.readFiles(name),
 		MCP:               cfg.MCP,
 		Env:               cfg.Env,
@@ -483,6 +493,10 @@ func (s *AgentService) saveUnlocked(a Agent) error {
 	if name == "" {
 		return fmt.Errorf("invalid agent name")
 	}
+	if err := ValidateAgentSSHMeta(a.GitSshKnownHosts, a.GitSshPrivateKey); err != nil {
+		return err
+	}
+	StripSSHEnvKeys(a.Env)
 	s.migrateCursorWorkDir(name)
 	dir := filepath.Join(s.root, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -497,6 +511,8 @@ func (s *AgentService) saveUnlocked(a Agent) error {
 		ProjectID:         strings.TrimSpace(a.ProjectID),
 		AcpBackend:        backend,
 		GitCredentialType: normalizeGitCredentialType(a.GitCredentialType),
+		GitSshKnownHosts:  a.GitSshKnownHosts,
+		GitSshPrivateKey:  a.GitSshPrivateKey,
 		MCP:               a.MCP,
 		Env:               a.Env,
 		Layout:            &layout,
