@@ -85,7 +85,7 @@ func TestBundleStoreAuth(t *testing.T) {
 	}
 }
 
-func TestManagerCreateUsesBundleURLInject(t *testing.T) {
+func TestManagerCreateUsesSANDBOXInject(t *testing.T) {
 	prev := config.GetConfig()
 	t.Cleanup(func() { config.StoreConfig(prev) })
 	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: "http://api.example.com"}})
@@ -109,6 +109,10 @@ func TestManagerCreateUsesBundleURLInject(t *testing.T) {
 		Name:       "approving-sb-inj",
 		ConfigHome: home,
 		ConfigRoot: "/root/.cursor",
+		Env: map[string]string{
+			"GITHUB_TOKEN": "gh-tok",
+			"GITLAB_TOKEN": "gl-tok",
+		},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -116,21 +120,89 @@ func TestManagerCreateUsesBundleURLInject(t *testing.T) {
 	if sb.ConfigRoot != "/root/.cursor" {
 		t.Errorf("ConfigRoot=%q", sb.ConfigRoot)
 	}
-	cfg, _ := fg.lastCreate["config"].(map[string]any)
-	if cfg == nil {
-		t.Fatalf("create missing config: %+v", fg.lastCreate)
+	env, _ := fg.lastCreate["env"].(map[string]any)
+	if env == nil {
+		t.Fatalf("create missing env: %+v", fg.lastCreate)
 	}
-	if cfg["configRoot"] != "/root/.cursor" {
-		t.Errorf("configRoot=%v", cfg["configRoot"])
+	inj, _ := env["SANDBOX_INJECT"].(string)
+	if !strings.Contains(inj, "http://api.example.com/sandbox-inject/") || !strings.Contains(inj, ".tgz|/root/.cursor") {
+		t.Fatalf("SANDBOX_INJECT=%q", inj)
 	}
-	bundleURL, _ := cfg["bundleUrl"].(string)
-	if !strings.HasPrefix(bundleURL, "http://api.example.com/sandbox-inject/") || !strings.HasSuffix(bundleURL, ".tgz") {
-		t.Fatalf("bundleUrl=%q", bundleURL)
+	if strings.Contains(inj, ",") {
+		t.Fatalf("config-only inject should be single part, got %q", inj)
 	}
-	if cfg["hostPath"] != nil && cfg["hostPath"] != "" {
-		t.Fatalf("hostPath must be empty for remote inject, got %v", cfg["hostPath"])
+	hdr, _ := env["SANDBOX_INJECT_HEADERS"].(string)
+	if !strings.HasPrefix(hdr, "Authorization: Bearer ") {
+		t.Fatalf("SANDBOX_INJECT_HEADERS=%q", hdr)
 	}
-	hdr, _ := cfg["headers"].(string)
+	if env["GITHUB_TOKEN"] != "gh-tok" || env["GITLAB_TOKEN"] != "gl-tok" {
+		t.Fatalf("token env lost: %+v", env)
+	}
+	if _, ok := env["GIT_SSH_PRIVATE_KEY"]; ok {
+		t.Fatal("GIT_SSH_PRIVATE_KEY must not appear in create env")
+	}
+	if _, ok := env["GIT_SSH_KNOWN_HOSTS"]; ok {
+		t.Fatal("GIT_SSH_KNOWN_HOSTS must not appear in create env")
+	}
+	// Prefer Env inject; gateway config.bundleUrl should stay unset.
+	if cfg, _ := fg.lastCreate["config"].(map[string]any); cfg != nil {
+		t.Fatalf("expected no gateway config inject when SANDBOX_INJECT used, got %+v", cfg)
+	}
+}
+
+func TestManagerCreateSSHAndConfigMultiInject(t *testing.T) {
+	prev := config.GetConfig()
+	t.Cleanup(func() { config.StoreConfig(prev) })
+	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: "http://api.example.com"}})
+
+	gw, fg := newInlineGW(t)
+	store := NewBundleStore()
+	m := NewManager(gw, ManagerOptions{
+		Image:           "img:test",
+		WorkspaceDir:    "/root/workspace",
+		InstallHelpers:  false,
+		InjectStore:     store,
+		InjectAdvertise: "http://api.example.com",
+	})
+
+	home := t.TempDir()
+	_ = os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{}`), 0o644)
+
+	spec := Spec{
+		Name:       "approving-sb-ssh",
+		ConfigHome: home,
+		ConfigRoot: "/root/.cursor",
+		Env: map[string]string{
+			"GITHUB_TOKEN":        "gh",
+			"GITLAB_TOKEN":        "gl",
+			"GIT_SSH_PRIVATE_KEY": "should-strip",
+			"GIT_SSH_KNOWN_HOSTS": "should-strip",
+		},
+	}
+	ApplySSHCredentials(&spec, "-----BEGIN KEY-----\nk\n-----END KEY-----", "host ssh-ed25519 AAAA")
+
+	if _, err := m.Create(context.Background(), spec); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	env, _ := fg.lastCreate["env"].(map[string]any)
+	inj, _ := env["SANDBOX_INJECT"].(string)
+	parts := strings.Split(inj, ",")
+	if len(parts) != 2 {
+		t.Fatalf("want SSH+ConfigHome two parts, got %q", inj)
+	}
+	if !strings.HasSuffix(parts[0], "|/tmp/approving-ssh-inject") {
+		t.Fatalf("SSH staging first: %q", parts[0])
+	}
+	if !strings.HasSuffix(parts[1], "|/root/.cursor") {
+		t.Fatalf("ConfigHome second: %q", parts[1])
+	}
+	if env["GITHUB_TOKEN"] != "gh" || env["GITLAB_TOKEN"] != "gl" {
+		t.Fatalf("tokens must remain: %+v", env)
+	}
+	if _, ok := env["GIT_SSH_PRIVATE_KEY"]; ok {
+		t.Fatal("stripped SSH env leaked")
+	}
+	hdr, _ := env["SANDBOX_INJECT_HEADERS"].(string)
 	if !strings.HasPrefix(hdr, "Authorization: Bearer ") {
 		t.Fatalf("headers=%q", hdr)
 	}

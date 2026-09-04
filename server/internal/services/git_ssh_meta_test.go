@@ -94,3 +94,37 @@ func TestAgentSSHMetaPersistAndRejectVars(t *testing.T) {
 		t.Fatal("expected vars reject")
 	}
 }
+
+func TestSharedAgentSSHMetaPersistAndRejectVars(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewSharedAgentService(dir)
+	cfg := SharedAgentConfig{
+		ProjectID:        "proj-ssh",
+		GitSshKnownHosts: "gitlab.com ssh-ed25519 AAAA\ngithub.com ssh-ed25519 BBBB",
+		GitSshPrivateKey: "-----BEGIN OPENSSH PRIVATE KEY-----\ny\n-----END OPENSSH PRIVATE KEY-----",
+		Env:              map[string]string{"GITHUB_TOKEN": "gh", "GITLAB_TOKEN": "gl", "GIT_SSH_PRIVATE_KEY": "strip-me"},
+	}
+	if err := svc.Save(cfg); err != nil {
+		t.Fatal(err)
+	}
+	got := svc.Get("proj-ssh")
+	if got.ProjectID == "" {
+		t.Fatal("missing shared config")
+	}
+	if got.GitSshKnownHosts != cfg.GitSshKnownHosts {
+		t.Fatalf("hosts mismatch")
+	}
+	if got.GitSshPrivateKey != cfg.GitSshPrivateKey {
+		t.Fatalf("key mismatch")
+	}
+	if _, ok := got.Env["GIT_SSH_PRIVATE_KEY"]; ok {
+		t.Fatal("GIT_SSH_* should be stripped from shared env on save")
+	}
+	if got.Env["GITHUB_TOKEN"] != "gh" || got.Env["GITLAB_TOKEN"] != "gl" {
+		t.Fatalf("tokens must remain: %+v", got.Env)
+	}
+	cfg.GitSshKnownHosts = "${vars.git_ssh_known_hosts}"
+	if err := svc.Save(cfg); err == nil {
+		t.Fatal("expected vars reject on known_hosts")
+	}
+}
