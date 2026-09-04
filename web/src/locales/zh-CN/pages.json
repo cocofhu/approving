@@ -2071,7 +2071,7 @@
         "regionHintTraeIntl": "www.trae.ai",
         "sshTitle": "Git SSH 凭据（元信息原文）",
         "sshIntro": "私钥与 known_hosts 以原文保存在元信息，沙箱启动时特殊注入到 ~/.ssh，可与 GitHub / GitLab Token 同时生效。",
-        "sshNoVars": "不支持 ${vars.*} 引用或替换；请粘贴完整原文。整段填写 ${vars.xxx} 将拒存。",
+        "sshNoVars": "不支持 {'${vars.*}'} 引用或替换；请粘贴完整原文。整段填写 {'${vars.xxx}'} 将拒存。",
         "sshKnownHosts": "SSH known_hosts",
         "sshKnownHostsDesc": "多行明文；已有文件时按行追加，不覆盖旧行。",
         "sshKnownHostsPh": "host.example.com ssh-ed25519 AAAA…",
