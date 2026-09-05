@@ -96,7 +96,28 @@ async function loadPorts() {
 
 watch(() => [props.runId, props.nodeId], loadPorts, { immediate: true })
 
+const EMPTY_POLL_MS = 2500
+let emptyPoll: ReturnType<typeof setInterval> | null = null
+
+function stopEmptyPoll() {
+  if (!emptyPoll) return
+  clearInterval(emptyPoll)
+  emptyPoll = null
+}
+
+watch(
+  () => ({ empty: !ports.value.length, loading: loading.value, err: loadError.value }),
+  ({ empty, loading: busy, err }) => {
+    if (empty && !busy && !err) {
+      if (!emptyPoll) emptyPoll = setInterval(() => loadPorts(), EMPTY_POLL_MS)
+      return
+    }
+    stopEmptyPoll()
+  },
+)
+
 onUnmounted(() => {
+  stopEmptyPoll()
   portsAbort?.abort()
   portsAbort = null
   portsGen++

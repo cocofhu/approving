@@ -110,11 +110,11 @@
         },
         "set_preview": {
           "signature": "set_preview(port?, url?, label?)",
-          "desc": "仅 app_preview 节点:注册沙箱端口或外部 http(s) URL(二选一);URL 可含端口,iframe 直连,无服务端探测"
+          "desc": "仅 app_preview 或 Approve 节点:注册沙箱端口或外部 http(s) URL(二选一);URL 可含端口,iframe 直连,无服务端探测。Approve 上为可选预览,不结束节点"
         },
         "set_artifact_preview": {
           "signature": "set_artifact_preview(name)",
-          "desc": "仅澄清(react)节点:把已写入的产物钉到预览 Tab;选项对比用 demoHtml,独立成稿用本工具"
+          "desc": "仅澄清(react)或 Approve 节点:把已写入的产物钉到预览 Tab;选项对比用 demoHtml,独立成稿用本工具"
         },
         "node_complete": {
           "signature": "node_complete(status, summary?, error?, outputs?, checks?)",

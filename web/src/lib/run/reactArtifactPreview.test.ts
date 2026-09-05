@@ -35,6 +35,7 @@ import {
   closeStagePreviewTab,
   findArtifactByName,
   isOwnNodeArtifact,
+  isAppPreviewRemoteNode,
   isClarifyInteractiveGraphNode,
   latestOwnNodeHtmlName,
   nextTabAfterClose,
@@ -88,6 +89,9 @@ describe('reactArtifactPreview helpers', () => {
       nodes: [{ id: 'a1', type: 'approve', label: 'Approve', position: { x: 0, y: 0 }, config: {} }],
     } as Run
     expect(isClarifyInteractiveGraphNode(approveRun, 'a1')).toBe(true)
+    expect(isAppPreviewRemoteNode('app_preview')).toBe(true)
+    expect(isAppPreviewRemoteNode('approve')).toBe(true)
+    expect(isAppPreviewRemoteNode('react')).toBe(false)
   })
 
   it('treats foreign-node artifacts as read-only unless nodeId is empty', () => {
@@ -218,6 +222,10 @@ describe('reactArtifactPreview helpers', () => {
     expect(inboxStageRemoteKind({ appPreview: true, run, nodeId: 'preview' })).toBe('app')
     expect(inboxStageRemoteKind({ appPreview: false, run, nodeId: 'c1' })).toBe('sandbox')
     expect(inboxStageRemoteKind({ appPreview: false, run, nodeId: 'visual' })).toBe('off')
+    const approveRun = {
+      nodes: [{ id: 'a1', type: 'approve', label: 'Approve', position: { x: 0, y: 0 }, config: {} }],
+    } as unknown as Run
+    expect(inboxStageRemoteKind({ appPreview: false, run: approveRun, nodeId: 'a1' })).toBe('app')
   })
 
   it('resolves remoteKind with explicit override over sandbox default', () => {

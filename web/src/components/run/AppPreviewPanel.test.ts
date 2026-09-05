@@ -189,4 +189,15 @@ describe('AppPreviewPanel', () => {
     expect(wrapper.find('[data-testid="direct-preview-inspect"]').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('schedules a poll while the port list is empty', async () => {
+    const spy = vi.spyOn(global, 'setInterval')
+    apiMocks.nodePreviews.mockResolvedValue({ ports: [] })
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="app-preview-empty"]').exists()).toBe(true)
+    expect(spy).toHaveBeenCalled()
+    wrapper.unmount()
+    spy.mockRestore()
+  })
 })

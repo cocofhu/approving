@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/envauth"
+	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/sandbox"
 )
@@ -388,7 +389,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 // direct_preview is on, skip the VNC stack and ask the gateway to 1:1-map a
 // PREVIEW_PORT instead (PREVIEW_DIRECT=1).
 func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]any, publicAdvertise string) {
-	if env == nil || nodeType != "app_preview" {
+	if env == nil || !mcp.SetPreviewAllowed(nodeType) {
 		return
 	}
 	if configTruthy(cfg["direct_preview"]) {

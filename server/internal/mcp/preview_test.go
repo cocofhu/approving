@@ -6,6 +6,15 @@ import (
 	"testing"
 )
 
+func TestSetPreviewAllowed(t *testing.T) {
+	if !SetPreviewAllowed("app_preview") || !SetPreviewAllowed("approve") {
+		t.Fatal("expected app_preview and approve")
+	}
+	if SetPreviewAllowed("implement") || SetPreviewAllowed("react") || SetPreviewAllowed("") {
+		t.Fatal("other node types must not get set_preview")
+	}
+}
+
 func TestSetPreviewGateAndUpsert(t *testing.T) {
 	h := NewHost(&memStore{})
 	h.SetPreviewBaseURL("http://app.example.com")
@@ -49,6 +58,22 @@ func TestSetPreviewGateAndUpsert(t *testing.T) {
 	bad := callPreviewTool(t, h, "r1", tok, `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"set_preview","arguments":{"port":8080}}}`)
 	if !previewResultIsError(bad) {
 		t.Fatal("expected set_preview rejected on implement node")
+	}
+}
+
+func TestSetPreviewAllowedOnApprove(t *testing.T) {
+	h := NewHost(&memStore{})
+	h.SetPreviewSandboxOps(&fakePreviewOps{name: "sb", ok: true, healthy: true, up: "http://10.0.0.1:5006"})
+	tok := h.RegisterRun("r-approve")
+	h.SetActiveNode("r-approve", "predev", "approve")
+
+	resp := callPreviewTool(t, h, "r-approve", tok, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"set_preview","arguments":{"port":5006,"label":"Demo"}}}`)
+	text := previewResultText(t, resp)
+	if text == "" || previewTextIsError(text) {
+		t.Fatalf("set_preview on approve failed: %s", text)
+	}
+	if !h.HasHealthyPreviewPorts("r-approve", "predev") {
+		t.Fatal("expected preview port registered on approve node")
 	}
 }
 
