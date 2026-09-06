@@ -5,6 +5,7 @@ import Icon from '../ui/Icon.vue'
 import ClarifyChat from './ClarifyChat.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
 import GateReactStreamPanel from './GateReactStreamPanel.vue'
+import PendingSendQueuePanel, { type PendingQueueRow } from './PendingSendQueuePanel.vue'
 import type { ClarifyTurn, ClarifyImage, ReactAnnotation, AcpEvent } from '@/lib/shared/types'
 import AnnotationChip from './AnnotationChip.vue'
 
@@ -55,7 +56,9 @@ const props = withDefaults(
      * Gate sandbox-aligned session UX (same surface as GateApproval mobile-fill /
      * content-fit): pending-send queue, streaming agent text, Cancel.
      */
-    queued?: { text: string }[]
+    queued?: PendingQueueRow[]
+    queueNotice?: string | null
+    queueToast?: string | null
     thinking?: boolean
     streamText?: string
     /** ACP thought rail (separate from streamText). */
@@ -84,6 +87,8 @@ const props = withDefaults(
     seedHumanText: '',
     seedHumanImages: () => [],
     queued: () => [],
+    queueNotice: null,
+    queueToast: null,
     thinking: false,
     streamText: '',
     streamThought: '',
@@ -98,6 +103,9 @@ const emit = defineEmits<{
   (e: 'cancel'): void
   (e: 'queue-remove', itemId: string | undefined, index: number): void
   (e: 'queue-reorder', itemIds: string[]): void
+  (e: 'queue-edit', index: number): void
+  (e: 'queue-cancel-item', index: number): void
+  (e: 'queue-reorder-indexes', fromIndex: number, toIndex: number): void
 }>()
 
 const chatRef = ref<{
@@ -147,7 +155,14 @@ const showGateCancel = computed(
   () => props.thinking || (props.queued?.length ?? 0) > 0,
 )
 
-const gateQueued = computed(() => props.queued ?? [])
+const gateQueued = computed<PendingQueueRow[]>(() =>
+  (props.queued ?? []).map((q) => ({
+    id: q.id,
+    text: q.text,
+    images: q.images ?? [],
+    annotations: q.annotations ?? [],
+  })),
+)
 
 /**
  * Footer hint (hot path only — cold path unmounts input/send and omits this hint):
@@ -289,22 +304,16 @@ function onConfirm() {
         </button>
       </div>
       <template v-if="!coldSession">
-        <div
+        <PendingSendQueuePanel
           v-if="gateQueued.length"
-          class="mt-2 rounded border border-line bg-base/40 px-2 py-1.5"
-          data-testid="gate-react-queue"
-        >
-          <div class="mb-1 text-[11px] text-txt3">
-            {{ t('pages.agentChatTester.queue', { n: gateQueued.length }) }}
-          </div>
-          <div
-            v-for="(q, qi) in gateQueued"
-            :key="qi"
-            class="truncate text-[12px] text-txt2"
-          >
-            {{ qi + 1 }}. {{ q.text }}
-          </div>
-        </div>
+          panel-test-id="gate-react-queue"
+          :items="gateQueued"
+          :notice="queueNotice"
+          :toast="queueToast"
+          @cancel="(i) => emit('queue-cancel-item', i)"
+          @edit="(i) => emit('queue-edit', i)"
+          @reorder="(from, to) => emit('queue-reorder-indexes', from, to)"
+        />
         <GateReactStreamPanel
           :thinking="thinking"
           :stream-text="streamText"

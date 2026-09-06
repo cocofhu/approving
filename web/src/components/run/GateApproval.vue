@@ -46,6 +46,8 @@ const {
   applyReviewFrame,
   applyAcpEvents,
   cancelReactRevise,
+  reactQueued,
+  editReactQueuedItem,
 } = useGateApproval(props, emit)
 
 defineExpose({
@@ -55,6 +57,8 @@ defineExpose({
   cancelReactRevise,
   reactAnnotations,
   reactText,
+  reactQueued,
+  editReactQueuedItem,
 })
 </script>
 

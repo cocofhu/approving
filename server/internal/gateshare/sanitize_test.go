@@ -13,6 +13,46 @@ func mustFuture() time.Time {
 	return time.Now().Add(24 * time.Hour)
 }
 
+func TestSanitizeQueueItemsKeepsAnnotationsDropsImages(t *testing.T) {
+	items := SanitizeQueueItems([]map[string]any{
+		{
+			"id":   "q-ann",
+			"text": "改标题 http://10.1.2.3/api/runs/x",
+			"annotations": []any{
+				map[string]any{
+					"selector": "#title",
+					"label":    "标题",
+					"jsonPath": "goals[0]",
+					"url":      "http://127.0.0.1:8080/preview/x",
+				},
+			},
+			"images": []any{map[string]any{"url": "blob:http://127.0.0.1/abc", "mimeType": "image/png"}},
+		},
+		{
+			"id": "q-ann-only",
+			"annotations": []models.ReactAnnotation{
+				{Selector: "#hero", Label: "仅标注"},
+			},
+		},
+	})
+	if len(items) != 2 {
+		t.Fatalf("items=%d %+v", len(items), items)
+	}
+	if strings.Contains(items[0].Text, "10.1.2.3") {
+		t.Fatalf("text leak: %s", items[0].Text)
+	}
+	if len(items[0].Annotations) != 1 || items[0].Annotations[0].Selector != "#title" {
+		t.Fatalf("ann: %+v", items[0].Annotations)
+	}
+	if len(items[1].Annotations) != 1 || items[1].Annotations[0].Label != "仅标注" {
+		t.Fatalf("ann-only: %+v", items[1])
+	}
+	raw, _ := json.Marshal(items)
+	if strings.Contains(string(raw), "blob:") || strings.Contains(string(raw), "images") || strings.Contains(string(raw), "127.0.0.1") {
+		t.Fatalf("queue sanitize leak: %s", raw)
+	}
+}
+
 func TestSanitizeTurnsDropsIdentityAndCaps(t *testing.T) {
 	msgs := []models.ReactMessage{
 		{Role: "agent", Text: "请审阅 page.html，勿访问 http://10.1.2.3/api/runs/abc", At: "2026-08-01T00:00:00Z"},
@@ -229,11 +269,21 @@ func TestBuildReviewPreviewDTOIncludesQueueState(t *testing.T) {
 		ReactSessionAlive: true,
 		SessionBusy:       true,
 		Waiting:           1,
-		QueueItems:        []map[string]any{{"id": "q1", "text": "请改标题，勿访问 http://10.1.2.3/api/runs/x"}},
+		QueueItems: []map[string]any{{
+			"id":   "q1",
+			"text": "请改标题，勿访问 http://10.1.2.3/api/runs/x",
+			"annotations": []any{
+				map[string]any{"selector": "#title", "label": "标题", "jsonPath": "goals[0]"},
+			},
+			"images": []any{map[string]any{"url": "blob:http://127.0.0.1/queue"}},
+		}},
 		ActiveItem: map[string]any{
 			"id":     "q1",
 			"text":   "请改标题，勿访问 http://10.1.2.3/api/runs/x",
 			"images": []any{map[string]any{"url": "blob:http://127.0.0.1/abc"}},
+			"annotations": []any{
+				map[string]any{"selector": "#hero", "label": "进行中"},
+			},
 		},
 		ProductKind: ProductKindStructured,
 		ProductName: "research.json",
@@ -244,9 +294,18 @@ func TestBuildReviewPreviewDTOIncludesQueueState(t *testing.T) {
 	if strings.Contains(dto.QueueItems[0].Text, "10.1.2.3") || strings.Contains(dto.ActiveItem.Text, "/api/runs") {
 		t.Fatalf("queue leak: %+v %+v", dto.QueueItems[0], dto.ActiveItem)
 	}
+	if len(dto.QueueItems[0].Annotations) != 1 || dto.QueueItems[0].Annotations[0].Selector != "#title" {
+		t.Fatalf("queue items must keep sanitized annotations: %+v", dto.QueueItems[0])
+	}
+	if len(dto.ActiveItem.Annotations) != 1 || dto.ActiveItem.Annotations[0].Selector != "#hero" {
+		t.Fatalf("activeItem annotations: %+v", dto.ActiveItem)
+	}
 	raw, _ := json.Marshal(dto)
 	if strings.Contains(string(raw), "blob:") || strings.Contains(string(raw), "127.0.0.1") {
 		t.Fatalf("activeItem leaked images/host: %s", raw)
+	}
+	if strings.Contains(string(raw), `"images"`) {
+		t.Fatalf("public queue/active must not leak images key: %s", raw)
 	}
 }
 

@@ -42,6 +42,18 @@ import { type PlanDoc } from '@/components/run/PlanView.vue'
 import { type ProposalsDoc } from '@/components/run/ProposalSelectView.vue'
 import { isStructuredArtifactName } from '@/components/run/StructuredArtifactView.vue'
 
+/** Element-level clone so queue rows never share annotation object refs with composer. */
+function cloneReactAnnotations(anns?: ReactAnnotation[] | null): ReactAnnotation[] {
+  if (!anns?.length) return []
+  return anns.map((a) => ({ ...a }))
+}
+
+/** Element-level clone for attachment lists (same contract as annotations). */
+function cloneClarifyImages(imgs?: ClarifyImage[] | null): ClarifyImage[] {
+  if (!imgs?.length) return []
+  return imgs.map((im) => ({ ...im }))
+}
+
 export type GateApprovalProps = {
   gate: Gate
   run?: Run
@@ -1275,16 +1287,67 @@ async function reorderReactQueuedItems(fromIndex: number, toIndex: number) {
 }
 
 async function editReactQueuedItem(index: number) {
-  if (hasReactComposerDraft()) {
-    reactQueueNotice.value = t('pages.clarify.queueEditBlocked')
-    return
-  }
   if (index < 0 || index >= reactQueued.value.length) return
   reactQueueNotice.value = null
+
+  // Snapshot before stash / queue_state race so we never lose the edit target.
+  const target = reactQueued.value[index]
+  const targetSnapshot = {
+    id: target?.id,
+    text: target?.text ?? '',
+    images: cloneClarifyImages(target?.images),
+    annotations: cloneReactAnnotations(target?.annotations),
+  }
+
+  // Composer already has an unsent draft (incl. annotation chips / pick):
+  // re-enqueue it first so chips are never discarded to unblock edit.
+  if (hasReactComposerDraft()) {
+    if (props.run?.id) {
+      if (usesPreviewIssues.value) {
+        await sendHotReject()
+      } else {
+        await sendReactRevise()
+      }
+      if (reactError.value) return
+    } else {
+      // Local-only stash when no run (unit probes): keep chips on the queue.
+      const body = reactText.value.trim()
+      reactQueued.value.push({
+        text: body || (reactAnnotations.value.length || reactImages.value.length ? '(annotate)' : body),
+        images: cloneClarifyImages(reactImages.value),
+        annotations: cloneReactAnnotations(reactAnnotations.value),
+      })
+      clearUnifiedDraft()
+      reactThinking.value = true
+    }
+    // Re-locate target after append (prefer stable id; text fallback).
+    index = targetSnapshot.id
+      ? reactQueued.value.findIndex((q) => q.id === targetSnapshot.id)
+      : reactQueued.value.findIndex((q) => q.text === targetSnapshot.text)
+    if (index < 0) {
+      // queue_state raced: target missing locally — refill from pre-stash snapshot.
+      reactText.value = targetSnapshot.text === '(annotate)' ? '' : targetSnapshot.text
+      reactImages.value = cloneClarifyImages(targetSnapshot.images)
+      reactAnnotations.value = cloneReactAnnotations(targetSnapshot.annotations)
+      syncReactQueueThinking()
+      showReactQueueToast(t('pages.clarify.queueEditRefilled'))
+      if (targetSnapshot.id && props.run?.id) {
+        try {
+          await api.gateReactQueueRemove(props.run.id, props.gate.nodeId, targetSnapshot.id)
+        } catch (e: any) {
+          reactError.value = e?.message || t('pages.gateApproval.reactRevise.failed')
+        }
+      } else if (!targetSnapshot.id) {
+        reactQueueNotice.value = t('pages.clarify.queueEditLost')
+      }
+      return
+    }
+  }
+
   const item = reactQueued.value.splice(index, 1)[0]
-  reactText.value = item.text
-  reactImages.value = item.images.slice()
-  reactAnnotations.value = item.annotations.slice()
+  reactText.value = item.text === '(annotate)' ? '' : item.text
+  reactImages.value = cloneClarifyImages(item.images)
+  reactAnnotations.value = cloneReactAnnotations(item.annotations)
   syncReactQueueThinking()
   showReactQueueToast(t('pages.clarify.queueEditRefilled'))
   if (item.id && props.run?.id) {
@@ -1332,13 +1395,28 @@ function settleReactAfterTurnEnd() {
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
-  item?: { id?: string; text?: string }
+  item?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }
   interrupted?: boolean
   message?: string
   waiting?: number
-  items?: { id?: string; text?: string }[]
+  items?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }[]
   busy?: boolean
-  activeItem?: { id?: string; text?: string } | null
+  activeItem?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  } | null
 }) {
   const producer = props.gate.reactUpstreamNodeId
   if (producer && frame.nodeId && frame.nodeId !== producer) return
@@ -1411,6 +1489,7 @@ function applyReviewFrame(frame: {
       }
       if (items) {
         // Preserve server id so turn_done can distinguish ghost vs real waiters.
+        // Prefer frame images/annotations; local only when frame omits; always slice.
         const rebuilt = items.map((it) => {
           const text = it.text ?? ''
           const id = typeof it.id === 'string' && it.id ? it.id : undefined
@@ -1418,11 +1497,17 @@ function applyReviewFrame(frame: {
             ? reactQueued.value.find((q) => q.id === id) ??
               reactQueued.value.find((q) => !q.id && q.text === text)
             : reactQueued.value.find((q) => q.text === text)
+          const images = Array.isArray(it.images)
+            ? cloneClarifyImages(it.images)
+            : cloneClarifyImages(local?.images)
+          const annotations = Array.isArray(it.annotations)
+            ? cloneReactAnnotations(it.annotations)
+            : cloneReactAnnotations(local?.annotations)
           return {
             id: id ?? local?.id,
             text,
-            images: local?.images ?? [],
-            annotations: local?.annotations ?? [],
+            images,
+            annotations,
           }
         })
         const maxLocal = reactInFlight.value || busy ? rebuilt.length : rebuilt.length + 1
@@ -1568,8 +1653,8 @@ async function sendReactRevise() {
   const body = reactText.value.trim()
   reactQueued.value.push({
     text: body,
-    images: reactImages.value.slice(),
-    annotations: reactAnnotations.value.slice(),
+    images: cloneClarifyImages(reactImages.value),
+    annotations: cloneReactAnnotations(reactAnnotations.value),
   })
   reactThinking.value = true
   reactSending.value = true
@@ -1580,7 +1665,7 @@ async function sendReactRevise() {
       props.gate.nodeId,
       body,
       reactImages.value,
-      reactAnnotations.value.slice(),
+      cloneReactAnnotations(reactAnnotations.value),
     )
     clearUnifiedDraft()
     emit('react-revised')
@@ -1650,19 +1735,19 @@ async function sendHotReject() {
   reactError.value = null
   const body = reactText.value.trim()
   const issueImages = collectUnifiedIssueImages()
-  const anns = reactAnnotations.value.slice()
+  const anns = cloneReactAnnotations(reactAnnotations.value)
   const reviseImages = issueImages.map((im) => ({ data: im.data, mimeType: im.mimeType }))
   const draftSnap = {
     text: reactText.value,
-    images: reactImages.value.slice(),
-    anns: anns.slice(),
+    images: cloneClarifyImages(reactImages.value),
+    anns: cloneReactAnnotations(anns),
     selector: pickedSelector.value,
     elementImage: pickedElementImage.value,
   }
   reactQueued.value.push({
     text: body || '(annotate)',
     images: reviseImages.map((im) => ({ data: im.data, mimeType: im.mimeType })),
-    annotations: anns.slice(),
+    annotations: cloneReactAnnotations(anns),
   })
   reactThinking.value = true
   try {

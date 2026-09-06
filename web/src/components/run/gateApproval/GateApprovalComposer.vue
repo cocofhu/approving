@@ -28,6 +28,8 @@ const { s } = useGateApprovalCtx()
     :pass-label="t('pages.clarify.confirmFlow')"
     :reject-label="s.composerRejectLabel"
     :queued="s.reactQueued"
+    :queue-notice="s.reactQueueNotice"
+    :queue-toast="s.reactQueueToast"
     :thinking="s.reactThinking"
     :stream-text="s.reactStreamText"
     :stream-thought="s.reactStreamThought"
@@ -36,5 +38,8 @@ const { s } = useGateApprovalCtx()
     @send="s.onComposerReject"
     @finish="s.onComposerPass"
     @cancel="s.cancelReactRevise"
+    @queue-edit="s.editReactQueuedItem"
+    @queue-cancel-item="s.cancelReactQueuedItem"
+    @queue-reorder-indexes="s.reorderReactQueuedItems"
   />
 </template>

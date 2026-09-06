@@ -350,20 +350,143 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     w.unmount()
   })
 
-  it('edit refills composer; draft conflict blocks overwrite', async () => {
+  it('edit refills composer; draft with chips is stashed onto queue', async () => {
     const w = mountClarify()
     await sendText(w, '排队原文')
     await w.find('textarea').setValue('未发送草稿')
     await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="clarify-queue-notice"]').exists()).toBe(true)
-    expect(w.find('textarea').element.value).toBe('未发送草稿')
+    // Draft stashed onto queue; queued item refilled into composer.
+    expect(w.find('textarea').element.value).toBe('排队原文')
+    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-queue-item"]').text()).toContain('未发送草稿')
+    w.unmount()
+  })
 
-    await w.find('textarea').setValue('')
+  it('edit refills annotation chips from queued item (plan g1.3)', async () => {
+    const anns: ReactAnnotation[] = [
+      { label: 'Hero', selector: '#hero', jsonPath: 'summary', quote: '摘录' },
+    ]
+    const w = mount(ClarifyChat, {
+      props: {
+        runId: 'run-1',
+        nodeId: 'clarify',
+        iteration: 1,
+        turns: [],
+        done: false,
+        active: true,
+        reviewMode: false,
+        annotateEnabled: true,
+        hideFinish: true,
+        sendLabel: '发送澄清回复',
+        draft: '带标注排队',
+        annotations: anns,
+      },
+      global: {
+        plugins: [
+          createI18n({
+            legacy: false,
+            locale: 'zh-CN',
+            messages: { 'zh-CN': { ...common, ...pages } },
+          }),
+        ],
+        stubs: { Icon: true, ClarifyDemoFrame: true },
+      },
+    })
+    await w.find('[data-testid="clarify-send-label"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="clarify-review-queue"]').text()).toMatch(/批注/)
     await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
     await flushPromises()
-    expect(w.find('textarea').element.value).toBe('排队原文')
-    expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(false)
+    expect(w.find('textarea').element.value).toBe('带标注排队')
+    // Composer chips restored (AnnotationChip renders path/quote; label may be omitted when quote set).
+    const chip = w.find('[data-testid="clarify-annotation-chip"]')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toMatch(/summary|摘录|Hero/)
+    expect(w.emitted('queue-remove')).toBeFalsy() // local ghost has no server id
+    w.unmount()
+  })
+
+  it('applyQueueState prefers frame annotations without local hit (plan g1.2)', async () => {
+    const w = mountClarify()
+    const vm = w.vm as unknown as {
+      applyQueueState: (
+        waiting: number,
+        items: {
+          id?: string
+          text?: string
+          images?: { data: string; mimeType: string }[]
+          annotations?: ReactAnnotation[]
+        }[] | null,
+        busy?: boolean,
+        activeItem?: unknown,
+      ) => void
+    }
+    vm.applyQueueState(
+      1,
+      [
+        {
+          id: 'q-frame-1',
+          text: '仅帧权威',
+          annotations: [{ label: '字段', jsonPath: 'goals[0]', selector: '.goal' }],
+          images: [],
+        },
+      ],
+      false,
+      null,
+    )
+    await nextTick()
+    const queue = w.find('[data-testid="clarify-review-queue"]')
+    expect(queue.exists()).toBe(true)
+    expect(queue.text()).toContain('仅帧权威')
+    expect(queue.text()).toMatch(/批注/)
+    await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+    expect(w.find('textarea').element.value).toBe('仅帧权威')
+    expect(w.find('[data-testid="clarify-annotation-chip"]').text()).toContain('字段')
+    w.unmount()
+  })
+
+  it('edit with composer chips stashes them; queued chips refill (plan g2.1)', async () => {
+    const queuedAnns: ReactAnnotation[] = [{ label: '队列点', selector: '#queued' }]
+    const draftAnns: ReactAnnotation[] = [{ label: '草稿点', selector: '#draft' }]
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const w = mount(ClarifyChat, {
+      props: {
+        runId: 'run-1',
+        nodeId: 'clarify',
+        iteration: 1,
+        turns: [],
+        done: false,
+        active: true,
+        reviewMode: false,
+        annotateEnabled: true,
+        hideFinish: true,
+        sendLabel: '发送澄清回复',
+        draft: '队列正文',
+        annotations: queuedAnns,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ClarifyDemoFrame: true },
+      },
+    })
+    await w.find('[data-testid="clarify-send-label"]').trigger('click')
+    await flushPromises()
+    // Put new chips into composer while queue holds the first item.
+    await w.setProps({ draft: '新草稿', annotations: draftAnns })
+    await nextTick()
+    await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+    // Composer has queued item chips; draft chips live on the queue row.
+    expect(w.find('textarea').element.value).toBe('队列正文')
+    expect(w.find('[data-testid="clarify-annotation-chip"]').text()).toContain('队列点')
+    expect(w.find('[data-testid="clarify-queue-item"]').text()).toContain('新草稿')
+    expect(w.find('[data-testid="clarify-review-queue"]').text()).toMatch(/批注/)
     w.unmount()
   })
 

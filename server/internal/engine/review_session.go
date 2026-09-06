@@ -156,10 +156,20 @@ func (e *Engine) ReviewSessionSnapshotFor(runID, producerID string) (ReviewSessi
 		Items:   s.queueSnapshotLocked(),
 	}
 	if s.active != nil {
+		images := s.active.Images
+		if images == nil {
+			images = []models.PromptImage{}
+		}
+		annotations := s.active.Annotations
+		if annotations == nil {
+			annotations = []models.ReactAnnotation{}
+		}
+		// Align with ReviewSessionsForRun / turn_begin: include images + annotations.
 		snap.ActiveItem = map[string]any{
 			"id":          s.active.ID,
 			"text":        s.active.Text,
-			"annotations": s.active.Annotations,
+			"images":      images,
+			"annotations": annotations,
 		}
 	}
 	return snap, true
@@ -344,9 +354,21 @@ func (s *reviewSession) queueSnapshot() []map[string]any {
 func (s *reviewSession) queueSnapshotLocked() []map[string]any {
 	out := make([]map[string]any, 0, len(s.queue))
 	for _, it := range s.queue {
+		images := it.Images
+		if images == nil {
+			images = []models.PromptImage{}
+		}
+		annotations := it.Annotations
+		if annotations == nil {
+			annotations = []models.ReactAnnotation{}
+		}
+		// Waiting items must carry images + annotations (same fields as turn_begin)
+		// so refresh / queue_state reconcile does not drop annotation chips.
 		out = append(out, map[string]any{
-			"id":   it.ID,
-			"text": it.Text,
+			"id":          it.ID,
+			"text":        it.Text,
+			"images":      images,
+			"annotations": annotations,
 		})
 	}
 	return out
