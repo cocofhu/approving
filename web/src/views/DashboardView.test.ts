@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
-import { flushPromises, mount } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
@@ -81,11 +81,30 @@ function mountDashboard() {
     messages: { 'zh-CN': { ...common, ...pages } },
   })
   return mount(DashboardView, {
+    attachTo: document.body,
     global: {
       plugins: [i18n],
-      stubs: { Icon: true, RunLaunchModal: true, AppModal: HomePreviewAppModalStub },
+      stubs: {
+        Icon: true,
+        RunLaunchModal: true,
+        AppModal: HomePreviewAppModalStub,
+        Teleport: false,
+      },
     },
   })
+}
+
+/** HomePipelineSelect teleports its panel to document.body. */
+function teleported(testid: string) {
+  const el = document.querySelector(`[data-testid="${testid}"]`)
+  if (!el) {
+    throw new Error(`Unable to get [data-testid="${testid}"] (teleported to body)`)
+  }
+  return new DOMWrapper(el)
+}
+
+function teleportedExists(testid: string) {
+  return document.querySelector(`[data-testid="${testid}"]`) != null
 }
 
 function stubReducedMotion(matches: boolean) {
@@ -130,6 +149,7 @@ describe('DashboardView home composer', () => {
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    document.body.innerHTML = ''
   })
 
   it('renders composer and approve-first cards without a project gate', async () => {
@@ -294,7 +314,7 @@ describe('DashboardView home composer', () => {
     )
     await trigger.trigger('click')
     await flushPromises()
-    await wrapper.get('[data-testid="home-pipeline-select-option-wf-ap"]').trigger('click')
+    await teleported('home-pipeline-select-option-wf-ap').trigger('click')
     await flushPromises()
     expect(trigger.text()).toContain('自我迭代PRO')
     expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
@@ -315,18 +335,18 @@ describe('DashboardView home composer', () => {
     await flushPromises()
     await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
     await flushPromises()
-    const search = wrapper.get('[data-testid="home-pipeline-select-search"]')
+    const search = teleported('home-pipeline-select-search')
     await search.setValue('Lite')
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-lite"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-ap"]').exists()).toBe(false)
+    expect(teleportedExists('home-pipeline-select-option-wf-lite')).toBe(true)
+    expect(teleportedExists('home-pipeline-select-option-wf-ap')).toBe(false)
     await search.setValue('nomatch-xyz')
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-pipeline-select-empty"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="home-pipeline-select-empty"]').text()).toContain('无匹配流水线')
+    expect(teleportedExists('home-pipeline-select-empty')).toBe(true)
+    expect(teleported('home-pipeline-select-empty').text()).toContain('无匹配流水线')
     await search.setValue('')
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-pipeline-select-option-wf-ap"]').exists()).toBe(true)
+    expect(teleportedExists('home-pipeline-select-option-wf-ap')).toBe(true)
     wrapper.unmount()
   })
 
@@ -342,7 +362,7 @@ describe('DashboardView home composer', () => {
     await flushPromises()
     await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
     await flushPromises()
-    const search = wrapper.get('[data-testid="home-pipeline-select-search"]')
+    const search = teleported('home-pipeline-select-search')
     await search.setValue('Lite')
     await flushPromises()
     await search.trigger('keydown', { key: 'Enter' })
