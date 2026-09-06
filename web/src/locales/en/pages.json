@@ -2655,7 +2655,7 @@
       "queueCancelled": "Removed: “{text}”",
       "queueReordered": "Order updated",
       "queueEditRefilled": "Moved back to the composer — send again to re-queue",
-      "queueEditBlocked": "The composer already has an unsent draft. Clear or send it before re-editing a queued item.",
+      "queueEditBlocked": "An attachment is too large to move the current draft onto the queue. Fix attachments first.",
       "queueAttachmentBadge": "Files×{n}",
       "queueAnnotationBadge": "Note"
     },

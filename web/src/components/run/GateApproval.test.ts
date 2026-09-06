@@ -20,6 +20,8 @@ const apiMocks = vi.hoisted(() => ({
   listGatePrimaryArtifacts: vi.fn(),
   gateReactRevise: vi.fn(),
   gateReactCancel: vi.fn(),
+  gateReactQueueRemove: vi.fn(),
+  gateReactQueueReorder: vi.fn(),
 }))
 
 /** Plain ref-like so template auto-unwrap works (needs __v_isRef). */
@@ -44,6 +46,8 @@ vi.mock('@/lib/api/api', async () => {
       listGatePrimaryArtifacts: apiMocks.listGatePrimaryArtifacts,
       gateReactRevise: apiMocks.gateReactRevise,
       gateReactCancel: apiMocks.gateReactCancel,
+      gateReactQueueRemove: apiMocks.gateReactQueueRemove,
+      gateReactQueueReorder: apiMocks.gateReactQueueReorder,
     },
   }
 })
@@ -3134,6 +3138,93 @@ describe('GateApproval mobileFillRemaining layout', () => {
     })
     await flushPromises()
     expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('gate queue_state frame annotations refill on edit; draft chips stash (plan g1.2/g1.3/g2.2)', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.gateReactRevise.mockResolvedValue({ status: 'accepted', waiting: 1 })
+    apiMocks.gateReactQueueRemove.mockResolvedValue({})
+    const proposalsDoc = {
+      context: '选型',
+      proposals: [
+        { id: 'p1', title: '方案甲', summary: '共享壳', recommended: true },
+        { id: 'p2', title: '方案乙', summary: '另起炉灶' },
+      ],
+    }
+    apiMocks.artifactContent.mockResolvedValue({ content: JSON.stringify(proposalsDoc) })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'pick-proposal',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'proposal',
+        actions: [
+          { id: 'p1', label: '方案甲' },
+          { id: 'p2', label: '方案乙' },
+        ],
+        form: [],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'pick-proposal',
+            type: 'proposal_select',
+            label: '选方案',
+            position: { x: 0, y: 0 },
+            config: { from: 'proposals.json' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-proposals',
+            name: 'proposals.json',
+            kind: 'json',
+            nodeId: 'proposal',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    // Authoritative frame only (no local hit): annotations must survive rebuild.
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'proposal',
+      waiting: 1,
+      busy: false,
+      items: [
+        {
+          id: 'gate-q-1',
+          text: '门禁排队带标注',
+          images: [],
+          annotations: [{ label: '门禁点', selector: '#gate-hero', jsonPath: 'proposals[0].title' }],
+        },
+      ],
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gate-react-queue"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="gate-react-queue"]').text()).toMatch(/批注/)
+
+    // Composer has different chips — edit must stash them, not force-clear.
+    vm.reactAnnotations = [{ label: '草稿门禁点', selector: '#draft-chip' }]
+    vm.reactText = '门禁草稿'
+    await flushPromises()
+    await wrapper.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+
+    expect(vm.reactText).toBe('门禁排队带标注')
+    expect(vm.reactAnnotations).toEqual([
+      { label: '门禁点', selector: '#gate-hero', jsonPath: 'proposals[0].title' },
+    ])
+    // Stashed draft still on queue with its chip badge.
+    expect(wrapper.find('[data-testid="gate-react-queue"]').text()).toContain('门禁草稿')
+    expect(wrapper.find('[data-testid="gate-react-queue"]').text()).toMatch(/批注/)
+    expect(apiMocks.gateReactQueueRemove).toHaveBeenCalledWith('run-1', 'pick-proposal', 'gate-q-1')
     wrapper.unmount()
   })
 

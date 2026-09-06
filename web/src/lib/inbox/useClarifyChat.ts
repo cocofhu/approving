@@ -417,16 +417,35 @@ function reorderQueuedItems(fromIndex: number, toIndex: number) {
 }
 
 function editQueuedItem(index: number) {
-  if (hasComposerDraft()) {
-    queueNotice.value = translate('pages.clarify.queueEditBlocked')
-    return
-  }
   if (index < 0 || index >= queued.value.length) return
   queueNotice.value = null
+
+  // Composer already has an unsent draft (text / attachments / annotation chips):
+  // re-enqueue it first so chips are never discarded to unblock edit.
+  if (hasComposerDraft()) {
+    const t = draft.value.trim()
+    const imgs = attachments.value.slice()
+    const anns = annotations.value.slice()
+    const over = findOversizedAttachments(imgs)
+    if (over.length) {
+      attachNotice.value = formatSendRejectMessage(
+        over.map((im, i) => attachmentDisplayName(im, i)),
+        SITE_ATTACH_MAX_MIB,
+      )
+      return
+    }
+    draft.value = ''
+    attachments.value = []
+    annotations.value = []
+    attachNotice.value = null
+    sendMessage(t, imgs, anns)
+    // Append keeps the target index stable.
+  }
+
   const item = queued.value.splice(index, 1)[0]
   draft.value = item.text
-  attachments.value = item.images.slice()
-  annotations.value = item.annotations.slice()
+  attachments.value = (item.images ?? []).slice()
+  annotations.value = (item.annotations ?? []).slice()
   attachNotice.value = null
   syncQueueThinking()
   nextTick(autoGrow)
@@ -922,7 +941,12 @@ function settleAfterTurnEnd() {
  */
 function applyQueueState(
   waiting: number,
-  items: { id?: string; text?: string }[] | null,
+  items: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }[] | null,
   busy?: boolean,
   activeItem?: {
     id?: string
@@ -947,11 +971,19 @@ function applyQueueState(
       const local = id
         ? queued.value.find((q) => q.id === id) ?? queued.value.find((q) => !q.id && q.text === text)
         : queued.value.find((q) => q.text === text)
+      // Prefer frame images/annotations (authoritative); local only when frame omits.
+      // Always slice so composer refill never shares array refs with the queue row.
+      const images = Array.isArray(it.images)
+        ? it.images.slice()
+        : (local?.images?.slice() ?? [])
+      const annotations = Array.isArray(it.annotations)
+        ? it.annotations.slice()
+        : (local?.annotations?.slice() ?? [])
       return {
         id: id ?? local?.id,
         text,
-        images: local?.images ?? [],
-        annotations: local?.annotations ?? [],
+        images,
+        annotations,
       }
     })
     const maxLocal = liveAgentIdx.value >= 0 || busy ? rebuilt.length : rebuilt.length + 1

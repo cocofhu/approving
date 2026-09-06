@@ -221,23 +221,34 @@ export type PublicGatePreviewTurn = {
   text?: string
   at?: string
   interrupted?: boolean
+  images?: Array<{
+    data?: string
+    mimeType?: string
+    name?: string
+    ref?: string
+  }>
   annotations?: Array<{
     selector?: string
     jsonPath?: string
     label?: string
     note?: string
     quote?: string
+    url?: string
+    truncated?: boolean
   }>
 }
 
 export type PublicGateQueueItem = {
   id?: string
   text?: string
+  images?: PublicGatePreviewTurn['images']
+  annotations?: PublicGatePreviewTurn['annotations']
 }
 
 export type PublicGateActiveItem = {
   id?: string
   text?: string
+  images?: PublicGatePreviewTurn['images']
   annotations?: PublicGatePreviewTurn['annotations']
 }
 

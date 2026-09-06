@@ -192,3 +192,69 @@ func TestReviewQueueRemoveAndReorder(t *testing.T) {
 	_ = eng.CancelReviewSession(run.ID, "prop")
 	_ = eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second)
 }
+
+// TestQueueSnapshotIncludesAnnotationsAndImages: waiting queue_state items must
+// carry annotations + images (plan g1.1) so clients can refill chips after edit.
+func TestQueueSnapshotIncludesAnnotationsAndImages(t *testing.T) {
+	eng, db, provider := setupReviewEngine(t, true)
+	hold := make(chan struct{})
+	provider.reviseHold = hold
+
+	run, err := eng.StartRun("review-wf", map[string]any{"idea": "登录"}, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "prop")
+	waitRunStatus(t, db, run.ID, "waiting_human")
+
+	// Occupy active slot so the next enqueue stays waiting.
+	if _, err := eng.EnqueueReviewTurn(run.ID, "prop", "active-hold", nil, nil, "node", ""); err != nil {
+		t.Fatalf("enqueue active: %v", err)
+	}
+	anns := []models.ReactAnnotation{
+		{JSONPath: "summary", Label: "摘要", Selector: "#hero", Quote: "摘录"},
+	}
+	// Images need blob store in this harness; assert empty images key + annotations.
+	if _, err := eng.EnqueueReviewTurn(run.ID, "prop", "带标注排队", nil, anns, "node", ""); err != nil {
+		t.Fatalf("enqueue annotated: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		snap, ok := eng.ReviewSessionSnapshotFor(run.ID, "prop")
+		if ok && snap.Waiting >= 1 && len(snap.Items) >= 1 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	snap, ok := eng.ReviewSessionSnapshotFor(run.ID, "prop")
+	if !ok || len(snap.Items) < 1 {
+		t.Fatalf("expected waiting items, snap=%+v", snap)
+	}
+	var found map[string]any
+	for _, it := range snap.Items {
+		if text, _ := it["text"].(string); text == "带标注排队" {
+			found = it
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("annotated waiting item missing: %+v", snap.Items)
+	}
+	gotAnns, ok := found["annotations"].([]models.ReactAnnotation)
+	if !ok || len(gotAnns) != 1 || gotAnns[0].JSONPath != "summary" || gotAnns[0].Selector != "#hero" {
+		t.Fatalf("annotations not in snapshot: %+v (type %T)", found["annotations"], found["annotations"])
+	}
+	gotImgs, ok := found["images"].([]models.PromptImage)
+	if !ok || gotImgs == nil {
+		t.Fatalf("images key missing or wrong type: %+v (type %T)", found["images"], found["images"])
+	}
+	if len(gotImgs) != 0 {
+		t.Fatalf("expected empty images slice, got %+v", gotImgs)
+	}
+
+	close(hold)
+	_ = eng.CancelReviewSession(run.ID, "prop")
+	_ = eng.waitReviewReadyForTest(run.ID, "prop", 5*time.Second)
+}

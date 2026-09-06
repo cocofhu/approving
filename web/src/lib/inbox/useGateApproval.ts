@@ -1275,16 +1275,43 @@ async function reorderReactQueuedItems(fromIndex: number, toIndex: number) {
 }
 
 async function editReactQueuedItem(index: number) {
-  if (hasReactComposerDraft()) {
-    reactQueueNotice.value = t('pages.clarify.queueEditBlocked')
-    return
-  }
   if (index < 0 || index >= reactQueued.value.length) return
   reactQueueNotice.value = null
+
+  // Composer already has an unsent draft (incl. annotation chips / pick):
+  // re-enqueue it first so chips are never discarded to unblock edit.
+  if (hasReactComposerDraft()) {
+    const targetId = reactQueued.value[index]?.id
+    const targetText = reactQueued.value[index]?.text
+    if (props.run?.id) {
+      if (usesPreviewIssues.value) {
+        await sendHotReject()
+      } else {
+        await sendReactRevise()
+      }
+      if (reactError.value) return
+    } else {
+      // Local-only stash when no run (unit probes): keep chips on the queue.
+      const body = reactText.value.trim()
+      reactQueued.value.push({
+        text: body || (reactAnnotations.value.length || reactImages.value.length ? '(annotate)' : body),
+        images: reactImages.value.slice(),
+        annotations: reactAnnotations.value.slice(),
+      })
+      clearUnifiedDraft()
+      reactThinking.value = true
+    }
+    // Re-locate target after append (index stable unless queue_state raced).
+    index = targetId
+      ? reactQueued.value.findIndex((q) => q.id === targetId)
+      : reactQueued.value.findIndex((q) => q.text === targetText)
+    if (index < 0) return
+  }
+
   const item = reactQueued.value.splice(index, 1)[0]
-  reactText.value = item.text
-  reactImages.value = item.images.slice()
-  reactAnnotations.value = item.annotations.slice()
+  reactText.value = item.text === '(annotate)' ? '' : item.text
+  reactImages.value = (item.images ?? []).slice()
+  reactAnnotations.value = (item.annotations ?? []).slice()
   syncReactQueueThinking()
   showReactQueueToast(t('pages.clarify.queueEditRefilled'))
   if (item.id && props.run?.id) {
@@ -1332,13 +1359,28 @@ function settleReactAfterTurnEnd() {
 function applyReviewFrame(frame: {
   event?: string
   nodeId?: string
-  item?: { id?: string; text?: string }
+  item?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }
   interrupted?: boolean
   message?: string
   waiting?: number
-  items?: { id?: string; text?: string }[]
+  items?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }[]
   busy?: boolean
-  activeItem?: { id?: string; text?: string } | null
+  activeItem?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  } | null
 }) {
   const producer = props.gate.reactUpstreamNodeId
   if (producer && frame.nodeId && frame.nodeId !== producer) return
@@ -1411,6 +1453,7 @@ function applyReviewFrame(frame: {
       }
       if (items) {
         // Preserve server id so turn_done can distinguish ghost vs real waiters.
+        // Prefer frame images/annotations; local only when frame omits; always slice.
         const rebuilt = items.map((it) => {
           const text = it.text ?? ''
           const id = typeof it.id === 'string' && it.id ? it.id : undefined
@@ -1418,11 +1461,17 @@ function applyReviewFrame(frame: {
             ? reactQueued.value.find((q) => q.id === id) ??
               reactQueued.value.find((q) => !q.id && q.text === text)
             : reactQueued.value.find((q) => q.text === text)
+          const images = Array.isArray(it.images)
+            ? it.images.slice()
+            : (local?.images?.slice() ?? [])
+          const annotations = Array.isArray(it.annotations)
+            ? it.annotations.slice()
+            : (local?.annotations?.slice() ?? [])
           return {
             id: id ?? local?.id,
             text,
-            images: local?.images ?? [],
-            annotations: local?.annotations ?? [],
+            images,
+            annotations,
           }
         })
         const maxLocal = reactInFlight.value || busy ? rebuilt.length : rebuilt.length + 1
