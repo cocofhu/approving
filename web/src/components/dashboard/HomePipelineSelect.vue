@@ -24,7 +24,10 @@ const search = ref('')
 const activeIndex = ref(0)
 const root = ref<HTMLElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
+/** Fixed position below trigger (Teleport escapes .home-shell__content overflow). */
+const panelStyle = ref<Record<string, string>>({})
 
 const selectedName = computed(() => {
   if (!props.pipelines.length) return t('pages.dashboard.noPipelineShort')
@@ -64,24 +67,49 @@ function highlightName(name: string, q: string): string {
   )
 }
 
-function openPanel() {
+/** Place panel directly below the trigger (gap 6px). No upward flip. */
+function placePanelBelow() {
+  const trig = trigger.value
+  if (!trig) return
+  const r = trig.getBoundingClientRect()
+  const width = Math.min(320, Math.min(window.innerWidth * 0.78, window.innerWidth - 16))
+  let left = r.left
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8))
+  // plan g1.1 / g1.2 — top = trigger bottom + 6px (not bottom: calc(100% + 6px))
+  const top = r.bottom + 6
+  panelStyle.value = {
+    position: 'fixed',
+    top: `${Math.round(top)}px`,
+    left: `${Math.round(left)}px`,
+    width: `${Math.round(width)}px`,
+  }
+}
+
+function onScrollOrResize() {
+  if (open.value) placePanelBelow()
+}
+
+async function openPanel() {
   if (props.disabled || !props.pipelines.length) return
   open.value = true
   search.value = ''
   const idx = props.pipelines.findIndex((p) => p.id === props.modelValue)
   activeIndex.value = Math.max(0, idx)
-  nextTick(() => searchInput.value?.focus())
+  await nextTick()
+  placePanelBelow()
+  searchInput.value?.focus()
 }
 
 function closePanel() {
   open.value = false
+  panelStyle.value = {}
 }
 
 function togglePanel(e: MouseEvent) {
   e.stopPropagation()
   if (props.disabled || !props.pipelines.length) return
   if (open.value) closePanel()
-  else openPanel()
+  else void openPanel()
 }
 
 function choose(id: string) {
@@ -93,7 +121,7 @@ function choose(id: string) {
 function onDocClick(e: MouseEvent) {
   if (!open.value) return
   const target = e.target as Node
-  if (root.value?.contains(target)) return
+  if (root.value?.contains(target) || panel.value?.contains(target)) return
   closePanel()
 }
 
@@ -132,7 +160,7 @@ function onTriggerKeydown(e: KeyboardEvent) {
   if (props.disabled || !props.pipelines.length) return
   if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
     e.preventDefault()
-    if (!open.value) openPanel()
+    if (!open.value) void openPanel()
   }
   if (e.key === 'Escape' && open.value) {
     e.preventDefault()
@@ -147,8 +175,16 @@ watch(
   },
 )
 
-onMounted(() => document.addEventListener('click', onDocClick))
-onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  window.addEventListener('resize', onScrollOrResize)
+  window.addEventListener('scroll', onScrollOrResize, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('resize', onScrollOrResize)
+  window.removeEventListener('scroll', onScrollOrResize, true)
+})
 </script>
 
 <template>
@@ -175,60 +211,67 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <span class="home-pipeline-select__chev" aria-hidden="true" />
     </button>
 
-    <div
-      v-if="open"
-      id="home-pipeline-select-panel"
-      class="home-pipeline-select__panel"
-      role="presentation"
-      data-testid="home-pipeline-select-panel"
-    >
-      <div class="home-pipeline-select__search-wrap">
-        <input
-          ref="searchInput"
-          v-model="search"
-          type="search"
-          class="home-pipeline-select__search"
-          data-testid="home-pipeline-select-search"
-          :placeholder="t('common.search.pipelinePlaceholder')"
-          autocomplete="off"
-          :aria-label="t('common.search.pipelinePlaceholder')"
-          @input="onSearchInput"
-          @keydown="onSearchKeydown"
-          @click.stop
-        />
-      </div>
+    <!-- Teleport to body so .home-shell__content overflow-y-auto cannot clip the downward panel (g1.2) -->
+    <Teleport to="body">
       <div
-        class="home-pipeline-select__list"
-        role="listbox"
-        :aria-label="t('pages.dashboard.pickPipeline')"
+        v-if="open"
+        ref="panel"
+        id="home-pipeline-select-panel"
+        class="home-pipeline-select__panel"
+        role="presentation"
+        data-testid="home-pipeline-select-panel"
+        data-placement="below"
+        :style="panelStyle"
+        @click.stop
       >
-        <template v-if="filtered.length">
-          <button
-            v-for="(p, i) in filtered"
-            :key="p.id"
-            type="button"
-            class="home-pipeline-select__opt"
-            role="option"
-            :class="{
-              'home-pipeline-select__opt--current': p.id === modelValue,
-              'home-pipeline-select__opt--active': i === activeIndex,
-            }"
-            :aria-selected="i === activeIndex"
-            :data-testid="`home-pipeline-select-option-${p.id}`"
-            @click.stop="choose(p.id)"
-          >
-            <span v-html="highlightName(p.name, search.trim())" />
-          </button>
-        </template>
+        <div class="home-pipeline-select__search-wrap">
+          <input
+            ref="searchInput"
+            v-model="search"
+            type="search"
+            class="home-pipeline-select__search"
+            data-testid="home-pipeline-select-search"
+            :placeholder="t('common.search.pipelinePlaceholder')"
+            autocomplete="off"
+            :aria-label="t('common.search.pipelinePlaceholder')"
+            @input="onSearchInput"
+            @keydown="onSearchKeydown"
+            @click.stop
+          />
+        </div>
         <div
-          v-else
-          class="home-pipeline-select__empty"
-          data-testid="home-pipeline-select-empty"
+          class="home-pipeline-select__list"
+          role="listbox"
+          :aria-label="t('pages.dashboard.pickPipeline')"
         >
-          {{ t('common.empty.noMatchingPipelines') }}
+          <template v-if="filtered.length">
+            <button
+              v-for="(p, i) in filtered"
+              :key="p.id"
+              type="button"
+              class="home-pipeline-select__opt"
+              role="option"
+              :class="{
+                'home-pipeline-select__opt--current': p.id === modelValue,
+                'home-pipeline-select__opt--active': i === activeIndex,
+              }"
+              :aria-selected="i === activeIndex"
+              :data-testid="`home-pipeline-select-option-${p.id}`"
+              @click.stop="choose(p.id)"
+            >
+              <span v-html="highlightName(p.name, search.trim())" />
+            </button>
+          </template>
+          <div
+            v-else
+            class="home-pipeline-select__empty"
+            data-testid="home-pipeline-select-empty"
+          >
+            {{ t('common.empty.noMatchingPipelines') }}
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
@@ -282,15 +325,18 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   flex-shrink: 0;
 }
 
+/* plan g1.1 — panel opens below trigger (top), never bottom/upward.
+   Teleported panel uses fixed coords from placePanelBelow(); keep top as
+   the documented downward default if styles apply without inline overrides. */
 .home-pipeline-select__panel {
-  position: absolute;
+  position: fixed;
   left: 0;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   width: min(320px, 78vw);
   border: 1px solid rgb(var(--c-line-strong));
   background: rgb(var(--c-elevated));
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-  z-index: 20;
+  z-index: 60;
 }
 
 .home-pipeline-select__search-wrap {
