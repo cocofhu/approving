@@ -156,10 +156,20 @@ func (e *Engine) ReviewSessionSnapshotFor(runID, producerID string) (ReviewSessi
 		Items:   s.queueSnapshotLocked(),
 	}
 	if s.active != nil {
+		images := s.active.Images
+		if images == nil {
+			images = []models.PromptImage{}
+		}
+		annotations := s.active.Annotations
+		if annotations == nil {
+			annotations = []models.ReactAnnotation{}
+		}
+		// Align with ReviewSessionsForRun / turn_begin: include images + annotations.
 		snap.ActiveItem = map[string]any{
 			"id":          s.active.ID,
 			"text":        s.active.Text,
-			"annotations": s.active.Annotations,
+			"images":      images,
+			"annotations": annotations,
 		}
 	}
 	return snap, true

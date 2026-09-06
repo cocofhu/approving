@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   decide: vi.fn(),
   reply: vi.fn(),
   cancel: vi.fn(),
+  queueRemove: vi.fn(),
+  queueReorder: vi.fn(),
 }))
 
 class FakeWebSocket {
@@ -53,6 +55,8 @@ vi.mock('@/lib/inbox/gateShareLink', async () => {
       decide: mocks.decide,
       reply: mocks.reply,
       cancel: mocks.cancel,
+      queueRemove: mocks.queueRemove,
+      queueReorder: mocks.queueReorder,
       eventsWsUrl: () => 'ws://test/public/gate-approvals/events',
     },
   }
@@ -491,6 +495,62 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.text()).toContain('流式产出正文')
     expect(w.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
+  })
+
+  it('public poll/WS queueItems keep annotations badge and refill on edit (plan g1/f4)', async () => {
+    window.location.hash = `#t=${'ee'.repeat(32)}`
+    mocks.preview.mockResolvedValue({
+      status: 'active',
+      kind: 'review',
+      nonce: 'n-q-ann',
+      reactSessionAlive: true,
+      sessionBusy: false,
+      waiting: 1,
+      queueItems: [
+        {
+          id: 'pub-q-1',
+          text: '公共排队带标注',
+          annotations: [{ label: '公共点', selector: '#pub-hero', jsonPath: 'goals[0]' }],
+        },
+      ],
+      actions: { confirm: 'confirm', reply: 'reply', cancel: 'cancel' },
+      turns: [{ role: 'agent', text: '请复审', at: '2026-08-01T00:00:00Z' }],
+    })
+    mocks.cancel.mockResolvedValue({})
+    const w = mountView()
+    await flushPromises()
+    await flushPromises()
+    expect(w.text()).toMatch(/批注/)
+    expect(w.text()).toContain('公共排队带标注')
+
+    // WS reconcile with annotations-only frame (no local hit) must keep badge.
+    const sock = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+    expect(sock).toBeTruthy()
+    sock.emit({
+      type: 'review',
+      event: 'queue_state',
+      nodeId: 'public-gate',
+      waiting: 1,
+      busy: false,
+      items: [
+        {
+          id: 'pub-q-1',
+          text: '公共排队带标注',
+          annotations: [{ label: '公共点', selector: '#pub-hero', jsonPath: 'goals[0]' }],
+        },
+      ],
+    })
+    await flushPromises()
+    expect(w.text()).toMatch(/批注/)
+
+    await w.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+    expect((w.get('[data-testid="clarify-input"]').element as HTMLTextAreaElement).value).toBe(
+      '公共排队带标注',
+    )
+    const anns = (w.vm as unknown as { annotations: Array<{ label?: string; selector?: string }> })
+      .annotations
+    expect(anns).toEqual([{ label: '公共点', selector: '#pub-hero', jsonPath: 'goals[0]' }])
   })
 
   it('unavailable states keep dark chrome without confirm/send', async () => {

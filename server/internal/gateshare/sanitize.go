@@ -39,9 +39,12 @@ type PreviewAnnotation struct {
 }
 
 // PreviewQueueItem is a leak-free pending-send row for polling resume.
+// Annotations are kept (sanitized) so public refresh / WS reconcile can show
+// the 批注 badge and refill chips on re-edit; images stay dropped (same as ActiveItem).
 type PreviewQueueItem struct {
-	ID   string `json:"id,omitempty"`
-	Text string `json:"text,omitempty"`
+	ID          string              `json:"id,omitempty"`
+	Text        string              `json:"text,omitempty"`
+	Annotations []PreviewAnnotation `json:"annotations,omitempty"`
 }
 
 // PreviewActiveItem is a leak-free in-flight turn hint (no images / blob URLs).
@@ -243,6 +246,8 @@ func SanitizeTurns(msgs []models.ReactMessage) []PreviewTurn {
 }
 
 // SanitizeQueueItems redacts pending FIFO rows for the public ReAct sidebar.
+// Carries sanitized annotations (aligned with ActiveItem) so poll/WS waiting
+// rows keep 批注 badges and edit refill; drops images to avoid blob/URL leaks.
 func SanitizeQueueItems(items []map[string]any) []PreviewQueueItem {
 	if len(items) == 0 {
 		return nil
@@ -256,10 +261,15 @@ func SanitizeQueueItems(items []map[string]any) []PreviewQueueItem {
 		text, _ := it["text"].(string)
 		text = capTurnText(SanitizeDescription(text))
 		id = strings.TrimSpace(id)
-		if id == "" && text == "" {
+		anns := annotationsFromAny(it["annotations"])
+		if id == "" && text == "" && len(anns) == 0 {
 			continue
 		}
-		out = append(out, PreviewQueueItem{ID: id, Text: text})
+		item := PreviewQueueItem{ID: id, Text: text}
+		if len(anns) > 0 {
+			item.Annotations = anns
+		}
+		out = append(out, item)
 	}
 	if len(out) == 0 {
 		return nil
@@ -275,12 +285,36 @@ func SanitizeActiveItem(m map[string]any) *PreviewActiveItem {
 	id, _ := m["id"].(string)
 	text, _ := m["text"].(string)
 	item := &PreviewActiveItem{
-		ID:   strings.TrimSpace(id),
-		Text: capTurnText(SanitizeDescription(text)),
+		ID:          strings.TrimSpace(id),
+		Text:        capTurnText(SanitizeDescription(text)),
+		Annotations: annotationsFromAny(m["annotations"]),
 	}
-	switch anns := m["annotations"].(type) {
+	if item.ID == "" && item.Text == "" && len(item.Annotations) == 0 {
+		return nil
+	}
+	return item
+}
+
+// annotationsFromAny parses ReactAnnotation slices from JSON-decoded maps or typed slices.
+func annotationsFromAny(v any) []PreviewAnnotation {
+	switch anns := v.(type) {
 	case []models.ReactAnnotation:
-		item.Annotations = sanitizeAnnotations(anns)
+		return sanitizeAnnotations(anns)
+	case []PreviewAnnotation:
+		if len(anns) == 0 {
+			return nil
+		}
+		parsed := make([]models.ReactAnnotation, 0, len(anns))
+		for _, a := range anns {
+			parsed = append(parsed, models.ReactAnnotation{
+				Selector: a.Selector,
+				JSONPath: a.JSONPath,
+				Label:    a.Label,
+				Note:     a.Note,
+				Quote:    a.Quote,
+			})
+		}
+		return sanitizeAnnotations(parsed)
 	case []any:
 		parsed := make([]models.ReactAnnotation, 0, len(anns))
 		for _, raw := range anns {
@@ -296,12 +330,10 @@ func SanitizeActiveItem(m map[string]any) *PreviewActiveItem {
 				Quote:    stringMapField(am, "quote"),
 			})
 		}
-		item.Annotations = sanitizeAnnotations(parsed)
-	}
-	if item.ID == "" && item.Text == "" && len(item.Annotations) == 0 {
+		return sanitizeAnnotations(parsed)
+	default:
 		return nil
 	}
-	return item
 }
 
 func capTurnText(text string) string {

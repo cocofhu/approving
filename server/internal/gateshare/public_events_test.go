@@ -82,3 +82,49 @@ func TestFilterPublicBrokerFrameReviewTurnBegin(t *testing.T) {
 		t.Fatalf("payload: %s", s)
 	}
 }
+
+func TestFilterPublicBrokerFrameQueueStateKeepsAnnotations(t *testing.T) {
+	raw, _ := json.Marshal(map[string]any{
+		"type":    "review",
+		"runId":   "run-secret",
+		"nodeId":  "research1",
+		"event":   "queue_state",
+		"waiting": 1,
+		"busy":    false,
+		"items": []any{
+			map[string]any{
+				"id":   "q-wait",
+				"text": "公共排队带标注",
+				"annotations": []any{
+					map[string]any{"selector": "#pub-hero", "label": "公共点", "jsonPath": "goals[0]"},
+				},
+				"images": []any{map[string]any{"data": "BBBB", "mimeType": "image/png"}},
+			},
+		},
+	})
+	out, ok := FilterPublicBrokerFrame(raw, "research1")
+	if !ok {
+		t.Fatal("expected queue_state frame")
+	}
+	s := string(out)
+	if strings.Contains(s, "run-secret") || strings.Contains(s, "BBBB") || strings.Contains(s, "images") {
+		t.Fatalf("leaked: %s", s)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	items, _ := parsed["items"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("items=%+v", parsed["items"])
+	}
+	row, _ := items[0].(map[string]any)
+	anns, _ := row["annotations"].([]any)
+	if len(anns) != 1 {
+		t.Fatalf("annotations missing: %+v", row)
+	}
+	ann, _ := anns[0].(map[string]any)
+	if ann["selector"] != "#pub-hero" || ann["label"] != "公共点" {
+		t.Fatalf("ann fields: %+v", ann)
+	}
+}

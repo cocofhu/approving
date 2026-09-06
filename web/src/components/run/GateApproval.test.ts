@@ -3228,6 +3228,97 @@ describe('GateApproval mobileFillRemaining layout', () => {
     wrapper.unmount()
   })
 
+  it('gate edit stash race still refills from snapshot (review v2)', async () => {
+    breakpointMocks.isMobile.value = false
+    apiMocks.gateReactQueueRemove.mockResolvedValue({})
+    const proposalsDoc = {
+      context: '选型',
+      proposals: [
+        { id: 'p1', title: '方案甲', summary: '共享壳', recommended: true },
+        { id: 'p2', title: '方案乙', summary: '另起炉灶' },
+      ],
+    }
+    apiMocks.artifactContent.mockResolvedValue({ content: JSON.stringify(proposalsDoc) })
+    const wrapper = mountApproval({
+      fillPreview: true,
+      gate: baseGate({
+        nodeId: 'pick-proposal',
+        reactSessionAlive: true,
+        reactUpstreamNodeId: 'proposal',
+        actions: [
+          { id: 'p1', label: '方案甲' },
+          { id: 'p2', label: '方案乙' },
+        ],
+        form: [],
+      }),
+      run: baseRun({
+        nodes: [
+          {
+            id: 'pick-proposal',
+            type: 'proposal_select',
+            label: '选方案',
+            position: { x: 0, y: 0 },
+            config: { from: 'proposals.json' },
+          },
+        ],
+        artifacts: [
+          {
+            id: 'a-proposals',
+            name: 'proposals.json',
+            kind: 'json',
+            nodeId: 'proposal',
+            runId: 'run-1',
+            workflowName: 'wf',
+            sizeBytes: 10,
+            createdAt: '2026-07-18T00:00:00Z',
+          },
+        ],
+      }),
+    })
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'proposal',
+      waiting: 1,
+      busy: false,
+      items: [
+        {
+          id: 'gate-q-race',
+          text: '竞态目标带标注',
+          images: [],
+          annotations: [{ label: '目标点', selector: '#race-target' }],
+        },
+      ],
+    })
+    await flushPromises()
+    vm.reactAnnotations = [{ label: '草稿点', selector: '#draft' }]
+    vm.reactText = '竞态草稿'
+    // After stash, queue_state drops the edit target — must still refill from snapshot.
+    apiMocks.gateReactRevise.mockImplementation(async () => {
+      vm.applyReviewFrame?.({
+        event: 'queue_state',
+        nodeId: 'proposal',
+        waiting: 1,
+        busy: false,
+        items: [
+          {
+            id: 'stashed-draft',
+            text: '竞态草稿',
+            annotations: [{ label: '草稿点', selector: '#draft' }],
+          },
+        ],
+      })
+      return { status: 'accepted', waiting: 1 }
+    })
+    await wrapper.find('[data-testid="clarify-queue-edit"]').trigger('click')
+    await flushPromises()
+    expect(vm.reactText).toBe('竞态目标带标注')
+    expect(vm.reactAnnotations).toEqual([{ label: '目标点', selector: '#race-target' }])
+    expect(apiMocks.gateReactQueueRemove).toHaveBeenCalledWith('run-1', 'pick-proposal', 'gate-q-race')
+    wrapper.unmount()
+  })
+
   it('applyAcpEvents returns false when not thinking/inFlight (g1.2 false applied)', async () => {
     breakpointMocks.isMobile.value = false
     const pageHtml = '<!doctype html><html><body><h1>gate</h1></body></html>'

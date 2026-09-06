@@ -33,6 +33,18 @@ import { imgSrc } from '@/lib/shared/compositeText'
 import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import type { Ref } from 'vue'
 
+/** Element-level clone so queue rows never share annotation object refs with composer. */
+function cloneReactAnnotations(anns?: ReactAnnotation[] | null): ReactAnnotation[] {
+  if (!anns?.length) return []
+  return anns.map((a) => ({ ...a }))
+}
+
+/** Element-level clone for attachment lists (same contract as annotations). */
+function cloneClarifyImages(imgs?: ClarifyImage[] | null): ClarifyImage[] {
+  if (!imgs?.length) return []
+  return imgs.map((im) => ({ ...im }))
+}
+
 export type ClarifyChatProps = {
   runId: string
   nodeId: string
@@ -424,8 +436,8 @@ function editQueuedItem(index: number) {
   // re-enqueue it first so chips are never discarded to unblock edit.
   if (hasComposerDraft()) {
     const t = draft.value.trim()
-    const imgs = attachments.value.slice()
-    const anns = annotations.value.slice()
+    const imgs = cloneClarifyImages(attachments.value)
+    const anns = cloneReactAnnotations(annotations.value)
     const over = findOversizedAttachments(imgs)
     if (over.length) {
       attachNotice.value = formatSendRejectMessage(
@@ -444,8 +456,8 @@ function editQueuedItem(index: number) {
 
   const item = queued.value.splice(index, 1)[0]
   draft.value = item.text
-  attachments.value = (item.images ?? []).slice()
-  annotations.value = (item.annotations ?? []).slice()
+  attachments.value = cloneClarifyImages(item.images)
+  annotations.value = cloneReactAnnotations(item.annotations)
   attachNotice.value = null
   syncQueueThinking()
   nextTick(autoGrow)
@@ -621,7 +633,7 @@ function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotat
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
   // Enqueue only — bubbles materialize on turn_begin (AgentChatTester / Demo).
   // Busy may still enqueue; never open a concurrent turn via optimistic pending.
-  queued.value.push({ text: t, images: imgs, annotations: anns.slice() })
+  queued.value.push({ text: t, images: imgs, annotations: cloneReactAnnotations(anns) })
   thinking.value = true
   emit('send', t, imgs, anns)
   stickToBottom.value = true
@@ -631,8 +643,8 @@ function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotat
 
 function sendFromComposer() {
   const t = draft.value.trim()
-  const imgs = attachments.value.slice()
-  const anns = annotations.value.slice()
+  const imgs = cloneClarifyImages(attachments.value)
+  const anns = cloneReactAnnotations(annotations.value)
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
   const over = findOversizedAttachments(imgs)
   if (over.length) {
@@ -972,13 +984,13 @@ function applyQueueState(
         ? queued.value.find((q) => q.id === id) ?? queued.value.find((q) => !q.id && q.text === text)
         : queued.value.find((q) => q.text === text)
       // Prefer frame images/annotations (authoritative); local only when frame omits.
-      // Always slice so composer refill never shares array refs with the queue row.
+      // Clone elements so composer refill never shares object refs with the queue row.
       const images = Array.isArray(it.images)
-        ? it.images.slice()
-        : (local?.images?.slice() ?? [])
+        ? cloneClarifyImages(it.images)
+        : cloneClarifyImages(local?.images)
       const annotations = Array.isArray(it.annotations)
-        ? it.annotations.slice()
-        : (local?.annotations?.slice() ?? [])
+        ? cloneReactAnnotations(it.annotations)
+        : cloneReactAnnotations(local?.annotations)
       return {
         id: id ?? local?.id,
         text,
@@ -1065,7 +1077,12 @@ function applyReviewFrame(frame: {
   message?: string
   interrupted?: boolean
   waiting?: number
-  items?: { id?: string; text?: string }[]
+  items?: {
+    id?: string
+    text?: string
+    images?: ClarifyImage[]
+    annotations?: ReactAnnotation[]
+  }[]
   busy?: boolean
   activeItem?: {
     id?: string
