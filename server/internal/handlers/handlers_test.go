@@ -127,7 +127,7 @@ func newHarness(t *testing.T) *harness {
 		PlatformRules:    platformRules,
 		Issues:           services.NewIssueService(db),
 		Audit:            auditSvc,
-		Onboarding:       services.NewOnboardingService(projectSvc, skills, sharedAgent, wfSvc),
+		Onboarding:       services.NewOnboardingService(projectSvc, skills, sharedAgent, wfSvc, services.NewOrgService(profilesRoot, skills)),
 		GateShare:         gateShareSvc,
 		GateShareNonces:   gateshare.NewNonceStore(db),
 		GateShareTickets:  gateShareTickets,

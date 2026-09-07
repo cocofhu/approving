@@ -28,11 +28,28 @@ func TestOnboardingBootstrapRequiresAPIKey(t *testing.T) {
 	}
 }
 
-func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
+func TestOnboardingBootstrapRejectsNonDefaultProject(t *testing.T) {
+	svc, _ := newOnboardingHarness(t)
+	other, err := svc.Projects.Create("Other", "", nil, nil)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	_, err = svc.Bootstrap(other.ID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "k",
+	})
+	if !errors.Is(err, services.ErrOnboardingNotDefaultProject) {
+		t.Fatalf("want ErrOnboardingNotDefaultProject, got %v", err)
+	}
+}
+
+func TestOnboardingBootstrapCreatesTeamAndDefaultWorkflow(t *testing.T) {
 	svc, projectID := newOnboardingHarness(t)
 	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
-		AcpBackend: "cursor",
-		APIKey:     "test-key-cursor",
+		AcpBackend:        "cursor",
+		APIKey:            "test-key-cursor",
+		GitCredentialType: "github_https",
+		GitHubToken:       "ghp_test",
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -43,27 +60,25 @@ func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
 	if res.WorkflowID == "" {
 		t.Fatal("missing workflowId")
 	}
-	if len(res.AgentIDs) != 5 {
-		t.Fatalf("want 5 agents, got %v", res.AgentIDs)
+	if len(res.AgentIDs) != 6 {
+		t.Fatalf("want 6 agents, got %v", res.AgentIDs)
 	}
-	if res.Repos != services.DefaultOnboardingRepos {
-		t.Fatalf("repos = %q", res.Repos)
-	}
-	if !strings.Contains(res.Repos, "heroku/nodejs-getting-started") {
-		t.Fatalf("repos must point at heroku well-known source: %q", res.Repos)
-	}
-	if strings.Contains(strings.ToLower(res.Repos), "approving-demo") {
-		t.Fatal("must not use approving-demo")
+	if res.GroupName != services.FirstInstallGroupName {
+		t.Fatalf("groupName = %q", res.GroupName)
 	}
 
-	p, ok := svc.Projects.Get(projectID)
-	if !ok {
-		t.Fatal("project missing")
-	}
-	_ = p
 	shared := svc.SharedAgent.Get(projectID)
 	if shared.Env["APPROVING_CURSOR_API_KEY"] != "test-key-cursor" {
 		t.Fatalf("shared env missing auth key: %+v", shared.Env)
+	}
+	if shared.Env["GITHUB_TOKEN"] != "ghp_test" {
+		t.Fatalf("shared git token missing: %+v", shared.Env)
+	}
+	if shared.GitCredentialType != "github_https" {
+		t.Fatalf("gitCredentialType = %q", shared.GitCredentialType)
+	}
+	if shared.Env["VNC_PREVIEW"] != "1" || shared.Env["BROWSER_MCP"] != "1" {
+		t.Fatalf("preview flags default on: %+v", shared.Env)
 	}
 
 	for _, name := range services.OnboardingAgentNames {
@@ -74,8 +89,8 @@ func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
 		if a.ProjectID != projectID {
 			t.Fatalf("agent %s projectId = %q", name, a.ProjectID)
 		}
-		if a.Env["GIT_REPOS"] != "${vars.repos}" {
-			t.Fatalf("agent %s GIT_REPOS = %q", name, a.Env["GIT_REPOS"])
+		if a.Env["GITHUB_TOKEN"] != "" {
+			t.Fatalf("agent %s must not store git token", name)
 		}
 		if a.AcpBackend != "cursor" {
 			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
@@ -89,11 +104,115 @@ func TestOnboardingBootstrapCreatesAgentsAndPublishedWorkflow(t *testing.T) {
 	if wf.Name != services.OnboardingWorkflowName || wf.Status != "published" || !wf.NeedsRepo {
 		t.Fatalf("workflow meta: name=%s status=%s needsRepo=%v", wf.Name, wf.Status, wf.NeedsRepo)
 	}
-	assertOnboardingGraph(t, wf.Graph)
-	assertOnboardingReposVar(t, wf.Graph)
+	assertDefaultWorkflowGraph(t, wf.Graph)
 }
 
-func TestOnboardingBootstrapWritesCodeBuddyRegionToAgents(t *testing.T) {
+func reposVarValue(t *testing.T, graph models.Graph) []any {
+	t.Helper()
+	for _, v := range graph.Variables {
+		if v.Name != "repos" {
+			continue
+		}
+		items, ok := v.Value.([]any)
+		if !ok {
+			t.Fatalf("repos value is %T, want a list", v.Value)
+		}
+		return items
+	}
+	t.Fatal("workflow has no repos variable")
+	return nil
+}
+
+func TestOnboardingBootstrapWritesWizardRepoIntoWorkflow(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "k",
+		RepoURL:    "https://github.com/org/web.git",
+		RepoBranch: "develop",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	wf, ok := svc.WF.Get(res.WorkflowID)
+	if !ok {
+		t.Fatal("workflow missing")
+	}
+	items := reposVarValue(t, wf.Graph)
+	if len(items) != 1 {
+		t.Fatalf("want 1 repo row, got %d", len(items))
+	}
+	row, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("repo row is %T", items[0])
+	}
+	if row["url"] != "https://github.com/org/web.git" {
+		t.Errorf("url = %v", row["url"])
+	}
+	if row["name"] != "web" {
+		t.Errorf("name = %v, want derived from URL", row["name"])
+	}
+	if row["branch"] != "develop" {
+		t.Errorf("branch = %v", row["branch"])
+	}
+}
+
+func TestOnboardingBootstrapWritesGitIdentityAndPreviewFlags(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	off := false
+	_, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend:   "cursor",
+		APIKey:       "k",
+		GitUserName:  "Ada Lovelace",
+		GitUserEmail: "ada@example.com",
+		VncPreview:   &off,
+		BrowserMcp:   &off,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	shared := svc.SharedAgent.Get(projectID)
+	if shared.Env["GIT_USER_NAME"] != "Ada Lovelace" {
+		t.Errorf("GIT_USER_NAME = %q", shared.Env["GIT_USER_NAME"])
+	}
+	if shared.Env["GIT_USER_EMAIL"] != "ada@example.com" {
+		t.Errorf("GIT_USER_EMAIL = %q", shared.Env["GIT_USER_EMAIL"])
+	}
+	if shared.Env["VNC_PREVIEW"] != "0" {
+		t.Errorf("VNC_PREVIEW = %q, want 0 so approve nodes do not force the stack on", shared.Env["VNC_PREVIEW"])
+	}
+	if shared.Env["BROWSER_MCP"] != "0" {
+		t.Errorf("BROWSER_MCP = %q, want 0", shared.Env["BROWSER_MCP"])
+	}
+}
+
+func TestOnboardingBootstrapLeavesReposBlankWhenRepoSkipped(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "k",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	wf, ok := svc.WF.Get(res.WorkflowID)
+	if !ok {
+		t.Fatal("workflow missing")
+	}
+	for i, item := range reposVarValue(t, wf.Graph) {
+		row, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("repos[%d] is %T", i, item)
+		}
+		for _, field := range []string{"url", "name", "branch"} {
+			if got, _ := row[field].(string); strings.TrimSpace(got) != "" {
+				t.Errorf("repos[%d].%s = %q, want blank", i, field, got)
+			}
+		}
+	}
+}
+
+func TestOnboardingBootstrapWritesCodeBuddyRegionToSharedOnly(t *testing.T) {
 	svc, projectID := newOnboardingHarness(t)
 	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
 		AcpBackend: "codebuddy",
@@ -111,15 +230,13 @@ func TestOnboardingBootstrapWritesCodeBuddyRegionToAgents(t *testing.T) {
 		if a.AcpBackend != "codebuddy" {
 			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
 		}
-		if got := a.Env["APPROVING_CODEBUDDY_REGION"]; got != "internal" {
-			t.Fatalf("agent %s region = %q, want internal", name, got)
+		if got := a.Env["APPROVING_CODEBUDDY_REGION"]; got != "" {
+			t.Fatalf("agent %s must not copy region, got %q", name, got)
 		}
 		if a.Layout.ConfigRoot != "/root/.codebuddy" {
 			t.Fatalf("agent %s configRoot = %q", name, a.Layout.ConfigRoot)
 		}
 	}
-	p, _ := svc.Projects.Get(projectID)
-	_ = p
 	shared := svc.SharedAgent.Get(projectID)
 	if shared.Env["APPROVING_CODEBUDDY_REGION"] != "internal" {
 		t.Fatalf("shared env missing region: %+v", shared.Env)
@@ -135,11 +252,8 @@ func TestOnboardingBootstrapDefaultsPublicRegionForCodeBuddy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
-	a, ok := svc.Skills.Get("ImplementAgent")
-	if !ok {
-		t.Fatal("ImplementAgent missing")
-	}
-	if got := a.Env["APPROVING_CODEBUDDY_REGION"]; got != "public" {
+	shared := svc.SharedAgent.Get(projectID)
+	if got := shared.Env["APPROVING_CODEBUDDY_REGION"]; got != "public" {
 		t.Fatalf("default region = %q, want public", got)
 	}
 }
@@ -159,64 +273,48 @@ func TestOnboardingBootstrapIdempotent(t *testing.T) {
 	if r1.WorkflowID != r2.WorkflowID {
 		t.Fatalf("workflow id changed: %s vs %s", r1.WorkflowID, r2.WorkflowID)
 	}
-	if len(svc.Skills.List()) != 5 {
+	if len(svc.Skills.List()) != 6 {
 		t.Fatalf("agents doubled: %d", len(svc.Skills.List()))
 	}
 	if n := len(svc.WF.List(projectID)); n != 1 {
 		t.Fatalf("workflows doubled: %d", n)
 	}
-	p, _ := svc.Projects.Get(projectID)
-	for _, e := range p.SandboxEnv {
-		if e.Key == "APPROVING_CURSOR_API_KEY" && e.Value != "k2-rotated" {
-			t.Fatalf("auth not updated: %q", e.Value)
-		}
+	shared := svc.SharedAgent.Get(projectID)
+	if shared.Env["APPROVING_CURSOR_API_KEY"] != "k2-rotated" {
+		t.Fatalf("auth not updated: %+v", shared.Env)
 	}
 }
 
 func TestOnboardingBootstrapRejectsCrossProjectAgentConflict(t *testing.T) {
 	svc, projectA := newOnboardingHarness(t)
-	_, err := svc.Bootstrap(projectA, services.OnboardingBootstrapRequest{
-		AcpBackend: "cursor",
-		APIKey:     "key-a",
-	})
-	if err != nil {
-		t.Fatalf("bootstrap A: %v", err)
-	}
-	projectB, err := svc.Projects.Create("Other", "", nil, nil)
+	other, err := svc.Projects.Create("Other", "", nil, nil)
 	if err != nil {
 		t.Fatalf("create B: %v", err)
 	}
-	_, err = svc.Bootstrap(projectB.ID, services.OnboardingBootstrapRequest{
+	if err := svc.Skills.Save(services.Agent{
+		Name:       services.OnboardingAgentNames[0],
 		AcpBackend: "cursor",
-		APIKey:     "key-b",
+		ProjectID:  other.ID,
+		Env:        map[string]string{},
+	}); err != nil {
+		t.Fatalf("seed other: %v", err)
+	}
+	_, err = svc.Bootstrap(projectA, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "key-a",
 	})
 	if !errors.Is(err, services.ErrOnboardingAgentConflict) {
 		t.Fatalf("want ErrOnboardingAgentConflict, got %v", err)
 	}
-	if n := len(svc.WF.List(projectB.ID)); n != 0 {
-		t.Fatalf("project B must not get workflow on conflict, got %d", n)
-	}
-	pB, _ := svc.Projects.Get(projectB.ID)
-	for _, e := range pB.SandboxEnv {
-		if e.Key == "APPROVING_CURSOR_API_KEY" {
-			t.Fatal("project B auth must not be written on agent conflict")
-		}
-	}
-	for _, name := range services.OnboardingAgentNames {
-		a, ok := svc.Skills.Get(name)
-		if !ok {
-			t.Fatalf("agent %s missing", name)
-		}
-		if a.ProjectID != projectA {
-			t.Fatalf("agent %s rebound to %q", name, a.ProjectID)
-		}
+	if n := len(svc.WF.List(projectA)); n != 0 {
+		t.Fatalf("must not get workflow on conflict, got %d", n)
 	}
 }
 
 func TestOnboardingBootstrapAllowsClaimingUnboundAgents(t *testing.T) {
 	svc, projectID := newOnboardingHarness(t)
 	unbound := services.Agent{
-		Name:       "ClarifyAgent",
+		Name:       services.OnboardingAgentNames[0],
 		AcpBackend: "cursor",
 		ProjectID:  "",
 		Files:      []services.AgentFile{{Path: "AGENTS.md", Content: "# unbound\n"}},
@@ -232,27 +330,44 @@ func TestOnboardingBootstrapAllowsClaimingUnboundAgents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootstrap should claim unbound: %v", err)
 	}
-	if len(res.AgentIDs) != 5 {
-		t.Fatalf("want 5 agents, got %v", res.AgentIDs)
+	if len(res.AgentIDs) != 6 {
+		t.Fatalf("want 6 agents, got %v", res.AgentIDs)
 	}
-	a, ok := svc.Skills.Get("ClarifyAgent")
+	a, ok := svc.Skills.Get(services.OnboardingAgentNames[0])
 	if !ok || a.ProjectID != projectID {
-		t.Fatalf("ClarifyAgent not claimed: ok=%v projectId=%q", ok, a.ProjectID)
+		t.Fatalf("agent not claimed: ok=%v projectId=%q", ok, a.ProjectID)
 	}
 }
 
-func TestOnboardingLightGraphValidate(t *testing.T) {
-	g := services.BuildOnboardingLightGraphForTest(
-		services.DefaultOnboardingRepos,
-		services.DefaultOnboardingFeature,
-	)
-	if err := g.Validate(); err != nil {
+func TestFirstInstallDefaultWorkflowValidates(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "k",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	wf, ok := svc.WF.Get(res.WorkflowID)
+	if !ok {
+		t.Fatal("missing workflow")
+	}
+	if err := wf.Graph.Validate(); err != nil {
 		t.Fatalf("graph invalid: %v", err)
 	}
 }
 
-func assertOnboardingReposVar(t *testing.T, g models.Graph) {
+func assertDefaultWorkflowGraph(t *testing.T, g models.Graph) {
 	t.Helper()
+	byID := map[string]models.Node{}
+	for _, n := range g.Nodes {
+		byID[n.ID] = n
+	}
+	for _, id := range []string{"input_d3s1", "approve_7gl6", "implement_qnlc", "test_7qy3", "review_hfqm", "submit_mr_i46x", "output_mh48"} {
+		if _, ok := byID[id]; !ok {
+			t.Fatalf("missing node %s", id)
+		}
+	}
 	var reposVar *models.Variable
 	for i := range g.Variables {
 		if g.Variables[i].Name == "repos" {
@@ -263,82 +378,17 @@ func assertOnboardingReposVar(t *testing.T, g models.Graph) {
 	if reposVar == nil {
 		t.Fatal("missing repos variable")
 	}
-	if reposVar.Type != "repos" {
-		t.Fatalf("repos type = %q, want repos", reposVar.Type)
-	}
 	list, ok := reposVar.Value.([]any)
 	if !ok || len(list) == 0 {
-		t.Fatalf("repos value want non-empty []any, got %T %#v", reposVar.Value, reposVar.Value)
+		t.Fatalf("repos value want []any, got %T %#v", reposVar.Value, reposVar.Value)
 	}
 	first, ok := list[0].(map[string]any)
 	if !ok {
 		t.Fatalf("repos[0] = %T", list[0])
 	}
 	url, _ := first["url"].(string)
-	if !strings.Contains(url, "heroku/nodejs-getting-started") {
-		t.Fatalf("repos[0].url = %q", url)
-	}
-}
-
-func assertOnboardingGraph(t *testing.T, g models.Graph) {
-	t.Helper()
-	byID := map[string]models.Node{}
-	for _, n := range g.Nodes {
-		byID[n.ID] = n
-	}
-	for _, id := range []string{"input", "clarify", "visual", "implement", "output"} {
-		if _, ok := byID[id]; !ok {
-			t.Fatalf("missing node %s", id)
-		}
-	}
-	for _, banned := range []string{"research", "proposal", "plan", "review", "human_gate", "test", "app_preview"} {
-		for _, n := range g.Nodes {
-			if n.Type == banned || n.ID == banned {
-				t.Fatalf("unexpected node %s type=%s", n.ID, n.Type)
-			}
-		}
-	}
-	for _, n := range g.Nodes {
-		if n.Position.X == 0 && n.Position.Y == 0 {
-			t.Fatalf("node %s has invalid position (0,0)", n.ID)
-		}
-	}
-	var hasReviewVar bool
-	for _, v := range g.Variables {
-		if v.Name == "review" {
-			hasReviewVar = true
-			if v.Value != true {
-				t.Fatalf("review var value = %v want true", v.Value)
-			}
-		}
-	}
-	if !hasReviewVar {
-		t.Fatal("missing review variable")
-	}
-	if byID["clarify"].Config["review_var"] != "review" {
-		t.Fatalf("clarify review_var = %v", byID["clarify"].Config["review_var"])
-	}
-	if byID["visual"].Config["review_var"] != "review" {
-		t.Fatalf("visual review_var = %v", byID["visual"].Config["review_var"])
-	}
-	implPrompt, _ := byID["implement"].Config["prompt"].(string)
-	if strings.Contains(implPrompt, "get_plan") {
-		t.Fatal("light implement prompt must not require get_plan")
-	}
-	wantEdges := map[string]string{
-		"input": "clarify", "clarify": "visual", "visual": "implement", "implement": "output",
-	}
-	for _, e := range g.Edges {
-		if wantEdges[e.Source] != e.Target {
-			t.Fatalf("unexpected edge %s→%s", e.Source, e.Target)
-		}
-		delete(wantEdges, e.Source)
-		if strings.TrimSpace(e.When) != "" {
-			t.Fatalf("main-chain edge must not use when: %s→%s when=%q", e.Source, e.Target, e.When)
-		}
-	}
-	if len(wantEdges) != 0 {
-		t.Fatalf("missing edges from %v", wantEdges)
+	if strings.Contains(url, "git.woa.com") || strings.Contains(url, "heroku") {
+		t.Fatalf("repos[0].url leaked host: %q", url)
 	}
 	if err := g.Validate(); err != nil {
 		t.Fatalf("graph validate: %v", err)
@@ -357,11 +407,13 @@ func newOnboardingHarness(t *testing.T) (*services.OnboardingService, string) {
 		}
 	})
 	projects := services.NewProjectService(db)
-	p, err := projects.Create("Onboard", "", nil, nil)
-	if err != nil {
-		t.Fatalf("create project: %v", err)
+	projectID := projects.DefaultProjectID()
+	if projectID == "" {
+		t.Fatal("default project missing")
 	}
-	skills := services.NewAgentService(t.TempDir())
+	root := t.TempDir()
+	skills := services.NewAgentService(root)
+	org := services.NewOrgService(root, skills)
 	wf := services.NewWorkflowService(db)
-	return services.NewOnboardingService(projects, skills, services.NewSharedAgentService(t.TempDir()), wf), p.ID
+	return services.NewOnboardingService(projects, skills, services.NewSharedAgentService(t.TempDir()), wf, org), projectID
 }

@@ -14,13 +14,15 @@ export async function seedOnboardingDismissed(
   page: Page,
   projectId = 'proj-1',
 ): Promise<void> {
-  await page.addInitScript((pid: string) => {
+  await page.addInitScript((pids: string[]) => {
     try {
-      localStorage.setItem(`approving-onboarding-dismiss:${pid}`, '1')
+      for (const pid of pids) {
+        localStorage.setItem(`approving-onboarding-dismiss:${pid}`, '1')
+      }
     } catch {
       /* ignore */
     }
-  }, projectId)
+  }, [projectId, 'proj-default'])
 }
 
 /**

@@ -41,16 +41,25 @@ export const agentsClient = {
       acpBackend: string
       apiKey: string
       region?: string
-      repos?: string
-      featureHint?: string
+      gitCredentialType?: string
+      githubToken?: string
+      gitlabToken?: string
+      gitlabUrl?: string
+      gitSshPrivateKey?: string
+      gitSshKnownHosts?: string
+      repoUrl?: string
+      repoBranch?: string
+      gitUserName?: string
+      gitUserEmail?: string
+      vncPreview?: boolean
+      browserMcp?: boolean
     },
   ) =>
     req<{
       agentIds: string[]
       workflowId: string
-      repos: string
-      feature: string
       published: boolean
+      groupName?: string
     }>(`/projects/${encodeURIComponent(projectId)}/bootstrap-onboarding`, {
       method: 'POST',
       body: JSON.stringify(body),

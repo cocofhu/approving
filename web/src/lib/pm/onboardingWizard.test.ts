@@ -1,24 +1,23 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, beforeEach, beforeAll } from 'vitest'
+import { describe, expect, it, beforeEach, beforeAll, vi } from 'vitest'
 import {
-  DEFAULT_ONBOARDING_REPOS_LITERAL,
+  DEFAULT_PROJECT_ID,
+  ONBOARDING_STEPS,
   assembleBootstrapBody,
+  detectSystemLocale,
   dismissOnboarding,
-  encodeReposLiteral,
   freshOnboardingDraft,
+  gitConfigured,
   isEmptyProjectForOnboarding,
   isOnboardingDismissed,
   onboardingDismissKey,
-  parseReposLiteral,
-  reposInputFromFields,
+  gitIdentityConfigured,
+  repoConfigured,
+  repoNameFromUrl,
   shouldAutoOpenOnboarding,
 } from './onboardingWizard'
 import { i18n } from '@/lib/shared/i18n'
 import { loadLocaleMessages } from '@/lib/shared/loadLocaleMessages'
-
-const EN_FEATURE_HINT =
-  'Add a lightweight quick-start sample so the team can walk the clarify → gate → agent path.'
-const ZH_FEATURE_HINT = '用轻量快速上手示例走完澄清 → 门禁 → Agent 路径。'
 
 beforeAll(async () => {
   const [zh, en] = await Promise.all([loadLocaleMessages('zh-CN'), loadLocaleMessages('en')])
@@ -32,76 +31,113 @@ describe('onboardingWizard', () => {
     i18n.global.locale.value = 'zh-CN'
   })
 
-  it('encodes default heroku well-known repos literal', () => {
-    const d = freshOnboardingDraft()
-    expect(encodeReposLiteral(d.repo)).toBe(DEFAULT_ONBOARDING_REPOS_LITERAL)
-    expect(DEFAULT_ONBOARDING_REPOS_LITERAL).toContain('heroku/nodejs-getting-started')
-    expect(DEFAULT_ONBOARDING_REPOS_LITERAL.toLowerCase()).not.toContain('approving-demo')
+  it('starts with language and defaults it from the system locale', () => {
+    expect(ONBOARDING_STEPS[0]?.id).toBe('language')
+    vi.stubGlobal('navigator', { language: 'zh-CN' })
+    expect(detectSystemLocale()).toBe('zh-CN')
+    expect(freshOnboardingDraft().language).toBe('zh-CN')
+    vi.stubGlobal('navigator', { language: 'en-US' })
+    expect(detectSystemLocale()).toBe('en')
+    expect(freshOnboardingDraft().language).toBe('en')
+    vi.unstubAllGlobals()
   })
 
-  it('round-trips repos literal', () => {
-    const lit = 'demo|https://github.com/heroku/nodejs-getting-started.git|main'
-    expect(encodeReposLiteral(parseReposLiteral(lit))).toBe(lit)
-  })
-
-  it('builds structured repos input for StartRun', () => {
-    expect(reposInputFromFields(parseReposLiteral(DEFAULT_ONBOARDING_REPOS_LITERAL))).toEqual([
-      {
-        name: 'demo',
-        url: 'https://github.com/heroku/nodejs-getting-started.git',
-        branch: 'main',
-      },
-    ])
-  })
-
-  it('assembles bootstrap body with optional region', () => {
+  it('assembles bootstrap body without heroku repos or featureHint', () => {
     const d = freshOnboardingDraft()
     d.acpBackend = 'codebuddy'
     d.region = 'public'
     d.apiKey = 'cb-key'
+    d.gitCredentialType = 'github_https'
+    d.githubToken = 'ghp_x'
     const body = assembleBootstrapBody(d)
     expect(body.apiKey).toBe('cb-key')
     expect(body.region).toBe('public')
-    expect(body.repos).toContain('heroku/nodejs-getting-started')
+    expect(body.gitCredentialType).toBe('github_https')
+    expect(body.githubToken).toBe('ghp_x')
+    expect(body).not.toHaveProperty('repos')
+    expect(body).not.toHaveProperty('featureHint')
+    expect(body.vncPreview).toBe(true)
+    expect(body.browserMcp).toBe(true)
   })
 
-  it('assembles featureHint from zh locale (Demo gold)', () => {
-    i18n.global.locale.value = 'zh-CN'
-    const body = assembleBootstrapBody(freshOnboardingDraft())
-    expect(body.featureHint).toBe(ZH_FEATURE_HINT)
+  it('sends git identity and can turn preview flags off', () => {
+    const d = freshOnboardingDraft()
+    d.apiKey = 'k'
+    expect(gitIdentityConfigured(d)).toBe(false)
+    d.gitUserName = ' Ada Lovelace '
+    d.gitUserEmail = ' ada@example.com '
+    d.vncPreview = false
+    d.browserMcp = false
+    expect(gitIdentityConfigured(d)).toBe(true)
+    const body = assembleBootstrapBody(d)
+    expect(body.gitUserName).toBe('Ada Lovelace')
+    expect(body.gitUserEmail).toBe('ada@example.com')
+    expect(body.vncPreview).toBe(false)
+    expect(body.browserMcp).toBe(false)
   })
 
-  it('assembles featureHint from en locale (Demo gold)', () => {
-    i18n.global.locale.value = 'en'
-    const body = assembleBootstrapBody(freshOnboardingDraft())
-    expect(body.featureHint).toBe(EN_FEATURE_HINT)
-    expect(body.featureHint).not.toContain('快速上手·轻量')
+  it('sends the repo only when a URL is given, branch only alongside it', () => {
+    const d = freshOnboardingDraft()
+    d.apiKey = 'k'
+    expect(assembleBootstrapBody(d)).not.toHaveProperty('repoUrl')
+
+    d.repoBranch = 'develop'
+    expect(assembleBootstrapBody(d)).not.toHaveProperty('repoBranch')
+
+    d.repoUrl = '  https://github.com/org/web.git  '
+    const body = assembleBootstrapBody(d)
+    expect(body.repoUrl).toBe('https://github.com/org/web.git')
+    expect(body.repoBranch).toBe('develop')
   })
 
-  it('detects empty project by 0 workflows and 0 bound agents', () => {
-    expect(isEmptyProjectForOnboarding(0, [], 'p1')).toBe(true)
-    expect(isEmptyProjectForOnboarding(1, [], 'p1')).toBe(false)
-    expect(isEmptyProjectForOnboarding(0, [{ name: 'ClarifyAgent', projectId: 'p1' }], 'p1')).toBe(false)
-    expect(isEmptyProjectForOnboarding(0, [{ name: 'OtherAgent', projectId: 'other' }], 'p1')).toBe(true)
+  it('derives the clone dir the same way the server does', () => {
+    expect(repoNameFromUrl('https://github.com/org/web.git')).toBe('web')
+    expect(repoNameFromUrl('https://git.host.cc/org/web')).toBe('web')
+    expect(repoNameFromUrl('git@github.com:org/api.git')).toBe('api')
+    expect(repoNameFromUrl('ssh://git@host/org/infra.git/')).toBe('infra')
+    expect(repoNameFromUrl('   ')).toBe('')
   })
 
-  it('treats cross-project onboarding agent names as non-empty (would 409)', () => {
+  it('repoConfigured tracks a non-blank URL', () => {
+    const d = freshOnboardingDraft()
+    expect(repoConfigured(d)).toBe(false)
+    d.repoUrl = '   '
+    expect(repoConfigured(d)).toBe(false)
+    d.repoUrl = 'https://github.com/org/web.git'
+    expect(repoConfigured(d)).toBe(true)
+  })
+
+  it('gitConfigured requires type and matching secret', () => {
+    const d = freshOnboardingDraft()
+    expect(gitConfigured(d)).toBe(false)
+    d.gitCredentialType = 'github_https'
+    expect(gitConfigured(d)).toBe(false)
+    d.githubToken = 'tok'
+    expect(gitConfigured(d)).toBe(true)
+  })
+
+  it('only treats the default project as empty for first-install', () => {
+    expect(isEmptyProjectForOnboarding(0, [], DEFAULT_PROJECT_ID)).toBe(true)
+    expect(isEmptyProjectForOnboarding(0, [], 'p1')).toBe(false)
+    expect(isEmptyProjectForOnboarding(1, [], DEFAULT_PROJECT_ID)).toBe(false)
     expect(
-      isEmptyProjectForOnboarding(0, [{ name: 'ClarifyAgent', projectId: 'other' }], 'p1'),
+      isEmptyProjectForOnboarding(0, [{ name: '综合研发工程师', projectId: DEFAULT_PROJECT_ID }], DEFAULT_PROJECT_ID),
     ).toBe(false)
-    expect(
-      isEmptyProjectForOnboarding(0, [{ name: 'VisualAgent', projectId: 'other' }], 'p1'),
-    ).toBe(false)
-    // unbound fixed-name agents can still be claimed
-    expect(isEmptyProjectForOnboarding(0, [{ name: 'ClarifyAgent', projectId: '' }], 'p1')).toBe(true)
   })
 
-  it('auto-open respects dismiss and emptiness', () => {
-    expect(shouldAutoOpenOnboarding('p1', 0, [])).toBe(true)
-    dismissOnboarding('p1')
-    expect(isOnboardingDismissed('p1')).toBe(true)
-    expect(localStorage.getItem(onboardingDismissKey('p1'))).toBe('1')
+  it('treats cross-project first-install agent names as non-empty', () => {
+    expect(
+      isEmptyProjectForOnboarding(0, [{ name: '综合AI技术产品', projectId: 'other' }], DEFAULT_PROJECT_ID),
+    ).toBe(false)
+    expect(isEmptyProjectForOnboarding(0, [{ name: '综合AI技术产品', projectId: '' }], DEFAULT_PROJECT_ID)).toBe(true)
+  })
+
+  it('auto-open respects dismiss and default project', () => {
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, 0, [])).toBe(true)
     expect(shouldAutoOpenOnboarding('p1', 0, [])).toBe(false)
-    expect(shouldAutoOpenOnboarding('p1', 0, [])).toBe(false) // CTA may still open manually
+    dismissOnboarding(DEFAULT_PROJECT_ID)
+    expect(isOnboardingDismissed(DEFAULT_PROJECT_ID)).toBe(true)
+    expect(localStorage.getItem(onboardingDismissKey(DEFAULT_PROJECT_ID))).toBe('1')
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, 0, [])).toBe(false)
   })
 })

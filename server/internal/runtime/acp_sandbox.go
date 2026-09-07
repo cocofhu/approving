@@ -385,7 +385,8 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 	return spec, nil
 }
 
-// applyAppPreviewEnv sets VNC_PREVIEW by default. When the node switch
+// applyAppPreviewEnv sets VNC_PREVIEW by default unless the merged env already
+// has an explicit off (0/false). When the node switch
 // direct_preview is on, skip the VNC stack and ask the gateway to 1:1-map a
 // PREVIEW_PORT instead (PREVIEW_DIRECT=1).
 func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]any, publicAdvertise string) {
@@ -408,8 +409,18 @@ func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]a
 		}
 		return
 	}
+	// Shared / Agent env can explicitly turn the stack off (first-install wizard).
+	if envFlagOff(env["VNC_PREVIEW"]) {
+		delete(env, "APPROVING_VNC_PREVIEW")
+		return
+	}
 	env["VNC_PREVIEW"] = "1"
 	env["APPROVING_VNC_PREVIEW"] = "1"
+}
+
+func envFlagOff(v string) bool {
+	s := strings.ToLower(strings.TrimSpace(v))
+	return s == "0" || s == "false" || s == "off" || s == "no"
 }
 
 func previewPickScriptURL(base string) string {

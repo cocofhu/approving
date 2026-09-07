@@ -20,11 +20,8 @@ import type {
   Workflow,
   WorkflowNotifyPolicy,
 } from '@/lib/shared/types'
-import {
-  isEmptyProjectForOnboarding,
-  shouldAutoOpenOnboarding,
-  type OnboardingBootstrapResult,
-} from '@/lib/pm/onboardingWizard'
+import { isEmptyProjectForOnboarding } from '@/lib/pm/onboardingWizard'
+import { firstInstallCompletedAt, openFirstInstall } from '@/lib/pm/firstInstall'
 
 export function useProjectDetail() {
 const PROJECT_TABS = [
@@ -260,7 +257,6 @@ const deleteWfError = ref('')
 const copyPreviewLoading = ref<string | null>(null)
 const copyModal = ref<{ sourceId: string; sourceName: string; suggestedName: string } | null>(null)
 const exportTarget = ref<Workflow | null>(null)
-const onboardingOpen = ref(false)
 const projectAgents = ref<{ name: string; projectId?: string }[]>([])
 
 const isOnboardingEmpty = computed(() =>
@@ -469,9 +465,6 @@ async function load() {
     varRows.value = (p.variables || []).map((v) => ({ ...v }))
     workflows.value = wfs
     projectAgents.value = agents.map((a) => ({ name: a.name, projectId: a.projectId }))
-    if (shouldAutoOpenOnboarding(p.id, wfs.length, projectAgents.value)) {
-      onboardingOpen.value = true
-    }
   } catch (e: unknown) {
     if (!projectSeq.isCurrentSeq(localSeq)) return
     if (keepStale && project.value) return
@@ -489,10 +482,10 @@ async function load() {
 }
 
 function openOnboarding() {
-  onboardingOpen.value = true
+  openFirstInstall()
 }
 
-async function onOnboardingCompleted(_res: OnboardingBootstrapResult) {
+async function refreshAfterOnboarding() {
   await reloadWorkflows()
   try {
     const agents = await api.listAgents()
@@ -502,10 +495,10 @@ async function onOnboardingCompleted(_res: OnboardingBootstrapResult) {
   }
 }
 
-function onOnboardingRunStarted(runId: string) {
-  onboardingOpen.value = false
-  router.push(`/runs/${runId}`)
-}
+// The wizard lives in App.vue, so a completed bootstrap reaches this view as a signal.
+watch(firstInstallCompletedAt, (at) => {
+  if (at) void refreshAfterOnboarding()
+})
 
 async function reloadWorkflows() {
   const localSeq = workflowSeq.beginListRequest()
@@ -880,7 +873,6 @@ onBeforeRouteUpdate(async (to, from) => {
   copyPreviewLoading,
   copyModal,
   exportTarget,
-  onboardingOpen,
   projectAgents,
   isOnboardingEmpty,
   fileInput,
@@ -913,8 +905,6 @@ onBeforeRouteUpdate(async (to, from) => {
   onScrollClose,
   load,
   openOnboarding,
-  onOnboardingCompleted,
-  onOnboardingRunStarted,
   reloadWorkflows,
   saveMeta,
   clearUnknownModelDisplayName,

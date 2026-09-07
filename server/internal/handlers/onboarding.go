@@ -11,9 +11,8 @@ import (
 )
 
 // BootstrapProjectOnboarding handles POST /api/projects/:id/bootstrap-onboarding.
-// It writes project auth, creates/reuses 5 agents, and publishes the light workflow.
-// It never starts a Run. Missing apiKey → 400 with no partial resources created
-// (auth/agents/workflow are only written after the key check).
+// First-install only: default project shared auth, 综合项目组, 默认工作流.
+// It never starts a Run. Missing apiKey → 400 with no partial resources created.
 func (h *Handlers) BootstrapProjectOnboarding(c *gin.Context) {
 	if h.Onboarding == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "onboarding unavailable"})
@@ -28,7 +27,8 @@ func (h *Handlers) BootstrapProjectOnboarding(c *gin.Context) {
 	result, err := h.Onboarding.Bootstrap(projectID, req)
 	if err != nil {
 		switch {
-		case errors.Is(err, services.ErrOnboardingAPIKeyRequired):
+		case errors.Is(err, services.ErrOnboardingAPIKeyRequired),
+			errors.Is(err, services.ErrOnboardingNotDefaultProject):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, services.ErrOnboardingProjectNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

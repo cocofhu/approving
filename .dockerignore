@@ -27,7 +27,7 @@ sandbox-gateway/
 **/*.md
 !server/internal/sandbox/skills_embed/
 !server/internal/sandbox/skills_embed/**/*.md
-!server/internal/services/onboarding_embed/
-!server/internal/services/onboarding_embed/**/*.md
+!server/internal/services/first_install_embed/
+!server/internal/services/first_install_embed/**/*.md
 !server/internal/services/team_embed/
 !server/internal/services/team_embed/**/*.md
