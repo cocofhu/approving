@@ -9,18 +9,17 @@ import { useI18n } from 'vue-i18n'
  * draggable via sash, clamped to [240, min(480, shell−stageMin−sash)],
  * optionally persisted per storageKey.
  * Narrow: vertical with a bottom drawer (draggable height); no horizontal sash.
+ * Mobile drawer clamps to [handle hit min, shell height] so it can fill top/bottom.
  */
 
 const SIDEBAR_MIN = 240
 const SIDEBAR_MAX = 480
+/** Desktop stage floor only — mobile drawer no longer reserves STAGE_MIN. */
 const STAGE_MIN = 160
 const SASH_WIDTH = 4
 const DRAG_THRESHOLD_PX = 3
 
-/** Mobile drawer floor (content area, excluding handle). */
-const DRAWER_MIN = 180
-const DRAWER_MAX_RATIO = 0.75
-/** Visual handle bar is thin; hit target is expanded to this minimum. */
+/** Visual handle bar is thin; hit target / drawer floor is this minimum. */
 const HANDLE_HIT_MIN = 44
 
 const props = withDefaults(
@@ -85,34 +84,35 @@ function effectiveShellHeight(): number {
 }
 
 function effectiveDrawerMax(shellH = effectiveShellHeight()): number {
-  return Math.floor(shellH * DRAWER_MAX_RATIO)
+  return Math.max(0, Math.round(shellH))
 }
 
+/** Floor is the visible handle hit target; never exceed shell on short viewports. */
 function effectiveDrawerMin(shellH = effectiveShellHeight()): number {
   const max = effectiveDrawerMax(shellH)
-  const stageCap = Math.max(0, shellH - STAGE_MIN)
-  return Math.min(DRAWER_MIN, max, stageCap)
+  return Math.min(HANDLE_HIT_MIN, max)
 }
 
-/** Clamp drawer height while guaranteeing stage ≥ STAGE_MIN. */
+/** Clamp drawer height to [handleMin, shellH] — full top / full bottom allowed. */
 function clampDrawerHeight(px: number, shellH = effectiveShellHeight()): number {
   const min = effectiveDrawerMin(shellH)
   const max = effectiveDrawerMax(shellH)
-  const stageCap = Math.max(min, shellH - STAGE_MIN)
-  const ceiling = Math.min(max, stageCap)
-  return Math.max(min, Math.min(ceiling, Math.round(px)))
+  return Math.max(min, Math.min(max, Math.round(px)))
 }
 
-/** Adaptive default: ~38% of shell, never squeezing stage below STAGE_MIN. */
+/** Adaptive default: ~38% of shell (and props hint), clamped to the new range. */
 function defaultDrawerHeight(shellH = effectiveShellHeight()): number {
-  const stageCap = shellH - STAGE_MIN
-  const preferred = Math.min(Math.round(shellH * 0.38), props.drawerHeight, stageCap)
+  const preferred = Math.min(Math.round(shellH * 0.38), props.drawerHeight)
   return clampDrawerHeight(preferred, shellH)
 }
+
+/** Last shell height used for mobile drawer clamp — preserves full-top / full-bottom on resize. */
+let lastDrawerShellH = 0
 
 function initDrawerHeight() {
   if (!props.mobile) return
   height.value = defaultDrawerHeight()
+  lastDrawerShellH = effectiveShellHeight()
 }
 
 /** Read stored width; returns null for missing/illegal/out-of-[240,480] values. */
@@ -155,7 +155,24 @@ function onShellSizeChange() {
   if (sashDragging.value) return
   if (props.mobile) {
     if (!drawerDragging.value) {
-      height.value = clampDrawerHeight(height.value)
+      const shellH = effectiveShellHeight()
+      const min = effectiveDrawerMin(shellH)
+      const max = effectiveDrawerMax(shellH)
+      if (lastDrawerShellH > 0) {
+        const prevMin = effectiveDrawerMin(lastDrawerShellH)
+        const prevMax = effectiveDrawerMax(lastDrawerShellH)
+        // Keep extreme semantics across shell resize (rotate / parent grow).
+        if (height.value >= prevMax - 1) {
+          height.value = max
+        } else if (height.value <= prevMin + 1) {
+          height.value = min
+        } else {
+          height.value = clampDrawerHeight(height.value, shellH)
+        }
+      } else {
+        height.value = clampDrawerHeight(height.value, shellH)
+      }
+      lastDrawerShellH = shellH
     }
     return
   }
@@ -188,6 +205,7 @@ function onPointerUp() {
   if (!drawerDragging.value) return
   drawerDragging.value = false
   setDrawerDraggingUi(false)
+  lastDrawerShellH = effectiveShellHeight()
 }
 
 function setSashDraggingUi(on: boolean) {
@@ -276,7 +294,6 @@ onBeforeUnmount(() => {
     <section
       class="flex min-h-0 flex-1 flex-col overflow-hidden"
       :class="mobile ? 'min-w-0 border-b border-line' : 'review-shell-stage'"
-      :style="mobile ? { minHeight: `${STAGE_MIN}px` } : undefined"
       data-testid="review-shell-stage"
     >
       <slot name="stage" />
@@ -303,7 +320,7 @@ onBeforeUnmount(() => {
 
     <aside
       class="flex min-h-0 flex-col bg-surface"
-      :class="mobile ? 'w-full' : 'shrink-0'"
+      :class="mobile ? 'w-full shrink-0' : 'shrink-0'"
       :style="
         mobile
           ? {

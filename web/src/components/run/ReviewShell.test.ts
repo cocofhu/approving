@@ -386,8 +386,8 @@ describe('ReviewShell sidebar width', () => {
   })
 })
 
-// plan_coverage leaves (mobile drawer fix): g1.1 drag events, g1.2 hit area, g1.3 aria/locale,
-// g1.4 adaptive default + stage min, g3.1 unit tests — use leaf ids only in test_result.
+// plan_coverage leaves: g1.1 clamp constants; g1.2 flex/minHeight; g1.3 aria;
+// g2.1 default ~38%; g2.2 unit extremes + drag-back — use leaf ids only in test_result.
 describe('ReviewShell mobile drawer', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -400,68 +400,198 @@ describe('ReviewShell mobile drawer', () => {
     vi.restoreAllMocks()
   })
 
-  // plan_coverage: g1.4 — adaptive default height + stage≥160 clamp
-  it('adaptive default height preserves stage min and stays below old 340 default', async () => {
+  // plan_coverage: g2.1 — adaptive default ~38% mid-split, not full-top/full-bottom
+  it('adaptive default height is mid-split (~38%) and not an extreme', async () => {
     const w = mountMobileShell({}, 600)
     await w.vm.$nextTick()
     const style = drawerHeightStyle(w)
     const match = style.match(/height:\s*(\d+)px/)
     expect(match).toBeTruthy()
     const drawerH = Number(match![1])
-    expect(drawerH).toBeLessThan(340)
-    expect(drawerH).toBeGreaterThanOrEqual(180)
-    // stage = shell 600 - drawer should stay >= STAGE_MIN 160
-    expect(600 - drawerH).toBeGreaterThanOrEqual(160)
+    // min(38% of 600, drawerHeight 280) = 228
+    expect(drawerH).toBe(228)
+    expect(drawerH).toBeGreaterThan(44)
+    expect(drawerH).toBeLessThan(600)
+    // No localStorage persistence for drawer height
+    expect(localStorage.length).toBe(0)
     w.unmount()
   })
 
-  // plan_coverage: g1.2 / g1.3 — 44px hit area, touch-action:none, horizontal separator aria + 拖动文案
-  it('drawer handle has touch-action none and expanded hit area', () => {
-    const w = mountMobileShell()
-    const handle = w.get('[data-testid="review-shell-drawer-handle"]')
-    expect(handle.classes()).toContain('review-shell-drawer-handle')
-    expect(handle.attributes('role')).toBe('separator')
-    expect(handle.attributes('aria-orientation')).toBe('horizontal')
-    expect(handle.attributes('aria-label')).toContain('拖动')
-    w.unmount()
-  })
-
-  // plan_coverage: g1.1 — pointer capture, preventDefault, scroll lock while dragging
-  it('dragging drawer handle changes height and locks scroll', async () => {
+  // plan_coverage: g1.3 — valuemin=handle(44), valuemax=shellH, scroll lock class
+  it('drawer handle aria range is [handleMin, shellH] with scroll lock while dragging', async () => {
     const w = mountMobileShell({}, 600)
     await w.vm.$nextTick()
-    const before = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
-    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
-    firePointer(handle, 'pointerdown', 200, 500)
-    firePointer(handle, 'pointermove', 200, 420)
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]')
+    expect(handle.attributes('role')).toBe('separator')
+    expect(handle.attributes('aria-orientation')).toBe('horizontal')
+    expect(handle.attributes('aria-valuemin')).toBe('44')
+    expect(handle.attributes('aria-valuemax')).toBe('600')
+    expect(handle.attributes('aria-label')).toContain('拖动')
+
+    const el = handle.element
+    firePointer(el, 'pointerdown', 200, 500)
     await w.vm.$nextTick()
-    const after = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
-    expect(after).toBeGreaterThan(before)
     expect(document.body.classList.contains('review-shell-drawer-dragging')).toBe(true)
-    firePointer(handle, 'pointerup', 200, 420)
+    firePointer(el, 'pointerup', 200, 500)
     await w.vm.$nextTick()
     expect(document.body.classList.contains('review-shell-drawer-dragging')).toBe(false)
     w.unmount()
   })
 
-  it('clamps drawer drag to shell budget on short viewports', async () => {
+  // plan_coverage: g1.1 / g2.2 — drag up to shell height (full top)
+  it('dragging up clamps drawer to full shell height', async () => {
+    const w = mountMobileShell({}, 600)
+    await w.vm.$nextTick()
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
+    firePointer(handle, 'pointerdown', 200, 400)
+    firePointer(handle, 'pointermove', 200, -400)
+    await w.vm.$nextTick()
+    const end = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    expect(end).toBe(600)
+    firePointer(handle, 'pointerup', 200, -400)
+    w.unmount()
+  })
+
+  // plan_coverage: g1.1 / g2.2 — drag down to handle-only (full bottom)
+  it('dragging down clamps drawer to handle hit min (44px)', async () => {
+    const w = mountMobileShell({}, 600)
+    await w.vm.$nextTick()
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
+    firePointer(handle, 'pointerdown', 200, 300)
+    firePointer(handle, 'pointermove', 200, 900)
+    await w.vm.$nextTick()
+    const end = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    expect(end).toBe(44)
+    firePointer(handle, 'pointerup', 200, 900)
+    w.unmount()
+  })
+
+  // plan_coverage: g2.2 — reverse drag from both extremes restores mid range
+  it('can drag back from full-top and full-bottom extremes', async () => {
+    const w = mountMobileShell({}, 600)
+    await w.vm.$nextTick()
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
+
+    // Full top then drag down
+    firePointer(handle, 'pointerdown', 200, 400)
+    firePointer(handle, 'pointermove', 200, -400)
+    firePointer(handle, 'pointerup', 200, -400)
+    await w.vm.$nextTick()
+    expect(Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])).toBe(600)
+
+    firePointer(handle, 'pointerdown', 200, 50)
+    firePointer(handle, 'pointermove', 200, 250)
+    firePointer(handle, 'pointerup', 200, 250)
+    await w.vm.$nextTick()
+    const afterFromTop = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    expect(afterFromTop).toBeLessThan(600)
+    expect(afterFromTop).toBeGreaterThan(44)
+
+    // Full bottom then drag up
+    firePointer(handle, 'pointerdown', 200, 300)
+    firePointer(handle, 'pointermove', 200, 900)
+    firePointer(handle, 'pointerup', 200, 900)
+    await w.vm.$nextTick()
+    expect(Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])).toBe(44)
+
+    firePointer(handle, 'pointerdown', 200, 700)
+    firePointer(handle, 'pointermove', 200, 500)
+    firePointer(handle, 'pointerup', 200, 500)
+    await w.vm.$nextTick()
+    const afterFromBottom = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
+    expect(afterFromBottom).toBeGreaterThan(44)
+    expect(afterFromBottom).toBeLessThan(600)
+    w.unmount()
+  })
+
+  // plan_coverage: g1.1 — short viewport: clamp within shell, no overflow
+  it('clamps drawer within short viewport without overflowing shell', async () => {
     const w = mountMobileShell({}, 360)
     await w.vm.$nextTick()
     const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
-    const start = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
     firePointer(handle, 'pointerdown', 200, 300)
     firePointer(handle, 'pointermove', 200, 50)
     await w.vm.$nextTick()
     const end = Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])
-    expect(end).toBeGreaterThan(start)
-    expect(360 - end).toBeGreaterThanOrEqual(160)
+    expect(end).toBeLessThanOrEqual(360)
+    expect(end).toBeGreaterThanOrEqual(44)
+    firePointer(handle, 'pointerup', 200, 50)
     w.unmount()
   })
 
-  it('stage section enforces min height on mobile', () => {
+  // plan_coverage: g1.2 — no stage minHeight:160; aside shrink-0
+  it('mobile stage has no 160px minHeight and drawer is shrink-0', () => {
     const w = mountMobileShell()
     const stage = w.get('[data-testid="review-shell-stage"]')
-    expect(stage.attributes('style')).toMatch(/min-height:\s*160px/)
+    expect(stage.attributes('style') || '').not.toMatch(/min-height/)
+    const aside = w.get('[data-testid="review-shell-sidebar"]')
+    expect(aside.classes()).toContain('shrink-0')
+    w.unmount()
+  })
+
+  // plan_coverage: g2.1 — resize keeps full-top / full-bottom extremes
+  it('resize preserves full-top and full-bottom extremes', async () => {
+    const observers: ResizeObserverCallback[] = []
+    class MockResizeObserver {
+      constructor(cb: ResizeObserverCallback) {
+        observers.push(cb)
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', MockResizeObserver)
+
+    let shellHeight = 600
+    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value() {
+        return {
+          x: 0,
+          y: 0,
+          top: 0,
+          left: 0,
+          bottom: shellHeight,
+          right: 390,
+          width: 390,
+          height: shellHeight,
+          toJSON() {
+            return {}
+          },
+        }
+      },
+    })
+    const w = mountShell({ mobile: true })
+    await w.vm.$nextTick()
+    const handle = w.get('[data-testid="review-shell-drawer-handle"]').element
+
+    // Drag to full top, then grow shell → stay full top
+    firePointer(handle, 'pointerdown', 200, 400)
+    firePointer(handle, 'pointermove', 200, -400)
+    firePointer(handle, 'pointerup', 200, -400)
+    await w.vm.$nextTick()
+    expect(Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])).toBe(600)
+
+    shellHeight = 800
+    for (const cb of observers) {
+      cb([], {} as ResizeObserver)
+    }
+    await w.vm.$nextTick()
+    expect(Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])).toBe(800)
+
+    // Drag to full bottom, then grow shell → stay handle-only
+    firePointer(handle, 'pointerdown', 200, 100)
+    firePointer(handle, 'pointermove', 200, 900)
+    firePointer(handle, 'pointerup', 200, 900)
+    await w.vm.$nextTick()
+    expect(Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])).toBe(44)
+
+    shellHeight = 900
+    for (const cb of observers) {
+      cb([], {} as ResizeObserver)
+    }
+    await w.vm.$nextTick()
+    expect(Number((drawerHeightStyle(w).match(/height:\s*(\d+)px/) || [])[1])).toBe(44)
     w.unmount()
   })
 })

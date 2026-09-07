@@ -37,9 +37,9 @@ async function mockApi(
   })
 }
 
-// plan_coverage: g2.1 mobile-fill no drawer-height=340; g3.2 e2e stage min + drag resize (leaf ids only).
+// plan_coverage: g2.1 default mid-split; g2.3 e2e full-top/full-bottom + drag-back.
 test.describe('Run 详情移动端 visual 定高预览', () => {
-  // plan_coverage: g2.1 / g3.2 — adaptive drawer<340, stage>160, handle drag grows drawer
+  // plan_coverage: g2.1 — adaptive drawer mid-split; preview + chat both visible
   test('390×844：n_open=0 确认并流转 + 取点，预览占满 stage', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, [])
@@ -65,10 +65,10 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
     ])
     expect(previewBox && drawerBox && rootBox && feedbackBox).toBeTruthy()
 
-    // Stage (preview) sits above the ReviewShell drawer; drawer is a sizable bottom panel.
+    // Stage (preview) sits above the ReviewShell drawer; default is mid-split (not extremes).
     expect(previewBox!.y).toBeLessThan(drawerBox!.y)
-    expect(previewBox!.height).toBeGreaterThan(160)
-    // Adaptive default is lower than the old fixed 340px so preview stays readable.
+    expect(previewBox!.height).toBeGreaterThan(44)
+    expect(drawerBox!.height).toBeGreaterThan(44)
     expect(drawerBox!.height).toBeLessThan(340)
     expect(drawerBox!.y + drawerBox!.height).toBeLessThanOrEqual(rootBox!.y + rootBox!.height + 1)
 
@@ -121,6 +121,68 @@ test.describe('Run 详情移动端 visual 定高预览', () => {
     // Inspect toggle remains available inside the preview shell.
     await expect(page.getByTestId('html-preview-inspect-bar')).toBeVisible()
     await expect(page.getByRole('button', { name: '取点标注' })).toBeVisible()
+  })
+
+  // plan_coverage: g2.3 — pull to full top / full bottom; handle remains; reverse drag restores panels
+  test('390×844：抽屉可拉满顶/底且手柄可反向拖回', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, [])
+
+    await page.goto('/gate-mobile-fill.html')
+    await expect(page.getByTestId('gate-mobile-fill-root')).toBeVisible({ timeout: 10_000 })
+    const shell = page.getByTestId('review-shell')
+    const drawer = page.getByTestId('review-shell-sidebar')
+    const stage = page.getByTestId('review-shell-stage')
+    const handle = page.getByTestId('review-shell-drawer-handle')
+    await expect(handle).toBeVisible()
+
+    const shellBox = await shell.boundingBox()
+    expect(shellBox).toBeTruthy()
+    const shellH = shellBox!.height
+
+    async function dragHandleBy(dy: number) {
+      const box = await handle.boundingBox()
+      expect(box).toBeTruthy()
+      const cx = box!.x + box!.width / 2
+      const cy = box!.y + box!.height / 2
+      await page.mouse.move(cx, cy)
+      await page.mouse.down()
+      await page.mouse.move(cx, cy + dy, { steps: 12 })
+      await page.mouse.up()
+    }
+
+    // Full top: drag handle far upward → drawer ≈ shell height, stage collapsed
+    await dragHandleBy(-(shellH + 100))
+    const fullTopDrawer = await drawer.boundingBox()
+    const fullTopStage = await stage.boundingBox()
+    expect(fullTopDrawer).toBeTruthy()
+    expect(Math.abs(fullTopDrawer!.height - shellH)).toBeLessThanOrEqual(2)
+    expect(fullTopStage!.height).toBeLessThanOrEqual(2)
+    await expect(handle).toBeVisible()
+
+    // Drag back down → stage reappears
+    await dragHandleBy(Math.round(shellH * 0.4))
+    const midFromTop = await drawer.boundingBox()
+    const stageFromTop = await stage.boundingBox()
+    expect(midFromTop!.height).toBeLessThan(shellH - 10)
+    expect(midFromTop!.height).toBeGreaterThan(50)
+    expect(stageFromTop!.height).toBeGreaterThan(10)
+
+    // Full bottom: drag handle far downward → drawer ≈ 44px handle
+    await dragHandleBy(shellH + 100)
+    const fullBottomDrawer = await drawer.boundingBox()
+    const fullBottomStage = await stage.boundingBox()
+    expect(fullBottomDrawer).toBeTruthy()
+    expect(fullBottomDrawer!.height).toBeGreaterThanOrEqual(42)
+    expect(fullBottomDrawer!.height).toBeLessThanOrEqual(48)
+    expect(fullBottomStage!.height).toBeGreaterThan(shellH - 50)
+    await expect(handle).toBeVisible()
+
+    // Drag back up → chat/drawer expands again
+    await dragHandleBy(-Math.round(shellH * 0.35))
+    const midFromBottom = await drawer.boundingBox()
+    expect(midFromBottom!.height).toBeGreaterThan(60)
+    expect(midFromBottom!.height).toBeLessThan(shellH - 10)
   })
 
   test('390×844：n_open≥1 可继续发送，确认并流转禁用', async ({ page }) => {
