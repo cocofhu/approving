@@ -462,6 +462,11 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	if approve["VNC_PREVIEW"] != "1" || approve["PREVIEW_DIRECT"] != "" {
 		t.Fatalf("approve default vnc: %v", approve)
 	}
+	off := map[string]string{"VNC_PREVIEW": "0"}
+	applyAppPreviewEnv(off, "approve", nil, "http://app.example")
+	if off["VNC_PREVIEW"] != "0" || off["APPROVING_VNC_PREVIEW"] != "" {
+		t.Fatalf("explicit off must stick: %v", off)
+	}
 	other := map[string]string{}
 	applyAppPreviewEnv(other, "implement", map[string]any{"direct_preview": true}, "http://app.example")
 	if other["PREVIEW_DIRECT"] != "" || other["VNC_PREVIEW"] != "" || other["PREVIEW_PICK_SCRIPT_URL"] != "" {

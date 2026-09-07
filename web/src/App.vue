@@ -4,7 +4,15 @@ import { useRoute } from 'vue-router'
 import AppShell from './components/shell/AppShell.vue'
 import ToastHost from './components/ui/ToastHost.vue'
 import AppSkeleton from './components/ui/AppSkeleton.vue'
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import { locale, updateDocumentTitle } from '@/lib/shared/locale'
+import { DEFAULT_PROJECT_ID } from '@/lib/pm/onboardingWizard'
+import {
+  closeFirstInstall,
+  firstInstallOpen,
+  markFirstInstallCompleted,
+  probeFirstInstall,
+} from '@/lib/pm/firstInstall'
 import { useAuth } from '@/lib/composables/useAuth'
 import { useDelayedBusy } from '@/lib/composables/useDelayedBusy'
 import { routeViewTransition, useRoutePending } from '@/lib/shared/routePending'
@@ -39,6 +47,14 @@ const canShowProtected = computed(
 watch(locale, () => {
   updateDocumentTitle(route.meta.titleKey as string | undefined)
 })
+
+watch(
+  () => !bareLayout.value && !!auth.ready.value && !!auth.user.value,
+  (signedIn) => {
+    if (signedIn) void probeFirstInstall()
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -53,6 +69,13 @@ watch(locale, () => {
     </router-view>
   </AppShell>
   <router-view v-else />
+  <OnboardingWizard
+    v-if="!bareLayout"
+    :open="firstInstallOpen"
+    :project-id="DEFAULT_PROJECT_ID"
+    @close="closeFirstInstall"
+    @completed="markFirstInstallCompleted"
+  />
   <ToastHost />
   <div class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-testid="loading-live">
     {{ liveMessage }}

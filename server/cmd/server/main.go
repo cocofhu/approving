@@ -474,7 +474,7 @@ func main() {
 		PublicAdvertise:   cfg.Server.PublicAdvertise,
 		InjectBundles:     injectStore,
 		Blobs:             blobStore,
-		Onboarding:        services.NewOnboardingService(projectSvc, agentSvc, sharedAgentSvc, wfSvc),
+		Onboarding:        services.NewOnboardingService(projectSvc, agentSvc, sharedAgentSvc, wfSvc, orgSvc),
 		Team:              services.NewTeamService(projectSvc, agentSvc, orgSvc, pmSvc, sbxSvc),
 	}
 	if h.Team != nil && h.PMMCP != nil {

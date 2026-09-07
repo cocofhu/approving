@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
 import { i18n } from './i18n'
 import {
   loadLocaleMessages,
@@ -37,12 +37,14 @@ export async function applyPublicLocale(): Promise<void> {
 }
 
 export const locale = ref<AppLocale>(detectLocale())
+let localeChangeSequence = 0
 
 function applyHtmlLocale(loc: AppLocale) {
   document.documentElement.lang = loc
 }
 
 export async function setLocale(next: AppLocale): Promise<void> {
+  const sequence = ++localeChangeSequence
   if (locale.value === next && i18n.global.locale.value === next) {
     localStorage.setItem(STORAGE_KEY, next)
     applyHtmlLocale(next)
@@ -50,6 +52,8 @@ export async function setLocale(next: AppLocale): Promise<void> {
   }
 
   const messages = await loadLocaleMessages(next)
+  // A newer user selection wins if locale bundles finish loading out of order.
+  if (sequence !== localeChangeSequence) return
   i18n.global.setLocaleMessage(next, messages)
   i18n.global.locale.value = next
   locale.value = next
@@ -63,8 +67,10 @@ let initPromise: Promise<void> | null = null
 export function initLocale(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
+      const sequence = localeChangeSequence
       const initial = detectLocale()
       const messages = await loadLocaleMessages(initial)
+      if (sequence !== localeChangeSequence) return
       i18n.global.setLocaleMessage(initial, messages)
       i18n.global.locale.value = initial
       locale.value = initial

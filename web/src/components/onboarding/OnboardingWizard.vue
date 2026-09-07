@@ -6,19 +6,21 @@ import AppButton from '@/components/ui/AppButton.vue'
 import { api } from '@/lib/api/api'
 import { authGuideFor } from '@/lib/agent/backendAuthGuide'
 import { ACP_BACKENDS, getRegionPolicy, type BackendId } from '@/lib/shared/regionPolicy'
+import { setLocale } from '@/lib/shared/locale'
+import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 import { useToast } from '@/lib/composables/useToast'
+import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import {
-  DEFAULT_ONBOARDING_FEATURE,
-  DEFAULT_ONBOARDING_REPO,
   ONBOARDING_AGENT_NAMES,
+  ONBOARDING_GIT_TYPES,
   ONBOARDING_STEPS,
   assembleBootstrapBody,
   dismissOnboarding,
-  encodeReposLiteral,
   freshOnboardingDraft,
-  hostLabelFromUrl,
-  parseReposLiteral,
-  reposInputFromFields,
+  gitConfigured,
+  gitIdentityConfigured,
+  repoConfigured,
+  repoNameFromUrl,
   type OnboardingBootstrapResult,
   type OnboardingDraft,
 } from '@/lib/pm/onboardingWizard'
@@ -31,7 +33,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   completed: [result: OnboardingBootstrapResult]
-  'run-started': [runId: string]
 }>()
 
 const { t } = useI18n()
@@ -46,6 +47,10 @@ const stepAnimKey = ref(0)
 const keyError = ref(false)
 
 const currentStep = computed(() => ONBOARDING_STEPS[draft.value.step] || ONBOARDING_STEPS[0])
+const languageOptions: { id: AppLocale; label: string; hint: string }[] = [
+  { id: 'zh-CN', label: '简体中文', hint: 'Chinese (Simplified)' },
+  { id: 'en', label: 'English', hint: '英语' },
+]
 const progressPct = computed(() =>
   phase.value === 'success' ? 100 : ((draft.value.step + 1) / ONBOARDING_STEPS.length) * 100,
 )
@@ -57,16 +62,17 @@ const headSub = computed(() => {
   if (phase.value === 'success') return t('pages.onboarding.head.success')
   return t(`pages.onboarding.head.${currentStep.value.id}`)
 })
-const repoHost = computed(() => hostLabelFromUrl(draft.value.repo.url))
-const successRepo = computed(() =>
-  parseReposLiteral(result.value?.repos || encodeReposLiteral(draft.value.repo)),
-)
+const gitOk = computed(() => gitConfigured(draft.value))
+const identityOk = computed(() => gitIdentityConfigured(draft.value))
+const repoOk = computed(() => repoConfigured(draft.value))
+const repoDirName = computed(() => repoNameFromUrl(draft.value.repoUrl))
 
 watch(
   () => props.open,
   (open) => {
     if (open) {
       draft.value = freshOnboardingDraft()
+      void setLocale(draft.value.language)
       creating.value = false
       createError.value = ''
       phase.value = 'wizard'
@@ -75,6 +81,7 @@ watch(
       stepAnimKey.value++
     }
   },
+  { immediate: true },
 )
 
 function suppressAndClose() {
@@ -90,8 +97,28 @@ function selectBackend(id: BackendId) {
   draft.value.region = policy?.defaultRegion || ''
 }
 
+function selectLanguage(language: AppLocale) {
+  if (draft.value.language === language) return
+  draft.value.language = language
+  void setLocale(language)
+}
+
 function selectRegion(id: string) {
   draft.value.region = id
+}
+
+function selectGitType(id: GitCredentialType) {
+  draft.value.gitCredentialType = draft.value.gitCredentialType === id ? '' : id
+}
+
+function toggleVncPreview() {
+  draft.value.vncPreview = !draft.value.vncPreview
+  if (!draft.value.vncPreview) draft.value.browserMcp = false
+}
+
+function toggleBrowserMcp() {
+  draft.value.browserMcp = !draft.value.browserMcp
+  if (draft.value.browserMcp) draft.value.vncPreview = true
 }
 
 function goPrev() {
@@ -104,7 +131,18 @@ function goPrev() {
 function goSkip() {
   if (!currentStep.value.skip || creating.value) return
   if (currentStep.value.id === 'git') {
-    draft.value.repo = { ...DEFAULT_ONBOARDING_REPO }
+    if (!gitIdentityConfigured(draft.value)) {
+      toast.error(t('pages.onboarding.toastNeedGitUser'))
+      return
+    }
+    draft.value.gitCredentialType = ''
+    draft.value.githubToken = ''
+    draft.value.gitlabToken = ''
+    draft.value.gitlabUrl = ''
+    draft.value.gitSshPrivateKey = ''
+    draft.value.gitSshKnownHosts = ''
+    draft.value.repoUrl = ''
+    draft.value.repoBranch = ''
   }
   draft.value.step++
   stepAnimKey.value++
@@ -116,6 +154,10 @@ function goNext() {
   if (step.id === 'apiKey' && !draft.value.apiKey.trim()) {
     keyError.value = true
     toast.error(t('pages.onboarding.toastNeedKey'))
+    return
+  }
+  if (step.id === 'git' && !gitIdentityConfigured(draft.value)) {
+    toast.error(t('pages.onboarding.toastNeedGitUser'))
     return
   }
   if (step.id === 'review') {
@@ -151,29 +193,6 @@ async function submitBootstrap() {
     toast.error(createError.value || t('pages.onboarding.toastErr'))
   } finally {
     creating.value = false
-  }
-}
-
-async function startSampleRun() {
-  if (!result.value?.workflowId) return
-  try {
-    const run = await api.startRun(
-      result.value.workflowId,
-      {
-        feature: result.value.feature || DEFAULT_ONBOARDING_FEATURE,
-        // Structured repos (Type "repos"); wire literals also work server-side
-        // via parseReposVar, but prefer the array form used by the engine.
-        repos: reposInputFromFields(
-          parseReposLiteral(result.value.repos || encodeReposLiteral(draft.value.repo)),
-        ),
-      },
-      'manual',
-    )
-    toast.success(t('pages.onboarding.toastRun'))
-    emit('run-started', run.id)
-    emit('close')
-  } catch (e: any) {
-    toast.error(e?.message || String(e))
   }
 }
 </script>
@@ -220,35 +239,50 @@ async function startSampleRun() {
             <li v-for="n in ONBOARDING_AGENT_NAMES" :key="n">· {{ n }}</li>
             <li>· {{ t('pages.onboarding.success.publishedLine') }}</li>
           </ul>
-          <div
-            class="mt-4 border border-line bg-elevated px-3 py-3 text-[13px] text-txt2"
+          <p
+            class="mt-4 border px-3 py-2 text-[12px]"
+            :class="identityOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
+            data-testid="onboarding-success-git-user"
+          >
+            {{
+              identityOk
+                ? t('pages.onboarding.success.gitUserOk', { name: draft.gitUserName, email: draft.gitUserEmail })
+                : t('pages.onboarding.success.gitUserSkip')
+            }}
+          </p>
+          <p class="mt-2 border border-ok/35 bg-ok/10 px-3 py-2 text-[12px] text-ok" data-testid="onboarding-success-preview">
+            {{
+              t('pages.onboarding.success.preview', {
+                vnc: draft.vncPreview
+                  ? t('pages.onboarding.preview.vncOn')
+                  : t('pages.onboarding.preview.vncOff'),
+                mcp: draft.browserMcp
+                  ? t('pages.onboarding.preview.browserOn')
+                  : t('pages.onboarding.preview.browserOff'),
+              })
+            }}
+          </p>
+          <p
+            class="mt-2 border px-3 py-2 text-[12px]"
+            :class="gitOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
+            data-testid="onboarding-success-git"
+          >
+            {{ gitOk ? t('pages.onboarding.success.gitOk') : t('pages.onboarding.success.gitSkip') }}
+          </p>
+          <p
+            class="mt-4 border px-3 py-2 text-[12px]"
+            :class="repoOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
             data-testid="onboarding-success-repo"
           >
-            <div class="text-[11px] uppercase tracking-wide text-txt3">
-              {{ t('pages.onboarding.success.repo') }}
-            </div>
-            <div class="mt-2 space-y-1">
-              <div>
-                <span class="text-txt3">{{ t('pages.onboarding.git.name') }}：</span>
-                <span class="text-txt">{{ successRepo.name }}</span>
-              </div>
-              <div class="break-all">
-                <span class="text-txt3">{{ t('pages.onboarding.git.url') }}：</span>
-                <span class="text-txt">{{ successRepo.url }}</span>
-              </div>
-              <div>
-                <span class="text-txt3">{{ t('pages.onboarding.git.branch') }}：</span>
-                <span class="text-txt">{{ successRepo.branch }}</span>
-              </div>
-            </div>
-          </div>
-          <p class="mt-4 border border-warn/35 bg-warn/10 px-3 py-2 text-[12px] text-warn">
-            {{ t('pages.onboarding.success.limit') }}
+            {{
+              repoOk
+                ? t('pages.onboarding.success.repoOk', { dir: repoDirName })
+                : t('pages.onboarding.success.limit')
+            }}
           </p>
           <div class="mt-auto flex flex-wrap justify-end gap-2 border-t border-line pt-4">
-            <AppButton variant="ghost" @click="emit('close')">{{ t('pages.onboarding.close') }}</AppButton>
-            <AppButton variant="primary" icon="play" data-testid="onboarding-start-run" @click="startSampleRun">
-              {{ t('pages.onboarding.startRun') }}
+            <AppButton variant="primary" data-testid="onboarding-success-close" @click="emit('close')">
+              {{ t('pages.onboarding.close') }}
             </AppButton>
           </div>
         </div>
@@ -286,18 +320,47 @@ async function startSampleRun() {
               <div :key="stepAnimKey">
                 <h3 class="m-0 text-[15px] font-semibold text-txt">{{ t(currentStep.labelKey) }}</h3>
 
-                <template v-if="currentStep.id === 'overview'">
+                <template v-if="currentStep.id === 'language'">
+                  <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.language.meta') }}</p>
+                  <div class="mt-5 grid max-w-lg grid-cols-2 gap-3">
+                    <button
+                      v-for="option in languageOptions"
+                      :key="option.id"
+                      type="button"
+                      class="border px-4 py-4 text-left transition"
+                      :class="
+                        draft.language === option.id
+                          ? 'border-accent bg-accent-dim'
+                          : 'border-line bg-base hover:border-line-strong'
+                      "
+                      :data-testid="`onboarding-language-${option.id}`"
+                      @click="selectLanguage(option.id)"
+                    >
+                      <strong class="block text-[14px] text-txt">{{ option.label }}</strong>
+                      <span class="mt-1 block text-[11px] text-txt3">{{ option.hint }}</span>
+                    </button>
+                  </div>
+                  <p class="mt-4 text-[12px] text-txt3">{{ t('pages.onboarding.language.detected') }}</p>
+                </template>
+
+                <template v-else-if="currentStep.id === 'overview'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.overview.meta') }}</p>
+                  <ol class="mt-4 list-decimal space-y-2 pl-5 text-[13px] text-txt2">
+                    <li>{{ t('pages.onboarding.overview.itemBackend') }}</li>
+                    <li>{{ t('pages.onboarding.overview.itemToken') }}</li>
+                    <li>{{ t('pages.onboarding.overview.itemGit') }}</li>
+                    <li>{{ t('pages.onboarding.overview.itemPreview') }}</li>
+                  </ol>
                   <div class="mt-4 grid gap-3 sm:grid-cols-2">
                     <div class="border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.agents') }}</div>
-                      <div class="mt-1 text-[18px] font-semibold text-txt">5</div>
+                      <div class="mt-1 text-[18px] font-semibold text-txt">6</div>
                       <p class="mt-1 text-[12px] text-txt2">{{ t('pages.onboarding.overview.agentsList') }}</p>
                     </div>
                     <div class="border border-line bg-base px-3 py-3">
-                      <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.repo') }}</div>
-                      <div class="mt-1 text-[18px] font-semibold text-txt">{{ repoHost }}</div>
-                      <p class="mt-1 font-mono text-[11px] text-txt2">{{ draft.repo.branch }} · HTTPS</p>
+                      <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.workflow') }}</div>
+                      <div class="mt-1 text-[18px] font-semibold text-txt">{{ t('pages.onboarding.workflowName') }}</div>
+                      <p class="mt-1 text-[12px] text-txt2">{{ t('pages.onboarding.overview.workflowHint') }}</p>
                     </div>
                   </div>
                   <p class="mt-4 border border-accent/35 bg-accent-dim px-3 py-2 text-[12px] text-accent-2">
@@ -325,7 +388,7 @@ async function startSampleRun() {
                     </button>
                   </div>
                   <div v-if="regionPolicy" class="mt-5 border-t border-dashed border-line pt-4">
-                    <div class="mb-2 text-[12px] font-medium text-txt2">Region</div>
+                    <div class="mb-2 text-[12px] font-medium text-txt2">{{ t('pages.onboarding.acp.region') }}</div>
                     <div class="grid max-w-lg grid-cols-2 gap-2.5">
                       <button
                         v-for="option in regionPolicy.options"
@@ -385,45 +448,189 @@ async function startSampleRun() {
 
                 <template v-else-if="currentStep.id === 'git'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.git.meta') }}</p>
-                  <div class="mt-4 border border-line bg-base">
-                    <div class="flex items-center justify-between border-b border-line px-3 py-2">
-                      <div>
-                        <div class="text-[13px] font-medium text-txt">{{ t('pages.onboarding.git.panelTitle') }}</div>
-                        <div class="text-[11px] text-txt3">{{ t('pages.onboarding.git.panelSub') }}</div>
-                      </div>
-                      <span class="border border-ok/35 bg-ok/10 px-2 py-0.5 text-[11px] text-ok">HTTPS</span>
+
+                  <div class="mt-4 border border-line bg-base px-3 py-3">
+                    <div class="text-[11px] uppercase tracking-[0.06em] text-txt3">
+                      {{ t('pages.onboarding.repo.section') }}
                     </div>
-                    <div class="flex flex-wrap items-center gap-2 px-3 py-3 font-mono text-[12px]">
-                      <code class="text-accent-2">{{ draft.repo.name }}</code>
-                      <span class="min-w-0 flex-1 truncate text-txt2" :title="draft.repo.url">{{ draft.repo.url }}</span>
-                      <span class="text-txt3">{{ draft.repo.branch }}</span>
-                    </div>
-                    <p class="border-t border-line px-3 py-2 text-[11px] text-txt3">
-                      {{ t('pages.onboarding.git.foot', { host: repoHost, branch: draft.repo.branch }) }}
+                    <label class="mt-2.5 block">
+                      <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                        {{ t('pages.onboarding.repo.urlLabel') }}
+                      </span>
+                      <input
+                        v-model="draft.repoUrl"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="https://github.com/org/repo.git"
+                        class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                        data-testid="onboarding-repo-url"
+                      />
+                    </label>
+                    <label class="mt-2.5 block">
+                      <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                        {{ t('pages.onboarding.repo.branchLabel') }}
+                      </span>
+                      <input
+                        v-model="draft.repoBranch"
+                        type="text"
+                        autocomplete="off"
+                        :placeholder="t('pages.onboarding.repo.branchPlaceholder')"
+                        class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                        data-testid="onboarding-repo-branch"
+                      />
+                    </label>
+                    <p class="mt-2 text-[11px] text-txt3" data-testid="onboarding-repo-hint">
+                      {{
+                        repoDirName
+                          ? t('pages.onboarding.repo.cloneTo', { dir: repoDirName })
+                          : t('pages.onboarding.repo.hint')
+                      }}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    class="mt-3 text-[12px] text-txt2 hover:text-txt"
-                    @click="draft.advOpen = !draft.advOpen"
-                  >
-                    {{ draft.advOpen ? '▾' : '▸' }} {{ t('pages.onboarding.git.adv') }}
-                  </button>
-                  <div v-if="draft.advOpen" class="mt-2 grid gap-2 sm:grid-cols-2">
-                    <label class="block text-[12px]">
-                      <span class="mb-1 block text-txt2">{{ t('pages.onboarding.git.name') }}</span>
-                      <input v-model="draft.repo.name" class="w-full border border-line bg-base px-2 py-1.5 font-mono text-txt" />
+
+                  <div class="mt-4 border border-line bg-base px-3 py-3">
+                    <div class="text-[11px] uppercase tracking-[0.06em] text-txt3">
+                      {{ t('pages.onboarding.gitUser.section') }}
+                    </div>
+                    <div class="mt-2.5 grid gap-3 sm:grid-cols-2">
+                      <label class="block">
+                        <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                          {{ t('pages.onboarding.gitUser.nameLabel') }} <span class="text-err">*</span>
+                        </span>
+                        <input
+                          v-model="draft.gitUserName"
+                          type="text"
+                          autocomplete="off"
+                          :placeholder="t('pages.onboarding.gitUser.namePlaceholder')"
+                          class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                          data-testid="onboarding-git-user-name"
+                        />
+                      </label>
+                      <label class="block">
+                        <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                          {{ t('pages.onboarding.gitUser.emailLabel') }} <span class="text-err">*</span>
+                        </span>
+                        <input
+                          v-model="draft.gitUserEmail"
+                          type="email"
+                          autocomplete="off"
+                          :placeholder="t('pages.onboarding.gitUser.emailPlaceholder')"
+                          class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                          data-testid="onboarding-git-user-email"
+                        />
+                      </label>
+                    </div>
+                    <p class="mt-2 text-[11px] text-txt3">{{ t('pages.onboarding.gitUser.hint') }}</p>
+                  </div>
+
+                  <div class="mt-4 border border-line bg-base px-3 py-3">
+                    <div class="text-[11px] uppercase tracking-[0.06em] text-txt3">
+                      {{ t('pages.onboarding.preview.section') }}
+                    </div>
+                    <div class="mt-2.5 grid gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        class="border px-3 py-3 text-left"
+                        :class="
+                          draft.vncPreview
+                            ? 'border-accent bg-accent-dim'
+                            : 'border-line bg-surface hover:border-line-strong'
+                        "
+                        data-testid="onboarding-vnc-preview"
+                        @click="toggleVncPreview"
+                      >
+                        <strong class="block text-[13px] text-txt">{{ t('pages.onboarding.preview.vncLabel') }}</strong>
+                        <span class="mt-1 block text-[11px] text-txt3">{{ t('pages.onboarding.preview.vncHint') }}</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="border px-3 py-3 text-left"
+                        :class="
+                          draft.browserMcp
+                            ? 'border-accent bg-accent-dim'
+                            : 'border-line bg-surface hover:border-line-strong'
+                        "
+                        data-testid="onboarding-browser-mcp"
+                        @click="toggleBrowserMcp"
+                      >
+                        <strong class="block text-[13px] text-txt">{{ t('pages.onboarding.preview.browserLabel') }}</strong>
+                        <span class="mt-1 block text-[11px] text-txt3">{{ t('pages.onboarding.preview.browserHint') }}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 text-[11px] uppercase tracking-[0.06em] text-txt3">
+                    {{ t('pages.onboarding.repo.credSection') }}
+                  </div>
+                  <div class="mt-2 grid grid-cols-3 gap-2.5">
+                    <button
+                      v-for="g in ONBOARDING_GIT_TYPES"
+                      :key="g.id"
+                      type="button"
+                      class="border px-3 py-3 text-center"
+                      :class="
+                        draft.gitCredentialType === g.id
+                          ? 'border-accent bg-accent-dim'
+                          : 'border-line bg-base hover:border-line-strong'
+                      "
+                      :data-testid="`onboarding-git-type-${g.id}`"
+                      @click="selectGitType(g.id)"
+                    >
+                      <strong class="block text-[13px] text-txt">{{ t(g.labelKey) }}</strong>
+                    </button>
+                  </div>
+                  <label v-if="draft.gitCredentialType === 'github_https'" class="mt-4 block">
+                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">GITHUB_TOKEN</span>
+                    <input
+                      v-model="draft.githubToken"
+                      type="password"
+                      autocomplete="off"
+                      class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
+                      data-testid="onboarding-github-token"
+                    />
+                  </label>
+                  <div v-else-if="draft.gitCredentialType === 'gitlab_https'" class="mt-4 grid gap-3">
+                    <label class="block">
+                      <span class="mb-1.5 block text-[12px] font-medium text-txt2">GITLAB_TOKEN</span>
+                      <input
+                        v-model="draft.gitlabToken"
+                        type="password"
+                        autocomplete="off"
+                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
+                        data-testid="onboarding-gitlab-token"
+                      />
                     </label>
-                    <label class="block text-[12px]">
-                      <span class="mb-1 block text-txt2">{{ t('pages.onboarding.git.branch') }}</span>
-                      <input v-model="draft.repo.branch" class="w-full border border-line bg-base px-2 py-1.5 font-mono text-txt" />
-                    </label>
-                    <label class="block text-[12px] sm:col-span-2">
-                      <span class="mb-1 block text-txt2">{{ t('pages.onboarding.git.url') }}</span>
-                      <input v-model="draft.repo.url" class="w-full border border-line bg-base px-2 py-1.5 font-mono text-txt" />
-                      <p class="mt-1 text-[11px] text-txt3">{{ t('pages.onboarding.git.advHint') }}</p>
+                    <label class="block">
+                      <span class="mb-1.5 block text-[12px] font-medium text-txt2">GITLAB_URL</span>
+                      <input
+                        v-model="draft.gitlabUrl"
+                        type="text"
+                        placeholder="https://gitlab.example.com"
+                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
+                        data-testid="onboarding-gitlab-url"
+                      />
                     </label>
                   </div>
+                  <div v-else-if="draft.gitCredentialType === 'ssh'" class="mt-4 grid gap-3">
+                    <label class="block">
+                      <span class="mb-1.5 block text-[12px] font-medium text-txt2">SSH private key</span>
+                      <textarea
+                        v-model="draft.gitSshPrivateKey"
+                        rows="4"
+                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt"
+                        data-testid="onboarding-ssh-key"
+                      />
+                    </label>
+                    <label class="block">
+                      <span class="mb-1.5 block text-[12px] font-medium text-txt2">known_hosts</span>
+                      <textarea
+                        v-model="draft.gitSshKnownHosts"
+                        rows="2"
+                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt"
+                      />
+                    </label>
+                  </div>
+                  <p class="mt-3 text-[12px] text-txt3">{{ t('pages.onboarding.git.foot') }}</p>
                 </template>
 
                 <template v-else-if="currentStep.id === 'review'">
@@ -440,18 +647,44 @@ async function startSampleRun() {
                       class="border px-2 py-1"
                       :class="draft.apiKey.trim() ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
                     >
-                      API Key · {{ draft.apiKey.trim() ? '已配置' : '未配置' }}
+                      API Key · {{ draft.apiKey.trim() ? t('pages.onboarding.review.keyOn') : t('pages.onboarding.review.keyOff') }}
                     </span>
-                    <span class="border border-accent/35 bg-accent-dim px-2 py-1 text-accent-2">
-                      Git · {{ repoHost }} @ {{ draft.repo.branch }}
+                    <span
+                      class="border px-2 py-1"
+                      :class="repoOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
+                      data-testid="onboarding-review-repo"
+                    >
+                      {{ t('pages.onboarding.repo.chip') }} ·
+                      {{ repoOk ? repoDirName : t('pages.onboarding.review.repoSkip') }}
+                    </span>
+                    <span
+                      class="border px-2 py-1"
+                      :class="identityOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
+                      data-testid="onboarding-review-git-user"
+                    >
+                      {{ t('pages.onboarding.gitUser.chip') }} ·
+                      {{ identityOk ? draft.gitUserName : t('pages.onboarding.review.gitUserOff') }}
+                    </span>
+                    <span
+                      class="border px-2 py-1"
+                      :class="draft.vncPreview ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
+                    >
+                      {{ t('pages.onboarding.preview.vncLabel') }} · {{ draft.vncPreview ? t('pages.onboarding.review.flagOn') : t('pages.onboarding.review.flagOff') }}
+                    </span>
+                    <span
+                      class="border px-2 py-1"
+                      :class="draft.browserMcp ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
+                    >
+                      {{ t('pages.onboarding.preview.browserLabel') }} · {{ draft.browserMcp ? t('pages.onboarding.review.flagOn') : t('pages.onboarding.review.flagOff') }}
+                    </span>
+                    <span
+                      class="border px-2 py-1"
+                      :class="gitOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
+                    >
+                      Git · {{ gitOk ? draft.gitCredentialType : t('pages.onboarding.review.gitSkip') }}
                     </span>
                     <span class="border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.agentsChip') }}</span>
                     <span class="border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.wfChip') }}</span>
-                  </div>
-                  <div class="mt-4 flex flex-wrap items-center gap-2 border border-line bg-base px-3 py-2 font-mono text-[12px]">
-                    <code class="text-accent-2">{{ draft.repo.name }}</code>
-                    <span class="truncate text-txt2">{{ draft.repo.url }}</span>
-                    <span class="text-txt3">{{ draft.repo.branch }}</span>
                   </div>
                   <p v-if="!draft.apiKey.trim()" class="mt-3 text-[12px] text-warn">{{ t('pages.onboarding.review.needKey') }}</p>
                   <p class="mt-3 text-[12px] text-txt3">{{ t('pages.onboarding.review.featureHint') }}</p>
@@ -472,6 +705,7 @@ async function startSampleRun() {
                 v-if="currentStep.skip"
                 variant="outline"
                 :disabled="creating"
+                data-testid="onboarding-skip"
                 @click="goSkip"
               >{{ t('pages.onboarding.skip') }}</AppButton>
               <AppButton

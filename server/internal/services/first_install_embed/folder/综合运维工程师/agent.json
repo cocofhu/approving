@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "acpBackend": "cursor",
+  "mcp": [
+    {
+      "name": "artifact-store",
+      "url": "${APPROVING_ARTIFACT_URL}",
+      "headers": {
+        "Authorization": "Bearer ${APPROVING_ARTIFACT_TOKEN}"
+      }
+    }
+  ],
+  "env": {},
+  "layout": {
+    "configRoot": "/root/.cursor",
+    "workspaceDir": "/root/workspace"
+  },
+  "name": "综合运维工程师"
+}

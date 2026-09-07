@@ -213,7 +213,7 @@
       "created": "Created project {name}"
     },
     "onboarding": {
-      "title": "Project quick start",
+      "title": "First-time setup",
       "railCap": "Steps",
       "prev": "Back",
       "next": "Next",
@@ -222,70 +222,115 @@
       "generate": "Generate setup",
       "generating": "Generating…",
       "close": "Close",
-      "startRun": "Start sample Run",
-      "cta": "Start onboarding",
-      "emptyTitle": "Empty project — start onboarding",
-      "emptyDesc": "Publishes Quick Start · Light workflow and starts a sample run.",
-      "workflowName": "Quick Start · Light",
+      "cta": "Finish install setup",
+      "emptyTitle": "Finish first-time setup",
+      "emptyDesc": "Configure ACP backend, token, and Git; create the default team and Default Workflow. Does not start a Run.",
+      "workflowName": "Default Workflow",
       "head": {
-        "overview": "What you will get",
+        "language": "Choose display language",
+        "overview": "What will be written",
         "acp": "Choose ACP backend",
         "apiKey": "Enter API Key",
-        "git": "Confirm sample repo",
+        "git": "Repository, Git identity, and preview (credentials optional)",
         "review": "Confirm and generate",
-        "success": "Done · start a sample Run"
+        "success": "Install complete"
       },
       "steps": {
+        "language": "Language",
         "overview": "Overview",
         "acp": "Backend",
         "apiKey": "API Key",
-        "git": "Repo",
+        "git": "Git",
         "review": "Review"
       },
+      "language": {
+        "meta": "Choose the display language for setup and the control plane. It defaults to your system language.",
+        "detected": "You can switch languages later from the bottom-left corner."
+      },
       "overview": {
-        "meta": "This writes project auth, creates 5 Agents, and publishes the light quick-start workflow. It will not start a Run automatically.",
+        "meta": "Credentials go into this project's shared Agent config and are inherited by team Agents. Imported team packs and workflows do not carry secrets.",
+        "itemBackend": "ACP backend (and region)",
+        "itemToken": "API token for that backend",
+        "itemGit": "Target repository, Git commit identity, plus a token or SSH (repo and credentials optional)",
+        "itemPreview": "Page preview and browser tools on by default so the sandbox can show a page and let the agent use a browser",
         "agents": "Agents",
-        "agentsList": "Clarify / Visual / Implement / Test / Preview",
-        "repo": "Repo",
-        "banner": "Default repo is Heroku’s official Node Getting Started (Express + EJS, public clone)."
+        "agentsList": "Default team: product / implement / test / review / preview / lead",
+        "workflow": "Workflow",
+        "workflowHint": "Set the repo now, or when starting a Run",
+        "banner": "Keep secrets in shared config only — never in Agent workspaces."
       },
       "acp": {
-        "meta": "Pick an ACP backend. The key is stored in this project’s env and shared by all Agents."
+        "meta": "Pick an ACP backend. The key is stored in this project's shared Agent config.",
+        "region": "Region"
       },
       "apiKey": {
         "meta": "API Key is required for the selected backend.",
         "required": "Please enter an API Key.",
-        "hint": "Stored only in project secret env — not in logs or artifacts."
+        "hint": "Stored only in project shared config — not in logs or artifacts."
       },
       "git": {
-        "meta": "The light workflow clones this public sample. No PAT required by default.",
-        "panelTitle": "Sample repository",
-        "panelSub": "Public HTTPS, anonymous clone",
-        "adv": "Advanced: custom repo",
-        "name": "Name",
-        "url": "URL",
-        "branch": "Branch",
-        "advHint": "Used as the workflow default repos value. Prefer a public HTTPS URL. Do not use a self-hosted demo repo.",
-        "foot": "Host {host} · branch {branch}"
+        "meta": "Set the repository, Git commit identity, and sandbox preview. Credentials can be skipped and filled in later.",
+        "foot": "Credentials are stored in shared config, not in the team export pack."
+      },
+      "gitUser": {
+        "section": "Git commit identity",
+        "nameLabel": "Committer name",
+        "emailLabel": "Committer email",
+        "namePlaceholder": "e.g. Ada Lovelace",
+        "emailPlaceholder": "you{'@'}example.com",
+        "hint": "Sandbox git commits use these values. They are stored in project shared config.",
+        "chip": "Git identity"
+      },
+      "preview": {
+        "section": "Sandbox preview",
+        "vncLabel": "Page preview",
+        "browserLabel": "Browser tools",
+        "vncHint": "Opens the sandbox desktop in the control plane so you can see the page.",
+        "browserHint": "Lets the agent drive the sandbox browser (also turns on page preview).",
+        "vncOn": "page preview on",
+        "vncOff": "page preview off",
+        "browserOn": "browser tools on",
+        "browserOff": "browser tools off"
+      },
+      "repo": {
+        "section": "Target repository",
+        "credSection": "Access credentials",
+        "urlLabel": "Repository URL",
+        "branchLabel": "Branch",
+        "branchPlaceholder": "empty uses the default branch",
+        "hint": "Leave empty to pick a repository when you start a Run.",
+        "cloneTo": "Clones to /root/workspace/{dir}/ and fills the Default Workflow repos variable.",
+        "chip": "Repo"
       },
       "review": {
         "meta": "Confirm below. Existing same-named resources are reused/updated (idempotent).",
         "needKey": "API Key is missing — go back and fill it in.",
-        "featureHint": "Add a lightweight quick-start sample so the team can walk the clarify → gate → agent path.",
-        "agentsChip": "Agents · 5",
-        "wfChip": "Workflow · Quick Start · Light"
+        "featureHint": "Installs the default team and Default Workflow. Fill the repo when you start a Run.",
+        "agentsChip": "Agents · 6",
+        "wfChip": "Workflow · Default Workflow",
+        "keyOn": "set",
+        "keyOff": "missing",
+        "gitSkip": "skipped",
+        "repoSkip": "at run start",
+        "gitUserOff": "missing",
+        "flagOn": "on",
+        "flagOff": "off"
       },
       "success": {
         "title": "Setup ready",
-        "desc": "Project auth written; 5 Agents and the published light workflow are ready.",
-        "repo": "Sample repository",
-        "limit": "Public repos usually cannot be pushed; Preview may not show Implement changes. Success means Agents/workflow were created.",
-        "runStarted": "Sample Run started",
-        "publishedLine": "Quick Start · Light (published)"
+        "desc": "Shared auth written; default team and published Default Workflow are ready.",
+        "limit": "Default Workflow has an empty repo URL — fill it when starting a Run. For private repos, confirm Git credentials in shared Agent config.",
+        "repoOk": "Saved to the Default Workflow repos variable, cloning to /root/workspace/{dir}/. You can still change it at run start.",
+        "publishedLine": "Default Workflow (published)",
+        "gitOk": "Git credentials were saved to shared config (values are masked).",
+        "gitSkip": "Git was skipped. For private repos, add a token or SSH under Project → shared Agent config.",
+        "gitUserOk": "Saved commit identity: {name} <{email}>.",
+        "gitUserSkip": "Git identity was not set. The sandbox will use sandbox / sandbox{'@'}localhost.",
+        "preview": "Wrote {vnc} and {mcp} to shared config."
       },
       "toastOk": "Generated — Run not started automatically",
       "toastNeedKey": "Please enter an API Key",
-      "toastRun": "Sample Run started",
+      "toastNeedGitUser": "Please enter a committer name and email",
       "toastErr": "Bootstrap failed"
     },
     "tokenByModel": {
