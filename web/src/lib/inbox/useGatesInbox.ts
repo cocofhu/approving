@@ -1477,12 +1477,12 @@ const activeClarify = computed(() => {
   return pickInboxClarifySession(activeRun.value, active.value.nodeId)
 })
 
-/** Inbox app_preview waiting: prefer API kind, fall back to loaded graph node type. */
+/** Inbox app_preview waiting: prefer API kind, fall back to loaded graph node type (not approve). */
 const inboxAppPreviewActive = computed(() => {
   if (active.value?.type !== 'clarify') return false
   if (active.value.kind === 'app_preview') return true
   const n = activeRun.value?.nodes?.find((node) => node.id === active.value!.nodeId)
-  return n?.type === 'app_preview' || n?.type === 'approve'
+  return n?.type === 'app_preview'
 })
 
 const inboxRemoteKind = computed(() =>
@@ -1490,6 +1490,8 @@ const inboxRemoteKind = computed(() =>
     appPreview: inboxAppPreviewActive.value,
     run: activeRun.value,
     nodeId: active.value?.type === 'clarify' ? active.value.nodeId : '',
+    // Approve upgrades inside ReactArtifactStage after silent probe; parents stay off.
+    hasRegisteredPreview: false,
   }),
 )
 
@@ -1716,8 +1718,8 @@ async function onClarifySend(
       activeRunLoadError.value = false
     }
   }
-  const mergedAnnotations =
-    inboxAppPreviewActive.value && !force ? mergeStagedAppPreviewPick(annotations) : annotations
+  // Always merge a staged pick when present (Approve may gain app preview mid-session).
+  const mergedAnnotations = !force ? mergeStagedAppPreviewPick(annotations) : annotations
   clarifyConfirmError.value = null
   let ok = true
   try {

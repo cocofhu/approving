@@ -28,6 +28,7 @@ vi.mock('@/lib/api/api', () => ({
       content: '<html>thumb</html>',
     })),
     getRunNodeSandbox: vi.fn(async () => ({ id: 42 })),
+    nodePreviews: vi.fn(async () => ({ ports: [] })),
   },
 }))
 
@@ -87,6 +88,7 @@ describe('ReactArtifactStage', () => {
     vi.mocked(api.artifactContent).mockImplementation(async () =>
       art({ id: 'thumb', name: 'thumb.html', kind: 'html', content: '<html>thumb</html>' }),
     )
+    vi.mocked(api.nodePreviews).mockResolvedValue({ ports: [] })
   })
   afterEach(() => {
     resetStageOpenStateForTests(':run-')
@@ -350,6 +352,117 @@ describe('ReactArtifactStage', () => {
     expect(wrapper.find('[data-testid="app-preview-stub"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').text()).toContain('应用预览')
+    wrapper.unmount()
+  })
+
+  it('hides app preview tab for Approve when no ports are registered (plan g1.4 / g2.3)', async () => {
+    vi.mocked(api.nodePreviews).mockResolvedValue({ ports: [] })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'research.json', kind: 'json', nodeId: 'approve_1' })],
+        runId: 'run-approve-empty',
+        nodeId: 'approve_1',
+        nodeType: 'approve',
+        // Even if a parent still passes app, stage must stay off until registration.
+        remoteKind: 'app',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(api.nodePreviews).toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="app-preview-stub"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toMatch(/尚未注册预览端口/)
+    wrapper.unmount()
+  })
+
+  it('shows app preview tab for Approve after silent probe finds ports (plan g2.2)', async () => {
+    vi.mocked(api.nodePreviews).mockResolvedValue({
+      ports: [
+        {
+          port: 5173,
+          label: '前端',
+          runId: 'run-approve-ports',
+          nodeId: 'approve_1',
+          proxyUrl: '/p',
+          healthy: true,
+        },
+      ],
+    })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'research.json', kind: 'json', nodeId: 'approve_1' })],
+        runId: 'run-approve-ports',
+        nodeId: 'approve_1',
+        nodeType: 'approve',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="app-preview-stub"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('true')
+    wrapper.unmount()
+  })
+
+  it('does not steal focus when Approve ports arrive after userMoved (plan g2.2)', async () => {
+    vi.useFakeTimers()
+    vi.mocked(api.nodePreviews).mockResolvedValue({ ports: [] })
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [art({ id: 'a1', name: 'research.json', kind: 'json', nodeId: 'approve_1' })],
+        runId: 'run-approve-moved',
+        nodeId: 'approve_1',
+        nodeType: 'approve',
+        remoteKind: 'off',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+
+    vi.mocked(api.nodePreviews).mockResolvedValue({
+      ports: [
+        {
+          port: 5173,
+          label: '前端',
+          runId: 'run-approve-moved',
+          nodeId: 'approve_1',
+          proxyUrl: '/p',
+          healthy: true,
+        },
+      ],
+    })
+    await vi.advanceTimersByTimeAsync(2500)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe(
+      'true',
+    )
+    expect(wrapper.get('[data-testid="react-artifact-tab-novnc"]').attributes('aria-selected')).toBe('false')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('keeps app_preview remote tab even when the port list is still empty (plan g2.3)', async () => {
+    const wrapper = mount(ReactArtifactStage, {
+      props: {
+        artifacts: [],
+        runId: 'run-app-preview',
+        nodeId: 'preview_1',
+        nodeType: 'app_preview',
+        remoteKind: 'app',
+      },
+      global: { plugins: [i18n()], stubs },
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="react-artifact-tab-novnc"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="app-preview-stub"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

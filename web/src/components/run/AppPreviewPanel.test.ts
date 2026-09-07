@@ -190,14 +190,25 @@ describe('AppPreviewPanel', () => {
     wrapper.unmount()
   })
 
-  it('schedules a poll while the port list is empty', async () => {
+  it('schedules a silent poll while the port list is empty', async () => {
+    vi.useFakeTimers()
     const spy = vi.spyOn(global, 'setInterval')
     apiMocks.nodePreviews.mockResolvedValue({ ports: [] })
     const wrapper = mountPanel()
     await flushPromises()
     expect(wrapper.find('[data-testid="app-preview-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="hard-load-layer"]').exists()).toBe(false)
     expect(spy).toHaveBeenCalled()
+    const callsBeforePoll = apiMocks.nodePreviews.mock.calls.length
+    expect(wrapper.attributes('aria-busy')).toBe('false')
+    // Advance one empty-poll tick — must not flip visible loading.
+    await vi.advanceTimersByTimeAsync(2500)
+    await flushPromises()
+    expect(apiMocks.nodePreviews.mock.calls.length).toBeGreaterThan(callsBeforePoll)
+    expect(wrapper.attributes('aria-busy')).toBe('false')
+    expect(wrapper.find('[data-testid="app-preview-empty"]').exists()).toBe(true)
     wrapper.unmount()
     spy.mockRestore()
+    vi.useRealTimers()
   })
 })

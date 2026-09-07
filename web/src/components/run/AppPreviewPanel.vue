@@ -66,12 +66,16 @@ function onStagedPick(payload: AppPreviewPickPayload | null) {
   emit('staged-pick', payload)
 }
 
-async function loadPorts() {
+async function loadPorts(opts?: { silent?: boolean }) {
   portsAbort?.abort()
   const gen = ++portsGen
   portsAbort = new AbortController()
-  loading.value = true
-  loadError.value = null
+  const silent = !!opts?.silent
+  // Visible loading only on first load / manual retry — empty poll must stay silent.
+  if (!silent) {
+    loading.value = true
+    loadError.value = null
+  }
   try {
     const r = await api.nodePreviews(props.runId, props.nodeId, { signal: portsAbort.signal })
     if (gen !== portsGen) return
@@ -85,16 +89,23 @@ async function loadPorts() {
       activeKey.value = ports.value[0] ? previewTabKey(ports.value[0]) : null
     }
     syncActivePort()
+    if (silent) loadError.value = null
   } catch (e: any) {
     if (gen !== portsGen || isAbortError(e) || portsAbort.signal.aborted) return
+    // Silent empty polls must not surface errors or flash loading layers.
+    if (silent) return
     loadError.value = t('pages.appPreview.loadFailed')
     if (!ports.value.length) ports.value = []
   } finally {
-    if (gen === portsGen) loading.value = false
+    if (gen === portsGen && !silent) loading.value = false
   }
 }
 
-watch(() => [props.runId, props.nodeId], loadPorts, { immediate: true })
+function retryLoadPorts() {
+  return loadPorts()
+}
+
+watch(() => [props.runId, props.nodeId], () => loadPorts(), { immediate: true })
 
 const EMPTY_POLL_MS = 2500
 let emptyPoll: ReturnType<typeof setInterval> | null = null
@@ -109,7 +120,7 @@ watch(
   () => ({ empty: !ports.value.length, loading: loading.value, err: loadError.value }),
   ({ empty, loading: busy, err }) => {
     if (empty && !busy && !err) {
-      if (!emptyPoll) emptyPoll = setInterval(() => loadPorts(), EMPTY_POLL_MS)
+      if (!emptyPoll) emptyPoll = setInterval(() => loadPorts({ silent: true }), EMPTY_POLL_MS)
       return
     }
     stopEmptyPoll()
@@ -142,7 +153,7 @@ function selectPreview(key: string) {
       :overlay="false"
       :stuck-after-ms="10_000"
       :stage="t('pages.appPreview.loading')"
-      @retry="loadPorts"
+      @retry="retryLoadPorts"
     />
     <div
       v-if="loadError"
@@ -154,7 +165,7 @@ function selectPreview(key: string) {
       <button
         type="button"
         class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
-        @click="loadPorts"
+        @click="retryLoadPorts"
       >
         {{ t('common.chatImage.retry') }}
       </button>

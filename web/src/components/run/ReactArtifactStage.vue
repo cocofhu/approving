@@ -20,6 +20,7 @@ import type { Artifact, ReactAnnotation, Run } from '@/lib/shared/types'
 import {
   REACT_STAGE_TAB_GRID,
   REACT_STAGE_TAB_NOVNC,
+  approveStageRemoteKind,
   artifactFriendlyNameKey,
   artifactKindLabelKey,
   artifactTechnicalDisplayName,
@@ -144,6 +145,64 @@ const resolvedRemoteKind = computed(() =>
 )
 const stageNode = computed(() => props.run?.nodes?.find((n) => n.id === props.nodeId) || null)
 const resolvedNodeType = computed(() => String(props.nodeType || stageNode.value?.type || '').trim())
+
+/** Approve: silent probe for set_preview registrations; hide app tab until ports exist. */
+const APPROVE_PREVIEW_POLL_MS = 2500
+const approvePreviewRegistered = ref(false)
+let approveProbeTimer: ReturnType<typeof setInterval> | null = null
+let approveProbeAbort: AbortController | null = null
+let approveProbeGen = 0
+
+function stopApprovePreviewProbe() {
+  if (approveProbeTimer) {
+    clearInterval(approveProbeTimer)
+    approveProbeTimer = null
+  }
+  approveProbeAbort?.abort()
+  approveProbeAbort = null
+  approveProbeGen++
+}
+
+async function probeApprovePreviews() {
+  if (resolvedNodeType.value !== 'approve') return
+  const rid = String(props.runId || '').trim()
+  const nid = String(props.nodeId || '').trim()
+  if (!rid || !nid) {
+    approvePreviewRegistered.value = false
+    return
+  }
+  approveProbeAbort?.abort()
+  const gen = ++approveProbeGen
+  approveProbeAbort = new AbortController()
+  try {
+    const r = await api.nodePreviews(rid, nid, { signal: approveProbeAbort.signal })
+    if (gen !== approveProbeGen) return
+    approvePreviewRegistered.value = (r.ports || []).length > 0
+  } catch (e) {
+    if (gen !== approveProbeGen || isAbortError(e)) return
+    // Keep last known registration on transient errors.
+  }
+}
+
+watch(
+  () => `${resolvedNodeType.value}|${props.runId}|${props.nodeId}`,
+  () => {
+    stopApprovePreviewProbe()
+    approvePreviewRegistered.value = false
+    if (resolvedNodeType.value !== 'approve') return
+    void probeApprovePreviews()
+    approveProbeTimer = setInterval(() => void probeApprovePreviews(), APPROVE_PREVIEW_POLL_MS)
+  },
+  { immediate: true },
+)
+
+const effectiveRemoteKind = computed(() => {
+  if (resolvedNodeType.value === 'approve') {
+    return approveStageRemoteKind(approvePreviewRegistered.value)
+  }
+  return resolvedRemoteKind.value
+})
+
 const stageArtifacts = computed(() => expandStageArtifacts(props.artifacts, props.run, stageNode.value))
 const effectivePin = computed(() =>
   resolveEffectivePreviewPin({
@@ -156,21 +215,21 @@ const effectivePin = computed(() =>
 const gridArtifacts = computed(() =>
   stageGridArtifactsWithPin(stageArtifacts.value, props.run, effectivePin.value),
 )
-const canOpenNovnc = computed(() => resolvedRemoteKind.value !== 'off')
+const canOpenNovnc = computed(() => effectiveRemoteKind.value !== 'off')
 const showingNovnc = computed(() => activeTab.value === REACT_STAGE_TAB_NOVNC)
 const showGridCards = computed(() => gridArtifacts.value.length > 0 || canOpenNovnc.value)
 const remoteCardTitle = computed(() =>
-  resolvedRemoteKind.value === 'sandbox'
+  effectiveRemoteKind.value === 'sandbox'
     ? t('pages.reactArtifactStage.novncCardTitle')
     : t('pages.reactArtifactStage.appCardTitle'),
 )
 const remoteCardMeta = computed(() =>
-  resolvedRemoteKind.value === 'sandbox'
+  effectiveRemoteKind.value === 'sandbox'
     ? t('pages.reactArtifactStage.novncCardMeta')
     : t('pages.reactArtifactStage.appCardMeta'),
 )
 const remoteTabLabel = computed(() =>
-  resolvedRemoteKind.value === 'sandbox'
+  effectiveRemoteKind.value === 'sandbox'
     ? t('pages.reactArtifactStage.novncTab')
     : t('pages.reactArtifactStage.appTab'),
 )
@@ -470,20 +529,31 @@ watch(
 )
 
 watch(
-  () => resolvedRemoteKind.value,
+  () => effectiveRemoteKind.value,
   (kind) => {
-    if (kind !== 'app' && kind !== 'public') return
+    if (kind !== 'app' && kind !== 'public') {
+      // Drop an empty Approve app tab if registration disappears.
+      if (resolvedNodeType.value === 'approve' && novncOpen.value && activeTab.value === REACT_STAGE_TAB_NOVNC) {
+        novncOpen.value = false
+        activeTab.value = openNames.value.length
+          ? previewTabId(openNames.value[openNames.value.length - 1])
+          : REACT_STAGE_TAB_GRID
+      }
+      return
+    }
+    // Show the remote tab once kind is live; never steal focus after the user moved.
     novncOpen.value = true
+    if (userMoved.value) return
     if (activeTab.value === REACT_STAGE_TAB_GRID) activeTab.value = REACT_STAGE_TAB_NOVNC
   },
   { immediate: true },
 )
 
 watch(
-  () => `${props.runId}|${props.nodeId}|${resolvedRemoteKind.value}`,
+  () => `${props.runId}|${props.nodeId}|${effectiveRemoteKind.value}`,
   async () => {
     sandboxId.value = null
-    if (resolvedRemoteKind.value !== 'sandbox') return
+    if (effectiveRemoteKind.value !== 'sandbox') return
     sandboxLoading.value = true
     try {
       const sbx = await api.getRunNodeSandbox(props.runId, props.nodeId)
@@ -521,6 +591,7 @@ watch(
 
 onMounted(() => document.addEventListener('click', onVersionMenuDocClick))
 onBeforeUnmount(() => {
+  stopApprovePreviewProbe()
   summaryThumbGen++
   summaryThumbAbort?.abort()
   document.removeEventListener('click', onVersionMenuDocClick)
@@ -768,7 +839,7 @@ onBeforeUnmount(() => {
       data-testid="react-artifact-preview-novnc"
     >
       <AppPreviewPanel
-        v-if="resolvedRemoteKind === 'app'"
+        v-if="effectiveRemoteKind === 'app'"
         :run-id="runId"
         :node-id="nodeId"
         fill
@@ -777,7 +848,7 @@ onBeforeUnmount(() => {
         @staged-pick="emit('stagedPick', $event)"
       />
       <PublicAppPreviewPanel
-        v-else-if="resolvedRemoteKind === 'public'"
+        v-else-if="effectiveRemoteKind === 'public'"
         :token="token"
         :ports="ports"
         :active="publicActive"
@@ -794,7 +865,7 @@ onBeforeUnmount(() => {
         @pick="onRemotePick"
       />
       <div
-        v-else-if="resolvedRemoteKind === 'sandbox'"
+        v-else-if="effectiveRemoteKind === 'sandbox'"
         class="flex h-full flex-col items-center justify-center p-6 text-center text-[12px] text-txt3"
         data-testid="react-artifact-novnc-missing"
       >
