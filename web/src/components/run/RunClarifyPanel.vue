@@ -74,7 +74,8 @@ const reviewChatRef = ref<{
 const artifacts = computed(() => props.run?.artifacts || [])
 const previewArtifact = computed(() => props.clarify?.previewArtifact || '')
 const nodeType = computed(() => props.run?.nodes?.find((n) => n.id === props.nodeId)?.type || '')
-const remoteKind = computed(() => (nodeType.value === 'approve' ? 'app' : 'sandbox'))
+// Approve defaults to off; ReactArtifactStage silently probes previews and upgrades to app when registered.
+const remoteKind = computed(() => (nodeType.value === 'approve' ? 'off' : 'sandbox'))
 
 function onRemotePick(payload: AppPreviewPickPayload) {
   if (!props.inputActive) return

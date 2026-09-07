@@ -41,6 +41,7 @@ import {
   nextTabAfterClose,
   openStagePreviewTab,
   previewTabId,
+  approveStageRemoteKind,
   resolveEffectivePreviewPin,
   resolveStageRemoteKind,
   stageGridArtifactsWithPin,
@@ -90,8 +91,10 @@ describe('reactArtifactPreview helpers', () => {
     } as Run
     expect(isClarifyInteractiveGraphNode(approveRun, 'a1')).toBe(true)
     expect(isAppPreviewRemoteNode('app_preview')).toBe(true)
-    expect(isAppPreviewRemoteNode('approve')).toBe(true)
+    expect(isAppPreviewRemoteNode('approve')).toBe(false)
     expect(isAppPreviewRemoteNode('react')).toBe(false)
+    expect(approveStageRemoteKind(false)).toBe('off')
+    expect(approveStageRemoteKind(true)).toBe('app')
   })
 
   it('treats foreign-node artifacts as read-only unless nodeId is empty', () => {
@@ -225,7 +228,15 @@ describe('reactArtifactPreview helpers', () => {
     const approveRun = {
       nodes: [{ id: 'a1', type: 'approve', label: 'Approve', position: { x: 0, y: 0 }, config: {} }],
     } as unknown as Run
-    expect(inboxStageRemoteKind({ appPreview: false, run: approveRun, nodeId: 'a1' })).toBe('app')
+    // Approve without registered preview stays off (not app/sandbox).
+    expect(inboxStageRemoteKind({ appPreview: false, run: approveRun, nodeId: 'a1' })).toBe('off')
+    expect(
+      inboxStageRemoteKind({ appPreview: false, run: approveRun, nodeId: 'a1', hasRegisteredPreview: true }),
+    ).toBe('app')
+    const appPreviewRun = {
+      nodes: [{ id: 'p1', type: 'app_preview', label: '预览', position: { x: 0, y: 0 }, config: {} }],
+    } as unknown as Run
+    expect(inboxStageRemoteKind({ appPreview: false, run: appPreviewRun, nodeId: 'p1' })).toBe('app')
   })
 
   it('resolves remoteKind with explicit override over sandbox default', () => {

@@ -392,8 +392,14 @@ export function resolveEffectivePreviewPin(opts: {
   return ''
 }
 
+/** Dedicated app_preview nodes always expose the remote app tab. Approve does not. */
 export function isAppPreviewRemoteNode(type: string | null | undefined): boolean {
-  return type === 'app_preview' || type === 'approve'
+  return type === 'app_preview'
+}
+
+/** Approve only upgrades to app after set_preview registers a port/URL. */
+export function approveStageRemoteKind(hasRegisteredPreview: boolean): ReactStageRemoteKind {
+  return hasRegisteredPreview ? 'app' : 'off'
 }
 
 export function isClarifyInteractiveGraphNode(run: Run | null | undefined, nodeId: string | null | undefined): boolean {
@@ -405,10 +411,14 @@ export function inboxStageRemoteKind(opts: {
   appPreview: boolean
   run?: Run | null
   nodeId?: string | null
+  /** When the active node is approve: true once set_preview has registered ports/URLs. */
+  hasRegisteredPreview?: boolean
 }): ReactStageRemoteKind {
   if (opts.appPreview) return 'app'
   const n = opts.run?.nodes?.find((node: WFNode) => node.id === opts.nodeId)
   if (isAppPreviewRemoteNode(n?.type)) return 'app'
+  // Approve is clarify-interactive but must not default to sandbox/app without a registration.
+  if (n?.type === 'approve') return approveStageRemoteKind(!!opts.hasRegisteredPreview)
   if (isClarifyInteractiveGraphNode(opts.run, opts.nodeId)) return 'sandbox'
   return 'off'
 }
