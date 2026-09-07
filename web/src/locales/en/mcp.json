@@ -19,6 +19,7 @@
       "entryPathAgent": "Agent Studio → MCP",
       "toolCount": "{n} tools · Click for details",
       "openDetail": "Open details",
+      "backToCatalog": "Back to catalog",
       "toolsTitle": "Tools",
       "io": {
         "write": "write",

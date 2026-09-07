@@ -19,6 +19,7 @@
       "entryPathAgent": "Agent Studio → MCP",
       "toolCount": "{n} 个工具 · 点击查看详细说明",
       "openDetail": "打开详述",
+      "backToCatalog": "返回目录",
       "toolsTitle": "工具列表",
       "io": {
         "write": "write",

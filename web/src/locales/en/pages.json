@@ -1568,6 +1568,11 @@
         "readOnly": "Read-only for non-admin accounts.",
         "manage": "Manage rules",
         "view": "View rules"
+      },
+      "integrationsCard": {
+        "title": "Integrations",
+        "desc": "Browse the built-in MCP discovery catalog (injected by scope; no configuration here).",
+        "view": "View integrations"
       }
     },
     "platformRules": {

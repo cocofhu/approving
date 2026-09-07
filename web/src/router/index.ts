@@ -29,8 +29,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/agents', name: 'agents', component: () => import('@/views/AgentStudioView.vue'), meta: { titleKey: 'route.agents' } },
   { path: '/sandboxes', name: 'sandboxes', component: () => import('@/views/SandboxListView.vue'), meta: { titleKey: 'route.sandboxes' } },
   { path: '/sandboxes/:id/console', name: 'sandbox-console', component: () => import('@/views/SandboxConsoleView.vue'), meta: { titleKey: 'route.sandboxConsole', full: true } },
-  { path: '/integrations', name: 'integrations', component: () => import('@/views/IntegrationsView.vue'), meta: { titleKey: 'route.integrations' } },
-  { path: '/triggers', name: 'triggers', component: () => import('@/views/TriggersView.vue'), meta: { titleKey: 'route.triggers' } },
+  // plan g1.2 / g1.3: retire standalone pages; redirect old bookmarks into settings
+  { path: '/integrations', redirect: { path: '/settings', query: { integrations: '1' } } },
+  { path: '/triggers', redirect: '/settings' },
   { path: '/settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { titleKey: 'route.settings' } },
   { path: '/settings/platform-rules', name: 'platform-rules', component: () => import('@/views/PlatformRulesView.vue'), meta: { titleKey: 'route.platformRules' } },
 ]

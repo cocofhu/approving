@@ -67,6 +67,10 @@ function mountSettings() {
       stubs: {
         Icon: true,
         AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
+        IntegrationsModal: {
+          props: ['open'],
+          template: '<div data-testid="integrations-modal-stub" :data-open="open" />',
+        },
       },
     },
   })
@@ -173,6 +177,76 @@ describe('SettingsView first skeleton vs reset keep form', () => {
     expect(w.find('[data-testid="settings-form-skeleton"]').exists()).toBe(false)
     release!(SETTINGS)
     await flushPromises()
+    w.unmount()
+  })
+})
+
+describe('SettingsView integrations entry card (plan g2.1 / g2.2 / g2.4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    apiMocks.listSandboxes.mockResolvedValue([])
+    apiMocks.dashboard.mockResolvedValue({ running: 0 })
+  })
+
+  it('source keeps integrations card outside settings load branches', () => {
+    expect(src).toMatch(/data-testid="settings-integrations-card"/)
+    expect(src).toMatch(/data-testid="settings-integrations-open"/)
+    expect(src).toMatch(/IntegrationsModal/)
+    expect(src).toMatch(/query\.integrations/)
+  })
+
+  it('renders integrations card while settings still loading', async () => {
+    apiMocks.getSettings.mockReturnValue(new Promise(() => {}))
+    const w = mountSettings()
+    await flushPromises()
+    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-integrations-open"]').exists()).toBe(true)
+    expect(w.text()).toContain('集成')
+    expect(w.text()).toContain('查看集成')
+    w.unmount()
+  })
+
+  it('keeps integrations card on 403 and opens modal stub', async () => {
+    apiMocks.getSettings.mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 }))
+    const w = mountSettings()
+    await flushPromises()
+    expect(w.find('[data-testid="settings-denied"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(true)
+    expect(w.find('[data-testid="integrations-modal-stub"]').attributes('data-open')).toBe('false')
+    await w.find('[data-testid="settings-integrations-open"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="integrations-modal-stub"]').attributes('data-open')).toBe('true')
+    w.unmount()
+  })
+
+  it('auto-opens integrations modal from ?integrations=1 then clears query', async () => {
+    apiMocks.getSettings.mockResolvedValue(SETTINGS)
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/settings', component: SettingsView }],
+    })
+    await router.push('/settings?integrations=1')
+    const w = mount(SettingsView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          Icon: true,
+          AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
+          IntegrationsModal: {
+            props: ['open'],
+            template: '<div data-testid="integrations-modal-stub" :data-open="open" />',
+          },
+        },
+      },
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="integrations-modal-stub"]').attributes('data-open')).toBe('true')
+    expect(router.currentRoute.value.query.integrations).toBeUndefined()
     w.unmount()
   })
 })

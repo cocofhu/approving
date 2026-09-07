@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
+import IntegrationsModal from '@/components/settings/IntegrationsModal.vue'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const { user } = useAuth()
 
@@ -74,6 +76,38 @@ const showRefreshProgress = computed(
 )
 const showSkeleton = computed(
   () => loading.value && items.value.length === 0 && !loadFailed.value && !loadDenied.value,
+)
+
+// plan g2.1–g2.3: integrations entry + modal (independent of settings load state)
+const integrationsOpen = ref(false)
+
+function openIntegrationsModal() {
+  integrationsOpen.value = true
+}
+
+function closeIntegrationsModal() {
+  integrationsOpen.value = false
+}
+
+function shouldAutoOpenIntegrations(raw: unknown): boolean {
+  if (Array.isArray(raw)) return raw.some((v) => shouldAutoOpenIntegrations(v))
+  return raw === '1' || raw === 'true'
+}
+
+async function consumeIntegrationsQuery() {
+  if (!shouldAutoOpenIntegrations(route.query.integrations)) return
+  openIntegrationsModal()
+  const nextQuery = { ...route.query }
+  delete nextQuery.integrations
+  await router.replace({ path: '/settings', query: nextQuery })
+}
+
+watch(
+  () => route.query.integrations,
+  () => {
+    void consumeIntegrationsQuery()
+  },
+  { immediate: true },
 )
 
 let poll: number | undefined
@@ -228,6 +262,52 @@ onBeforeUnmount(() => {
       {{ error }}
     </div>
 
+    <!-- Entry cards independent of settings API load (plan g2.1; platform rules unchanged jump) -->
+    <div class="card mb-4 border-accent/20 bg-accent-dim/20">
+      <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+        <div class="flex items-start gap-3">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center bg-accent-dim text-accent-2">
+            <Icon name="file" :size="16" />
+          </span>
+          <div>
+            <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.settings.platformRulesCard.title') }}</h3>
+            <p class="mt-1 max-w-2xl text-xs leading-relaxed text-txt3">{{ t('pages.settings.platformRulesCard.desc') }}</p>
+            <p v-if="!isAdmin" class="mt-1 text-[11px] text-warn">{{ t('pages.settings.platformRulesCard.readOnly') }}</p>
+          </div>
+        </div>
+        <AppButton class="min-h-11" variant="primary" size="sm" icon="chevron-right" @click="router.push('/settings/platform-rules')">
+          {{ isAdmin ? t('pages.settings.platformRulesCard.manage') : t('pages.settings.platformRulesCard.view') }}
+        </AppButton>
+      </div>
+    </div>
+
+    <div
+      class="card mb-4 border-accent/20 bg-accent-dim/20"
+      data-testid="settings-integrations-card"
+    >
+      <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+        <div class="flex items-start gap-3">
+          <span class="flex h-8 w-8 shrink-0 items-center justify-center bg-accent-dim text-accent-2">
+            <Icon name="connector" :size="16" />
+          </span>
+          <div>
+            <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.settings.integrationsCard.title') }}</h3>
+            <p class="mt-1 max-w-2xl text-xs leading-relaxed text-txt3">{{ t('pages.settings.integrationsCard.desc') }}</p>
+          </div>
+        </div>
+        <AppButton
+          class="min-h-11"
+          variant="primary"
+          size="sm"
+          icon="chevron-right"
+          data-testid="settings-integrations-open"
+          @click="openIntegrationsModal"
+        >
+          {{ t('pages.settings.integrationsCard.view') }}
+        </AppButton>
+      </div>
+    </div>
+
     <div
       v-if="showRefreshProgress"
       class="mb-2 h-[2px] overflow-hidden bg-line"
@@ -282,24 +362,6 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <div :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
-      <div class="card mb-4 border-accent/20 bg-accent-dim/20">
-        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div class="flex items-start gap-3">
-            <span class="flex h-8 w-8 shrink-0 items-center justify-center bg-accent-dim text-accent-2">
-              <Icon name="file" :size="16" />
-            </span>
-            <div>
-              <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.settings.platformRulesCard.title') }}</h3>
-              <p class="mt-1 max-w-2xl text-xs leading-relaxed text-txt3">{{ t('pages.settings.platformRulesCard.desc') }}</p>
-              <p v-if="!isAdmin" class="mt-1 text-[11px] text-warn">{{ t('pages.settings.platformRulesCard.readOnly') }}</p>
-            </div>
-          </div>
-          <AppButton variant="primary" size="sm" icon="chevron-right" @click="router.push('/settings/platform-rules')">
-            {{ isAdmin ? t('pages.settings.platformRulesCard.manage') : t('pages.settings.platformRulesCard.view') }}
-          </AppButton>
-        </div>
-      </div>
-
       <div v-for="group in groups" :key="group.id" class="card mb-4">
         <div class="border-b border-line px-4 py-3.5">
           <h3 class="flex items-center gap-2 text-[13px] font-semibold text-txt">
@@ -434,6 +496,8 @@ onBeforeUnmount(() => {
       {{ t('pages.settings.priorityNote') }}
     </p>
     </div>
+
+    <IntegrationsModal :open="integrationsOpen" @close="closeIntegrationsModal" />
   </div>
 </template>
 
