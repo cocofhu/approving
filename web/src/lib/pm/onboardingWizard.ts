@@ -1,29 +1,24 @@
 import type { BackendId } from '@/lib/shared/regionPolicy'
 import { getRegionPolicy } from '@/lib/shared/regionPolicy'
-import { i18n } from '@/lib/shared/i18n'
+import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
+import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 
-export const ONBOARDING_WORKFLOW_NAME = '快速上手·轻量'
+/** Matches models.DefaultProjectID — first-install wizard only opens here. */
+export const DEFAULT_PROJECT_ID = 'proj-default'
 
-export const DEFAULT_ONBOARDING_REPO = {
-  name: 'demo',
-  url: 'https://github.com/heroku/nodejs-getting-started.git',
-  branch: 'main',
-} as const
-
-export const DEFAULT_ONBOARDING_REPOS_LITERAL =
-  `${DEFAULT_ONBOARDING_REPO.name}|${DEFAULT_ONBOARDING_REPO.url}|${DEFAULT_ONBOARDING_REPO.branch}`
-
-export const DEFAULT_ONBOARDING_FEATURE = '把首页欢迎文案与主按钮文案改得更清晰友好'
+export const ONBOARDING_WORKFLOW_NAME = '默认工作流'
+export const FIRST_INSTALL_GROUP_NAME = '综合项目组'
 
 export const ONBOARDING_AGENT_NAMES = [
-  'ClarifyAgent',
-  'VisualAgent',
-  'ImplementAgent',
-  'TestAgent',
-  'PreviewAgent',
+  '综合AI技术产品',
+  '综合研发工程师',
+  '综合测试工程师',
+  '综合代码审查工程师',
+  '综合运维工程师',
+  '综合项目组组长',
 ] as const
 
-export type OnboardingStepId = 'overview' | 'acp' | 'apiKey' | 'git' | 'review'
+export type OnboardingStepId = 'language' | 'overview' | 'acp' | 'apiKey' | 'git' | 'review'
 
 export type OnboardingStep = {
   id: OnboardingStepId
@@ -32,6 +27,7 @@ export type OnboardingStep = {
 }
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
+  { id: 'language', labelKey: 'pages.onboarding.steps.language' },
   { id: 'overview', labelKey: 'pages.onboarding.steps.overview' },
   { id: 'acp', labelKey: 'pages.onboarding.steps.acp' },
   { id: 'apiKey', labelKey: 'pages.onboarding.steps.apiKey' },
@@ -39,36 +35,55 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'review', labelKey: 'pages.onboarding.steps.review' },
 ]
 
-export type OnboardingRepoFields = {
-  name: string
-  url: string
-  branch: string
-}
+export const ONBOARDING_GIT_TYPES: { id: GitCredentialType; labelKey: string }[] = [
+  { id: 'github_https', labelKey: 'pages.agentStudio.git.types.github_https' },
+  { id: 'gitlab_https', labelKey: 'pages.agentStudio.git.types.gitlab_https' },
+  { id: 'ssh', labelKey: 'pages.agentStudio.git.types.ssh' },
+]
 
 export type OnboardingDraft = {
   step: number
+  language: AppLocale
   acpBackend: BackendId
   region: string
   apiKey: string
-  repo: OnboardingRepoFields
-  advOpen: boolean
+  gitCredentialType: GitCredentialType | ''
+  githubToken: string
+  gitlabToken: string
+  gitlabUrl: string
+  gitSshPrivateKey: string
+  gitSshKnownHosts: string
+  repoUrl: string
+  repoBranch: string
+  gitUserName: string
+  gitUserEmail: string
+  vncPreview: boolean
+  browserMcp: boolean
 }
 
 export type OnboardingBootstrapBody = {
   acpBackend: BackendId
   apiKey: string
   region?: string
-  repos?: string
-  /** Locale-aware sample feature; server falls back to Chinese default when omitted. */
-  featureHint?: string
+  gitCredentialType?: GitCredentialType
+  githubToken?: string
+  gitlabToken?: string
+  gitlabUrl?: string
+  gitSshPrivateKey?: string
+  gitSshKnownHosts?: string
+  repoUrl?: string
+  repoBranch?: string
+  gitUserName?: string
+  gitUserEmail?: string
+  vncPreview?: boolean
+  browserMcp?: boolean
 }
 
 export type OnboardingBootstrapResult = {
   agentIds: string[]
   workflowId: string
-  repos: string
-  feature: string
   published: boolean
+  groupName?: string
 }
 
 const DISMISS_PREFIX = 'approving-onboarding-dismiss:'
@@ -82,7 +97,7 @@ export function isOnboardingDismissed(projectId: string): boolean {
   try {
     return localStorage.getItem(onboardingDismissKey(projectId)) === '1'
   } catch {
-    return false
+    return true
   }
 }
 
@@ -95,23 +110,13 @@ export function dismissOnboarding(projectId: string): void {
   }
 }
 
-function clearOnboardingDismiss(projectId: string): void {
-  if (!projectId) return
-  try {
-    localStorage.removeItem(onboardingDismissKey(projectId))
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Empty project for onboarding: 0 workflows, 0 agents bound to this project,
- * and none of the fixed onboarding agent names are owned by another project. */
+/** First-install empty default project: 0 workflows, 0 bound agents, no name conflicts. */
 export function isEmptyProjectForOnboarding(
   workflowCount: number,
   agents: { name?: string; projectId?: string }[],
   projectId: string,
 ): boolean {
-  if (!projectId) return false
+  if (projectId !== DEFAULT_PROJECT_ID) return false
   if (workflowCount > 0) return false
   const bound = agents.filter((a) => (a.projectId || '') === projectId)
   if (bound.length > 0) return false
@@ -138,67 +143,79 @@ export function freshOnboardingDraft(): OnboardingDraft {
   const policy = getRegionPolicy('cursor')
   return {
     step: 0,
+    language: detectSystemLocale(),
     acpBackend: 'cursor',
     region: policy?.defaultRegion || '',
     apiKey: '',
-    repo: { ...DEFAULT_ONBOARDING_REPO },
-    advOpen: false,
+    gitCredentialType: '',
+    githubToken: '',
+    gitlabToken: '',
+    gitlabUrl: '',
+    gitSshPrivateKey: '',
+    gitSshKnownHosts: '',
+    repoUrl: '',
+    repoBranch: '',
+    gitUserName: '',
+    gitUserEmail: '',
+    vncPreview: true,
+    browserMcp: true,
   }
 }
 
-export function encodeReposLiteral(repo: OnboardingRepoFields): string {
-  const name = (repo.name || '').trim() || DEFAULT_ONBOARDING_REPO.name
-  const url = (repo.url || '').trim() || DEFAULT_ONBOARDING_REPO.url
-  const branch = (repo.branch || '').trim() || DEFAULT_ONBOARDING_REPO.branch
-  return `${name}|${url}|${branch}`
+/** Mirrors the server's RepoNameFromURL so the wizard can preview the clone dir. */
+export function repoNameFromUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '')
+  if (!trimmed) return ''
+  const seg = trimmed.split(/[/:]/).pop() || ''
+  return seg.replace(/\.git$/, '').trim()
 }
 
-export function parseReposLiteral(literal: string): OnboardingRepoFields {
-  const parts = (literal || '').split('|')
-  if (parts.length < 2) {
-    return { ...DEFAULT_ONBOARDING_REPO }
-  }
-  return {
-    name: parts[0]?.trim() || DEFAULT_ONBOARDING_REPO.name,
-    url: parts[1]?.trim() || DEFAULT_ONBOARDING_REPO.url,
-    branch: (parts[2] || 'main').trim() || 'main',
-  }
+export function repoConfigured(draft: OnboardingDraft): boolean {
+  return Boolean(draft.repoUrl.trim())
 }
 
-/** Structured repos value accepted by StartRun / workflow Type "repos". */
-export function reposInputFromFields(repo: OnboardingRepoFields): Array<{ name: string; url: string; branch: string }> {
-  const fields = {
-    name: (repo.name || '').trim() || DEFAULT_ONBOARDING_REPO.name,
-    url: (repo.url || '').trim() || DEFAULT_ONBOARDING_REPO.url,
-    branch: (repo.branch || '').trim() || DEFAULT_ONBOARDING_REPO.branch,
-  }
-  return [fields]
+export function gitIdentityConfigured(draft: OnboardingDraft): boolean {
+  return Boolean(draft.gitUserName.trim() && draft.gitUserEmail.trim())
+}
+
+/** First-install language defaults to the browser/OS language, not a prior app preference. */
+export function detectSystemLocale(): AppLocale {
+  if (typeof navigator === 'undefined') return 'zh-CN'
+  return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'
+}
+
+export function gitConfigured(draft: OnboardingDraft): boolean {
+  if (!draft.gitCredentialType) return false
+  if (draft.gitCredentialType === 'github_https') return Boolean(draft.githubToken.trim())
+  if (draft.gitCredentialType === 'gitlab_https') return Boolean(draft.gitlabToken.trim())
+  if (draft.gitCredentialType === 'ssh') return Boolean(draft.gitSshPrivateKey.trim())
+  return false
 }
 
 export function assembleBootstrapBody(draft: OnboardingDraft): OnboardingBootstrapBody {
-  const featureHint = String(i18n.global.t('pages.onboarding.review.featureHint')).trim()
   const body: OnboardingBootstrapBody = {
     acpBackend: draft.acpBackend,
     apiKey: draft.apiKey.trim(),
-    repos: encodeReposLiteral(draft.repo),
-  }
-  if (featureHint && !featureHint.startsWith('pages.onboarding.')) {
-    body.featureHint = featureHint
   }
   const policy = getRegionPolicy(draft.acpBackend)
   if (policy && draft.region.trim()) {
     body.region = draft.region.trim()
   }
-  return body
-}
-
-export function hostLabelFromUrl(url: string): string {
-  try {
-    const u = new URL(url)
-    if (u.hostname.includes('github')) return 'GitHub'
-    if (u.hostname.includes('gitlab')) return 'GitLab'
-    return u.hostname || 'Git'
-  } catch {
-    return 'Git'
+  if (draft.gitCredentialType) {
+    body.gitCredentialType = draft.gitCredentialType
   }
+  if (draft.githubToken.trim()) body.githubToken = draft.githubToken.trim()
+  if (draft.gitlabToken.trim()) body.gitlabToken = draft.gitlabToken.trim()
+  if (draft.gitlabUrl.trim()) body.gitlabUrl = draft.gitlabUrl.trim()
+  if (draft.gitSshPrivateKey.trim()) body.gitSshPrivateKey = draft.gitSshPrivateKey.trim()
+  if (draft.gitSshKnownHosts.trim()) body.gitSshKnownHosts = draft.gitSshKnownHosts.trim()
+  if (draft.repoUrl.trim()) {
+    body.repoUrl = draft.repoUrl.trim()
+    if (draft.repoBranch.trim()) body.repoBranch = draft.repoBranch.trim()
+  }
+  if (draft.gitUserName.trim()) body.gitUserName = draft.gitUserName.trim()
+  if (draft.gitUserEmail.trim()) body.gitUserEmail = draft.gitUserEmail.trim()
+  body.vncPreview = draft.vncPreview
+  body.browserMcp = draft.browserMcp
+  return body
 }

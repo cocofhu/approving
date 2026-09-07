@@ -58,7 +58,7 @@ Image tags / digests can be overridden in `.env` — see [`.env.example`](https:
 
 ## Next steps
 
-- After login, an empty project can use **Project quick start** to configure backend + API Key and generate 5 Agents plus the published light workflow (default git: public Heroku nodejs-getting-started).
+- After login, the **default project** opens first-time setup: ACP backend, API token, and optional Git credentials (written to shared Agent config), then creates the default team and publishes **Default Workflow**. Fill the repo URL when starting a Run.
 - [Core concepts](../concepts/) — FSM, gates, sandbox, artifacts
 - [Configuration summary](../../help/configuration/) — points to full `CONFIGURATION.md`
 - [Gateway summary](../../help/gateway/) — points to `GATEWAY.md`

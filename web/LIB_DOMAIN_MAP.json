@@ -65,6 +65,7 @@
     ],
     "pm": [
       "cronDeliverTargets.ts",
+      "firstInstall.ts",
       "onboardingWizard.ts",
       "pmCitationShape.ts",
       "pmTurnState.ts",
@@ -177,7 +178,7 @@
     "api": 3,
     "composables": 16,
     "inbox": 20,
-    "pm": 6,
+    "pm": 7,
     "project": 4,
     "run": 53,
     "shared": 37

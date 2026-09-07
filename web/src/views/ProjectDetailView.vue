@@ -18,7 +18,6 @@ import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
 import ProjectSharedAgentPanel from '@/components/project/ProjectSharedAgentPanel.vue'
 import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.vue'
 import ProjectExternalMcpPanel from '@/components/project/ProjectExternalMcpPanel.vue'
-import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import { useProjectDetail } from '@/lib/project/useProjectDetail'
 
 const {
@@ -90,7 +89,6 @@ const {
   copyPreviewLoading,
   copyModal,
   exportTarget,
-  onboardingOpen,
   projectAgents,
   isOnboardingEmpty,
   fileInput,
@@ -123,8 +121,6 @@ const {
   onScrollClose,
   load,
   openOnboarding,
-  onOnboardingCompleted,
-  onOnboardingRunStarted,
   reloadWorkflows,
   saveMeta,
   clearUnknownModelDisplayName,
@@ -1217,14 +1213,6 @@ const {
         </AppButton>
       </template>
     </AppModal>
-
-    <OnboardingWizard
-      :open="onboardingOpen"
-      :project-id="projectId"
-      @close="onboardingOpen = false"
-      @completed="onOnboardingCompleted"
-      @run-started="onOnboardingRunStarted"
-    />
 
     <AppModal
       :open="showDelete"
