@@ -277,7 +277,7 @@
         "nameLabel": "提交者姓名",
         "emailLabel": "提交者邮箱",
         "namePlaceholder": "例如 张三",
-        "emailPlaceholder": "you@example.com",
+        "emailPlaceholder": "you{'@'}example.com",
         "hint": "沙箱里 git commit 会用这两个值，写入项目共享配置。",
         "chip": "Git 身份"
       },
@@ -325,7 +325,7 @@
         "gitOk": "已写入 Git 凭据到共享配置（值已打码）。",
         "gitSkip": "未配置 Git。私有仓请到项目详情 → 共享 Agent 配置补 Token 或 SSH。",
         "gitUserOk": "已写入提交身份：{name} <{email}>。",
-        "gitUserSkip": "未填写 Git 提交身份。沙箱会用默认 sandbox / sandbox@localhost。",
+        "gitUserSkip": "未填写 Git 提交身份。沙箱会用默认 sandbox / sandbox{'@'}localhost。",
         "preview": "已写入 {vnc}、{mcp} 到共享配置。"
       },
       "toastOk": "生成成功，未自动开跑",

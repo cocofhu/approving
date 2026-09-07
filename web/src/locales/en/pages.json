@@ -277,7 +277,7 @@
         "nameLabel": "Committer name",
         "emailLabel": "Committer email",
         "namePlaceholder": "e.g. Ada Lovelace",
-        "emailPlaceholder": "you@example.com",
+        "emailPlaceholder": "you{'@'}example.com",
         "hint": "Sandbox git commits use these values. They are stored in project shared config.",
         "chip": "Git identity"
       },
@@ -325,7 +325,7 @@
         "gitOk": "Git credentials were saved to shared config (values are masked).",
         "gitSkip": "Git was skipped. For private repos, add a token or SSH under Project → shared Agent config.",
         "gitUserOk": "Saved commit identity: {name} <{email}>.",
-        "gitUserSkip": "Git identity was not set. The sandbox will use sandbox / sandbox@localhost.",
+        "gitUserSkip": "Git identity was not set. The sandbox will use sandbox / sandbox{'@'}localhost.",
         "preview": "Wrote {vnc} and {mcp} to shared config."
       },
       "toastOk": "Generated — Run not started automatically",
