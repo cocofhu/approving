@@ -387,8 +387,8 @@ func assertDefaultWorkflowGraph(t *testing.T, g models.Graph) {
 		t.Fatalf("repos[0] = %T", list[0])
 	}
 	url, _ := first["url"].(string)
-	if strings.Contains(url, "git.woa.com") || strings.Contains(url, "heroku") {
-		t.Fatalf("repos[0].url leaked host: %q", url)
+	if strings.TrimSpace(url) != "" {
+		t.Fatalf("repos[0].url = %q, want blank", url)
 	}
 	if err := g.Validate(); err != nil {
 		t.Fatalf("graph validate: %v", err)

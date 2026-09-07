@@ -39,8 +39,8 @@ func TestFirstInstallEmbedFSHasWorkspaceMarkdown(t *testing.T) {
 			t.Fatalf("%s template Files empty after embed load", name)
 		}
 		for _, f := range agent.Files {
-			if strings.Contains(f.Content, "git.woa.com") || strings.Contains(f.Content, "git.cocofhu.cc") {
-				t.Fatalf("%s file %s contains internal git host", name, f.Path)
+			if looksLikeCloneURL(f.Content) {
+				t.Fatalf("%s file %s contains a clone URL; first-install files must stay host-agnostic", name, f.Path)
 			}
 		}
 	}
@@ -53,14 +53,34 @@ func TestFirstInstallEmbedFSHasWorkspaceMarkdown(t *testing.T) {
 	}
 }
 
-// The shipped templates are public: no internal hosts, regions, or project names.
-func TestFirstInstallEmbedCarriesNoBusinessIdentifiers(t *testing.T) {
-	denied := []string{
-		"git.woa.com",
-		"git.cocofhu.cc",
-		"CODEBUDDY_REGION",
-		"skillhub",
+func looksLikeCloneURL(s string) bool {
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "git@") {
+		return true
 	}
+	if strings.Contains(lower, "heroku") {
+		return true
+	}
+	return strings.Contains(lower, "://") && (strings.Contains(lower, ".git") || strings.Contains(lower, "github.com") || strings.Contains(lower, "gitlab"))
+}
+
+func looksLikeSecretLiteral(s string) bool {
+	if strings.Contains(s, "BEGIN ") && strings.Contains(s, "PRIVATE KEY") {
+		return true
+	}
+	for _, key := range []string{"GITHUB_TOKEN", "GITLAB_TOKEN", "APPROVING_CURSOR_API_KEY", "APPROVING_CODEBUDDY_API_KEY"} {
+		if i := strings.Index(s, key); i >= 0 {
+			rest := strings.TrimSpace(s[i+len(key):])
+			if strings.HasPrefix(rest, "=") || strings.HasPrefix(rest, ":") || strings.HasPrefix(rest, "\":") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Shipped templates are public: no clone URLs, tokens, or private keys.
+func TestFirstInstallEmbedCarriesNoSecretsOrHosts(t *testing.T) {
 	err := fs.WalkDir(firstInstallEmbedFS, firstInstallEmbedRoot, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -69,11 +89,12 @@ func TestFirstInstallEmbedCarriesNoBusinessIdentifiers(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		lower := strings.ToLower(string(b))
-		for _, bad := range denied {
-			if strings.Contains(lower, strings.ToLower(bad)) {
-				t.Errorf("%s contains business identifier %q", p, bad)
-			}
+		body := string(b)
+		if looksLikeCloneURL(body) {
+			t.Errorf("%s contains a clone URL", p)
+		}
+		if looksLikeSecretLiteral(body) {
+			t.Errorf("%s contains a credential literal", p)
 		}
 		return nil
 	})
