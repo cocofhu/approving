@@ -4,8 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
-- Approve nodes can call `set_preview` to register a live app or external URL
-  on the ReAct preview stage (optional; does not park/finish the node).
+## 0.3.4-beta — 2026-09-08
+
+- Public beta follow-up on [`v0.3.4-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.4-beta)
+  (relative to `v0.3.3-beta`: PRs #485–#492). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.4-beta` (tag publish does not rewrite these files).
+- Highlights: Approve `set_preview` live app preview; first-install wizard
+  (default team + workflow); integrations in Settings modal; mobile ReviewShell
+  drawer fill; pending-queue annotation re-edit.
 
 ## 0.3.3-beta — 2026-09-04
 
