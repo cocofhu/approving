@@ -122,6 +122,7 @@ describe('BUILTIN_MCPS artifact-store catalog', () => {
 
     expect(te('mcp.integrations.toolCount')).toBe(true)
     expect(te('mcp.integrations.openDetail')).toBe(true)
+    expect(te('mcp.integrations.backToCatalog')).toBe(true)
     expect(te('mcp.integrations.toolsTitle')).toBe(true)
     expect(te('mcp.integrations.alwaysAvailable')).toBe(true)
     expect(te(store!.descKey)).toBe(true)

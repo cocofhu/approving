@@ -18,8 +18,7 @@ export const sidebarNavGroups: SidebarNavGroup[] = [
     items: [
       { to: '/agents', icon: 'robot', labelKey: 'nav.agents' },
       { to: '/sandboxes', icon: 'terminal', labelKey: 'nav.sandboxes' },
-      { to: '/integrations', icon: 'connector', labelKey: 'nav.integrations' },
-      { to: '/triggers', icon: 'trigger', labelKey: 'nav.triggers' },
+      // plan g1.1: integrations & triggers removed from sidebar; integrations live in settings modal
       { to: '/settings', icon: 'settings', labelKey: 'nav.settings' },
     ],
   },

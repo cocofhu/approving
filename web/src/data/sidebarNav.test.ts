@@ -10,6 +10,14 @@ describe('sidebarNav', () => {
     expect(sidebarNavGroups[1].items.some((i) => i.to === '/settings')).toBe(true)
   })
 
+  // plan g1.1: config group no longer exposes /integrations or /triggers
+  it('config group keeps agents/sandboxes/settings without integrations or triggers', () => {
+    const configTos = sidebarNavGroups[1].items.map((i) => i.to)
+    expect(configTos).toEqual(['/agents', '/sandboxes', '/settings'])
+    expect(configTos).not.toContain('/integrations')
+    expect(configTos).not.toContain('/triggers')
+  })
+
   it('does not expose a global /board entry', () => {
     const allTos = sidebarNavGroups.flatMap((g) => g.items.map((i) => i.to))
     expect(allTos).not.toContain('/board')

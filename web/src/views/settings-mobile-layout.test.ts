@@ -16,16 +16,23 @@ describe('settings-family narrow-screen stacking (g3)', () => {
     expect(src).toMatch(/min-h-11 w-full md:w-auto/)
   })
 
-  it('Integrations availability badges wrap instead of shrink-0', () => {
-    const src = read('IntegrationsView.vue')
-    expect(src).toMatch(/flex flex-wrap items-center gap-2/)
-    expect(src).toMatch(/availabilityBadgeClass\(m\.scope\)/)
-    expect(src).not.toMatch(/inline-flex shrink-0 items-center gap-1 rounded-full border/)
-    expect(src).toMatch(/min-h-11 items-start gap-3/)
+  // plan g2.1 / g2.4: integrations card + modal replace IntegrationsView page layout
+  it('Integrations modal availability badges wrap; settings open button keeps touch height', () => {
+    const modal = readFileSync(
+      join(dir, '../components/settings/IntegrationsModal.vue'),
+      'utf8',
+    )
+    expect(modal).toMatch(/flex flex-wrap items-center gap-2/)
+    expect(modal).toMatch(/availabilityBadgeClass\(m\.scope\)/)
+    expect(modal).not.toMatch(/inline-flex shrink-0 items-center gap-1 rounded-full border/)
+    expect(modal).toMatch(/min-h-11 items-start gap-3/)
+    const settings = read('SettingsView.vue')
+    expect(settings).toMatch(/data-testid="settings-integrations-open"/)
+    expect(settings).toMatch(/class="min-h-11"/)
+    expect(settings).not.toMatch(/TriggersView/)
   })
 
-  it('Triggers chips wrap and Notifications controls keep touch height', () => {
-    expect(read('TriggersView.vue')).toMatch(/flex flex-wrap items-center gap-2/)
+  it('Notifications controls keep touch height', () => {
     expect(read('NotificationsView.vue')).toMatch(/min-h-11 border border-line bg-transparent/)
     expect(read('NotificationsView.vue')).toMatch(/min-h-11 border-b-2 border-transparent px-4/)
   })

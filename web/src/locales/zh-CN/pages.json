@@ -1568,6 +1568,11 @@
         "readOnly": "当前账号无管理员权限，仅可查看。",
         "manage": "管理规则",
         "view": "查看规则"
+      },
+      "integrationsCard": {
+        "title": "集成",
+        "desc": "查看内置 MCP 发现目录（按作用域注入，无需在此配置）。",
+        "view": "查看集成"
       }
     },
     "platformRules": {
