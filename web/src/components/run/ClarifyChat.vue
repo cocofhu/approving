@@ -243,7 +243,7 @@ const {
                 />
                 <div
                   v-else
-                  class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                  class="rounded-md flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
                   data-testid="clarify-history-file-chip"
                   :title="imagePreviewLabel(t.images, ii)"
                 >
@@ -266,7 +266,7 @@ const {
                 />
                 <div
                   v-else
-                  class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                  class="rounded-md flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
                   data-testid="clarify-agent-file-chip"
                 >
                   <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-info">DOC</span>
@@ -428,7 +428,7 @@ const {
                           @click="pick(curQuestion, o.id)"
                         >
                           <span
-                            class="flex h-4 w-4 shrink-0 items-center justify-center border"
+                            class="rounded-lg flex h-4 w-4 shrink-0 items-center justify-center border"
                             :class="[
                               curQuestion.allowMultiple ? 'rounded' : 'rounded-full',
                               isSelected(curQuestion.id, o.id) ? 'border-accent bg-accent text-white' : 'border-line-strong',
@@ -450,7 +450,7 @@ const {
                       >
                         <button
                           type="button"
-                          class="flex h-4 w-4 shrink-0 items-center justify-center border"
+                          class="rounded-lg flex h-4 w-4 shrink-0 items-center justify-center border"
                           :class="[
                             curQuestion.allowMultiple ? 'rounded' : 'rounded-full',
                             isOtherSelected(curQuestion.id) ? 'border-accent bg-accent text-white' : 'border-line-strong',
@@ -646,7 +646,7 @@ const {
           @remove="removeAnnotation(ai)"
         />
       </div>
-      <div v-if="attachNotice" class="mb-2 border border-err/40 bg-err/10 px-2.5 py-1.5 text-[12px] text-err" data-testid="clarify-attach-notice" role="alert">
+      <div v-if="attachNotice" class="rounded-md mb-2 border border-err/40 bg-err/10 px-2.5 py-1.5 text-[12px] text-err" data-testid="clarify-attach-notice" role="alert">
         {{ attachNotice }}
       </div>
       <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
@@ -664,7 +664,7 @@ const {
           />
           <div
             v-else
-            class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+            class="rounded-lg flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
             :title="attachmentDisplayName(im, ii)"
             data-testid="clarify-pending-file-chip"
           >

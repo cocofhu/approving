@@ -262,7 +262,7 @@ onUnmounted(() => {
       >{{ t('pages.appPreview.directOpenTab') }}</a>
       <div
         v-if="inlineTip || scriptTip"
-        class="basis-full border px-2.5 py-1.5 text-[11px] leading-snug"
+        class="rounded-md basis-full border px-2.5 py-1.5 text-[11px] leading-snug"
         :class="inlineTip ? 'border-err/40 bg-err/10 text-err' : 'border-warn/40 bg-warn/10 text-warn'"
         role="status"
         data-testid="direct-preview-tip"

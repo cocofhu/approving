@@ -686,7 +686,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
               <span v-if="launchMode === 'empty'" class="h-1.5 w-1.5 rounded-full bg-white" />
             </span>
             <div class="flex items-start gap-2.5 pr-6">
-              <span class="flex h-8 w-8 shrink-0 items-center justify-center border border-line bg-elevated text-txt2" :class="launchMode === 'empty' ? 'border-accent/35 bg-accent/15 text-accent-2' : ''">
+              <span class="rounded-full flex h-8 w-8 shrink-0 items-center justify-center border border-line bg-elevated text-txt2" :class="launchMode === 'empty' ? 'border-accent/35 bg-accent/15 text-accent-2' : ''">
                 <Icon name="folder" :size="16" />
               </span>
               <div>
@@ -710,7 +710,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
               <span v-if="launchMode === 'clone'" class="h-1.5 w-1.5 rounded-full bg-white" />
             </span>
             <div class="flex items-start gap-2.5 pr-6">
-              <span class="flex h-8 w-8 shrink-0 items-center justify-center border border-line bg-elevated text-txt2" :class="launchMode === 'clone' ? 'border-accent/35 bg-accent/15 text-accent-2' : ''">
+              <span class="rounded-full flex h-8 w-8 shrink-0 items-center justify-center border border-line bg-elevated text-txt2" :class="launchMode === 'clone' ? 'border-accent/35 bg-accent/15 text-accent-2' : ''">
                 <Icon name="git" :size="16" />
               </span>
               <div>
@@ -786,7 +786,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
               />
               <div
                 v-else
-                class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                class="rounded-md flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
                 data-testid="tester-history-file-chip"
                 :title="attachmentDisplayName(im, ii)"
               >
@@ -878,7 +878,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
           />
           <div
             v-else
-            class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+            class="rounded-lg flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
             data-testid="tester-pending-file-chip"
             :title="attachmentDisplayName(im, ii)"
           >

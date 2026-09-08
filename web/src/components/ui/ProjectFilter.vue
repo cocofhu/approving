@@ -95,7 +95,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   <div ref="root" class="relative w-full md:w-auto" data-testid="project-filter">
     <button
       type="button"
-      class="flex w-full min-h-[44px] items-center gap-2 border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
+      class="flex w-full min-h-[44px] items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
       :class="{ 'border-accent/60 text-txt': modelValue || open }"
       @click.stop="toggle"
     >
@@ -106,7 +106,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
     </button>
     <div
       v-if="open"
-      class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-md border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
+      class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-lg border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
       data-testid="project-filter-panel"
       @click.stop
     >

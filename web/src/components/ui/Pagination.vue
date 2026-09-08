@@ -184,6 +184,7 @@ function onPageSizeChange(event: Event) {
   align-items: center;
   gap: 6px;
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
   background: rgb(var(--c-elevated));
   color: rgb(var(--c-txt));
   padding: 6px 10px;
@@ -207,6 +208,7 @@ function onPageSizeChange(event: Event) {
   min-width: 32px;
   height: 32px;
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
   background: rgb(var(--c-elevated));
   color: rgb(var(--c-txt2));
   font-size: 12px;
@@ -244,6 +246,7 @@ function onPageSizeChange(event: Event) {
 }
 .pg-size-select {
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
   background: rgb(var(--c-elevated));
   color: rgb(var(--c-txt));
   padding: 6px 8px;

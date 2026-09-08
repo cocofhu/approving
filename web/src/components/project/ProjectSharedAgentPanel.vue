@@ -296,7 +296,7 @@ onMounted(() => {
 
 <template>
   <div
-    class="flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+    class="rounded-lg flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
     data-testid="project-shared-agent-panel"
   >
     <div
@@ -413,7 +413,7 @@ onMounted(() => {
                 v-for="b in ACP_BACKENDS"
                 :key="b.id"
                 type="button"
-                class="border px-2 py-3 text-center transition"
+                class="rounded-lg border px-2 py-3 text-center transition"
                 :class="
                   draft.acpBackend === b.id
                     ? 'border-accent bg-accent-dim text-txt'
@@ -434,7 +434,7 @@ onMounted(() => {
             <p class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.regionDesc') }}</p>
             <p
               v-if="specialRegion"
-              class="mb-2 border border-warn/35 bg-warn/10 px-2.5 py-2 font-mono text-[11px] text-warn"
+              class="rounded-md mb-2 border border-warn/35 bg-warn/10 px-2.5 py-2 font-mono text-[11px] text-warn"
             >
               {{ t('pages.agentStudio.region.special', { value: specialRegion }) }}
             </p>
@@ -443,7 +443,7 @@ onMounted(() => {
                 v-for="r in metaRegionOptions"
                 :key="r.id"
                 type="button"
-                class="border px-2 py-3 text-center transition"
+                class="rounded-lg border px-2 py-3 text-center transition"
                 :class="
                   displayRegion === r.id
                     ? 'border-accent bg-accent-dim text-txt'
@@ -469,7 +469,7 @@ onMounted(() => {
             <input
               v-model="draft.projectId"
               spellcheck="false"
-              class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+              class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
               :placeholder="projectId"
             />
           </label>
@@ -481,7 +481,7 @@ onMounted(() => {
               v-model="draft.layout.configRoot"
               :placeholder="defaultConfigRootFor(draft.acpBackend)"
               spellcheck="false"
-              class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+              class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
               @input="configRootTouched = true"
             />
           </label>
@@ -492,7 +492,7 @@ onMounted(() => {
               v-model="draft.layout.workspaceDir"
               :placeholder="DEFAULT_WORKSPACE_DIR"
               spellcheck="false"
-              class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+              class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
             />
           </label>
         </div>
@@ -512,7 +512,7 @@ onMounted(() => {
                 data-test="shared-ssh-known-hosts"
                 rows="4"
                 spellcheck="false"
-                class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+                class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
                 :placeholder="t('pages.agentStudio.meta.sshKnownHostsPh')"
               />
             </label>
@@ -524,7 +524,7 @@ onMounted(() => {
                 data-test="shared-ssh-private-key"
                 rows="5"
                 spellcheck="false"
-                class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+                class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
                 :placeholder="t('pages.agentStudio.meta.sshPrivateKeyPh')"
                 :style="draft.gitSshPrivateKey ? { WebkitTextSecurity: 'disc' } as Record<string, string> : undefined"
               />
@@ -536,7 +536,7 @@ onMounted(() => {
           <div class="mb-1.5 text-[11px] uppercase tracking-wider text-txt3">
             {{ t('pages.agentStudio.meta.derivedPaths') }}
           </div>
-          <div class="overflow-hidden border border-line">
+          <div class="rounded-lg overflow-hidden border border-line">
             <table class="w-full text-left text-[12px]">
               <tbody>
                 <tr

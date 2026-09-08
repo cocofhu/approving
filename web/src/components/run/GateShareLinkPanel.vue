@@ -271,13 +271,13 @@ function close() {
     @close="close"
   >
     <div v-if="target" class="space-y-4 text-sm text-txt" data-testid="gate-share-panel-body">
-      <p class="border border-warn/35 bg-warn/10 px-3 py-2 text-[13px] text-warn" role="note">
+      <p class="rounded-lg border border-warn/35 bg-warn/10 px-3 py-2 text-[13px] text-warn" role="note">
         {{ t('pages.gatesInbox.share.safetyHint') }}
       </p>
 
       <p
         v-if="loopbackBlocked"
-        class="border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
+        class="rounded-lg border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
         role="alert"
         data-testid="gate-share-loopback-warning"
       >
@@ -285,7 +285,7 @@ function close() {
       </p>
       <p
         v-else
-        class="border border-ok/35 bg-ok/10 px-3 py-2 text-[13px] text-ok"
+        class="rounded-lg border border-ok/35 bg-ok/10 px-3 py-2 text-[13px] text-ok"
         role="note"
         data-testid="gate-share-origin-hint"
       >
@@ -305,7 +305,7 @@ function close() {
             v-for="tier in GATE_SHARE_TTL_TIERS"
             :key="tier"
             type="button"
-            class="min-h-11 border px-3 text-xs"
+            class="rounded-md min-h-11 border px-3 text-xs"
             :class="ttlTier === tier ? 'border-accent bg-accent text-white' : 'border-line text-txt2 hover:bg-elevated'"
             :aria-checked="ttlTier === tier ? 'true' : 'false'"
             role="radio"
@@ -330,7 +330,7 @@ function close() {
             v-for="preset in GATE_SHARE_PERMISSION_PRESETS"
             :key="preset"
             type="button"
-            class="flex min-h-11 items-start gap-3 border px-3 py-2.5 text-left"
+            class="rounded-lg flex min-h-11 items-start gap-3 border px-3 py-2.5 text-left"
             :class="
               permissionPreset === preset
                 ? 'border-accent bg-accent/10'
@@ -343,7 +343,7 @@ function close() {
             @click="permissionPreset = preset"
           >
             <span
-              class="mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center border"
+              class="rounded-lg mt-0.5 grid h-3.5 w-3.5 shrink-0 place-items-center border"
               :class="permissionPreset === preset ? 'border-accent' : 'border-line-strong'"
               aria-hidden="true"
             >
@@ -386,7 +386,7 @@ function close() {
       <div v-else class="space-y-3">
         <div class="flex flex-wrap items-center gap-2" data-testid="gate-share-active-meta">
           <span
-            class="border border-accent/45 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2"
+            class="rounded-md border border-accent/45 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2"
             data-testid="gate-share-preset-chip"
           >
             {{ activePresetChip }}
@@ -397,7 +397,7 @@ function close() {
         </div>
         <label class="block text-xs font-medium text-txt2">{{ t('pages.gatesInbox.share.linkLabel') }}</label>
         <textarea
-          class="w-full border bg-elevated px-3 py-2 font-mono text-[12px] text-txt"
+          class="rounded-lg w-full border bg-elevated px-3 py-2 font-mono text-[12px] text-txt"
           :class="loopbackBlocked ? 'border-err/45' : 'border-line'"
           rows="3"
           readonly
@@ -430,7 +430,7 @@ function close() {
           </button>
           <button
             type="button"
-            class="inline-flex min-h-11 items-center border border-line px-3 text-xs text-txt2 hover:bg-elevated"
+            class="rounded-md inline-flex min-h-11 items-center border border-line px-3 text-xs text-txt2 hover:bg-elevated"
             data-testid="gate-share-regen"
             :disabled="busy"
             @click="confirmKind = 'regen'"
@@ -439,7 +439,7 @@ function close() {
           </button>
           <button
             type="button"
-            class="inline-flex min-h-11 items-center border border-err/40 px-3 text-xs text-err hover:bg-err/10"
+            class="rounded-md inline-flex min-h-11 items-center border border-err/40 px-3 text-xs text-err hover:bg-err/10"
             data-testid="gate-share-revoke"
             :disabled="busy"
             @click="confirmKind = 'revoke'"
@@ -451,7 +451,7 @@ function close() {
 
       <div
         v-if="confirmKind"
-        class="border border-line bg-elevated px-3 py-3"
+        class="rounded-lg border border-line bg-elevated px-3 py-3"
         data-testid="gate-share-confirm"
         role="alertdialog"
       >
@@ -474,7 +474,7 @@ function close() {
           </button>
           <button
             type="button"
-            class="min-h-11 border border-line px-3 text-xs text-txt2"
+            class="rounded-md min-h-11 border border-line px-3 text-xs text-txt2"
             data-testid="gate-share-confirm-cancel"
             @click="confirmKind = null"
           >

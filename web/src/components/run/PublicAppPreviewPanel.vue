@@ -225,7 +225,7 @@ function retry() {
         <p>{{ t('pages.publicGate.appPreviewNoPorts') }}</p>
         <button
           type="button"
-          class="mt-1 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+          class="rounded-lg mt-1 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
           data-testid="public-gate-app-preview-retry"
           @click="retry"
         >
@@ -273,7 +273,7 @@ function retry() {
           <p>{{ ticketError }}</p>
           <button
             type="button"
-            class="mt-1 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+            class="rounded-lg mt-1 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
             data-testid="public-gate-app-preview-retry"
             @click="retry"
           >

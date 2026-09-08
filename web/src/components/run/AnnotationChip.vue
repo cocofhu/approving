@@ -49,7 +49,7 @@ const showFieldLabel = computed(() => kind.value === 'field' && !!fieldLabel.val
 
 <template>
   <span
-    class="inline-flex max-w-full items-start gap-1 border px-1.5 py-0.5 text-[11px] leading-snug"
+    class="rounded-md inline-flex max-w-full items-start gap-1 border px-1.5 py-0.5 text-[11px] leading-snug"
     :class="chipClass"
     :title="ann.note || ann.url || path || ann.quote || ''"
     :data-testid="testId"
@@ -64,7 +64,7 @@ const showFieldLabel = computed(() => kind.value === 'field' && !!fieldLabel.val
         {{ ann.quote }}
         <span
           v-if="ann.truncated"
-          class="ml-1 inline-block border border-current px-0.5 text-[9px] opacity-80"
+          class="rounded-lg ml-1 inline-block border border-current px-0.5 text-[9px] opacity-80"
         >{{ t('pages.reviewComposer.chipTruncated') }}</span>
       </span>
       <span v-else-if="showFieldLabel" class="truncate">{{ fieldLabel }}</span>

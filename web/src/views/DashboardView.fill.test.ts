@@ -63,8 +63,8 @@ describe('DashboardView home chat layout', () => {
     expect(src).not.toMatch(/fonts\.googleapis|fonts\.gstatic|cdn\.jsdelivr/)
   })
 
-  // plan g1.4 / g2.4 — right-angle Open Design composer with toolbar zone
-  it('uses right-angle Open Design composer with toolbar partition', () => {
+  // plan g1 — shell composer 16px + control toolbar 8px (no right-angle Open Design)
+  it('uses shell-radius Open Design composer with toolbar partition', () => {
     expect(src).toMatch(/home-composer/)
     expect(src).toMatch(/home-composer__toolbar/)
     expect(src).toMatch(/home-composer__plus/)
@@ -76,6 +76,9 @@ describe('DashboardView home chat layout', () => {
     expect(src).not.toMatch(/<select[^>]*home-pipeline-select/)
     expect(src).toMatch(/data-testid="home-composer-send"/)
     expect(src).toMatch(/<textarea/)
+    expect(src).toMatch(/\.home-composer\s*\{[^}]*border-radius:\s*16px/s)
+    expect(src).toMatch(/\.home-composer__plus\s*\{[^}]*border-radius:\s*8px/s)
+    expect(src).toMatch(/\.home-composer__send\s*\{[^}]*border-radius:\s*8px/s)
   })
 
   // review — 无 subtitle；流水线卡片脱离全局 .card；圆角 Token 12px
@@ -85,8 +88,10 @@ describe('DashboardView home chat layout', () => {
     expect(src).not.toMatch(/class="[^"]*\bcard\b[^"]*home-shell__card|class="home-shell__card[^"]*\bcard\b/)
     expect(src).toMatch(/\.home-shell__card\s*\{[^}]*border-radius:\s*12px/s)
     expect(src).toMatch(/home-shell__card--selected/)
-    expect(src).toMatch(/rounded-none bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
-    expect(src).not.toMatch(/rounded-full bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
+    expect(src).toMatch(/rounded bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
+    expect(src).not.toMatch(/rounded-none bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
+    expect(src).toMatch(/thumb-class="rounded"/)
+    expect(src).not.toMatch(/thumb-class="rounded-none"/)
   })
 
   // plan g2 / g3 — no filter hint; caret opacity settle; placeholder typewriter

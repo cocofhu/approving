@@ -311,7 +311,7 @@ const settingsItems = settingsNavItems
                 <span class="truncate text-[11px] text-txt3" :title="item.projectName">{{ item.projectName }}</span>
                 <span
                   v-if="item.status === 'draft'"
-                  class="shrink-0 border border-warn/35 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
+                  class="rounded-md shrink-0 border border-warn/35 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
                 >{{ t('common.status.draft') }}</span>
               </div>
             </div>

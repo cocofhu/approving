@@ -88,7 +88,7 @@ defineExpose({ toggle, close, isOpen })
   <div v-if="total != null" class="relative inline-flex" data-testid="token-by-model-tip-host">
     <button
       type="button"
-      class="usage-trigger inline-flex items-center gap-1 border border-line bg-elevated px-2 py-0.5 font-mono text-xs tabular-nums text-txt2 hover:border-accent/40 hover:text-txt"
+      class="usage-trigger inline-flex items-center gap-1 rounded-md border border-line bg-elevated px-2 py-0.5 font-mono text-xs tabular-nums text-txt2 hover:border-accent/40 hover:text-txt"
       data-testid="token-by-model-trigger"
       :aria-expanded="isOpen"
       @click.stop="toggle"
@@ -100,7 +100,7 @@ defineExpose({ toggle, close, isOpen })
       role="dialog"
       :aria-label="t('pages.tokenByModel.tipTitle')"
       data-testid="token-by-model-tip"
-      class="absolute right-0 top-[calc(100%+8px)] z-30 w-[min(320px,calc(100vw-24px))] border border-line bg-[#111827] px-3 py-2.5 text-left text-[#f9fafb] shadow-lg"
+      class="absolute right-0 top-[calc(100%+8px)] z-30 w-[min(320px,calc(100vw-24px))] rounded-lg border border-line bg-[#111827] px-3 py-2.5 text-left text-[#f9fafb] shadow-lg"
     >
       <div class="mb-2 flex items-center justify-between gap-2">
         <span class="text-[11px] font-semibold tracking-wide text-[#9ca3af]">
@@ -108,7 +108,7 @@ defineExpose({ toggle, close, isOpen })
         </span>
         <button
           type="button"
-          class="border border-white/10 px-2 py-0.5 text-[11px] text-[#9ca3af] hover:text-white"
+          class="rounded-md border border-white/10 px-2 py-0.5 text-[11px] text-[#9ca3af] hover:text-white"
           data-testid="token-by-model-close"
           @click.stop="close"
         >
@@ -123,7 +123,7 @@ defineExpose({ toggle, close, isOpen })
         <div
           v-for="row in rows"
           :key="row.modelKey"
-          class="border border-white/10 bg-white/5 px-2 py-1.5"
+          class="rounded-md border border-white/10 bg-white/5 px-2 py-1.5"
           :data-model="row.modelKey"
           :data-filled="row.filled ? '1' : '0'"
         >

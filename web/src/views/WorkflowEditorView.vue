@@ -516,12 +516,12 @@ function deleteEdge() {
       <span class="truncate text-[13px] font-medium text-txt">{{ wf.name }}</span>
     </div>
     <div class="flex flex-1 flex-col items-center px-5 py-8 text-center">
-      <div class="mb-3 flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">◇</div>
+      <div class="rounded-lg mb-3 flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">◇</div>
       <h3 class="text-[14px] font-semibold text-txt">{{ t('pages.workflowEditor.mobile.title') }}</h3>
       <p class="mt-2 max-w-[32ch] text-[12.5px] leading-relaxed text-txt2">{{ t('pages.workflowEditor.mobile.desc') }}</p>
       <button
         type="button"
-        class="mt-4 min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
+        class="rounded-md mt-4 min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
         data-testid="workflow-editor-peek"
         @click="showFlowPeek = !showFlowPeek"
       >
@@ -530,7 +530,7 @@ function deleteEdge() {
     </div>
     <div
       v-if="showFlowPeek"
-      class="mx-4 mb-6 border border-line bg-surface p-3 text-left"
+      class="rounded-lg mx-4 mb-6 border border-line bg-surface p-3 text-left"
       data-testid="workflow-editor-summary"
     >
       <div class="mb-2 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.workflowEditor.mobile.summaryLabel') }}</div>
@@ -595,7 +595,7 @@ function deleteEdge() {
       <button
         v-if="hydrateFailed"
         type="button"
-        class="ml-auto border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
+        class="rounded-md ml-auto border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
         data-testid="workflow-editor-hydrate-retry"
         @click="loadExistingWorkflow"
       >
@@ -670,7 +670,7 @@ function deleteEdge() {
           <p class="text-[13px] text-err">{{ t('pages.workflowEditor.loadFailed') }}</p>
           <button
             type="button"
-            class="inline-flex min-h-11 items-center border border-line bg-surface px-3 text-[12px] font-medium text-txt hover:bg-elevated"
+            class="rounded-lg inline-flex min-h-11 items-center border border-line bg-surface px-3 text-[12px] font-medium text-txt hover:bg-elevated"
             data-testid="workflow-editor-hydrate-retry-canvas"
             @click="loadExistingWorkflow"
           >

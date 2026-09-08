@@ -124,7 +124,7 @@ function lineClass(kind: string) {
           {{ t('pages.agentStudio.teamWizard.progress.sub') }}
         </p>
       </div>
-      <span class="shrink-0 border px-2 py-1 text-[11px]" :class="badgeClass">{{ badgeText }}</span>
+      <span class="rounded-md shrink-0 border px-2 py-1 text-[11px]" :class="badgeClass">{{ badgeText }}</span>
     </div>
 
     <div
@@ -143,7 +143,7 @@ function lineClass(kind: string) {
           :class="lineClass(ev.kind)"
         >
           <template v-if="ev.kind === 'mcp'">
-            <div class="mcp-block border border-dashed border-warn/45 bg-warn/10 px-3 py-2 text-warn">
+            <div class="rounded-lg mcp-block border border-dashed border-warn/45 bg-warn/10 px-3 py-2 text-warn">
               {{ ev.message }}
             </div>
           </template>
@@ -161,7 +161,7 @@ function lineClass(kind: string) {
         <div
           v-for="(r, i) in session?.resources || []"
           :key="i"
-          class="mb-2 border border-line bg-elevated px-3 py-2 text-[12px]"
+          class="rounded-lg mb-2 border border-line bg-elevated px-3 py-2 text-[12px]"
           :class="session?.status === 'ready' ? 'border-ok/35' : ''"
         >
           <div class="font-semibold text-txt">{{ r.name }}</div>

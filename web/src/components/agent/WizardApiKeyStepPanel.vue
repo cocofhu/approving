@@ -42,7 +42,7 @@ function setMode(mode: WizardAuthMode) {
 <template>
   <div>
     <p class="sec-meta">{{ t('pages.agentStudio.wizard.apiKey.meta') }}</p>
-    <div class="mb-3 border border-accent/30 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-5 text-txt2">
+    <div class="mb-3 rounded-lg border border-accent/30 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-5 text-txt2">
       {{
         t('pages.agentStudio.wizard.apiKey.backendBanner', {
           backend: acpBackend,
@@ -58,7 +58,7 @@ function setMode(mode: WizardAuthMode) {
     >
       <button
         type="button"
-        class="border px-3 py-3 text-left transition"
+        class="rounded-lg border px-3 py-3 text-left transition"
         :class="
           authMode === 'apiKey'
             ? 'border-accent bg-accent-dim'
@@ -75,7 +75,7 @@ function setMode(mode: WizardAuthMode) {
       </button>
       <button
         type="button"
-        class="border px-3 py-3 text-left transition"
+        class="rounded-lg border px-3 py-3 text-left transition"
         :class="
           authMode === 'customConfig'
             ? 'border-accent bg-accent-dim'
@@ -93,7 +93,7 @@ function setMode(mode: WizardAuthMode) {
     </div>
 
     <div v-if="authMode === 'apiKey'">
-      <div class="mb-4 border border-line bg-base p-3.5">
+      <div class="mb-4 rounded-lg border border-line bg-base p-3.5">
         <div class="text-[13px] font-semibold text-txt">
           <code class="text-accent-2">{{ primaryAuthKey }}</code>
         </div>
@@ -116,7 +116,7 @@ function setMode(mode: WizardAuthMode) {
             :href="link.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim"
+            class="rounded-md border border-accent/40 px-2 py-1 text-[11px] text-accent-2 hover:bg-accent-dim"
           >
             {{ t(link.labelKey) }}
           </a>
@@ -130,7 +130,7 @@ function setMode(mode: WizardAuthMode) {
           :value="apiKeyInput"
           type="password"
           autocomplete="off"
-          class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+          class="w-full rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
           :placeholder="t('pages.agentStudio.wizard.apiKey.inputPlaceholder')"
           data-test="api-key-input"
           @input="emit('update:apiKeyInput', ($event.target as HTMLInputElement).value)"
@@ -142,7 +142,7 @@ function setMode(mode: WizardAuthMode) {
     </div>
 
     <div v-else>
-      <div class="mb-4 border border-line bg-base p-3.5">
+      <div class="mb-4 rounded-lg border border-line bg-base p-3.5">
         <div class="text-[13px] font-semibold text-txt">
           {{ t('pages.agentStudio.wizard.apiKey.customConfig.cardTitle') }}
         </div>
@@ -160,7 +160,7 @@ function setMode(mode: WizardAuthMode) {
         <span class="mb-1.5 block text-[12px] font-medium text-txt2">
           {{ AGENT_SETTINGS_PATH }}
         </span>
-        <div class="h-[220px] border border-line" data-test="custom-config-editor-host">
+        <div class="h-[220px] overflow-hidden rounded-lg border border-line" data-test="custom-config-editor-host">
           <CodeEditor
             :model-value="customConfigContent"
             language="json"

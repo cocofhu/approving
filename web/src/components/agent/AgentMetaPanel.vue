@@ -189,7 +189,7 @@ const derivedPaths = computed(() => {
             v-for="tile in metaGroupTiles"
             :key="tile.id"
             type="button"
-            class="flex min-h-[56px] items-start gap-2.5 border px-3 py-2.5 text-left transition"
+            class="rounded-lg flex min-h-[56px] items-start gap-2.5 border px-3 py-2.5 text-left transition"
             :class="tile.selected
               ? 'border-accent bg-accent-dim text-txt shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
               : 'border-line bg-base text-txt2 hover:border-line-strong hover:bg-elevated hover:text-txt'"
@@ -210,7 +210,7 @@ const derivedPaths = computed(() => {
             </span>
           </button>
         </div>
-        <p v-else class="border border-dashed border-line px-3 py-3 text-[12px] text-txt3">
+        <p v-else class="rounded-lg border border-dashed border-line px-3 py-3 text-[12px] text-txt3">
           {{ t('pages.agentStudio.org.noGroups') }}
         </p>
       </div>
@@ -230,7 +230,7 @@ const derivedPaths = computed(() => {
             v-for="b in ACP_BACKENDS"
             :key="b.id"
             type="button"
-            class="border px-2 py-3 text-center transition"
+            class="rounded-lg border px-2 py-3 text-center transition"
             :class="draft.acpBackend === b.id ? 'border-accent bg-accent-dim text-txt' : 'border-line bg-base text-txt2 hover:border-line-strong'"
             @click="selectAcpBackend(b.id)"
           >
@@ -242,10 +242,10 @@ const derivedPaths = computed(() => {
       <div v-if="showMetaRegionBlock" class="border-t border-dashed border-line pt-4">
         <div class="text-[12px] font-medium text-txt2">
           {{ t('pages.agentStudio.meta.regionTitle') }}
-          <span class="ml-1.5 inline-block border border-accent/30 bg-accent-dim px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent-2">{{ t('pages.agentStudio.meta.regionNewBadge') }}</span>
+          <span class="rounded-md ml-1.5 inline-block border border-accent/30 bg-accent-dim px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent-2">{{ t('pages.agentStudio.meta.regionNewBadge') }}</span>
         </div>
         <p class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.regionDesc') }}</p>
-        <p v-if="specialRegion" class="mb-2 border border-warn/35 bg-warn/10 px-2.5 py-2 font-mono text-[11px] text-warn">
+        <p v-if="specialRegion" class="mb-2 rounded-lg border border-warn/35 bg-warn/10 px-2.5 py-2 font-mono text-[11px] text-warn">
           {{ t('pages.agentStudio.region.special', { value: specialRegion }) }}
         </p>
         <div class="grid max-w-md grid-cols-2 gap-2" role="radiogroup" :aria-label="t('pages.agentStudio.region.title')">
@@ -253,7 +253,7 @@ const derivedPaths = computed(() => {
             v-for="r in metaRegionOptions"
             :key="r.id"
             type="button"
-            class="border px-2 py-3 text-center transition"
+            class="rounded-lg border px-2 py-3 text-center transition"
             :class="displayRegion === r.id ? 'border-accent bg-accent-dim text-txt' : 'border-line bg-base text-txt2 hover:border-line-strong'"
             role="radio"
             :aria-checked="displayRegion === r.id"

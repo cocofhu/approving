@@ -295,7 +295,7 @@ function onConfirm() {
         <button
           v-if="!coldSession && showGateCancel"
           type="button"
-          class="inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
+          class="rounded-lg inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
           data-testid="gate-react-cancel"
           title="Cancel"
           @click="emit('cancel')"

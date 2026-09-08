@@ -146,7 +146,7 @@ defineExpose({
 
 <template>
   <div
-    class="requirement-drafts flex h-full min-h-0 min-w-0 flex-1 flex-col border border-line bg-base"
+    class="rounded-lg requirement-drafts flex h-full min-h-0 min-w-0 flex-1 flex-col border border-line bg-base"
     data-testid="requirement-drafts-panel"
   >
     <!-- Top toolbar -->
@@ -218,7 +218,7 @@ defineExpose({
       <input
         v-model="query"
         type="search"
-        class="min-w-[160px] flex-1 border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(123,97,255,0.3)]"
+        class="rounded-md min-w-[160px] flex-1 border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(123,97,255,0.3)]"
         data-testid="requirement-drafts-search"
         :placeholder="t('pages.projectDetail.requirementDrafts.searchPh')"
         @input="onSearchInput"
@@ -249,7 +249,7 @@ defineExpose({
             v-for="d in items"
             :key="d.id"
             type="button"
-            class="relative block w-full border border-line px-3 py-2.5 text-left hover:bg-elevated"
+            class="rounded-lg relative block w-full border border-line px-3 py-2.5 text-left hover:bg-elevated"
             :class="d.id === selectedId ? 'bg-accent-dim' : 'bg-transparent'"
             :data-testid="`requirement-drafts-item-${d.id}`"
             @click="onPickDraft(d.id)"
@@ -263,11 +263,11 @@ defineExpose({
               <span class="min-w-0 truncate">{{ d.title }}</span>
             </div>
             <div class="flex flex-wrap items-center gap-2 text-[11px] text-txt3">
-              <span class="border border-line bg-elevated px-1.5 py-px text-txt2">
+              <span class="rounded-lg border border-line bg-elevated px-1.5 py-px text-txt2">
                 {{ kindLabel(d.kind) }}
               </span>
               <span
-                class="border px-1.5 py-px"
+                class="rounded-lg border px-1.5 py-px"
                 :class="
                   d.status === 'open'
                     ? 'border-info/40 text-info bg-elevated'
@@ -306,7 +306,7 @@ defineExpose({
                   {{ t('pages.projectDetail.requirementDrafts.editLabel') }}
                 </strong>
                 <span
-                  class="border px-1.5 py-px text-[11px]"
+                  class="rounded-md border px-1.5 py-px text-[11px]"
                   :class="
                     selectedStatus === 'open'
                       ? 'border-info/40 text-info bg-elevated'
@@ -322,7 +322,7 @@ defineExpose({
                 </span>
                 <span
                   v-if="isDirty"
-                  class="border border-warn/40 bg-elevated px-1.5 py-px text-[11px] text-warn"
+                  class="rounded-md border border-warn/40 bg-elevated px-1.5 py-px text-[11px] text-warn"
                   data-testid="requirement-drafts-dirty-chip"
                 >
                   {{ t('pages.projectDetail.requirementDrafts.unsaved') }}
@@ -382,7 +382,7 @@ defineExpose({
                 id="requirement-draft-title"
                 v-model="editTitle"
                 type="text"
-                class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(123,97,255,0.3)]"
+                class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent focus:shadow-[0_0_0_2px_rgba(123,97,255,0.3)]"
                 data-testid="requirement-drafts-title"
                 :placeholder="t('pages.projectDetail.requirementDrafts.titlePh')"
               />
@@ -393,7 +393,7 @@ defineExpose({
 
             <!-- Schedule block (edit view) -->
             <div
-              class="rd-schedule mb-4 border border-accent bg-surface p-3"
+              class="rounded-lg rd-schedule mb-4 border border-accent bg-surface p-3"
               data-testid="requirement-drafts-schedule-block"
             >
               <div class="mb-2 text-[13px] font-medium text-txt">
@@ -407,7 +407,7 @@ defineExpose({
                   {{ t('pages.projectDetail.requirementDrafts.kindLabel') }}
                   <select
                     v-model="editKind"
-                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                     data-testid="requirement-drafts-schedule-kind"
                     :disabled="scheduleBusy"
                     @change="onScheduleKindChange"
@@ -425,7 +425,7 @@ defineExpose({
                   <input
                     v-model="editStartAt"
                     type="date"
-                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                     data-testid="requirement-drafts-schedule-start"
                     :disabled="scheduleBusy"
                     @change="onScheduleStartChange"
@@ -436,7 +436,7 @@ defineExpose({
                   <input
                     v-model="editDueAt"
                     type="date"
-                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                     data-testid="requirement-drafts-schedule-due"
                     :disabled="scheduleBusy"
                     @change="onScheduleDueChange"
@@ -449,7 +449,7 @@ defineExpose({
                     type="number"
                     min="0"
                     max="100"
-                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                     data-testid="requirement-drafts-schedule-progress"
                     :disabled="scheduleBusy"
                     @change="onScheduleProgressChange"
@@ -459,7 +459,7 @@ defineExpose({
                   {{ t('pages.projectDetail.requirementDrafts.parentLabel') }}
                   <select
                     v-model="editParentId"
-                    class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                    class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                     data-testid="requirement-drafts-schedule-parent"
                     :disabled="scheduleBusy"
                     @change="onScheduleParentChange"
@@ -487,7 +487,7 @@ defineExpose({
                 {{ t('pages.projectDetail.requirementDrafts.bodyLabel') }}
               </label>
               <div
-                class="rd-toolbar flex flex-wrap items-center gap-0.5 border border-b-0 border-line bg-elevated p-1.5"
+                class="rounded-lg rd-toolbar flex flex-wrap items-center gap-0.5 border border-b-0 border-line bg-elevated p-1.5"
                 data-testid="requirement-drafts-toolbar"
               >
                 <button
@@ -619,12 +619,12 @@ defineExpose({
               </div>
               <div
                 v-if="isMobile"
-                class="flex gap-1.5 border border-b-0 border-line bg-elevated p-1.5"
+                class="rounded-lg flex gap-1.5 border border-b-0 border-line bg-elevated p-1.5"
                 data-testid="requirement-drafts-mobile-switch"
               >
                 <button
                   type="button"
-                  class="flex-1 border px-2 py-1 text-xs"
+                  class="rounded-md flex-1 border px-2 py-1 text-xs"
                   :class="mobilePane === 'src' ? 'border-accent bg-accent-dim text-txt' : 'border-line text-txt2'"
                   data-testid="requirement-drafts-mobile-src"
                   @click="mobilePane = 'src'"
@@ -633,7 +633,7 @@ defineExpose({
                 </button>
                 <button
                   type="button"
-                  class="flex-1 border px-2 py-1 text-xs"
+                  class="rounded-md flex-1 border px-2 py-1 text-xs"
                   :class="mobilePane === 'prev' ? 'border-accent bg-accent-dim text-txt' : 'border-line text-txt2'"
                   data-testid="requirement-drafts-mobile-prev"
                   @click="mobilePane = 'prev'"
@@ -643,7 +643,7 @@ defineExpose({
               </div>
               <div
                 ref="splitEl"
-                class="rd-split flex min-h-[360px] flex-1 border border-line bg-surface"
+                class="rounded-lg rd-split flex min-h-[360px] flex-1 border border-line bg-surface"
                 :class="{
                   'rd-split-narrow': isMobile,
                   'rd-split-collapsed': previewCollapsed && !isMobile,
@@ -668,7 +668,7 @@ defineExpose({
                       ref="findInputEl"
                       v-model="findQuery"
                       type="search"
-                      class="min-w-0 flex-1 border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent"
+                      class="rounded-md min-w-0 flex-1 border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent"
                       data-testid="requirement-drafts-find-input"
                       :placeholder="t('pages.projectDetail.requirementDrafts.findPh')"
                       @keydown="onFindInputKeydown"
@@ -928,7 +928,7 @@ defineExpose({
               {{ t('pages.projectDetail.requirementDrafts.kindLabel') }}
               <select
                 v-model="editKind"
-                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                 data-testid="requirement-drafts-inspector-kind"
                 :disabled="scheduleBusy"
                 @change="onScheduleKindChange"
@@ -946,7 +946,7 @@ defineExpose({
               <input
                 v-model="editStartAt"
                 type="date"
-                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                 data-testid="requirement-drafts-inspector-start"
                 :disabled="scheduleBusy"
                 @change="onScheduleStartChange"
@@ -957,7 +957,7 @@ defineExpose({
               <input
                 v-model="editDueAt"
                 type="date"
-                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                 data-testid="requirement-drafts-inspector-due"
                 :disabled="scheduleBusy"
                 @change="onScheduleDueChange"
@@ -970,7 +970,7 @@ defineExpose({
                 type="number"
                 min="0"
                 max="100"
-                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                 data-testid="requirement-drafts-inspector-progress"
                 :disabled="scheduleBusy"
                 @change="onScheduleProgressChange"
@@ -980,7 +980,7 @@ defineExpose({
               {{ t('pages.projectDetail.requirementDrafts.parentLabel') }}
               <select
                 v-model="editParentId"
-                class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                 data-testid="requirement-drafts-inspector-parent"
                 :disabled="scheduleBusy"
                 @change="onScheduleParentChange"
@@ -1037,13 +1037,13 @@ defineExpose({
           <div class="min-w-0 flex-1">
             <div class="text-[13px] font-medium text-txt">{{ m.title }}</div>
             <div class="mt-1 text-[11px] text-txt3">{{ m.dueAt || '—' }} · {{ m.progress }}%</div>
-            <div v-if="isRowSelected(m.id)" class="mt-3 grid gap-2 border border-line bg-surface p-3">
+            <div v-if="isRowSelected(m.id)" class="rounded-lg mt-3 grid gap-2 border border-line bg-surface p-3">
               <label class="block text-xs text-txt2">
                 {{ t('pages.projectDetail.requirementDrafts.dueAtLabel') }}
                 <input
                   v-model="editDueAt"
                   type="date"
-                  class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                  class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                   data-testid="requirement-drafts-milestone-due"
                   :disabled="scheduleBusy"
                   @change="onScheduleDueChange"
@@ -1057,7 +1057,7 @@ defineExpose({
                   type="number"
                   min="0"
                   max="100"
-                  class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+                  class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
                   data-testid="requirement-drafts-milestone-progress"
                   :disabled="scheduleBusy"
                   @change="onScheduleProgressChange"
@@ -1094,7 +1094,7 @@ defineExpose({
       <div class="mb-4 flex gap-2">
         <button
           type="button"
-          class="flex-1 border px-3 py-2 text-[13px]"
+          class="rounded-lg flex-1 border px-3 py-2 text-[13px]"
           :class="
             newModalKind === 'requirement'
               ? 'border-accent bg-accent-dim text-txt'
@@ -1107,7 +1107,7 @@ defineExpose({
         </button>
         <button
           type="button"
-          class="flex-1 border px-3 py-2 text-[13px]"
+          class="rounded-lg flex-1 border px-3 py-2 text-[13px]"
           :class="
             newModalKind === 'milestone'
               ? 'border-accent bg-accent-dim text-txt'
@@ -1127,7 +1127,7 @@ defineExpose({
         <input
           v-model="newModalDueAt"
           type="date"
-          class="mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
+          class="rounded-md mt-1 w-full border border-line bg-base px-2 py-1.5 text-[13px] text-txt outline-none focus:border-accent"
           data-testid="requirement-drafts-new-milestone-due"
         />
       </label>

@@ -55,7 +55,7 @@ function itemClass(disabled: boolean) {
   <Teleport to="body">
     <div
       v-if="open && target"
-      class="fixed z-[9999] min-w-[210px] border border-line bg-elevated py-1 shadow-card explorer-ctx-menu"
+      class="rounded-lg fixed z-[9999] min-w-[210px] border border-line bg-elevated py-1 shadow-card explorer-ctx-menu"
       :style="{ left: x + 'px', top: y + 'px' }"
       @click.stop
     >

@@ -66,7 +66,7 @@ function onOpenShare() {
 
 <template>
   <article
-    class="flex w-full shrink-0 flex-col border p-3 transition"
+    class="flex w-full shrink-0 flex-col rounded-lg border p-3 transition"
     :class="active ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:bg-elevated'"
     data-testid="inbox-item-card"
     :data-starting="starting ? 'true' : undefined"
@@ -80,7 +80,7 @@ function onOpenShare() {
       @click="emit('select')"
     >
       <div
-        class="flex h-9 w-9 shrink-0 items-center justify-center"
+        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
         :class="iconClass"
       >
         <AppSpinner v-if="inProgress" :size="18" />
@@ -90,7 +90,7 @@ function onOpenShare() {
         <div class="truncate text-sm font-medium text-txt">{{ title }}</div>
         <div class="truncate text-[11px] text-txt3" :title="secondary">{{ secondary }}</div>
         <div class="mt-1 flex items-center gap-1.5">
-          <span class="border px-1.5 py-px text-[10px]" :class="badgeClass">{{ badgeText }}</span>
+          <span class="rounded border px-1.5 py-px text-[10px]" :class="badgeClass">{{ badgeText }}</span>
           <span class="text-[10px] text-txt3">{{ locale && timeLabel }}</span>
         </div>
         <div v-if="item.tags?.length" class="mt-1 flex flex-wrap gap-1.5">
@@ -106,7 +106,7 @@ function onOpenShare() {
     >
       <span
         role="status"
-        class="border border-line bg-elevated px-1.5 py-0.5 text-[10px] text-txt2"
+        class="rounded border border-line bg-elevated px-1.5 py-0.5 text-[10px] text-txt2"
         data-testid="gate-share-status"
       >
         {{ shareLabel }}
@@ -119,7 +119,7 @@ function onOpenShare() {
       >
         <button
           type="button"
-          class="inline-flex min-h-6 items-center gap-1 border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium leading-[1.4] text-accent-2 hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-45"
+          class="inline-flex min-h-6 items-center gap-1 rounded border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium leading-[1.4] text-accent-2 hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-45"
           data-testid="gate-share-copy-btn"
           :disabled="shareDisabled"
           :aria-label="t('pages.gatesInbox.share.copyLinkAria')"

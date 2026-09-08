@@ -170,7 +170,7 @@ const {
     <AppButton @click="emit('openSettings')">{{ t('pages.projectDetail.pm.goSettings') }}</AppButton>
   </div>
 
-  <div v-else class="flex min-h-0 flex-1 overflow-hidden border border-line bg-base">
+  <div v-else class="rounded-lg flex min-h-0 flex-1 overflow-hidden border border-line bg-base">
     <!-- left rail -->
     <aside
       v-if="showThreadsAside"
@@ -207,7 +207,7 @@ const {
             <span class="min-w-0 truncate font-mono text-[12px]">{{ threadDisplayTitle(th) }}</span>
             <span
               v-if="isChannelThread(th)"
-              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold tracking-wide leading-4"
+              class="rounded-md inline-flex shrink-0 items-center border px-1 text-[9px] font-bold tracking-wide leading-4"
               :class="channelBadgeClass(th)"
               data-testid="pm-qq-tag"
               :data-channel-kind="channelTypeOf(th)"
@@ -215,12 +215,12 @@ const {
             >{{ channelBadgeLabel(th) }}</span>
             <span
               v-if="th.unspoken"
-              class="inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
+              class="rounded-md inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
               data-testid="pm-unspoken-tag"
             >{{ t('pages.projectDetail.pm.unspoken') }}</span>
             <span
               v-else
-              class="inline-flex shrink-0 items-center border border-line bg-elevated px-1 text-[9px] font-bold tracking-wide leading-4 text-txt3"
+              class="rounded-md inline-flex shrink-0 items-center border border-line bg-elevated px-1 text-[9px] font-bold tracking-wide leading-4 text-txt3"
               data-testid="pm-web-tag"
             >{{ t('pages.projectDetail.pm.channelBadgeWeb') }}</span>
           </span>
@@ -268,7 +268,7 @@ const {
             <span class="min-w-0 truncate text-sm font-medium text-txt">{{ activeThreadTitle }}</span>
             <span
               v-if="activeIsChannel"
-              class="inline-flex shrink-0 items-center border px-1 text-[9px] font-bold tracking-wide leading-4"
+              class="rounded-md inline-flex shrink-0 items-center border px-1 text-[9px] font-bold tracking-wide leading-4"
               :class="channelBadgeClass(activeThread)"
               data-testid="pm-qq-tag-header"
               :data-channel-kind="channelTypeOf(activeThread)"
@@ -276,7 +276,7 @@ const {
             >{{ channelBadgeLabel(activeThread) }}</span>
             <span
               v-if="activeThread?.unspoken"
-              class="inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
+              class="rounded-md inline-flex shrink-0 items-center border border-warn/45 px-1 text-[9px] leading-4 text-warn"
               data-testid="pm-unspoken-tag-header"
             >{{ t('pages.projectDetail.pm.unspoken') }}</span>
           </div>
@@ -333,7 +333,7 @@ const {
               v-for="s in suggestions"
               :key="s"
               type="button"
-              class="border border-line bg-surface px-3 py-1 text-sm text-txt2 hover:bg-elevated hover:text-txt disabled:opacity-50"
+              class="rounded-md border border-line bg-surface px-3 py-1 text-sm text-txt2 hover:bg-elevated hover:text-txt disabled:opacity-50"
               :disabled="busy"
               @click="send(s)"
             >
@@ -354,12 +354,12 @@ const {
         <template v-for="m in messages" :key="m.id">
           <div
             v-if="isChannelHint(m)"
-            class="mx-auto flex max-w-[92%] items-start gap-2 self-center border border-warn/35 bg-warn/[0.08] px-3 py-2 text-[12px] text-txt"
+            class="rounded-lg mx-auto flex max-w-[92%] items-start gap-2 self-center border border-warn/35 bg-warn/[0.08] px-3 py-2 text-[12px] text-txt"
             :data-msg-id="m.id"
             data-testid="pm-channel-hint"
           >
             <span
-              class="shrink-0 border border-warn/35 px-1.5 py-px text-[10px] font-bold tracking-wide text-warn"
+              class="rounded-md shrink-0 border border-warn/35 px-1.5 py-px text-[10px] font-bold tracking-wide text-warn"
             >
               {{ t('pages.projectDetail.pm.channelHintLabel') }}
             </span>
@@ -372,7 +372,7 @@ const {
           </div>
           <div v-else-if="m.role === 'user'" class="flex gap-2.5 flex-row-reverse" :data-msg-id="m.id">
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/20 bg-accent-dim text-[11px] font-semibold text-accent-2"
+              class="rounded-full flex h-7 w-7 shrink-0 items-center justify-center border border-accent/20 bg-accent-dim text-[11px] font-semibold text-accent-2"
             >
               {{ t('pages.projectDetail.pm.me') }}
             </div>
@@ -391,7 +391,7 @@ const {
                   />
                   <div
                     v-else
-                    class="flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
+                    class="rounded-lg flex max-w-[200px] items-center gap-2 border border-line bg-elevated px-2 py-1.5"
                     data-testid="pm-history-file-chip"
                     :title="attachmentDisplayName(im, ii)"
                   >
@@ -402,13 +402,13 @@ const {
               </div>
               <div
                 v-if="m.content"
-                class="border border-accent/35 bg-accent px-3 py-2 text-sm leading-6 text-white whitespace-pre-wrap"
+                class="rounded-lg border border-accent/35 bg-accent px-3 py-2 text-sm leading-6 text-white whitespace-pre-wrap"
               >
                 {{ m.content }}
               </div>
               <div
                 v-else-if="m.images?.length"
-                class="border border-accent/35 bg-accent px-3 py-2 text-sm leading-6 text-white/80"
+                class="rounded-lg border border-accent/35 bg-accent px-3 py-2 text-sm leading-6 text-white/80"
               >
                 {{ t('pages.projectDetail.pm.imagesOnly') }}
               </div>
@@ -417,14 +417,14 @@ const {
           </div>
           <div v-else-if="m.role === 'assistant'" class="flex gap-2.5" :data-msg-id="m.id">
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
+              class="rounded-full flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
             >
               <Icon name="robot" :size="15" />
             </div>
             <div class="min-w-0 max-w-[85%]">
               <div
                 data-assistant-bubble
-                class="border border-line bg-elevated px-3 py-2 text-sm leading-6 text-txt"
+                class="rounded-md border border-line bg-elevated px-3 py-2 text-sm leading-6 text-txt"
               >
                 <div class="md" v-html="renderMarkdown(m.content)" />
                 <div
@@ -462,12 +462,12 @@ const {
             data-testid="pm-failed-partial"
           >
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
+              class="rounded-full flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
             >
               <Icon name="robot" :size="15" />
             </div>
             <div class="min-w-0 max-w-[85%]">
-              <div class="border border-err/35 bg-err/[0.06] px-3 py-2 text-sm leading-6 text-txt">
+              <div class="rounded-lg border border-err/35 bg-err/[0.06] px-3 py-2 text-sm leading-6 text-txt">
                 <div class="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-red-400">
                   <Icon name="alert" :size="14" class="shrink-0" />
                   {{ t('pages.projectDetail.pm.failPartialKeptMeta') }}
@@ -480,7 +480,7 @@ const {
           <!-- Failure card hangs beside the user turn (after the bubble / partial). -->
           <div v-if="isFailedUser(m)" class="flex justify-start">
             <div
-              class="fail-card ml-[38px] max-w-[85%] flex flex-col gap-2 border border-err/35 bg-err/10 px-3 py-2.5"
+              class="rounded-lg fail-card ml-[38px] max-w-[85%] flex flex-col gap-2 border border-err/35 bg-err/10 px-3 py-2.5"
               role="alert"
             >
               <div class="flex items-start gap-2">
@@ -497,7 +497,7 @@ const {
               <div>
                 <button
                   type="button"
-                  class="border border-err/40 bg-transparent px-2.5 py-1 text-xs text-err hover:bg-err/15 disabled:opacity-50"
+                  class="rounded-md border border-err/40 bg-transparent px-2.5 py-1 text-xs text-err hover:bg-err/15 disabled:opacity-50"
                   :disabled="busy"
                   data-testid="pm-fail-retry"
                   @click="retryTurn(m.id)"
@@ -511,13 +511,13 @@ const {
 
         <div v-if="showStreamBubble" class="flex gap-2.5" data-testid="pm-stream-bubble">
           <div
-            class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
+            class="rounded-full flex h-7 w-7 shrink-0 items-center justify-center border border-accent/25 bg-accent/10 text-accent-2"
           >
             <Icon name="robot" :size="15" />
           </div>
           <div class="min-w-0 max-w-[85%]">
             <div
-              class="border bg-elevated px-3 py-2 text-sm text-txt"
+              class="rounded-lg border bg-elevated px-3 py-2 text-sm text-txt"
               :class="
                 finalizing
                   ? 'border-warn/35 shadow-[inset_0_0_0_1px_rgb(var(--color-warn)/0.08)]'
@@ -587,7 +587,7 @@ const {
             v-for="s in suggestions"
             :key="s"
             type="button"
-            class="border border-line bg-surface px-2.5 py-1 text-xs text-txt2 hover:bg-elevated hover:text-txt disabled:opacity-50"
+            class="rounded-md border border-line bg-surface px-2.5 py-1 text-xs text-txt2 hover:bg-elevated hover:text-txt disabled:opacity-50"
             :disabled="busy"
             @click="send(s)"
           >
@@ -599,9 +599,9 @@ const {
       </div>
 
       <div v-if="activeIsChannel" class="shrink-0 border-t border-line p-3" data-testid="pm-channel-readonly">
-        <div class="flex items-center gap-2.5 border border-accent-2/30 bg-accent/10 px-3.5 py-3">
+        <div class="rounded-lg flex items-center gap-2.5 border border-accent-2/30 bg-accent/10 px-3.5 py-3">
           <div
-            class="flex h-7 w-7 shrink-0 items-center justify-center border border-accent-2/35 bg-accent/15 text-accent-2"
+            class="rounded-full flex h-7 w-7 shrink-0 items-center justify-center border border-accent-2/35 bg-accent/15 text-accent-2"
             aria-hidden="true"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -634,7 +634,7 @@ const {
             />
             <div
               v-else
-              class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+              class="rounded-lg flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
               data-testid="pm-pending-file-chip"
               :title="attachmentDisplayName(im, ii)"
             >
@@ -673,7 +673,7 @@ const {
           <textarea
             v-model="input"
             rows="2"
-            class="scroll-area max-h-32 min-h-[40px] min-w-0 flex-1 resize-none border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent disabled:opacity-50"
+            class="rounded-md scroll-area max-h-32 min-h-[40px] min-w-0 flex-1 resize-none border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent disabled:opacity-50"
             :placeholder="t('pages.projectDetail.pm.inputPh')"
             :disabled="busy"
             @keydown.enter.exact.prevent="send()"
@@ -719,7 +719,7 @@ const {
   />
   <div
     v-if="channelCtx"
-    class="fixed z-50 min-w-[160px] border border-line bg-elevated py-1 shadow-card"
+    class="rounded-lg fixed z-50 min-w-[160px] border border-line bg-elevated py-1 shadow-card"
     data-testid="pm-channel-ctx-menu"
     role="menu"
     :style="{ left: `${channelCtx.x}px`, top: `${channelCtx.y}px` }"
@@ -745,7 +745,7 @@ const {
     aria-modal="true"
     @click.self="closeChannelDetail"
   >
-    <div class="w-full max-w-[360px] border border-line bg-surface shadow-card">
+    <div class="rounded-xl w-full max-w-[360px] border border-line bg-surface shadow-card">
       <div class="flex items-center justify-between border-b border-line px-3.5 py-3 text-[13px] font-semibold text-txt">
         <span>{{ t('pages.projectDetail.pm.channelDetailTitle') }}</span>
         <button
@@ -759,13 +759,13 @@ const {
       <div class="flex flex-col gap-3 p-3.5">
         <div>
           <div class="mb-1 text-[11px] text-txt3">{{ t('pages.projectDetail.pm.channelDetailLabelTitle') }}</div>
-          <div class="border border-line bg-base px-2.5 py-2 text-[13px] text-txt" data-testid="pm-channel-detail-title">
+          <div class="rounded-lg border border-line bg-base px-2.5 py-2 text-[13px] text-txt" data-testid="pm-channel-detail-title">
             {{ channelDetailTitle }}
           </div>
         </div>
         <div>
           <div class="mb-1 text-[11px] text-txt3">{{ t('pages.projectDetail.pm.channelDetailLabelSource') }}</div>
-          <div class="border border-line bg-base px-2.5 py-2 text-[13px] text-txt" data-testid="pm-channel-detail-source">
+          <div class="rounded-lg border border-line bg-base px-2.5 py-2 text-[13px] text-txt" data-testid="pm-channel-detail-source">
             {{ channelDetailSource }}
           </div>
         </div>

@@ -162,10 +162,10 @@ const {
         </AppButton>
       </div>
 
-      <div v-if="!channelList.length" class="border border-dashed border-line-strong p-3.5 text-xs text-txt3">
+      <div v-if="!channelList.length" class="rounded-lg border border-dashed border-line-strong p-3.5 text-xs text-txt3">
         {{ t('pages.projectDetail.pm.channel.listEmpty') }}
       </div>
-      <div v-else class="border border-line">
+      <div v-else class="rounded-lg border border-line">
         <div
           class="grid grid-cols-[1fr_100px_140px_80px_120px] gap-3 border-b border-line bg-elevated px-3.5 py-2 text-[11px] uppercase tracking-wide text-txt3 max-md:grid-cols-2"
         >
@@ -184,7 +184,7 @@ const {
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2 text-[13px] font-medium text-txt">
               <span
-                class="border px-2 py-0.5 text-[11px]"
+                class="rounded-md border px-2 py-0.5 text-[11px]"
                 data-testid="channel-type-badge"
                 :class="
                   ch.type === 'wecom'
@@ -209,7 +209,7 @@ const {
               <span class="truncate">{{ ch.name || ch.appId }}</span>
               <span
                 v-if="ch.isPrimary"
-                class="border border-accent/55 bg-accent-dim px-2 py-0.5 text-[11px] text-accent-2"
+                class="rounded-md border border-accent/55 bg-accent-dim px-2 py-0.5 text-[11px] text-accent-2"
               >
                 {{ t('pages.projectDetail.pm.channel.rolePrimary') }}
               </span>
@@ -258,7 +258,7 @@ const {
         </div>
       </div>
 
-      <div class="mt-3 border border-info/35 bg-info/10 px-3 py-2.5 text-xs leading-snug text-txt2">
+      <div class="rounded-lg mt-3 border border-info/35 bg-info/10 px-3 py-2.5 text-xs leading-snug text-txt2">
         <strong class="text-info">{{ t('pages.projectDetail.pm.channel.compatTitle') }}</strong>
         {{ t('pages.projectDetail.pm.channel.compatHint') }}
       </div>
@@ -288,13 +288,13 @@ const {
         </AppButton>
       </div>
 
-      <div v-if="!isNew && !editingId" class="border border-dashed border-line-strong p-3.5 text-xs text-txt3">
+      <div v-if="!isNew && !editingId" class="rounded-lg border border-dashed border-line-strong p-3.5 text-xs text-txt3">
         {{ t('pages.projectDetail.pm.channel.editEmpty') }}
       </div>
 
       <template v-else>
         <div class="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
-          <div class="border border-line bg-surface p-4">
+          <div class="rounded-lg border border-line bg-surface p-4">
             <h3 class="m-0 text-[13px] font-semibold text-txt">
               {{ t('pages.projectDetail.pm.channel.basicsTitle') }}
             </h3>
@@ -309,7 +309,7 @@ const {
 
             <div class="mt-3">
               <span class="label">{{ t('pages.projectDetail.pm.channel.typeLabel') }}</span>
-              <div class="mt-1 flex border border-line" role="group" data-testid="channel-type-seg">
+              <div class="rounded-md overflow-hidden mt-1 flex border border-line" role="group" data-testid="channel-type-seg">
                 <button
                   type="button"
                   class="flex-1 px-3 py-2 text-[13px]"
@@ -436,7 +436,7 @@ const {
             </div>
             <p
               v-if="saveError"
-              class="mt-2 border border-err/45 bg-err/10 px-3 py-2 text-xs text-err"
+              class="rounded-lg mt-2 border border-err/45 bg-err/10 px-3 py-2 text-xs text-err"
               data-testid="channel-save-error"
             >
               {{ saveError }}
@@ -496,7 +496,7 @@ const {
               {{ t('pages.projectDetail.pm.channel.longConnHint') }}
             </p>
 
-            <div class="mt-3 border border-line p-3">
+            <div class="rounded-lg mt-3 border border-line p-3">
               <label class="flex cursor-pointer items-center gap-2.5 text-[13px] text-txt">
                 <AppSwitch
                   v-model="chCronDeliver"
@@ -567,7 +567,7 @@ const {
           </div>
 
           <div class="grid gap-4 content-start">
-            <div class="border border-line bg-surface p-4">
+            <div class="rounded-lg border border-line bg-surface p-4">
               <h3 class="m-0 text-[13px] font-semibold text-txt">
                 {{ t('pages.projectDetail.pm.channel.sessionCapsTitle') }}
               </h3>
@@ -594,21 +594,21 @@ const {
               </label>
             </div>
 
-            <div class="border border-line bg-surface p-4">
+            <div class="rounded-lg border border-line bg-surface p-4">
               <h3 class="m-0 text-[13px] font-semibold text-txt">
                 {{ t('pages.projectDetail.pm.channel.channelMcpsTitle') }}
               </h3>
               <p class="m-0 mb-2 mt-1 text-xs text-txt2">
                 {{ t('pages.projectDetail.pm.channel.channelMcpsHint') }}
               </p>
-              <div class="mb-3 border border-info/35 bg-info/10 px-3 py-2 text-xs text-txt2">
+              <div class="rounded-lg mb-3 border border-info/35 bg-info/10 px-3 py-2 text-xs text-txt2">
                 {{ t('pages.projectDetail.pm.channel.channelMcpsNote') }}
               </div>
               <div class="grid gap-2">
                 <label
                   v-for="opt in PM_MCP_OPTIONS"
                   :key="opt.id"
-                  class="flex cursor-pointer items-center justify-between gap-2 border border-line bg-base px-3 py-2.5 text-[13px]"
+                  class="rounded-md flex cursor-pointer items-center justify-between gap-2 border border-line bg-base px-3 py-2.5 text-[13px]"
                 >
                   <span class="flex items-center gap-2">
                     <AppSwitch
@@ -691,7 +691,7 @@ const {
         </AppButton>
       </div>
 
-      <div class="mb-3 flex items-center justify-between gap-2 border border-line bg-surface px-3.5 py-3">
+      <div class="rounded-lg mb-3 flex items-center justify-between gap-2 border border-line bg-surface px-3.5 py-3">
         <div>
           <div class="text-[13px] font-medium text-txt">
             {{ t('pages.projectDetail.pm.channel.notifyPolicyTitle') }}
@@ -700,15 +700,15 @@ const {
             {{ t('pages.projectDetail.pm.channel.notifyPolicyHint') }}
           </div>
         </div>
-        <span class="border border-line bg-elevated px-2 py-0.5 text-[12px] text-txt2">
+        <span class="rounded-md border border-line bg-elevated px-2 py-0.5 text-[12px] text-txt2">
           {{ t('pages.projectDetail.pm.channel.notifySelected', { n: notifySelected.length }) }}
         </span>
       </div>
 
-      <div v-if="!channelList.length" class="border border-dashed border-line-strong p-3.5 text-xs text-txt3">
+      <div v-if="!channelList.length" class="rounded-lg border border-dashed border-line-strong p-3.5 text-xs text-txt3">
         {{ t('pages.projectDetail.pm.channel.listEmpty') }}
       </div>
-      <div v-else class="border border-line">
+      <div v-else class="rounded-lg border border-line">
         <label
           v-for="ch in channelList"
           :key="ch.id"
@@ -725,13 +725,13 @@ const {
               <span>{{ ch.name || ch.appId }}</span>
               <span
                 v-if="ch.isPrimary"
-                class="border border-accent/55 bg-accent-dim px-2 py-0.5 text-[11px] text-accent-2"
+                class="rounded-md border border-accent/55 bg-accent-dim px-2 py-0.5 text-[11px] text-accent-2"
               >
                 {{ t('pages.projectDetail.pm.channel.rolePrimary') }}
               </span>
               <span
                 v-if="!ch.enabled"
-                class="border border-line px-2 py-0.5 text-[11px] text-txt3"
+                class="rounded-md border border-line px-2 py-0.5 text-[11px] text-txt3"
               >
                 {{ t('pages.projectDetail.pm.channel.statusOff') }}
               </span>
@@ -745,13 +745,13 @@ const {
 
       <div
         v-if="!notifySelected.length"
-        class="mt-2.5 border border-dashed border-line-strong bg-base p-3.5 text-xs text-txt3"
+        class="rounded-lg mt-2.5 border border-dashed border-line-strong bg-base p-3.5 text-xs text-txt3"
         data-testid="notify-empty-hint"
       >
         {{ t('pages.projectDetail.pm.channel.notifyEmpty') }}
       </div>
 
-      <div class="mt-4 border border-line" data-testid="channel-deliver-log">
+      <div class="rounded-lg mt-4 border border-line" data-testid="channel-deliver-log">
         <div class="border-b border-line bg-elevated px-3.5 py-2 text-[13px] font-medium text-txt">
           {{ t('pages.projectDetail.pm.channel.deliverLogTitle') }}
         </div>
@@ -764,7 +764,7 @@ const {
           class="flex items-start gap-2 border-b border-line px-3.5 py-2.5 last:border-b-0"
         >
           <span
-            class="shrink-0 border px-2 py-0.5 text-[11px]"
+            class="rounded-md shrink-0 border px-2 py-0.5 text-[11px]"
             :class="rec.status === 'ok' ? 'border-ok/40 text-ok' : 'border-err/45 text-err'"
           >
             {{ rec.status === 'ok' ? t('pages.projectDetail.pm.channel.deliverOk') : t('pages.projectDetail.pm.channel.deliverFail') }}
@@ -776,7 +776,7 @@ const {
         </div>
       </div>
 
-      <div class="mt-3 border border-warn/40 bg-warn/10 px-3 py-2.5 text-xs leading-snug text-txt2">
+      <div class="rounded-lg mt-3 border border-warn/40 bg-warn/10 px-3 py-2.5 text-xs leading-snug text-txt2">
         {{ t('pages.projectDetail.pm.channel.notifyFanoutHint') }}
       </div>
     </div>
@@ -787,7 +787,7 @@ const {
       class="fixed inset-0 z-40 flex items-center justify-center bg-black/55 p-6"
       data-testid="channel-delete-primary-modal"
     >
-      <div class="w-full max-w-md border border-line-strong bg-surface p-4 shadow-[var(--shadow-card)]">
+      <div class="rounded-xl w-full max-w-md border border-line-strong bg-surface p-4 shadow-[var(--shadow-card)]">
         <h3 class="m-0 text-sm font-semibold text-txt">
           {{ t('pages.projectDetail.pm.channel.deletePrimaryTitle') }}
         </h3>
@@ -797,7 +797,7 @@ const {
         <div class="mb-3.5 grid gap-2">
           <button
             type="button"
-            class="border px-3 py-2.5 text-left text-xs"
+            class="rounded-lg border px-3 py-2.5 text-left text-xs"
             :class="
               deleteMode === 'promote'
                 ? 'border-accent bg-accent-dim text-txt'
@@ -809,7 +809,7 @@ const {
           </button>
           <button
             type="button"
-            class="border px-3 py-2.5 text-left text-xs"
+            class="rounded-lg border px-3 py-2.5 text-left text-xs"
             :class="
               deleteMode === 'none'
                 ? 'border-accent bg-accent-dim text-txt'

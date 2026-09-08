@@ -34,6 +34,20 @@ function mountFrame(props: { label: string; html: string; highlighted?: boolean;
 }
 
 describe('ClarifyDemoFrame', () => {
+  it('uses card-radius (12px) demo frame with enlarge control', () => {
+    const wrapper = mountFrame({
+      label: '方案 A',
+      html: '<!doctype html><html><body>demo</body></html>',
+    })
+    const root = wrapper.find('div.overflow-hidden')
+    expect(root.classes()).toContain('rounded-lg')
+    expect(root.classes()).not.toContain('rounded-none')
+    const enlargeBtn = wrapper.findAll('button').find((b) => b.text().includes('放大') || b.text().includes('Enlarge'))
+    expect(enlargeBtn).toBeTruthy()
+    expect(enlargeBtn!.classes().join(' ')).toMatch(/\brounded\b/)
+    wrapper.unmount()
+  })
+
   it('renders label and html preview', () => {
     const wrapper = mountFrame({
       label: '方案 A',

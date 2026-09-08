@@ -360,7 +360,7 @@ defineExpose({
               <span>{{ t('common.format.chars', { n: currentFile.content.length }) }}</span>
               <span
                 v-if="!isMobile && isMdPath(currentFile.path)"
-                class="border border-line bg-elevated px-1.5 text-[10px] text-txt2"
+                class="rounded-md border border-line bg-elevated px-1.5 text-[10px] text-txt2"
               >{{ t('pages.agentStudio.explorer.markdownBadge') }}</span>
               <span class="ml-auto truncate font-mono">{{ currentFile.path }}</span>
             </div>
@@ -420,7 +420,7 @@ defineExpose({
       <div
         v-if="isMobile && explorerMore"
         data-test="explorer-more-menu"
-        class="fixed z-[9999] min-w-[180px] border border-line bg-elevated py-1 shadow-card"
+        class="rounded-lg fixed z-[9999] min-w-[180px] border border-line bg-elevated py-1 shadow-card"
         :style="explorerMoreStyle"
         @click.stop
       >

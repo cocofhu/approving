@@ -16,7 +16,7 @@ const { toasts } = useToast()
         <div
           v-for="t in toasts"
           :key="t.id"
-          class="border border-line bg-elevated px-4 py-2.5 text-[13px] font-medium text-txt shadow-card"
+          class="rounded-lg border border-line bg-elevated px-4 py-2.5 text-[13px] font-medium text-txt shadow-card"
           :class="{
             'border-ok/40 text-ok': t.type === 'success',
             'border-err/40 text-err': t.type === 'error',

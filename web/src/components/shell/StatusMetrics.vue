@@ -121,7 +121,7 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(cumulative) }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
           {{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span>
@@ -143,7 +143,7 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtFiveMinuteRate(rate) }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
           {{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span>
@@ -166,7 +166,7 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(peak) }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
           {{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span>
@@ -189,7 +189,7 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ running }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
           {{ t('shell.statusMetrics.running') }}: <span class="font-mono">{{ running }}</span>
@@ -211,7 +211,7 @@ function onBlurTip(id: string) {
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ queued }}</span>
         <span
-          class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+          class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
           {{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span>
@@ -256,7 +256,7 @@ function onBlurTip(id: string) {
       </span>
       <span
         v-if="!usePortaledCompactTip"
-        class="sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[180px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+        class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden min-w-[180px] -translate-x-1/2 border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
         role="tooltip"
       >
         <div>{{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span></div>
@@ -271,7 +271,7 @@ function onBlurTip(id: string) {
       <div
         v-show="compactTipVisible"
         ref="compactTip"
-        class="sm-tip pointer-events-none z-[60] min-w-[180px] border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
+        class="rounded-md sm-tip pointer-events-none z-[60] min-w-[180px] border border-line-strong bg-overlay px-2.5 py-2 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
         role="tooltip"
         data-testid="status-metrics-compact-tip"
         data-placement="above"

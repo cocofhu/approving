@@ -267,7 +267,7 @@ html.light .stats-panel {
       <!-- Single run -->
       <template v-if="statsTab === 'single'">
         <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-5">
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-wall">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-wall">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.wallClock') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -294,7 +294,7 @@ html.light .stats-panel {
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.wallHint') }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-node-sum">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-node-sum">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.nodeSum') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -321,7 +321,7 @@ html.light .stats-panel {
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.nodeSumHint') }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-gap">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-gap">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.gap') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -348,7 +348,7 @@ html.light .stats-panel {
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ t('pages.executionStats.gapHint') }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-total-tokens">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-total-tokens">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.totalTokens') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -400,7 +400,7 @@ html.light .stats-panel {
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ singleTokenHint }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-token-rate">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-token-rate">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.tokenRate') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -439,7 +439,7 @@ html.light .stats-panel {
 
         <div
           v-if="singleBottleneck"
-          class="mb-3 border border-err/35 bg-err/6 px-3 py-2.5"
+          class="rounded-lg mb-3 border border-err/35 bg-err/6 px-3 py-2.5"
         >
           <div class="mb-1.5 flex items-center justify-between gap-2">
             <span class="text-[11px] font-semibold uppercase tracking-wide text-err">
@@ -447,7 +447,7 @@ html.light .stats-panel {
             </span>
             <span
               v-if="singleBottleneck.item.hasHumanWait"
-              class="shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
+              class="rounded-md shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
             >
               {{ t('pages.executionStats.hasHumanWait') }}
             </span>
@@ -467,7 +467,7 @@ html.light .stats-panel {
           </div>
         </div>
 
-        <div class="mb-3.5 border border-line bg-surface p-3">
+        <div class="rounded-lg mb-3.5 border border-line bg-surface p-3">
           <StatsPieChart
             :items="singleItems"
             :center-value="fmtDuration(singleSummary.nodeSumSec)"
@@ -479,7 +479,7 @@ html.light .stats-panel {
 
         <div class="mb-3 flex flex-wrap items-center gap-2">
           <span class="text-[11px] text-txt3">{{ t('pages.executionStats.dimension') }}</span>
-          <div class="inline-flex border border-line bg-surface text-[12px]">
+          <div class="rounded-lg inline-flex border border-line bg-surface text-[12px]">
             <button
               v-for="opt in dimOptionsSingle"
               :key="opt.id"
@@ -505,7 +505,7 @@ html.light .stats-panel {
           <div
             v-for="it in singleItems"
             :key="it.key"
-            class="border bg-surface px-3 py-2.5"
+            class="rounded-lg border bg-surface px-3 py-2.5"
             :class="
               singleBottleneck && it.key === singleBottleneck.item.key
                 ? 'border-err/40'
@@ -526,19 +526,19 @@ html.light .stats-panel {
               </TruncatedTextTooltip>
               <span
                 v-if="it.isProcess && it.iteration && it.iteration > 1"
-                class="shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
+                class="rounded-md shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
               >
                 {{ t('common.iterationN', { n: it.iteration }) }}
               </span>
               <span
                 v-if="!it.isProcess && it.count > 1"
-                class="shrink-0 border border-info/40 bg-info/10 px-1.5 py-px text-[10px] text-info"
+                class="rounded-md shrink-0 border border-info/40 bg-info/10 px-1.5 py-px text-[10px] text-info"
               >
                 {{ t('pages.executionStats.mergeCount', { n: it.count }) }}
               </span>
               <span
                 v-if="it.hasHumanWait"
-                class="shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
+                class="rounded-md shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
               >
                 {{ t('pages.executionStats.hasHumanWait') }}
               </span>
@@ -575,7 +575,7 @@ html.light .stats-panel {
 
       <!-- Multi run -->
       <template v-else>
-        <div class="mb-3 border border-line bg-surface" data-testid="stats-multi-selection">
+        <div class="rounded-lg mb-3 border border-line bg-surface" data-testid="stats-multi-selection">
           <div class="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
             <h3
               class="min-w-0 text-[12px] font-medium text-txt3"
@@ -597,7 +597,7 @@ html.light .stats-panel {
               </button>
               <button
                 type="button"
-                class="inline-flex items-center gap-1 border px-2.5 py-1 text-[12px] transition-colors"
+                class="rounded-md inline-flex items-center gap-1 border px-2.5 py-1 text-[12px] transition-colors"
                 :class="
                   pickerOpen
                     ? 'border-accent/50 bg-accent-dim text-accent-2'
@@ -682,7 +682,7 @@ html.light .stats-panel {
                 @click="toggleRun(c.id)"
               >
                 <span
-                  class="inline-block h-3.5 w-3.5 shrink-0 border"
+                  class="rounded-lg inline-block h-3.5 w-3.5 shrink-0 border"
                   :class="
                     selectedIds.has(c.id)
                       ? 'border-accent-2 bg-accent-2'
@@ -713,7 +713,7 @@ html.light .stats-panel {
         </div>
 
         <div class="mb-3.5 grid grid-cols-1 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-selected">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-selected">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.selectedRuns') }}</div>
             <div
               class="text-[16px] font-semibold tabular-nums text-txt"
@@ -722,7 +722,7 @@ html.light .stats-panel {
               {{ selectedCountDisplay }}
             </div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-wall">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-wall">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.avgWall') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -752,7 +752,7 @@ html.light .stats-panel {
               </span>
             </div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-process-count">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-process-count">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.processCount') }}</div>
             <div
               class="text-[16px] font-semibold tabular-nums text-txt"
@@ -761,7 +761,7 @@ html.light .stats-panel {
               {{ multiReady ? multiSummary.processCount : t('pages.executionStats.dash') }}
             </div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-sum-tokens">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-sum-tokens">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.sumTokens') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -793,7 +793,7 @@ html.light .stats-panel {
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ multiSumHint }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-tokens">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-avg-tokens">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.avgTokens') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -825,7 +825,7 @@ html.light .stats-panel {
             </div>
             <div class="mt-0.5 text-[10px] text-txt3">{{ multiAvgHint }}</div>
           </div>
-          <div class="border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-multi-token-rate">
+          <div class="rounded-lg border border-line bg-surface px-3 py-2.5" data-testid="stats-kpi-multi-token-rate">
             <div class="mb-1 text-[11px] text-txt3">{{ t('pages.executionStats.tokenRate') }}</div>
             <div class="stats-kpi-value-wrap">
               <div
@@ -863,7 +863,7 @@ html.light .stats-panel {
           {{ t('pages.executionStats.multiPending') }}
         </p>
         <template v-else>
-        <div v-if="multiItems[0]" class="mb-3.5 border border-err/35 bg-err/6 px-3 py-2.5">
+        <div v-if="multiItems[0]" class="rounded-lg mb-3.5 border border-err/35 bg-err/6 px-3 py-2.5">
           <div class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-err">
             {{ t('pages.executionStats.topAvg') }}
           </div>
@@ -879,7 +879,7 @@ html.light .stats-panel {
 
         <div class="mb-3 flex flex-wrap items-center gap-2">
           <span class="text-[11px] text-txt3">{{ t('pages.executionStats.dimension') }}</span>
-          <div class="inline-flex border border-line bg-surface text-[12px]">
+          <div class="rounded-lg inline-flex border border-line bg-surface text-[12px]">
             <button
               v-for="opt in dimOptionsMulti"
               :key="opt.id"
@@ -897,7 +897,7 @@ html.light .stats-panel {
           </div>
         </div>
 
-        <div class="mb-3.5 border border-line bg-surface p-3">
+        <div class="rounded-lg mb-3.5 border border-line bg-surface p-3">
           <StatsPieChart
             :items="multiItems"
             :center-value="fmtDuration(multiSummary.wallSumSec ? multiItems.reduce((a, i) => a + i.durationSec, 0) : 0)"
@@ -922,7 +922,7 @@ html.light .stats-panel {
           <div
             v-for="(it, i) in multiItems"
             :key="it.key"
-            class="border bg-surface px-3 py-2.5"
+            class="rounded-lg border bg-surface px-3 py-2.5"
             :class="i === 0 ? 'border-err/40' : 'border-line'"
           >
             <div class="mb-1.5 flex items-center gap-2">
@@ -936,7 +936,7 @@ html.light .stats-panel {
               </TruncatedTextTooltip>
               <span
                 v-if="it.hasHumanWait"
-                class="shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
+                class="rounded-md shrink-0 border border-warn/40 bg-warn/10 px-1.5 py-px text-[10px] text-warn"
               >
                 {{ t('pages.executionStats.hasHumanWait') }}
               </span>

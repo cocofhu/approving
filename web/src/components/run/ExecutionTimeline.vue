@@ -399,7 +399,7 @@ const DOT: Record<string, string> = {
           </li>
         </ol>
         <div
-          class="mt-3 border border-line bg-elevated px-4 py-3"
+          class="rounded-lg mt-3 border border-line bg-elevated px-4 py-3"
           data-testid="timeline-footer"
         >
           <div class="flex flex-wrap items-center justify-between gap-2.5">

@@ -325,7 +325,7 @@ const pending = computed(() => props.nodeRun.status === 'pending')
             v-if="isVisual && eligibleVersions.length >= 2"
             v-model="selectedIteration"
             @change="onVersionChange"
-            class="border border-line bg-elevated px-2 py-1 text-xs text-txt outline-none focus:border-accent"
+            class="rounded-md border border-line bg-elevated px-2 py-1 text-xs text-txt outline-none focus:border-accent"
             data-testid="structured-product-version-select"
             aria-label="选择视觉产物版本"
           >
@@ -343,7 +343,7 @@ const pending = computed(() => props.nodeRun.status === 'pending')
             v-for="tab in productTabs"
             :key="tab.name"
             type="button"
-            class="border px-2 py-0.5 text-[11px]"
+            class="rounded-md border px-2 py-0.5 text-[11px]"
             :class="
               selectedArtifactName === tab.name
                 ? 'border-accent bg-accent/10 text-accent-2'
@@ -364,10 +364,10 @@ const pending = computed(() => props.nodeRun.status === 'pending')
       :class="isVisual && rawHtml ? 'flex flex-col overflow-hidden px-4' : 'overflow-y-auto px-4 pb-4'"
       data-testid="structured-product-preview"
     >
-      <div v-if="isVisual && rawHtml" class="relative min-h-0 flex-1 border border-line">
+      <div v-if="isVisual && rawHtml" class="rounded-lg relative min-h-0 flex-1 border border-line">
         <div
           v-if="isHistoricalPreview"
-          class="absolute left-2 top-2 z-10 border border-warn/50 bg-base/95 px-2 py-1 text-xs text-warn"
+          class="rounded-md absolute left-2 top-2 z-10 border border-warn/50 bg-base/95 px-2 py-1 text-xs text-warn"
           data-testid="structured-product-historical-banner"
         >
           历史版本 · 只读

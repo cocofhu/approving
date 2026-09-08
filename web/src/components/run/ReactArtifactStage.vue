@@ -769,7 +769,7 @@ onBeforeUnmount(() => {
               >
                 <button
                   type="button"
-                  class="inline-flex items-center gap-0.5 border border-line bg-elevated px-1.5 py-px text-[10px] text-txt2 hover:border-line-strong hover:text-txt"
+                  class="rounded-md inline-flex items-center gap-0.5 border border-line bg-elevated px-1.5 py-px text-[10px] text-txt2 hover:border-line-strong hover:text-txt"
                   :class="{ 'border-accent/60 text-txt': versionMenuFor === a.name }"
                   :aria-expanded="versionMenuFor === a.name ? 'true' : 'false'"
                   aria-haspopup="listbox"
@@ -782,7 +782,7 @@ onBeforeUnmount(() => {
                 <div
                   v-if="versionMenuFor === a.name"
                   role="listbox"
-                  class="absolute right-0 bottom-full z-20 mb-1 min-w-[7.5rem] border border-line bg-surface py-0.5"
+                  class="rounded-lg absolute right-0 bottom-full z-20 mb-1 min-w-[7.5rem] border border-line bg-surface py-0.5"
                   data-testid="react-artifact-version-menu"
                 >
                   <button

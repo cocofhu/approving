@@ -336,7 +336,7 @@ const {
         <div
           v-for="n in SKELETON_CARDS"
           :key="'skel-m-' + n"
-          class="flex w-full shrink-0 flex-col gap-2 border border-line bg-surface p-3"
+          class="flex w-full shrink-0 flex-col gap-2 rounded-lg border border-line bg-surface p-3"
         >
           <div class="flex items-start gap-3">
             <div class="h-9 w-9 shrink-0 bg-elevated animate-pulse" />
@@ -618,7 +618,7 @@ const {
       <div
         v-for="n in SKELETON_CARDS"
         :key="'skel-d-' + n"
-        class="flex w-full max-w-[320px] shrink-0 flex-col gap-2 border border-line bg-surface p-3"
+        class="flex w-full max-w-[320px] shrink-0 flex-col gap-2 rounded-lg border border-line bg-surface p-3"
       >
         <div class="flex items-start gap-3">
           <div class="h-9 w-9 shrink-0 bg-elevated animate-pulse" />

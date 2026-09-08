@@ -73,7 +73,7 @@ onMounted(() => nextTick(autoGrow))
   <div data-testid="paragraph-input-root" :data-text-only="textOnly ? '1' : '0'">
     <div
       v-if="!textOnly && notice?.kind === 'error'"
-      class="mb-2 border border-err/40 bg-err/10 px-2.5 py-1.5 text-[12px] text-err"
+      class="mb-2 rounded-lg border border-err/40 bg-err/10 px-2.5 py-1.5 text-[12px] text-err"
       data-testid="paragraph-attach-notice"
       role="alert"
     >
@@ -94,7 +94,7 @@ onMounted(() => nextTick(autoGrow))
         />
         <div
           v-else
-          class="flex h-14 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2"
+          class="flex h-14 max-w-[160px] items-center gap-1.5 rounded-md border border-line bg-elevated px-2"
           data-testid="paragraph-pending-file-chip"
           :title="attachmentDisplayName(im, ii)"
         >

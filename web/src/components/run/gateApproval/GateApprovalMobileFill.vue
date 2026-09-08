@@ -142,7 +142,7 @@ const {
             data-testid="mobile-fill-scroll"
           >
             <div
-              class="flex min-h-0 flex-1 flex-col overflow-hidden border border-line"
+              class="rounded-lg flex min-h-0 flex-1 flex-col overflow-hidden border border-line"
               data-testid="mobile-fill-preview"
             >
               <div

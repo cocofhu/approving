@@ -198,14 +198,13 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g1.4 — pipeline cards are square (no global .card / rounded-lg)
-  it('renders right-angle pipeline cards', async () => {
+  // plan g1 — pipeline cards use card-role 12px via scoped CSS (not global .card)
+  it('renders rounded pipeline cards via home-shell__card', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     const card = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
     expect(card.classes()).toContain('home-shell__card')
     expect(card.classes()).not.toContain('card')
-    expect(card.classes()).not.toContain('rounded-lg')
     expect(card.classes()).toContain('border')
     wrapper.unmount()
   })

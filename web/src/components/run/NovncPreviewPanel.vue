@@ -584,7 +584,7 @@ onBeforeUnmount(() => {
             {{ t('pages.appPreview.novnc.fps') }}
           </template>
           <span
-            class="pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-[220px] border border-line-strong bg-overlay px-2.5 py-2 text-[10px] leading-snug text-txt2 shadow-card group-hover:block"
+            class="rounded-md pointer-events-none absolute bottom-full right-0 z-20 mb-2 hidden w-[220px] border border-line-strong bg-overlay px-2.5 py-2 text-[10px] leading-snug text-txt2 shadow-card group-hover:block"
           >
             {{ t('pages.appPreview.novnc.fpsTooltip') }}
           </span>
@@ -603,7 +603,7 @@ onBeforeUnmount(() => {
       </span>
       <div
         v-if="inlineTip"
-        class="basis-full border px-2.5 py-1.5 text-[11px] leading-snug"
+        class="rounded-md basis-full border px-2.5 py-1.5 text-[11px] leading-snug"
         :class="
           inlineTip.err
             ? 'border-err/40 bg-err/10 text-err'
@@ -744,13 +744,13 @@ onBeforeUnmount(() => {
         }}</span>
         <div
           v-if="previewStuck"
-          class="pointer-events-auto max-w-[360px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
+          class="rounded-lg pointer-events-auto max-w-[360px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
           data-testid="novnc-preview-stuck"
         >
           <p>{{ t('pages.appPreview.novnc.maybeStuck') }}</p>
           <button
             type="button"
-            class="mt-2 inline-flex min-h-11 items-center border border-line bg-surface px-3 text-[12px] font-medium text-txt"
+            class="rounded-lg mt-2 inline-flex min-h-11 items-center border border-line bg-surface px-3 text-[12px] font-medium text-txt"
             @click="reconnect"
           >
             {{ t('pages.appPreview.novnc.reconnect') }}

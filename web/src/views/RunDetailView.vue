@@ -380,7 +380,7 @@ const {
         role="dialog"
         tabindex="-1"
         :aria-label="t('pages.runDetail.priorityTitle')"
-        class="fixed z-40 border border-line-strong bg-surface p-3.5 shadow-card outline-none"
+        class="rounded-lg fixed z-40 border border-line-strong bg-surface p-3.5 shadow-card outline-none"
         :style="priorityPopoverStyle"
       >
         <h3 class="mb-2.5 text-[13px] font-semibold text-txt">{{ t('pages.runDetail.priorityTitle') }}</h3>
@@ -398,14 +398,14 @@ const {
         </div>
         <div
           v-if="priorityError"
-          class="mt-2.5 flex items-start gap-1.5 border border-err/30 bg-err/10 px-2.5 py-2 text-[12px] text-err"
+          class="rounded-lg mt-2.5 flex items-start gap-1.5 border border-err/30 bg-err/10 px-2.5 py-2 text-[12px] text-err"
         >
           <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
           <span>{{ priorityError }}</span>
         </div>
         <div
           v-else-if="priorityOk"
-          class="mt-2.5 border border-ok/30 bg-ok/10 px-2.5 py-2 text-[12px] text-ok"
+          class="rounded-lg mt-2.5 border border-ok/30 bg-ok/10 px-2.5 py-2 text-[12px] text-ok"
         >
           {{ t('pages.runDetail.prioritySaved') }}
         </div>

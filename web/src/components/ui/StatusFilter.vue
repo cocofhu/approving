@@ -92,7 +92,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   <div ref="root" class="relative w-full md:w-auto">
     <button
       type="button"
-      class="flex w-full min-h-[44px] items-center gap-2 border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
+      class="flex w-full min-h-[44px] items-center gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-sm text-txt2 transition hover:bg-elevated md:min-h-0 md:w-auto"
       :class="{ 'border-accent/60 text-txt': hasFilter }"
       @click.stop="toggle"
     >

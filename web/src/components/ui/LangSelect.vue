@@ -93,7 +93,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       :class="
         variant === 'ghost'
           ? ['h-8 gap-1.5 border-0 bg-transparent px-2 text-xs', open ? 'bg-elevated text-txt' : '']
-          : ['gap-2 border border-line bg-surface px-3 py-1.5 text-sm', open ? 'border-accent/60 text-txt' : '']
+          : ['gap-2 rounded-md border border-line bg-surface px-3 py-1.5 text-sm', open ? 'border-accent/60 text-txt' : '']
       "
       :aria-label="t('shell.langSelect')"
       aria-haspopup="listbox"

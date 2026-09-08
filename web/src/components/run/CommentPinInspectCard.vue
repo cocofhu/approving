@@ -192,7 +192,7 @@ defineExpose({ placeCardNear })
   <div
     v-show="open"
     ref="cardRef"
-    class="comment-pin-inspect-card absolute z-20 flex max-h-[calc(100%-24px)] w-[320px] flex-col border border-line-strong bg-elevated shadow-[var(--shadow-card)]"
+    class="rounded-lg comment-pin-inspect-card absolute z-20 flex max-h-[calc(100%-24px)] w-[320px] flex-col border border-line-strong bg-elevated shadow-[var(--shadow-card)]"
     :style="cardStyle"
     data-testid="comment-pin-inspect-card"
     role="dialog"
@@ -212,7 +212,7 @@ defineExpose({ placeCardNear })
             <span class="w-9 shrink-0 text-txt3">{{ row.label }}</span>
             <span
               v-if="row.swatch"
-              class="inline-block h-2.5 w-2.5 shrink-0 border border-line"
+              class="rounded-lg inline-block h-2.5 w-2.5 shrink-0 border border-line"
               :style="{ background: row.swatch }"
             />
             <span class="min-w-0 truncate text-txt2">{{ row.value }}</span>
@@ -221,7 +221,7 @@ defineExpose({ placeCardNear })
       </div>
       <button
         type="button"
-        class="shrink-0 border border-line px-2 py-1 text-[11px] text-txt2 hover:text-txt"
+        class="rounded-md shrink-0 border border-line px-2 py-1 text-[11px] text-txt2 hover:text-txt"
         data-testid="comment-pin-card-close"
         @click="emit('close')"
       >
@@ -230,7 +230,7 @@ defineExpose({ placeCardNear })
     </div>
     <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-auto px-3 py-2.5">
       <div
-        class="flex h-11 items-center justify-center border border-dashed border-line-strong bg-base text-[11px]"
+        class="rounded-lg flex h-11 items-center justify-center border border-dashed border-line-strong bg-base text-[11px]"
         :class="
           screenshotMissing
             ? 'border-warn/50 text-warn'
@@ -253,7 +253,7 @@ defineExpose({ placeCardNear })
       </div>
       <textarea
         v-model="comment"
-        class="min-h-[56px] w-full resize-y border border-line bg-base px-2.5 py-2 text-[13px] text-txt outline-none focus:border-accent"
+        class="rounded-md min-h-[56px] w-full resize-y border border-line bg-base px-2.5 py-2 text-[13px] text-txt outline-none focus:border-accent"
         rows="3"
         :placeholder="t('pages.gateApproval.commentPins.placeholder')"
         data-testid="comment-pin-input"
@@ -263,7 +263,7 @@ defineExpose({ placeCardNear })
     <div class="flex shrink-0 items-center justify-end gap-1.5 border-t border-line bg-elevated px-3 py-2.5">
       <button
         type="button"
-        class="border border-line px-3 py-1.5 text-xs font-medium text-txt2 hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
+        class="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-txt2 hover:text-txt disabled:cursor-not-allowed disabled:opacity-45"
         :disabled="!canSubmit"
         data-testid="comment-pin-send-chat"
         @click="onSendChat"

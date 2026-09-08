@@ -135,7 +135,7 @@ const htmlPreviewState = computed<'loading' | 'load-error' | 'empty' | 'ready'>(
     <div v-if="loading && !htmlBody" class="text-[12px] text-txt3">…</div>
     <pre
       v-else
-      class="whitespace-pre-wrap border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2"
+      class="rounded-lg whitespace-pre-wrap border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2"
       :class="variant === 'detail' ? 'scroll-area max-h-48 overflow-y-auto' : ''"
     >{{ artifactHtml }}</pre>
   </template>

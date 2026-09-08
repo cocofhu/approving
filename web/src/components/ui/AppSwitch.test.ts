@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import AppSwitch from './AppSwitch.vue'
 
 describe('AppSwitch', () => {
-  it('renders square accent track when on', () => {
+  it('renders capsule accent track when on', () => {
     const w = mount(AppSwitch, {
       props: { modelValue: true },
       attrs: { 'aria-label': 'Enable feature' },
@@ -13,8 +13,8 @@ describe('AppSwitch', () => {
     expect(btn.attributes('aria-checked')).toBe('true')
     expect(btn.attributes('aria-label')).toBe('Enable feature')
     expect(btn.classes().join(' ')).toContain('bg-accent')
-    expect(btn.classes().join(' ')).toContain('rounded-none')
-    expect(btn.classes().join(' ')).not.toContain('rounded-full')
+    expect(btn.classes().join(' ')).toContain('rounded-full')
+    expect(btn.classes().join(' ')).not.toContain('rounded-none')
     w.unmount()
   })
 

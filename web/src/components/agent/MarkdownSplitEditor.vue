@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
               v-model="fmFields.description"
               rows="2"
               :disabled="readonly"
-              class="w-full resize-y border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent disabled:opacity-60"
+              class="rounded-md w-full resize-y border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent disabled:opacity-60"
               @input="syncContentFromForm"
             />
           </div>
@@ -264,7 +264,7 @@ onBeforeUnmount(() => {
             <div class="flex items-center gap-2">
               <button
                 type="button"
-                class="relative h-[18px] w-8 border transition-colors"
+                class="rounded-lg relative h-[18px] w-8 border transition-colors"
                 :class="fmFields.alwaysApply ? 'border-accent bg-accent' : 'border-line-strong bg-overlay'"
                 :disabled="readonly"
                 aria-label="alwaysApply"
@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
               v-model="fmFields.name"
               type="text"
               :disabled="readonly"
-              class="w-full border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent disabled:opacity-60"
+              class="rounded-md w-full border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent disabled:opacity-60"
               @input="syncContentFromForm"
             />
           </div>
@@ -296,7 +296,7 @@ onBeforeUnmount(() => {
               v-model="fmFields.description"
               rows="2"
               :disabled="readonly"
-              class="w-full resize-y border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent disabled:opacity-60"
+              class="rounded-md w-full resize-y border border-line bg-base px-2 py-1 text-[12px] text-txt outline-none focus:border-accent disabled:opacity-60"
               @input="syncContentFromForm"
             />
           </div>
@@ -306,7 +306,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- stack: edit / preview toggle -->
-    <div v-if="isStack" class="mx-2.5 mb-2.5 mt-2 flex shrink-0 border border-line" role="tablist">
+    <div v-if="isStack" class="rounded-md overflow-hidden mx-2.5 mb-2.5 mt-2 flex shrink-0 border border-line" role="tablist">
       <button
         type="button"
         class="min-h-11 flex-1 text-[12px] transition"
@@ -347,7 +347,7 @@ onBeforeUnmount(() => {
       >
         <pre
           v-if="stackFmRaw"
-          class="mb-3 whitespace-pre-wrap border border-line bg-elevated px-2.5 py-2 font-mono text-[11px] leading-relaxed text-txt3"
+          class="rounded-md mb-3 whitespace-pre-wrap border border-line bg-elevated px-2.5 py-2 font-mono text-[11px] leading-relaxed text-txt3"
         >FRONTMATTER
 {{ stackFmRaw }}</pre>
         <div class="md" v-html="previewHtml" />

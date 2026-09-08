@@ -38,7 +38,7 @@ function btnClass(value: RunPriority) {
 
 <template>
   <div
-    class="grid grid-cols-3 border border-line bg-base"
+    class="grid grid-cols-3 overflow-hidden rounded-md border border-line bg-base"
     role="radiogroup"
     :aria-label="t('common.priority.label')"
     :aria-disabled="disabled || undefined"

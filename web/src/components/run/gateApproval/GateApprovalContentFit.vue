@@ -152,7 +152,7 @@ const {
             >
               <div
                 ref="gateStageEl"
-                class="border border-line"
+                class="rounded-lg border border-line"
                 :class="
                   isMobile
                     ? 'scroll-area min-h-0 overflow-x-hidden overflow-y-auto'

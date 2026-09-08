@@ -267,7 +267,7 @@ const {
         </div>
         <div
           v-else-if="isVisualBody && productHtml"
-          class="overflow-x-hidden border border-line"
+          class="rounded-lg overflow-x-hidden border border-line"
           data-testid="comment-pin-desktop-split"
         >
           <div

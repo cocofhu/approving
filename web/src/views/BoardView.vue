@@ -159,13 +159,13 @@ onUnmounted(() => {
     <div class="min-h-0 flex-1 overflow-y-auto">
     <div
       v-if="error && error !== 'missing_project'"
-      class="mb-4 flex flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
+      class="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
       data-testid="board-load-error"
     >
       <span>{{ t('pages.board.loadFailed') }}</span>
       <button
         type="button"
-        class="border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
+        class="rounded-md border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
         data-testid="board-retry"
         @click="load()"
       >
@@ -182,7 +182,7 @@ onUnmounted(() => {
           v-for="key in (['queued', 'failed', 'cancelled'] as const)"
           :key="key"
           type="button"
-          class="inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs transition"
+          class="rounded-md inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs transition"
           :class="
             extraEnabled[key]
               ? 'border-accent-2/45 bg-accent-dim text-txt'
@@ -192,7 +192,7 @@ onUnmounted(() => {
           @click="toggleExtra(key)"
         >
           <span
-            class="inline-block h-2 w-2 border"
+            class="inline-block h-2 w-2 rounded-full border"
             :class="extraEnabled[key] ? 'border-accent-2 bg-accent-2' : 'border-line-strong bg-transparent'"
           />
           {{ t(`common.status.${key}`) }}

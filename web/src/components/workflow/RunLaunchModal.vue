@@ -394,7 +394,7 @@ async function startRun() {
         >
           <span
             ref="checkIconEl"
-            class="check-icon-wrap flex h-7 w-7 shrink-0 items-center justify-center border border-ok/30 bg-ok/10 text-ok"
+            class="rounded-full check-icon-wrap flex h-7 w-7 shrink-0 items-center justify-center border border-ok/30 bg-ok/10 text-ok"
           >
             <Icon name="check" :size="16" />
           </span>
@@ -483,7 +483,7 @@ async function startRun() {
             </AppButton>
           </div>
           <p class="text-[11px] leading-relaxed text-txt3">{{ t('pages.runLaunch.envHint') }}</p>
-          <div v-if="envRows.length" class="overflow-hidden border border-line bg-base">
+          <div v-if="envRows.length" class="rounded-lg overflow-hidden border border-line bg-base">
             <div class="hidden gap-2 border-b border-line bg-elevated/55 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_72px_36px]">
               <span>{{ t('pages.runLaunch.envKey') }}</span>
               <span>{{ t('pages.runLaunch.envValue') }}</span>

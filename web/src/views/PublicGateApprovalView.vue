@@ -1053,7 +1053,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
     >
       <div class="flex items-center gap-2">
         <span
-          class="border border-line bg-elevated px-2 py-0.5 text-[11px] text-txt2"
+          class="rounded-md border border-line bg-elevated px-2 py-0.5 text-[11px] text-txt2"
           data-testid="public-gate-badge"
         >
           {{
@@ -1080,7 +1080,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
         </span>
         <span
           v-if="isActive && !doneKind"
-          class="border border-accent/45 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2"
+          class="rounded-md border border-accent/45 bg-accent/10 px-2 py-0.5 text-[11px] text-accent-2"
           data-testid="public-gate-preset-chip"
         >
           {{ presetChipLabel }}
@@ -1115,7 +1115,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
       <h1 class="text-lg font-semibold">{{ t('pages.publicGate.networkError') }}</h1>
       <button
         type="button"
-        class="inline-flex min-h-11 items-center justify-center border border-line bg-surface px-4 text-sm font-medium text-txt"
+        class="rounded-lg inline-flex min-h-11 items-center justify-center border border-line bg-surface px-4 text-sm font-medium text-txt"
         data-testid="public-gate-network-retry"
         @click="loadPreview()"
       >
@@ -1232,7 +1232,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
           <div class="flex h-full min-h-0 flex-col" data-testid="public-gate-sidebar">
             <div
               v-if="showReactOnlyDeadend"
-              class="flex flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line-strong bg-elevated px-6 py-10 text-center"
+              class="rounded-lg flex flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line-strong bg-elevated px-6 py-10 text-center"
               data-testid="public-gate-react-only-deadend"
               role="status"
             >
@@ -1305,7 +1305,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               v-model="reviewerName"
               type="text"
               maxlength="80"
-              class="w-[8rem] border border-line bg-elevated px-2 py-1 text-xs text-txt"
+              class="rounded-md w-[8rem] border border-line bg-elevated px-2 py-1 text-xs text-txt"
               data-testid="public-gate-name"
               :placeholder="t('pages.publicGate.namePh')"
               autocomplete="name"
@@ -1314,7 +1314,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               v-model="comment"
               type="text"
               maxlength="4000"
-              class="min-w-[10rem] flex-1 border border-line bg-elevated px-2 py-1 text-xs text-txt md:w-[16rem] md:flex-none"
+              class="rounded-md min-w-[10rem] flex-1 border border-line bg-elevated px-2 py-1 text-xs text-txt md:w-[16rem] md:flex-none"
               data-testid="public-gate-comment"
               :placeholder="t('pages.publicGate.commentPh')"
             />

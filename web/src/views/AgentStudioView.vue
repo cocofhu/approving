@@ -549,7 +549,7 @@ const {
           v-if="tab !== 'files' && isMobile && tab !== 'data'"
           class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8 text-center"
         >
-          <div class="flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">
+          <div class="rounded-md flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">
             <Icon name="alert" :size="20" />
           </div>
           <h3 class="text-[14px] font-semibold text-txt">{{ t('pages.agentStudio.mobile.desktopOnlyTitle') }}</h3>
@@ -558,7 +558,7 @@ const {
           </p>
           <button
             type="button"
-            class="min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
+            class="rounded-md min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
             data-testid="studio-mobile-back-files"
             @click="requestStudioTab('files')"
           >
@@ -661,7 +661,7 @@ const {
             type="text"
             autocomplete="off"
             :placeholder="t('pages.agentStudio.org.manageSearchPlaceholder')"
-            class="w-full border border-line bg-base py-2 pl-8 pr-8 text-[13px] text-txt outline-none transition focus:border-accent"
+            class="rounded-md w-full border border-line bg-base py-2 pl-8 pr-8 text-[13px] text-txt outline-none transition focus:border-accent"
             data-test="manage-search"
           />
           <button
@@ -682,7 +682,7 @@ const {
               : t('pages.agentStudio.org.manageTotalCount', { total: agentNames.length })
           }}
         </p>
-        <div v-if="manageSearchActive && !filteredManageNames.length" class="border border-dashed border-line px-4 py-8 text-center">
+        <div v-if="manageSearchActive && !filteredManageNames.length" class="rounded-lg border border-dashed border-line px-4 py-8 text-center">
           <Icon name="search" :size="20" class="mx-auto mb-2 text-txt3" />
           <p class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.org.manageNoMatchTitle') }}</p>
           <p class="mt-1 text-[12px] text-txt3">{{ t('pages.agentStudio.org.manageNoMatchDesc') }}</p>
@@ -695,7 +695,7 @@ const {
           v-for="name in filteredManageNames"
           :key="name"
           :data-manage-agent="name"
-          class="flex items-center gap-2 border px-2.5 py-2 transition"
+          class="rounded-lg flex items-center gap-2 border px-2.5 py-2 transition"
           :class="
             manageFocusAgent === name
               ? 'border-accent/40 bg-accent-dim shadow-[inset_0_0_0_1px_rgba(99,102,241,0.35)]'
@@ -732,7 +732,7 @@ const {
       :width="420"
       @close="closeRenameBlocked"
     >
-      <div class="border border-warn/40 bg-warn/10 px-3.5 py-3 text-[13px] leading-6 text-warn">
+      <div class="rounded-lg border border-warn/40 bg-warn/10 px-3.5 py-3 text-[13px] leading-6 text-warn">
         <div class="mb-1.5 text-[14px] font-semibold text-txt">{{ t('pages.agentStudio.org.renameBlockedMessage') }}</div>
         <p>{{ t('pages.agentStudio.org.renameBlockedBody') }}</p>
         <p class="mt-2 text-[12px] text-txt2">{{ t('pages.agentStudio.org.renameBlockedHint') }}</p>
@@ -848,7 +848,7 @@ const {
                       data-org-project
                     >({{ row.projectLabel }})</span>
                   </span>
-                  <span class="ml-auto inline-flex h-4 min-w-[18px] shrink-0 items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3">{{ row.count }}</span>
+                  <span class="rounded-md ml-auto inline-flex h-4 min-w-[18px] shrink-0 items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3">{{ row.count }}</span>
                 </button>
               </template>
               <template v-else-if="row.kind === 'ungrouped-header'">
@@ -861,7 +861,7 @@ const {
                   <Icon name="chevron-right" :size="12" class="shrink-0 text-txt3" :class="row.collapsed ? '' : 'rotate-90'" />
                   <Icon name="folder" :size="14" class="shrink-0 text-txt3" />
                   <span class="truncate font-medium text-txt2">{{ t('pages.agentStudio.org.ungrouped') }}</span>
-                  <span class="ml-auto inline-flex h-4 min-w-[18px] shrink-0 items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3">{{ row.count }}</span>
+                  <span class="rounded-md ml-auto inline-flex h-4 min-w-[18px] shrink-0 items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3">{{ row.count }}</span>
                 </button>
               </template>
               <template v-else>
@@ -879,14 +879,14 @@ const {
                       <span class="truncate text-txt">{{ row.name }}</span>
                       <span
                         v-if="row.multi"
-                        class="shrink-0 border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-2"
+                        class="rounded-md shrink-0 border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-2"
                       >{{ t('pages.agentStudio.org.multiGroup') }}</span>
                     </span>
                   </span>
                 </button>
               </template>
             </div>
-            <p class="mx-1 mt-2 border border-dashed border-line-strong/60 bg-white/[0.015] px-2.5 py-2 text-[11px] leading-relaxed text-txt3">
+            <p class="rounded-md mx-1 mt-2 border border-dashed border-line-strong/60 bg-white/[0.015] px-2.5 py-2 text-[11px] leading-relaxed text-txt3">
               {{ t('pages.agentStudio.mobile.orgSheetHint') }}
             </p>
           </div>
@@ -967,7 +967,7 @@ const {
           {{ t('pages.agentStudio.org.clearSensitive.selectNone') }}
         </AppButton>
       </div>
-      <div class="max-h-60 overflow-auto border border-line" data-test="clear-sensitive-modal">
+      <div class="rounded-lg max-h-60 overflow-auto border border-line" data-test="clear-sensitive-modal">
         <label
           v-for="hit in clearSensitiveHits"
           :key="hit.key"
@@ -1009,13 +1009,13 @@ const {
       @close="closeBatchConflict"
     >
       <p class="text-[13px] leading-6 text-txt2">{{ t('pages.agentStudio.exportImport.batchConflict.intro') }}</p>
-      <ul class="mt-2 max-h-32 overflow-auto border border-line bg-base px-3 py-2 text-[12px] text-txt">
+      <ul class="rounded-md mt-2 max-h-32 overflow-auto border border-line bg-base px-3 py-2 text-[12px] text-txt">
         <li v-for="n in batchConflictNames" :key="n" class="font-mono">{{ n }}</li>
       </ul>
       <div class="mt-3 flex flex-col gap-2">
         <button
           type="button"
-          class="w-full border border-accent/50 bg-accent-dim px-3 py-2.5 text-left"
+          class="rounded-lg w-full border border-accent/50 bg-accent-dim px-3 py-2.5 text-left"
           @click="confirmBatchRename"
         >
           <div class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.exportImport.batchConflict.rename') }}</div>
@@ -1023,7 +1023,7 @@ const {
         </button>
         <button
           type="button"
-          class="w-full border border-err/40 bg-base px-3 py-2.5 text-left hover:bg-err/10"
+          class="rounded-lg w-full border border-err/40 bg-base px-3 py-2.5 text-left hover:bg-err/10"
           @click="confirmBatchOverwrite"
         >
           <div class="text-[13px] font-medium text-err">{{ t('pages.agentStudio.exportImport.batchConflict.overwrite') }}</div>
@@ -1031,7 +1031,7 @@ const {
         </button>
         <button
           type="button"
-          class="w-full border border-line bg-base px-3 py-2.5 text-left hover:bg-elevated"
+          class="rounded-md w-full border border-line bg-base px-3 py-2.5 text-left hover:bg-elevated"
           @click="closeBatchConflict"
         >
           <div class="text-[13px] font-medium text-txt">{{ t('pages.agentStudio.exportImport.batchConflict.cancel') }}</div>
@@ -1065,7 +1065,7 @@ const {
       <div class="mt-3 flex flex-col gap-2">
         <button
           type="button"
-          class="w-full border px-3 py-2.5 text-left transition"
+          class="rounded-lg w-full border px-3 py-2.5 text-left transition"
           :class="importConflictAction === 'overwrite' ? 'border-accent/50 bg-accent-dim' : 'border-line bg-base hover:bg-elevated'"
           @click="selectImportConflict('overwrite')"
         >
@@ -1074,7 +1074,7 @@ const {
         </button>
         <button
           type="button"
-          class="w-full border px-3 py-2.5 text-left transition"
+          class="rounded-lg w-full border px-3 py-2.5 text-left transition"
           :class="importConflictAction === 'rename' ? 'border-accent/50 bg-accent-dim' : 'border-line bg-base hover:bg-elevated'"
           @click="selectImportConflict('rename')"
         >
@@ -1083,7 +1083,7 @@ const {
         </button>
         <button
           type="button"
-          class="w-full border px-3 py-2.5 text-left transition"
+          class="rounded-lg w-full border px-3 py-2.5 text-left transition"
           :class="importConflictAction === 'cancel' ? 'border-accent/50 bg-accent-dim' : 'border-line bg-base hover:bg-elevated'"
           @click="selectImportConflict('cancel')"
         >
@@ -1126,7 +1126,7 @@ const {
       <div
         v-if="isMobile && showFullNameTip"
         data-test="agent-name-tip"
-        class="fixed z-[9999] border border-line bg-elevated px-3 py-2.5 text-[12.5px] text-txt shadow-card"
+        class="rounded-lg fixed z-[9999] border border-line bg-elevated px-3 py-2.5 text-[12.5px] text-txt shadow-card"
         :style="fullNameTipStyle"
         @click.stop
       >
@@ -1163,7 +1163,7 @@ const {
           <label
             v-for="p in projects"
             :key="p.id"
-            class="flex cursor-pointer items-center gap-2.5 border border-line bg-base px-2.5 py-2"
+            class="rounded-lg flex cursor-pointer items-center gap-2.5 border border-line bg-base px-2.5 py-2"
             :class="assignTargetId === p.id ? 'border-accent bg-accent-dim' : ''"
           >
             <input v-model="assignTargetId" type="radio" class="accent-accent" :value="p.id" />
@@ -1198,7 +1198,7 @@ const {
     >
       <div class="space-y-2 text-[13px] leading-6 text-txt2">
         <p>{{ t('pages.agentStudio.project.assignCoverLead', { n: assignDiffBound.length }) }}</p>
-        <div class="border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px]">
+        <div class="rounded-lg border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px]">
           <b class="text-warn">{{ t('pages.agentStudio.project.assignCoverWarn') }}</b>
           <ul class="mt-1.5 list-disc space-y-1 pl-5">
             <li>{{ t('pages.agentStudio.project.switchItemMemory') }}</li>
@@ -1281,7 +1281,7 @@ const {
       <div
         v-if="toastMsg"
         data-test="studio-toast"
-        class="fixed bottom-5 right-5 z-[10000] border border-line bg-elevated px-3.5 py-2 text-[12px] text-txt2 shadow-card"
+        class="rounded-lg fixed bottom-5 right-5 z-[10000] border border-line bg-elevated px-3.5 py-2 text-[12px] text-txt2 shadow-card"
       >
         {{ toastMsg }}
       </div>

@@ -191,7 +191,7 @@ describe('TokenStatsPanel', () => {
     wrapper.unmount()
   })
 
-  it('chart cards are square-bordered like 用量统计 (g2.2)', async () => {
+  it('chart cards use card radius rounded-lg (g2.2)', async () => {
     getProjectTokenStats.mockResolvedValue(sampleStats())
     const wrapper = mountPanel()
     await flushPromises()
@@ -203,15 +203,16 @@ describe('TokenStatsPanel', () => {
       wrapper.find('[data-testid="token-stats-model-rank-card"]'),
     ]
     for (const card of cards) {
-      expect(card.classes()).toEqual(expect.arrayContaining(['border', 'border-line', 'bg-surface']))
-      expect(card.classes().some((c) => c.startsWith('rounded'))).toBe(false)
+      expect(card.classes()).toEqual(
+        expect.arrayContaining(['rounded-lg', 'border', 'border-line', 'bg-surface']),
+      )
     }
     wrapper.unmount()
 
     getProjectTokenStats.mockResolvedValue(sampleStats({ empty: true, trend: [], workflows: [] }))
     const empty = mountPanel()
     await flushPromises()
-    expect(empty.find('[data-testid="token-stats-empty"]').html()).not.toMatch(/rounded-xl/)
+    expect(empty.find('[data-testid="token-stats-empty"]').html()).toMatch(/rounded-lg/)
     empty.unmount()
   })
 

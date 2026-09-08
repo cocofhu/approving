@@ -178,7 +178,7 @@ function closeEnlarge() {
     <!-- Multi-card name+status list (g1.2 / g3.2): no max-height / own overflow. -->
     <div
       v-if="showList"
-      class="mb-3 border border-line bg-base"
+      class="rounded-lg mb-3 border border-line bg-base"
       role="listbox"
       :aria-label="t('pages.nodeOutput.outputCards.listTitle')"
       data-testid="output-result-list"
@@ -235,7 +235,7 @@ function closeEnlarge() {
           :class="currentCard.status === 'failed' ? 'text-err' : 'text-txt'"
         >{{ currentCard.title }}</span>
         <span
-          class="shrink-0 border border-line px-1.5 py-0.5 text-[10px] text-txt3"
+          class="rounded-md shrink-0 border border-line px-1.5 py-0.5 text-[10px] text-txt3"
           data-testid="output-result-detail-kind"
         >{{ detailKindLabel(currentCard) }}</span>
         <button

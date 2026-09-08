@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
       v-else-if="loadDenied"
       role="status"
       data-testid="settings-denied"
-      class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+      class="rounded-lg border border-warn/40 bg-warn/10 px-5 py-10 text-center"
     >
       <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
       <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
@@ -351,7 +351,7 @@ onBeforeUnmount(() => {
       v-else-if="loadFailed"
       role="status"
       data-testid="settings-failed"
-      class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+      class="rounded-lg border border-err/40 bg-err/10 px-5 py-10 text-center"
     >
       <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
       <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
@@ -374,7 +374,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-if="group.id === 'capacity'" class="border-b border-line px-4 py-3.5">
-          <div class="border border-line bg-base px-3.5 py-3">
+          <div class="rounded-lg border border-line bg-base px-3.5 py-3">
             <div class="mb-2.5 flex items-baseline justify-between gap-3">
               <span class="text-xs text-txt2">{{ t('pages.settings.capacity.activeSandboxes') }}</span>
               <span class="text-[22px] font-bold tabular-nums leading-none text-txt">
@@ -383,12 +383,12 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="mb-2.5 flex flex-wrap gap-2">
-              <span class="inline-flex items-center gap-1.5 border border-line bg-elevated px-2.5 py-1 text-[11px] text-txt2">
+              <span class="rounded-md inline-flex items-center gap-1.5 border border-line bg-elevated px-2.5 py-1 text-[11px] text-txt2">
                 <span class="h-1.5 w-1.5 shrink-0 bg-info" />
                 {{ t('pages.settings.capacity.test') }} <strong class="tabular-nums text-txt">{{ usage.testCount }}</strong>
                 <span class="text-[10px] text-txt3">/ {{ testLimit }} {{ t('pages.settings.capacity.limit') }}</span>
               </span>
-              <span class="inline-flex items-center gap-1.5 border border-line bg-elevated px-2.5 py-1 text-[11px] text-txt2">
+              <span class="rounded-md inline-flex items-center gap-1.5 border border-line bg-elevated px-2.5 py-1 text-[11px] text-txt2">
                 <span class="h-1.5 w-1.5 shrink-0 bg-accent-2" />
                 {{ t('pages.settings.capacity.run') }} <strong class="tabular-nums text-txt">{{ runCount }}</strong>
                 <span class="text-[10px] text-txt3">/ {{ runLimit }} {{ t('pages.settings.capacity.concurrency') }}</span>

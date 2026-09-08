@@ -21,7 +21,7 @@ function enlarge() {
 
 <template>
   <div
-    class="overflow-hidden border bg-elevated transition-colors"
+    class="overflow-hidden rounded-lg border bg-elevated transition-colors"
     :class="highlighted ? 'border-accent shadow-[0_0_0_1px_rgba(123,97,255,0.3)]' : 'border-line'"
   >
     <div class="flex items-center gap-1.5 border-b border-line px-2 py-1 text-[10px] text-txt3">
