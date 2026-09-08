@@ -94,6 +94,15 @@ body {
   border-radius: 9999px !important;
 }
 
+/* Floating sidebar card + capsule nav (plan g1.3) — beat universal radius:0 */
+.force-radius-xl {
+  border-radius: 16px !important;
+}
+
+.force-radius-pill {
+  border-radius: 10px !important;
+}
+
 /* ghost scrollbar — idle-invisible (align AppModal / approved page.html) */
 * {
   scrollbar-width: thin;
@@ -140,6 +149,26 @@ html:not(.light) *.is-scrolling::-webkit-scrollbar {
   background: rgb(var(--c-base));
 }
 
+/* Workspace desktop: dotted canvas around the floating sidebar card (plan g1.3 / g3.1). */
+.app-shell-dotgrid {
+  background-color: rgb(var(--c-base));
+  background-image: radial-gradient(rgb(var(--c-line)) 0.85px, transparent 0.85px);
+  background-size: 16px 16px;
+}
+
+.app-sidebar-card {
+  border-radius: 16px !important;
+  box-shadow:
+    0 8px 28px rgb(0 0 0 / 22%),
+    0 0 0 1px rgb(var(--c-line));
+}
+
+html.light .app-sidebar-card {
+  box-shadow:
+    0 8px 28px rgba(40, 50, 70, 0.1),
+    0 0 0 1px rgba(40, 50, 70, 0.04);
+}
+
 @layer components {
   .card {
     @apply rounded-lg border border-line bg-surface;
@@ -174,11 +203,12 @@ html:not(.light) *.is-scrolling::-webkit-scrollbar {
     @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line bg-elevated px-2 py-0.5 text-xs text-txt2;
   }
   .nav-item {
-    @apply flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-txt2 transition
+    @apply flex items-center gap-2.5 px-3 py-[9px] text-sm text-txt2 transition
       hover:bg-elevated hover:text-txt;
+    border-radius: 10px !important;
   }
   .nav-item.active {
-    @apply bg-accent-dim text-txt;
+    @apply bg-elevated font-semibold text-txt;
   }
   /* Utility marker for scroll regions; idle-invisible comes from global rules above. */
   .scroll-area {

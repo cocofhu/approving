@@ -180,6 +180,26 @@ describe('AppShell (no topbar + floating ball)', () => {
     wrapper.unmount()
   })
 
+  it('workspace shell uses dotted canvas and sidebar padding (plan g1.3)', () => {
+    const wrapper = mountShell()
+    expect(wrapper.find('[data-testid="app-shell-workspace"]').exists()).toBe(true)
+    expect(wrapper.find('.app-shell-dotgrid').exists()).toBe(true)
+    const slot = wrapper.find('[data-testid="app-shell-sidebar-slot"]')
+    expect(slot.classes()).toContain('py-[14px]')
+    expect(slot.classes()).toContain('pl-[14px]')
+    wrapper.unmount()
+  })
+
+  it('full pages skip dotted canvas and sidebar pad (plan g3.1)', () => {
+    routeState.meta = { full: true }
+    const wrapper = mountShell()
+    expect(wrapper.find('[data-testid="app-shell-full"]').exists()).toBe(true)
+    expect(wrapper.find('.app-shell-dotgrid').exists()).toBe(false)
+    const slot = wrapper.find('[data-testid="app-shell-sidebar-slot"]')
+    expect(slot.classes()).not.toContain('py-[14px]')
+    wrapper.unmount()
+  })
+
   it('mobile drawer stays md:hidden (g3.2 source lock)', () => {
     const src = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'AppShell.vue'),

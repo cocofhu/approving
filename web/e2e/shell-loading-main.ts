@@ -9,7 +9,7 @@ import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import { installRoutePendingGuards } from '../src/lib/shared/routePending'
 import { installAuthGuard } from '../src/lib/shared/authGuard'
 import AppInlineError from '../src/components/ui/AppInlineError.vue'
-import { sidebarNavGroups } from '../src/data/sidebarNav'
+import { shellNavPaths } from '../src/data/shellNavPaths'
 
 installIdleScrollbar()
 
@@ -92,14 +92,12 @@ async function bootstrap() {
     },
   })
 
-  const extraRoutes = sidebarNavGroups.flatMap((g) =>
-    g.items
-      .filter((item) => item.to !== '/dashboard' && item.to !== '/runs')
-      .map((item) => ({
-        path: item.to,
-        component: DummyPage,
-      })),
-  )
+  const extraRoutes = shellNavPaths()
+    .filter((to) => to !== '/dashboard' && to !== '/runs')
+    .map((to) => ({
+      path: to,
+      component: DummyPage,
+    }))
 
   const router = createRouter({
     history: createMemoryHistory(),

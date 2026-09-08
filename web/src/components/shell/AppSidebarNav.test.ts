@@ -6,12 +6,14 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import nav from '@/locales/zh-CN/nav.json'
 
+const routeState = { path: '/dashboard', query: {} as Record<string, unknown>, meta: {} as Record<string, unknown> }
+
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ path: '/runs', meta: {} }),
+  useRoute: () => routeState,
   RouterLink: {
     props: ['to'],
     template:
-      '<a :href="to" :data-to="to" @click="$emit(\'click\')"><slot /></a>',
+      '<a :href="typeof to === \'string\' ? to : (to.path || \'\')" :data-to="typeof to === \'string\' ? to : (to.path || \'\')" @click="$emit(\'click\')"><slot /></a>',
   },
 }))
 
@@ -100,6 +102,9 @@ beforeEach(() => {
   favMocks.displayItems.value = []
   favMocks.hydrateDisplay.mockResolvedValue(undefined)
   breakpointMocks.isMobile.value = false
+  routeState.path = '/dashboard'
+  routeState.query = {}
+  routeState.meta = {}
   vi.useFakeTimers()
 })
 
@@ -152,9 +157,15 @@ describe('AppSidebarNav', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('快捷流水线')
-    // Primary nav still present
+    // Primary workspace nav still present (plan g1.1)
     expect(wrapper.find('[data-to="/notifications"]').exists()).toBe(true)
     expect(wrapper.find('[data-to="/settings"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/dashboard"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/gates"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/stats"]').exists()).toBe(false)
+    expect(wrapper.find('[data-to="/projects"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('配置')
     wrapper.unmount()
     vi.useRealTimers()
   })
@@ -239,6 +250,67 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-testid="nav-quick-pipeline-drag-handle"]').exists()).toBe(false)
     await wrapper.find('[data-testid="nav-quick-pipeline-item"]').trigger('click')
     expect(favMocks.getFavoriteWorkflow).toHaveBeenCalledWith('wf-1')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('settings chrome replaces workspace four items and hides quick pipelines (plan g2.1 / g1.2)', async () => {
+    routeState.path = '/projects'
+    favMocks.displayItems.value = [
+      {
+        workflowId: 'wf-1',
+        favoritedAt: 1,
+        name: '夜间回归',
+        projectId: 'p1',
+        projectName: 'checkout-service',
+        status: 'published',
+      },
+    ]
+    const wrapper = mountNav()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-back-home"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-back-home"]').attributes('data-to')).toBe('/dashboard')
+    expect(wrapper.find('[data-to="/projects"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/runs"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/stats"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-settings-integrations"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('返回首页')
+    expect(wrapper.text()).toContain('通用')
+    expect(wrapper.text()).toContain('平台规则')
+    expect(wrapper.text()).not.toContain('待审批')
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('highlights projects for /projects/:id and general only on exact /settings (plan g2.2)', async () => {
+    routeState.path = '/projects/abc'
+    const wrapper = mountNav()
+    await flushPromises()
+    const projectLink = wrapper.find('[data-to="/projects"]')
+    expect(projectLink.classes()).toContain('active')
+    wrapper.unmount()
+
+    routeState.path = '/settings'
+    const general = mountNav()
+    await flushPromises()
+    const links = general.findAll('[data-to="/settings"]')
+    const generalLink = links.find((l) => l.text().includes('通用'))
+    expect(generalLink?.classes()).toContain('active')
+    expect(general.find('[data-to="/settings/platform-rules"]').classes()).not.toContain('active')
+    general.unmount()
+    vi.useRealTimers()
+  })
+
+  it('full pages do not insert settings chrome (plan g3.1)', async () => {
+    routeState.path = '/runs/run-1'
+    routeState.meta = { full: true }
+    const wrapper = mountNav()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(false)
     wrapper.unmount()
     vi.useRealTimers()
   })

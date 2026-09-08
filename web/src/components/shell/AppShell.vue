@@ -81,8 +81,18 @@ onUnmounted(() => stopShutdownPolling())
 </script>
 
 <template>
-  <div class="relative flex h-screen w-screen overflow-hidden bg-base text-txt">
-    <AppSidebar />
+  <div
+    class="relative flex h-screen w-screen overflow-hidden text-txt"
+    :class="full ? 'bg-base' : 'app-shell-dotgrid'"
+    :data-testid="full ? 'app-shell-full' : 'app-shell-workspace'"
+  >
+    <div
+      class="hidden h-full min-h-0 shrink-0 md:flex"
+      :class="!full && !sidebarHidden ? 'py-[14px] pl-[14px]' : ''"
+      data-testid="app-shell-sidebar-slot"
+    >
+      <AppSidebar />
+    </div>
 
     <div class="flex min-w-0 flex-1 flex-col">
       <div
@@ -130,7 +140,7 @@ onUnmounted(() => stopShutdownPolling())
         >
           <slot />
         </div>
-        <div v-else class="scroll-area safe-area-bottom h-full min-h-0 overflow-y-auto bg-base">
+        <div v-else class="scroll-area safe-area-bottom h-full min-h-0 overflow-y-auto">
           <div
             class="flex h-full min-h-0 flex-col px-4 py-4 md:px-6 md:py-6"
             :class="{ 'app-refresh-dim': dimContent }"

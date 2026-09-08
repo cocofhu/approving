@@ -9,7 +9,7 @@ import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import { installRoutePendingGuards } from '../src/lib/shared/routePending'
 import { installAuthGuard } from '../src/lib/shared/authGuard'
 import NotificationsView from '../src/views/NotificationsView.vue'
-import { sidebarNavGroups } from '../src/data/sidebarNav'
+import { shellNavPaths } from '../src/data/shellNavPaths'
 import {
   isBeforeBaseline,
   mapRunToNotification,
@@ -565,14 +565,12 @@ async function bootstrap() {
     '/gates',
     '/login',
   ])
-  const extraRoutes = sidebarNavGroups.flatMap((g) =>
-    g.items
-      .filter((item) => !known.has(item.to))
-      .map((item) => ({
-        path: item.to,
-        component: DummyPage,
-      })),
-  )
+  const extraRoutes = shellNavPaths()
+    .filter((to) => !known.has(to))
+    .map((to) => ({
+      path: to,
+      component: DummyPage,
+    }))
 
   const router = createRouter({
     history: createMemoryHistory(),
