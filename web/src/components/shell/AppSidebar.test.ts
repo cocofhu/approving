@@ -9,6 +9,7 @@ import { __resetSidebarHiddenForTests } from '@/lib/shared/sidebarHidden'
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useRoute: () => ({ path: '/dashboard', meta: {} }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
@@ -123,6 +124,17 @@ describe('AppSidebar', () => {
     expect(aside.attributes('aria-hidden')).toBe('true')
     expect(wrapper.find('[data-testid="nav"]').exists()).toBe(true)
     expect(wrapper.html()).toContain('min-w-[232px]')
+    wrapper.unmount()
+  })
+
+  it('workspace desktop sidebar uses floating card shell (plan g1.3)', () => {
+    const wrapper = mountSidebar()
+    const aside = wrapper.find('[data-testid="app-desktop-sidebar"]')
+    expect(aside.attributes('data-floating')).toBe('true')
+    expect(aside.classes()).not.toContain('border-r')
+    const card = wrapper.find('[data-testid="app-sidebar-card"]')
+    expect(card.classes()).toContain('app-sidebar-card')
+    expect(card.classes()).toContain('bg-surface')
     wrapper.unmount()
   })
 

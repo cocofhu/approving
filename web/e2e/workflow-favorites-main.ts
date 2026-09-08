@@ -8,7 +8,7 @@ import { initLocale, setLocale } from '../src/lib/shared/locale'
 import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
 import { installRoutePendingGuards } from '../src/lib/shared/routePending'
 import { installAuthGuard } from '../src/lib/shared/authGuard'
-import { sidebarNavGroups } from '../src/data/sidebarNav'
+import { shellNavPaths } from '../src/data/shellNavPaths'
 import { useWorkflowFavorites, WORKFLOW_FAVORITES_MAX } from '../src/lib/run/useWorkflowFavorites'
 import type { Workflow } from '../src/lib/shared/types'
 
@@ -274,14 +274,12 @@ async function bootstrap() {
     },
   })
 
-  const extraRoutes = sidebarNavGroups.flatMap((g) =>
-    g.items
-      .filter((item) => item.to !== '/dashboard' && item.to !== '/runs')
-      .map((item) => ({
-        path: item.to,
-        component: DummyPage,
-      })),
-  )
+  const extraRoutes = shellNavPaths()
+    .filter((to) => to !== '/dashboard' && to !== '/runs')
+    .map((to) => ({
+      path: to,
+      component: DummyPage,
+    }))
 
   const router = createRouter({
     history: createMemoryHistory(),

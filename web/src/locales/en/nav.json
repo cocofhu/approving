@@ -12,10 +12,14 @@
     "quickPipelines": "Quick pipelines",
     "quickPipelinesEmpty": "Star a pipeline to save a shortcut",
     "groupConfig": "Configuration",
+    "groupPlatform": "Platform",
     "agents": "Agent studio",
     "sandboxes": "Sandboxes",
     "integrations": "Integrations",
     "triggers": "Triggers",
-    "settings": "Settings"
+    "settings": "Settings",
+    "general": "General",
+    "platformRules": "Platform rules",
+    "backHome": "Back to home"
   }
 }

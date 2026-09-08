@@ -1,36 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import { sidebarNavGroups } from './sidebarNav'
 
-describe('sidebarNav', () => {
-  it('exposes dashboard and config groups', () => {
-    expect(sidebarNavGroups.length).toBeGreaterThanOrEqual(2)
-    expect(sidebarNavGroups[0].items.some((i) => i.to === '/dashboard')).toBe(true)
-    expect(sidebarNavGroups[0].items.some((i) => i.to === '/stats')).toBe(true)
-    expect(sidebarNavGroups[1].titleKey).toBe('nav.groupConfig')
-    expect(sidebarNavGroups[1].items.some((i) => i.to === '/settings')).toBe(true)
+describe('sidebarNav (plan g1.1)', () => {
+  it('workspace primary is exactly home / gates / notifications / settings', () => {
+    expect(sidebarNavGroups).toHaveLength(1)
+    expect(sidebarNavGroups[0].titleKey).toBeUndefined()
+    expect(sidebarNavGroups[0].items.map((i) => i.to)).toEqual([
+      '/dashboard',
+      '/gates',
+      '/notifications',
+      '/settings',
+    ])
   })
 
-  // plan g1.1: config group no longer exposes /integrations or /triggers
-  it('config group keeps agents/sandboxes/settings without integrations or triggers', () => {
-    const configTos = sidebarNavGroups[1].items.map((i) => i.to)
-    expect(configTos).toEqual(['/agents', '/sandboxes', '/settings'])
-    expect(configTos).not.toContain('/integrations')
-    expect(configTos).not.toContain('/triggers')
-  })
-
-  it('does not expose a global /board entry', () => {
+  it('does not expose collapsed pages or config group as workspace primary', () => {
     const allTos = sidebarNavGroups.flatMap((g) => g.items.map((i) => i.to))
+    expect(allTos).not.toContain('/stats')
+    expect(allTos).not.toContain('/projects')
+    expect(allTos).not.toContain('/runs')
+    expect(allTos).not.toContain('/artifacts')
+    expect(allTos).not.toContain('/agents')
+    expect(allTos).not.toContain('/sandboxes')
     expect(allTos).not.toContain('/board')
-    expect(allTos).toContain('/projects')
+    expect(allTos).not.toContain('/integrations')
+    expect(allTos).not.toContain('/triggers')
+    expect(sidebarNavGroups.some((g) => g.titleKey === 'nav.groupConfig')).toBe(false)
   })
 
-  it('exposes independent /notifications next to runs/gates without replacing them', () => {
-    const primary = sidebarNavGroups[0].items.map((i) => i.to)
-    expect(primary).toContain('/notifications')
-    expect(primary).toContain('/runs')
-    expect(primary).toContain('/gates')
-    expect(sidebarNavGroups[0].items.find((i) => i.to === '/notifications')?.labelKey).toBe(
-      'nav.notifications',
-    )
+  it('keeps notifications and gates label keys for badges (plan g1.2)', () => {
+    const items = sidebarNavGroups[0].items
+    expect(items.find((i) => i.to === '/notifications')?.labelKey).toBe('nav.notifications')
+    expect(items.find((i) => i.to === '/gates')?.labelKey).toBe('nav.gates')
   })
 })

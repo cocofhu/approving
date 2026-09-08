@@ -80,10 +80,11 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('nav-notifications-badge')).toHaveText('3')
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
 
-    // Sidebar dual entry still present alongside runs/gates
+    // Workspace dual entry: notifications + gates stay; runs live under settings chrome (plan g1.1)
     await expect(page.getByRole('link', { name: '通知' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '运行' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '设置' })).toBeVisible()
     await expect(page.getByRole('link', { name: '待审批' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '运行' })).toHaveCount(0)
 
     await page.getByTestId('notifications-filter-unread').click()
     await expect(page.getByTestId('notifications-item')).toHaveCount(3)

@@ -4,6 +4,13 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { sidebarNavGroups } from '@/data/sidebarNav'
+import {
+  isSettingsChrome,
+  settingsItemActive,
+  settingsItemKey,
+  settingsNavItems,
+  type SettingsNavItem,
+} from '@/data/settingsNav'
 import { usePendingGates } from '@/lib/inbox/usePendingGates'
 import { useRunTerminalNotifications } from '@/lib/run/useRunTerminalNotifications'
 import { useWorkflowFavorites } from '@/lib/run/useWorkflowFavorites'
@@ -73,6 +80,17 @@ watch(
 
 function isActive(to: string) {
   return route.path === to || route.path.startsWith(to + '/')
+}
+
+const settingsChrome = computed(() => isSettingsChrome(route.path, route.meta.full === true))
+
+function isSettingsItemActive(item: SettingsNavItem) {
+  return settingsItemActive(item, route.path, route.query)
+}
+
+function settingsLinkTo(item: SettingsNavItem) {
+  if (item.query) return { path: item.to, query: item.query }
+  return item.to
 }
 
 function onNavigate() {
@@ -195,19 +213,48 @@ function onHandlePointerDown(workflowId: string, event: PointerEvent) {
 }
 
 const primaryGroup = sidebarNavGroups[0]
-const configGroups = sidebarNavGroups.slice(1)
+const settingsItems = settingsNavItems
 </script>
 
 <template>
-  <nav class="scroll-area flex-1 overflow-y-auto px-3 py-2" data-testid="app-sidebar-nav">
-    <!-- Primary static nav (dashboard → notifications) -->
-    <div v-if="primaryGroup" class="mb-3">
-      <div
-        v-if="primaryGroup.titleKey"
-        class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-txt3"
+  <nav
+    class="scroll-area flex-1 overflow-y-auto px-3 py-2"
+    data-testid="app-sidebar-nav"
+    :data-nav-mode="settingsChrome ? 'settings' : 'workspace'"
+  >
+    <!-- Settings chrome: back to home + category list (plan g2.1) -->
+    <div v-if="settingsChrome" class="mb-3" data-testid="nav-settings-chrome">
+      <RouterLink
+        to="/dashboard"
+        class="nav-item mb-2 text-txt3"
+        data-testid="nav-back-home"
+        @click="onNavigate"
       >
-        {{ t(primaryGroup.titleKey) }}
-      </div>
+        <Icon name="arrow-left" :size="16" />
+        <span class="flex-1 text-xs">{{ t('nav.backHome') }}</span>
+      </RouterLink>
+      <template v-for="(item, index) in settingsItems" :key="settingsItemKey(item, index)">
+        <div
+          v-if="item.groupKey"
+          class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-txt3"
+        >
+          {{ t(item.groupKey) }}
+        </div>
+        <RouterLink
+          :to="settingsLinkTo(item)"
+          class="nav-item mb-0.5"
+          :class="{ active: isSettingsItemActive(item) }"
+          :data-testid="item.query?.integrations ? 'nav-settings-integrations' : undefined"
+          @click="onNavigate"
+        >
+          <Icon :name="item.icon" :size="17" />
+          <span class="flex-1">{{ t(item.labelKey) }}</span>
+        </RouterLink>
+      </template>
+    </div>
+
+    <!-- Workspace primary: four items (plan g1.1) -->
+    <div v-else-if="primaryGroup" class="mb-3" data-testid="nav-workspace-chrome">
       <RouterLink
         v-for="item in primaryGroup.items"
         :key="item.to"
@@ -220,14 +267,14 @@ const configGroups = sidebarNavGroups.slice(1)
         <span class="flex-1">{{ t(item.labelKey) }}</span>
         <span
           v-if="badgeFor(item.to)"
-          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white"
+          class="force-radius-full flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white"
           :data-testid="item.to === '/notifications' ? 'nav-notifications-badge' : item.to === '/gates' ? 'nav-gates-badge' : undefined"
         >{{ badgeFor(item.to) }}</span>
       </RouterLink>
     </div>
 
-    <!-- Quick pipelines: only when there are favorites to show -->
-    <div v-if="displayItems.length" class="mb-3" data-testid="nav-quick-pipelines">
+    <!-- Quick pipelines: workspace only, and only when favorites exist (plan g1.2) -->
+    <div v-if="!settingsChrome && displayItems.length" class="mb-3" data-testid="nav-quick-pipelines">
       <div class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-txt3">
         {{ t('nav.quickPipelines') }}
       </div>
@@ -288,27 +335,6 @@ const configGroups = sidebarNavGroups.slice(1)
       </div>
     </div>
 
-    <!-- Config group(s) -->
-    <div v-for="(g, gi) in configGroups" :key="'cfg-' + gi" class="mb-3">
-      <div v-if="g.titleKey" class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-txt3">
-        {{ t(g.titleKey) }}
-      </div>
-      <RouterLink
-        v-for="item in g.items"
-        :key="item.to"
-        :to="item.to"
-        class="nav-item mb-0.5"
-        :class="{ active: isActive(item.to) }"
-        @click="onNavigate"
-      >
-        <Icon :name="item.icon" :size="17" />
-        <span class="flex-1">{{ t(item.labelKey) }}</span>
-        <span
-          v-if="badgeFor(item.to)"
-          class="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white"
-        >{{ badgeFor(item.to) }}</span>
-      </RouterLink>
-    </div>
   </nav>
   <div
     v-if="dragState"
