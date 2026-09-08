@@ -18,7 +18,7 @@ export const DEMO_GHOST_SCROLLBAR_STYLE = `<style>
 }
 ::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 0;
+  border-radius: 9999px;
   transition: background 0.15s ease;
 }
 *:hover::-webkit-scrollbar-thumb,

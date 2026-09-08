@@ -189,7 +189,7 @@ defineExpose({ chartOption, chartData, hideTip })
         backgroundColor: tone.tooltipBg,
         border: `1px solid ${tone.tooltipBorder}`,
         color: tone.tooltipText,
-        borderRadius: '0',
+        borderRadius: '12px',
       }"
     >
       <div>

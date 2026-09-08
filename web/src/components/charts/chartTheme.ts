@@ -85,7 +85,7 @@ export function statsLegend() {
     left: 0,
     itemWidth: 12,
     itemHeight: 8,
-    itemStyle: { borderRadius: 0 },
+    itemStyle: { borderRadius: 4 },
     textStyle: { fontSize: 11, color: chartTone().legend },
   }
 }
@@ -100,7 +100,7 @@ export function pieLegend() {
     type: 'scroll' as const,
     itemWidth: 10,
     itemHeight: 8,
-    itemStyle: { borderRadius: 0 },
+    itemStyle: { borderRadius: 4 },
     textStyle: { fontSize: 10, color: chartTone().legend },
   }
 }
@@ -108,13 +108,13 @@ export function pieLegend() {
 export function statsTooltip<T extends Record<string, unknown> = Record<string, never>>(extra?: T) {
   const tone = chartTone()
   return {
-    borderRadius: 0,
+    borderRadius: 12,
     backgroundColor: tone.tooltipBg,
     borderColor: tone.tooltipBorder,
     textStyle: { color: tone.tooltipText, fontSize: 12 },
     confine: false,
     appendToBody: true,
-    extraCssText: 'z-index: 1000; border-radius: 0;',
+    extraCssText: 'z-index: 1000; border-radius: 12px;',
     className: ECHARTS_TOOLTIP_CLASS,
     ...(extra ?? ({} as T)),
   }

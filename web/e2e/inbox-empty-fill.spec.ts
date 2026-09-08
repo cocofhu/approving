@@ -149,9 +149,10 @@ test.describe('Inbox empty fill layout (plan g2.3)', () => {
 
     expectFillGeometry(m)
     await expectEmptyCardClasses(page)
-    // Product chrome already forces zero radius (* { border-radius: 0 !important });
-    // keep .card token class, do not introduce Demo preview-suite skin.
-    expect(m.cardRadius === '0px' || parseFloat(String(m.cardRadius).split(' ')[0] || '0') === 0).toBe(true)
+    // .card uses rounded-lg → card role 12px (no global radius:0 !important)
+    const radiusPx = parseFloat(String(m.cardRadius).split(' ')[0] || '0')
+    expect(radiusPx).toBeGreaterThanOrEqual(11)
+    expect(radiusPx).toBeLessThanOrEqual(13)
   })
 
   test('mobile empty inbox: same fill + center geometry (g1.1 g2.3)', async ({ page }, testInfo) => {

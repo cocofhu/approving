@@ -82,7 +82,7 @@ type TrendOption = {
 }
 
 function expectSquareThemeTooltip(tip: PieOption['tooltip'] | TrendOption['tooltip'], theme: 'dark' | 'light') {
-  expect(tip?.borderRadius).toBe(0)
+  expect(tip?.borderRadius).toBe(12)
   expect(tip?.appendToBody).toBe(true)
   expect(tip?.confine).toBe(false)
   expect(JSON.stringify(tip)).not.toContain('#1a1d23')
@@ -357,7 +357,7 @@ describe('Token charts (g2.3/g2.4)', () => {
     const rowTip = (
       wrapper.vm as unknown as { rowOptions: { tooltip: { borderRadius?: number; backgroundColor?: string } }[] }
     ).rowOptions[0]!.tooltip
-    expect(rowTip.borderRadius).toBe(0)
+    expect(rowTip.borderRadius).toBe(12)
     expect(JSON.stringify(rowTip)).not.toContain('#1a1d23')
     wrapper.unmount()
   })

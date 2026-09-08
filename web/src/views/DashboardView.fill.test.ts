@@ -78,12 +78,12 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/<textarea/)
   })
 
-  // review v1/v2/v4 — 无 subtitle；流水线卡片脱离全局 .card；附件移除钮直角
-  it('omits home-subtitle and forces square pipeline cards', () => {
+  // review — 无 subtitle；流水线卡片脱离全局 .card；圆角 Token 12px
+  it('omits home-subtitle and uses rounded pipeline cards', () => {
     expect(src).not.toMatch(/data-testid="home-subtitle"/)
     expect(src).toMatch(/class="home-shell__card[^"]*border border-line/)
     expect(src).not.toMatch(/class="[^"]*\bcard\b[^"]*home-shell__card|class="home-shell__card[^"]*\bcard\b/)
-    expect(src).toMatch(/\.home-shell__card\s*\{[^}]*border-radius:\s*0/s)
+    expect(src).toMatch(/\.home-shell__card\s*\{[^}]*border-radius:\s*12px/s)
     expect(src).toMatch(/home-shell__card--selected/)
     expect(src).toMatch(/rounded-none bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)
     expect(src).not.toMatch(/rounded-full bg-err[\s\S]{0,80}data-testid="home-attach-remove"/)

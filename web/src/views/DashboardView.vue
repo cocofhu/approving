@@ -732,10 +732,10 @@ onBeforeUnmount(() => {
   color: #fff;
 }
 
-/* g1.2 — square cards; selected = accent inset border */
+/* Card role 12px; selected = accent inset border */
 .home-shell__card {
   background: rgb(var(--c-surface));
-  border-radius: 0;
+  border-radius: 12px;
   box-shadow: none;
 }
 

@@ -127,11 +127,13 @@ describe('AppSidebar', () => {
     wrapper.unmount()
   })
 
-  it('workspace desktop sidebar uses floating card shell (plan g1.3)', () => {
+  it('workspace desktop sidebar uses floating card shell without square clip (g2.2)', () => {
     const wrapper = mountSidebar()
     const aside = wrapper.find('[data-testid="app-desktop-sidebar"]')
     expect(aside.attributes('data-floating')).toBe('true')
     expect(aside.classes()).not.toContain('border-r')
+    expect(aside.classes()).toContain('overflow-visible')
+    expect(aside.classes()).not.toContain('overflow-hidden')
     const card = wrapper.find('[data-testid="app-sidebar-card"]')
     expect(card.classes()).toContain('app-sidebar-card')
     expect(card.classes()).toContain('bg-surface')
@@ -142,7 +144,7 @@ describe('AppSidebar', () => {
     const wrapper = mountSidebar()
     const avatar = wrapper.find('[data-testid="sidebar-user-avatar"]')
     expect(avatar.exists()).toBe(true)
-    // force-radius-full pierces global.css border-radius:0 !important (g3.1)
+    // force-radius-full keeps avatar circular (role: full)
     expect(avatar.classes()).toContain('force-radius-full')
     expect(avatar.classes()).toContain('rounded-full')
     expect(avatar.classes()).toContain('bg-accent-dim')

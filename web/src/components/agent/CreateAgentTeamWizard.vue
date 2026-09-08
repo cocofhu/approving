@@ -300,7 +300,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
       <div class="absolute inset-0 bg-black/70" @click="close" />
       <div
         class="wiz-modal relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
-        style="width: min(980px, 100%); height: min(700px, 94vh); border-radius: 0"
+        style="width: min(980px, 100%); height: min(700px, 94vh); border-radius: 16px"
         role="dialog"
         aria-modal="true"
       >

@@ -1,6 +1,11 @@
 /* 设计令牌（浅色 / 深色主题） */
 :root,
 [data-theme="dark"] {
+    --radius-control: 8px;
+    --radius-nav: 10px;
+    --radius-card: 12px;
+    --radius-shell: 16px;
+    --radius-full: 9999px;
     --bg-primary: #0d1117;
     --bg-secondary: #161b22;
     --bg-tertiary: #21262d;
@@ -74,7 +79,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
     background: var(--bg-tertiary);
-    border-radius: 0;
+    border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -117,7 +122,7 @@ body {
     font-size: 0.72rem;
     font-weight: 500;
     padding: 3px 10px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: 1px solid var(--border-color);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
@@ -167,7 +172,7 @@ body {
     max-height: min(520px, calc(100vh - 80px));
     display: flex;
     flex-direction: column;
-    border-radius: 0;
+    border-radius: var(--radius-shell);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -191,7 +196,7 @@ body {
     flex-direction: column;
     overflow: hidden;
     max-height: inherit;
-    border-radius: 0;
+    border-radius: var(--radius-shell);
 }
 
 .cc-model-modal-head {
@@ -206,7 +211,7 @@ body {
     flex: 1;
     font-size: 0.85rem;
     padding: 6px 10px;
-    border-radius: 0;
+    border-radius: var(--radius-shell);
     border: 1px solid var(--border-color);
     background: var(--bg-primary);
     color: var(--text-primary);
@@ -229,7 +234,7 @@ body {
     color: var(--text-secondary);
     font-size: 1rem;
     cursor: pointer;
-    border-radius: 0;
+    border-radius: var(--radius-shell);
 }
 
 .cc-model-modal-close:hover {
@@ -248,7 +253,7 @@ body {
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     cursor: pointer;
     font-size: 0.82rem;
     color: var(--text-secondary);
@@ -277,7 +282,7 @@ body {
 .cc-model-item-default {
     font-size: 0.65rem;
     padding: 1px 5px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: color-mix(in srgb, var(--accent) 20%, transparent);
     color: var(--accent);
 }
@@ -294,7 +299,7 @@ body {
     font-size: 0.75rem;
     font-weight: 500;
     padding: 4px 10px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: 1px solid var(--border-color);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
@@ -315,7 +320,7 @@ body {
 .cc-icon-btn {
     padding: 6px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     cursor: pointer;
     background: var(--bg-tertiary);
     color: var(--text-primary);
@@ -341,7 +346,7 @@ body {
 .cc-qq-btn {
     padding: 6px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     cursor: pointer;
     background: var(--bg-tertiary);
     color: var(--text-primary);
@@ -406,7 +411,7 @@ body {
     align-items: center;
     justify-content: center;
     padding: 6px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: none;
     cursor: pointer;
     background: var(--danger);
@@ -458,7 +463,7 @@ body {
 .cc-queue-panel {
     max-width: 48rem;
     margin: 24px auto 0;
-    border-radius: 0;
+    border-radius: var(--radius-card);
     overflow: hidden;
     border: 1px solid var(--border-color);
     font-size: 0.8125rem;
@@ -629,7 +634,7 @@ body {
     gap: 10px;
     align-items: flex-start;
     padding: 10px 12px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     font-size: 0.78rem;
     line-height: 1.45;
     border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border-color));
@@ -675,7 +680,7 @@ body {
 
 .cc-user-bubble {
     max-width: 80%;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     padding: 10px 16px;
     font-size: 0.875rem;
     white-space: pre-wrap;
@@ -699,7 +704,7 @@ body {
 .cc-user-img {
     max-width: 260px;
     max-height: 200px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     object-fit: contain;
     cursor: pointer;
     transition: opacity 0.15s;
@@ -719,7 +724,7 @@ body {
 .cc-avatar {
     width: 28px;
     height: 28px;
-    border-radius: 0;
+    border-radius: var(--radius-full);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -798,7 +803,7 @@ body {
     max-width: 18rem;
     padding: 8px 10px;
     border: 1px solid var(--border-color);
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--bg-secondary);
     color: var(--text-primary);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
@@ -824,7 +829,7 @@ body {
     font-size: 0.75rem;
     color: var(--text-secondary);
     padding: 6px 10px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     line-height: 1.4;
@@ -936,7 +941,7 @@ body {
 .cc-md pre {
     margin: 0.5em 0;
     padding: 10px 12px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--code-bg);
     overflow-x: auto;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -948,7 +953,7 @@ body {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.85em;
     padding: 0.12em 0.35em;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--code-bg);
 }
 
@@ -962,7 +967,7 @@ body {
     margin: 0.5em 0;
     overflow-x: auto;
     padding: 12px 14px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: 1px solid var(--border-color);
     /* 比主背景略抬一层，避免整块「纯黑底」糊成一片 */
     background: var(--bg-secondary);
@@ -976,7 +981,7 @@ body {
 
 .cc-mermaid--interactive {
     cursor: zoom-in;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     outline: 1px solid transparent;
     transition: outline-color 0.15s, background-color 0.15s;
 }
@@ -1022,7 +1027,7 @@ body {
     flex-direction: column;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 0;
+    border-radius: var(--radius-card);
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
     animation: cc-lightbox-in 0.2s ease-out;
 }
@@ -1040,7 +1045,7 @@ body {
     min-height: 120px;
     /* 与代码块背景一致，避免浅色主题下白底 + 浅色填充导致「看不见图」 */
     background: var(--code-bg);
-    border-radius: 0;
+    border-radius: var(--radius-control);
     padding: 12px;
     /* 让内部 flex 子项能正确撑开 */
     width: 100%;
@@ -1051,7 +1056,7 @@ body {
 .cc-mermaid-lightbox-inner .cc-mermaid {
     margin: 0;
     padding: 12px 14px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: 1px solid var(--border-color);
     background: var(--bg-secondary);
     max-width: 100%;
@@ -1083,7 +1088,7 @@ body {
     width: 36px;
     height: 36px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border-color);
@@ -1117,7 +1122,7 @@ body {
     font-size: 0.75rem;
     margin-top: 4px;
     padding: 8px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     white-space: pre-wrap;
@@ -1156,7 +1161,7 @@ body {
 
 .cc-tool {
     font-size: 0.75rem;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     overflow: hidden;
     border: 1px solid var(--border-color);
 }
@@ -1215,7 +1220,7 @@ body {
 .cc-tool-args-pre {
     margin: 4px 0 0;
     padding: 6px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: var(--code-bg);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.75rem;
@@ -1246,7 +1251,7 @@ body {
     text-align: center;
     font-size: 0.75rem;
     padding: 8px 16px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     max-width: 28rem;
     margin: 0 auto;
     background: var(--bg-tertiary);
@@ -1275,7 +1280,7 @@ body {
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     padding: 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
@@ -1320,7 +1325,7 @@ body {
     -webkit-appearance: none;
     appearance: none;
     padding: 8px 16px;
-    border-radius: 0 !important;
+    border-radius: var(--radius-full) !important;
     border: none;
     font-size: 0.875rem;
     font-weight: 600;
@@ -1376,7 +1381,7 @@ body {
 
 .cc-attach-item {
     position: relative;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     overflow: hidden;
     border: 1px solid var(--border-color);
     background: var(--bg-tertiary);
@@ -1416,7 +1421,7 @@ body {
     right: 2px;
     width: 18px;
     height: 18px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: none;
     background: rgba(0, 0, 0, 0.55);
     color: #fff;
@@ -1462,7 +1467,7 @@ body {
     overflow: hidden;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 0;
+    border-radius: var(--radius-shell);
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
     animation: cc-lightbox-in 0.18s ease-out;
 }
@@ -1597,7 +1602,7 @@ body {
 .cc-qq-status {
     margin-left: auto;
     padding: 3px 8px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: 1px solid var(--border-color);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
@@ -1619,7 +1624,7 @@ body {
 .cc-field-input {
     width: 100%;
     padding: 10px 11px;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     border: 1px solid var(--border-color);
     background: var(--input-bg);
     color: var(--text-primary);
@@ -1654,7 +1659,7 @@ textarea.cc-field-input {
     font-family: inherit;
     font-size: 0.875rem;
     font-weight: 600;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     padding: 10px 14px;
     cursor: pointer;
     border: none;
@@ -1710,7 +1715,7 @@ textarea.cc-field-input {
     max-width: 440px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 0;
+    border-radius: var(--radius-shell);
     padding: 22px;
 }
 
@@ -1723,7 +1728,7 @@ textarea.cc-field-input {
     margin: 0;
     padding: 12px;
     background: var(--code-bg);
-    border-radius: 0;
+    border-radius: var(--radius-shell);
     font-size: 0.72rem;
     color: var(--text-secondary);
     overflow: auto;
@@ -1766,7 +1771,7 @@ textarea.cc-field-input {
     max-width: 90vw;
     max-height: 90vh;
     object-fit: contain;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     user-select: none;
     animation: cc-lightbox-in 0.2s ease-out;
@@ -1791,7 +1796,7 @@ textarea.cc-field-input {
     width: 36px;
     height: 36px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-control);
     background: rgba(0, 0, 0, 0.6);
     color: #fff;
     font-size: 1.1rem;
@@ -1810,7 +1815,7 @@ textarea.cc-field-input {
 .cc-toggle-detail-btn {
     padding: 6px;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-full);
     cursor: pointer;
     background: var(--bg-tertiary);
     color: var(--text-primary);

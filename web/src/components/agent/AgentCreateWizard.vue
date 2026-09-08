@@ -63,7 +63,7 @@ const {
       <div class="absolute inset-0 bg-black/70" @click="close" />
       <div
         class="wiz-modal relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
-        style="width: min(980px, 100%); height: min(700px, 94vh); border-radius: 0"
+        style="width: min(980px, 100%); height: min(700px, 94vh); border-radius: 16px"
         role="dialog"
         aria-modal="true"
       >
@@ -314,7 +314,7 @@ const {
         <div class="absolute inset-0 bg-black/60" @click="cancelAcpSwitch" />
         <div
           class="relative z-10 w-full max-w-[420px] border border-line bg-surface p-5 shadow-card"
-          style="border-radius: 0"
+          style="border-radius: 16px"
         >
           <h3 class="m-0 text-[15px] font-semibold text-txt">
             {{ t('pages.agentStudio.wizard.acp.remapTitle') }}
@@ -342,7 +342,7 @@ const {
 }
 .hero-mark {
   background: linear-gradient(145deg, rgba(123, 97, 255, 0.22), rgb(var(--c-elevated)));
-  border-radius: 0;
+  border-radius: 12px;
 }
 .wiz-progress span {
   display: block;

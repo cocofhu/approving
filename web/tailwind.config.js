@@ -4,14 +4,15 @@ export default {
   theme: {
     borderRadius: {
       none: '0px',
-      sm: '0px',
-      DEFAULT: '0px',
-      md: '0px',
-      lg: '0px',
-      xl: '0px',
-      '2xl': '0px',
-      '3xl': '0px',
-      full: '0px',
+      // Role tokens: control 8 / card 12 / shell 16 / full capsule
+      sm: '8px',
+      DEFAULT: '8px',
+      md: '8px',
+      lg: '12px',
+      xl: '16px',
+      '2xl': '16px',
+      '3xl': '16px',
+      full: '9999px',
     },
     extend: {
       screens: {

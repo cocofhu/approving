@@ -230,7 +230,7 @@ defineExpose({ close })
   cursor: pointer;
   text-align: left;
   white-space: nowrap;
-  border-radius: 0;
+  border-radius: 8px;
 }
 .audit-dd.block .audit-dd-trig {
   display: flex;
@@ -297,7 +297,7 @@ defineExpose({ close })
   background: rgb(var(--c-surface));
   border: 1px solid rgb(var(--c-line));
   box-shadow: 0 0 0 1px rgb(var(--c-line) / 0.6), 0 12px 32px rgba(0, 0, 0, 0.12);
-  border-radius: 0;
+  border-radius: 12px;
 }
 .audit-dd-find {
   padding: 8px;
@@ -314,7 +314,7 @@ defineExpose({ close })
   outline: none;
   background: rgb(var(--c-elevated));
   color: rgb(var(--c-txt));
-  border-radius: 0;
+  border-radius: 8px;
 }
 .audit-dd-find input:focus {
   border-color: rgb(var(--c-accent));
@@ -347,7 +347,7 @@ defineExpose({ close })
   text-align: left;
   cursor: pointer;
   color: rgb(var(--c-txt));
-  border-radius: 0;
+  border-radius: 8px;
 }
 .audit-dd-opt:hover {
   background: rgb(var(--c-elevated));

@@ -79,22 +79,14 @@ body {
   box-sizing: border-box;
 }
 
-*,
-*::before,
-*::after {
-  border-radius: 0 !important;
-}
-
 /*
- * Explicit circular exceptions for confirmed sidebar After preview
- * (avatar + unread badge). Must beat the universal 0 !important reset
- * via higher specificity (.force-radius-full > *).
+ * Circular / role radius helpers (kept for specificity where utilities need
+ * an explicit beat; no longer fighting a universal border-radius:0 !important).
  */
 .force-radius-full {
   border-radius: 9999px !important;
 }
 
-/* Floating sidebar card + capsule nav (plan g1.3) — beat universal radius:0 */
 .force-radius-xl {
   border-radius: 16px !important;
 }
@@ -133,7 +125,7 @@ html:not(.light) *.is-scrolling::-webkit-scrollbar-track {
 }
 ::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 0;
+  border-radius: 9999px;
   transition: background 0.15s ease;
 }
 *:hover::-webkit-scrollbar-thumb,
@@ -156,8 +148,10 @@ html:not(.light) *.is-scrolling::-webkit-scrollbar {
   background-size: 16px 16px;
 }
 
+/* Radius + overflow + bg + shadow on same layer (no square parent clip → gray corner). */
 .app-sidebar-card {
   border-radius: 16px !important;
+  overflow: hidden;
   box-shadow:
     0 8px 28px rgb(0 0 0 / 22%),
     0 0 0 1px rgb(var(--c-line));
@@ -386,7 +380,8 @@ html.light .app-sidebar-card {
 }
 
 .app-desktop-sidebar {
-  overflow: hidden;
+  /* Floating visible: overflow visible so card shadow is not square-clipped (gray corner).
+     Collapsed / docked: overflow-hidden via utility classes on the aside. */
   transition:
     width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
     border-right-width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
@@ -476,7 +471,7 @@ html.light .app-sidebar-card {
   height: 9px;
   background: rgb(var(--c-base));
   border: 2px solid rgb(var(--c-line-strong));
-  border-radius: 0;
+  border-radius: 9999px;
 }
 .vue-flow__handle:hover {
   border-color: #7b61ff;
@@ -484,12 +479,12 @@ html.light .app-sidebar-card {
 .vue-flow__minimap {
   background: rgb(var(--c-surface)) !important;
   border: 1px solid rgb(var(--c-line));
-  border-radius: 0;
+  border-radius: 12px;
   overflow: hidden;
 }
 .vue-flow__controls {
   border: 1px solid rgb(var(--c-line));
-  border-radius: 0;
+  border-radius: 12px;
   overflow: hidden;
   box-shadow: none;
 }
