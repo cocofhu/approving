@@ -54,7 +54,7 @@ describe('injectDemoScrollbarStyles', () => {
 
   it('locks idle-invisible + right-angle thin bar contract', () => {
     const result = injectDemoScrollbarStyles('<html><head></head><body></body></html>')
-    expect(result).toContain('border-radius: 0')
+    expect(result).toContain('border-radius: 9999px')
     expect(result).toContain(IDLE_COLOR_MARKER)
     expect(result).toContain(ACTIVE_COLOR_MARKER)
     expect(result).toContain(SCROLLING_MARKER)

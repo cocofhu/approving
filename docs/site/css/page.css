@@ -93,7 +93,7 @@
   font-size: 0.9em;
   background: var(--accent-soft);
   padding: 0.1em 0.35em;
-  border-radius: 0;
+  border-radius: var(--radius-control, 8px);
   color: var(--accent-strong);
 }
 

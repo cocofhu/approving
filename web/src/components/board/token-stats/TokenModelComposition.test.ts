@@ -69,7 +69,7 @@ function expectPieShell(vm: unknown, theme: 'dark' | 'light') {
   expect(option.series?.[0]?.label?.show).toBe(true)
   expect(option.series?.[0]?.label?.formatter).toBe('{b} {d}%')
   expect(option.series?.[0]?.center?.[0]).toBe('38%')
-  expect(option.tooltip?.borderRadius).toBe(0)
+  expect(option.tooltip?.borderRadius).toBe(12)
   expect(option.tooltip?.appendToBody).toBe(true)
   expect(JSON.stringify(option.tooltip)).not.toContain('#1a1d23')
   expect(option.tooltip?.backgroundColor).toBe(theme === 'dark' ? '#27272a' : '#ffffff')

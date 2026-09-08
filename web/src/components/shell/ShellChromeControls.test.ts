@@ -220,7 +220,7 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     expect(badge.text()).toBe('12')
     expect(badge.classes().join(' ')).toMatch(/bg-err/)
     // g2.3: sidebar unread badge is a small circular pill
-    // force-radius-full pierces global.css border-radius:0 !important
+    // force-radius-full keeps unread badge circular
     expect(badge.classes()).toContain('force-radius-full')
     expect(badge.classes()).toContain('rounded-full')
     expect(badge.classes()).toContain('h-3.5')

@@ -168,7 +168,7 @@ img {
   justify-content: center;
   min-height: 2.75rem;
   padding: 0.7rem 1.25rem;
-  border-radius: 0;
+  border-radius: var(--radius-control, 8px);
   font-weight: 600;
   font-size: 0.975rem;
   text-decoration: none;

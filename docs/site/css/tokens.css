@@ -28,7 +28,11 @@
   --space-8: 4.5rem;
   --space-9: 6rem;
 
-  --radius: 0;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-shell: 16px;
+  --radius-full: 9999px;
+  --radius: 12px;
   --max: 1280px;
   --header-h: 3.5rem;
 }

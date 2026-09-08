@@ -1255,7 +1255,7 @@ defineExpose({
 .rd-tb {
   min-width: 28px;
   border: 1px solid transparent;
-  border-radius: 0;
+  border-radius: 8px;
   background: transparent;
   padding: 4px 7px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -1292,24 +1292,24 @@ defineExpose({
   color: rgb(var(--c-txt3));
 }
 .rd-schedule {
-  border-radius: 0;
+  border-radius: 12px;
 }
 .rd-gantt-name {
   width: 220px;
   min-width: 220px;
 }
 .rd-gantt-bar {
-  border-radius: 0;
+  border-radius: 8px;
   background: #7b61ff;
   min-width: 4px;
 }
 .rd-gantt-bar-fill {
-  border-radius: 0;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.35);
   pointer-events: none;
 }
 .rd-gantt-diamond {
-  border-radius: 0;
+  border-radius: 2px;
   background: #34d399;
 }
 .rd-gantt-today {

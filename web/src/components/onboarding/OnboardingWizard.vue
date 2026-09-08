@@ -203,7 +203,7 @@ async function submitBootstrap() {
       <div class="absolute inset-0 bg-black/70" data-testid="onboarding-backdrop" @click="suppressAndClose" />
       <div
         class="relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
-        style="width: min(980px, 100%); height: min(640px, 92vh); border-radius: 0"
+        style="width: min(980px, 100%); height: min(640px, 92vh); border-radius: 16px"
         role="dialog"
         aria-modal="true"
       >

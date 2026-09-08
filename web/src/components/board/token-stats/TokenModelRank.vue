@@ -43,7 +43,7 @@ function rowChartOption(m: TokenStatsModel, i: number) {
         type: 'bar',
         data: [m.total || 0],
         barWidth: 8,
-        itemStyle: { color, borderRadius: [0, 2, 2, 0] },
+        itemStyle: { color, borderRadius: [0, 8, 8, 0] },
         showBackground: true,
         backgroundStyle: { color: 'rgb(var(--c-elevated))' },
       },
