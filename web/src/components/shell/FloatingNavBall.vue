@@ -21,7 +21,7 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()
 
-const EXIT_MS = 320
+const EXIT_MS = 200
 const exiting = ref(false)
 let exitTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -67,22 +67,20 @@ watch(sidebarHidden, (hidden) => {
 async function pinDesktop() {
   if (!sidebarHidden.value || exiting.value) return
   clearExitTimer()
-  exiting.value = true
 
-  const finish = async () => {
-    showDesktopSidebar()
-    exiting.value = false
-    await focusDesktopNavControl('hide')
+  const reducedMotion = prefersReducedMotion()
+  // Ball exit runs alongside the sidebar; it must never gate showDesktopSidebar.
+  exiting.value = !reducedMotion
+  showDesktopSidebar()
+
+  if (!reducedMotion) {
+    exitTimer = setTimeout(() => {
+      exitTimer = null
+      exiting.value = false
+    }, EXIT_MS)
   }
 
-  if (prefersReducedMotion()) {
-    await finish()
-    return
-  }
-  exitTimer = setTimeout(() => {
-    exitTimer = null
-    void finish()
-  }, EXIT_MS)
+  await focusDesktopNavControl('hide')
 }
 
 function onActivate() {
@@ -104,7 +102,7 @@ onBeforeUnmount(() => {
     :class="[
       wrapClass,
       exiting
-        ? 'duration-[320ms] ease-[cubic-bezier(0.4,0,0.2,1)]'
+        ? 'duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)]'
         : '',
     ]"
     data-testid="floating-nav-ball-wrap"

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import AppModal from '@/components/ui/AppModal.vue'
+import AppButton from '@/components/ui/AppButton.vue'
 import OutputResultCards from '@/components/run/OutputResultCards.vue'
 import { api } from '@/lib/api/api'
 import { resolveOutputFocusNodeId } from '@/lib/run/runOutputSelection'
@@ -159,22 +160,20 @@ function openArtifacts() {
       <p class="max-w-md text-sm text-txt2">{{ t('shell.runNotifications.noFinalResultsHint') }}</p>
       <p class="mt-1.5 max-w-md text-xs text-txt3">{{ t('shell.runNotifications.noFinalResultsNote') }}</p>
       <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          class="rounded-lg border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
+        <AppButton
+          variant="primary"
           data-testid="run-output-empty-open-run"
           @click="openRunDetail"
         >
           {{ t('shell.runNotifications.openRunDetail') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-md border border-line bg-transparent px-3 py-2 text-[13px] text-txt2 hover:border-line-strong hover:text-txt"
+        </AppButton>
+        <AppButton
+          variant="outline"
           data-testid="run-output-empty-open-artifacts"
           @click="openArtifacts"
         >
           {{ t('shell.runNotifications.viewArtifacts') }}
-        </button>
+        </AppButton>
       </div>
     </div>
     <div
@@ -204,14 +203,17 @@ function openArtifacts() {
     </div>
 
     <template #footer>
-      <button
-        type="button"
-        class="rounded-lg border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
+      <AppButton variant="ghost" data-testid="run-output-close" @click="close">
+        {{ t('common.buttons.close') }}
+      </AppButton>
+      <AppButton
+        variant="primary"
+        icon="check"
         data-testid="run-output-mark-read"
         @click="markRead"
       >
         {{ t('shell.runNotifications.markAsRead') }}
-      </button>
+      </AppButton>
     </template>
   </AppModal>
 </template>

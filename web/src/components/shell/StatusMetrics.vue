@@ -72,17 +72,14 @@ function fmtFull(n: number | null | undefined): string {
   return n.toLocaleString('en-US')
 }
 
-/** Bucket cumulative for StatusMetrics; not Run-level token/s. */
-function fmtFiveMinuteRate(n: number | null | undefined): string {
-  if (n === null || n === undefined) return '—'
-  return `${fmtCompactTokenCount(n)}/5m`
-}
-
 const cumulative = computed(() => metrics.value?.cumulativeTokens ?? null)
-const rate = computed(() => metrics.value?.current5mBucketTokens ?? null)
-const peak = computed(() => metrics.value?.todayMaxCompleted5mTokens ?? null)
+const today = computed(() => metrics.value?.todayTokens ?? null)
 const running = computed(() => metrics.value?.runningCount ?? 0)
 const queued = computed(() => metrics.value?.queuedCount ?? 0)
+
+function todayAria(): string {
+  return `${t('shell.statusMetrics.today')}: ${fmtFull(today.value)}`
+}
 
 function toggleTip(id: string, ev: Event) {
   ev.preventDefault()
@@ -104,7 +101,7 @@ function onBlurTip(id: string) {
     :aria-label="t('shell.statusMetrics.aria')"
     :data-stale="stale ? 'true' : 'false'"
   >
-    <!-- Desktop ≥md (or variant=full): five icon+value items -->
+    <!-- Desktop ≥md (or variant=full): four icon+value items -->
     <template v-if="!useCompact">
       <button
         type="button"
@@ -115,9 +112,10 @@ function onBlurTip(id: string) {
         @click="toggleTip('tokens', $event)"
         @blur="onBlurTip('tokens')"
       >
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 8v8M9.5 10.2c.6-.7 1.5-1.1 2.5-1.1 1.7 0 3 1 3 2.4s-1.3 2.4-3 2.4h-1.2c-1.7 0-3 1-3 2.4 0 1.4 1.4 2.3 3.2 2.3 1.1 0 2-.4 2.6-1.1" />
+        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <ellipse cx="12" cy="6.6" rx="7.2" ry="3.1" />
+          <path d="M4.8 6.6v4.7c0 1.7 3.2 3.1 7.2 3.1s7.2-1.4 7.2-3.1V6.6" />
+          <path d="M4.8 11.5v4.7c0 1.7 3.2 3.1 7.2 3.1s7.2-1.4 7.2-3.1v-4.7" />
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(cumulative) }}</span>
         <span
@@ -132,44 +130,23 @@ function onBlurTip(id: string) {
       <button
         type="button"
         class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-        :class="tipOpen === 'rate' ? 'bg-elevated text-txt tip-open' : ''"
-        data-testid="status-metrics-rate"
-        :aria-label="t('shell.statusMetrics.rate')"
-        @click="toggleTip('rate', $event)"
-        @blur="onBlurTip('rate')"
+        :class="tipOpen === 'today' ? 'bg-elevated text-txt tip-open' : ''"
+        data-testid="status-metrics-today"
+        :aria-label="todayAria()"
+        @click="toggleTip('today', $event)"
+        @blur="onBlurTip('today')"
       >
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M13 3L5 14h7l-1 7 8-11h-7l1-7z" />
+        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3.4" y="5.2" width="17.2" height="15.2" rx="2.6" />
+          <path d="M8.2 3v4.2M15.8 3v4.2M3.4 10.2h17.2" />
+          <circle cx="12" cy="15.2" r="2.6" />
         </svg>
-        <span class="sm-val text-xs leading-none text-txt">{{ fmtFiveMinuteRate(rate) }}</span>
+        <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(today) }}</span>
         <span
           class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
           role="tooltip"
         >
-          {{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span>
-        </span>
-      </button>
-      <span class="mx-0.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
-
-      <button
-        type="button"
-        class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-        :class="tipOpen === 'peak' ? 'bg-elevated text-txt tip-open' : ''"
-        data-testid="status-metrics-peak"
-        :aria-label="t('shell.statusMetrics.peak')"
-        @click="toggleTip('peak', $event)"
-        @blur="onBlurTip('peak')"
-      >
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M3 18h18" />
-          <path d="M5 18V13l4-4 3 3 5-6 2 2v10" />
-        </svg>
-        <span class="sm-val text-xs leading-none text-txt">{{ fmtCompactTokenCount(peak) }}</span>
-        <span
-          class="rounded-md sm-tip pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-40 hidden -translate-x-1/2 whitespace-nowrap border border-line-strong bg-overlay px-2.5 py-1.5 text-left font-sans text-xs leading-snug text-txt2 shadow-card"
-          role="tooltip"
-        >
-          {{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span>
+          {{ t('shell.statusMetrics.today') }}: <span class="font-mono">{{ fmtFull(today) }}</span>
         </span>
       </button>
       <span class="mx-0.5 h-3.5 w-px shrink-0 bg-line-strong" aria-hidden="true" />
@@ -183,9 +160,9 @@ function onBlurTip(id: string) {
         @click="toggleTip('running', $event)"
         @blur="onBlurTip('running')"
       >
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M10 9.2l5.2 2.8L10 14.8V9.2z" fill="currentColor" stroke="none" />
+        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.2" />
+          <path d="M10.3 8.7l5.4 3.3-5.4 3.3z" />
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ running }}</span>
         <span
@@ -206,8 +183,8 @@ function onBlurTip(id: string) {
         @click="toggleTip('queued', $event)"
         @blur="onBlurTip('queued')"
       >
-        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M5 7h14M5 12h14M5 17h10" />
+        <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7.2h16M4 12h11.5M4 16.8h7" />
         </svg>
         <span class="sm-val text-xs leading-none text-txt">{{ queued }}</span>
         <span
@@ -219,7 +196,7 @@ function onBlurTip(id: string) {
       </button>
     </template>
 
-    <!-- Narrow &lt;md: Token · RUN/Q; rate/peak only in tip -->
+    <!-- Narrow &lt;md: Token · RUN/Q; today only in tip -->
     <button
       v-else
       ref="compactTrigger"
@@ -235,22 +212,23 @@ function onBlurTip(id: string) {
       @mouseleave="compactTipHovered = false"
     >
       <span class="inline-flex items-center gap-1.5">
-        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 8v8M9.5 10.2c.6-.7 1.5-1.1 2.5-1.1 1.7 0 3 1 3 2.4s-1.3 2.4-3 2.4h-1.2c-1.7 0-3 1-3 2.4 0 1.4 1.4 2.3 3.2 2.3 1.1 0 2-.4 2.6-1.1" />
+        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <ellipse cx="12" cy="6.6" rx="7.2" ry="3.1" />
+          <path d="M4.8 6.6v4.7c0 1.7 3.2 3.1 7.2 3.1s7.2-1.4 7.2-3.1V6.6" />
+          <path d="M4.8 11.5v4.7c0 1.7 3.2 3.1 7.2 3.1s7.2-1.4 7.2-3.1v-4.7" />
         </svg>
         <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ fmtCompactTokenCount(cumulative) }}</span>
       </span>
       <span class="h-3 w-px shrink-0 bg-line-strong opacity-90" aria-hidden="true" />
       <span class="inline-flex items-center gap-1.5">
-        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M10 9.2l5.2 2.8L10 14.8V9.2z" fill="currentColor" stroke="none" />
+        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.2" />
+          <path d="M10.3 8.7l5.4 3.3-5.4 3.3z" />
         </svg>
         <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ running }}</span>
         <span class="text-txt3">/</span>
-        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-          <path d="M5 7h14M5 12h14M5 17h10" />
+        <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7.2h16M4 12h11.5M4 16.8h7" />
         </svg>
         <span class="sm-val text-[11px] font-semibold leading-none text-txt">{{ queued }}</span>
       </span>
@@ -260,8 +238,7 @@ function onBlurTip(id: string) {
         role="tooltip"
       >
         <div>{{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span></div>
-        <div>{{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span></div>
-        <div>{{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span></div>
+        <div>{{ t('shell.statusMetrics.today') }}: <span class="font-mono">{{ fmtFull(today) }}</span></div>
         <div>{{ t('shell.statusMetrics.running') }}: <span class="font-mono">{{ running }}</span></div>
         <div>{{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span></div>
       </span>
@@ -278,8 +255,7 @@ function onBlurTip(id: string) {
         :style="compactTipStyle ?? undefined"
       >
         <div>{{ t('shell.statusMetrics.tokens') }}: <span class="font-mono">{{ fmtFull(cumulative) }}</span></div>
-        <div>{{ t('shell.statusMetrics.rate') }}: <span class="font-mono">{{ fmtFull(rate) }}</span></div>
-        <div>{{ t('shell.statusMetrics.peak') }}: <span class="font-mono">{{ fmtFull(peak) }}</span></div>
+        <div>{{ t('shell.statusMetrics.today') }}: <span class="font-mono">{{ fmtFull(today) }}</span></div>
         <div>{{ t('shell.statusMetrics.running') }}: <span class="font-mono">{{ running }}</span></div>
         <div>{{ t('shell.statusMetrics.queued') }}: <span class="font-mono">{{ queued }}</span></div>
       </div>

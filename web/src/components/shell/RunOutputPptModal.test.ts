@@ -307,7 +307,7 @@ describe('RunOutputPptModal output result cards (g1/g2)', () => {
     wrapper.unmount()
   })
 
-  it('footer only has mark-as-read and emits mark-read (g3.1)', async () => {
+  it('footer has close + mark-as-read; mark-read emits mark-read (g2.1/g2.3)', async () => {
     apiMocks.getRun.mockResolvedValue({
       id: 'run-1',
       title: 't',
@@ -318,12 +318,31 @@ describe('RunOutputPptModal output result cards (g1/g2)', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="run-output-open-run"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="run-output-done"]').exists()).toBe(false)
+    const closeBtn = wrapper.find('[data-testid="run-output-close"]')
+    expect(closeBtn.exists()).toBe(true)
+    expect(closeBtn.text()).toContain('关闭')
     const markBtn = wrapper.find('[data-testid="run-output-mark-read"]')
     expect(markBtn.exists()).toBe(true)
     expect(markBtn.text()).toContain('标记已读')
     await markBtn.trigger('click')
     expect(wrapper.emitted('mark-read')).toBeTruthy()
     expect(wrapper.emitted('close')).toBeFalsy()
+    expect(push).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('footer close emits close and does not emit mark-read (g2.3)', async () => {
+    apiMocks.getRun.mockResolvedValue({
+      id: 'run-1',
+      title: 't',
+      workflowName: 'wf',
+      artifacts: [],
+    })
+    const wrapper = mountModal()
+    await flushPromises()
+    await wrapper.find('[data-testid="run-output-close"]').trigger('click')
+    expect(wrapper.emitted('close')).toBeTruthy()
+    expect(wrapper.emitted('mark-read')).toBeFalsy()
     expect(push).not.toHaveBeenCalled()
     wrapper.unmount()
   })

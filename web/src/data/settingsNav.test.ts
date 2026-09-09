@@ -10,7 +10,7 @@ describe('settingsNav (plan g2.1 / g2.2 / g2.3)', () => {
   it('lists subnav in the confirmed order', () => {
     expect(settingsNavItems.map((i) => i.labelKey)).toEqual([
       'nav.projects',
-      'nav.runs',
+      'nav.notifications',
       'nav.stats',
       'nav.artifacts',
       'nav.agents',
@@ -21,7 +21,7 @@ describe('settingsNav (plan g2.1 / g2.2 / g2.3)', () => {
     ])
     expect(settingsNavItems.map((i) => i.to)).toEqual([
       '/projects',
-      '/runs',
+      '/notifications',
       '/stats',
       '/artifacts',
       '/agents',
@@ -37,10 +37,10 @@ describe('settingsNav (plan g2.1 / g2.2 / g2.3)', () => {
     expect(isSettingsChrome('/settings/platform-rules')).toBe(true)
     expect(isSettingsChrome('/projects')).toBe(true)
     expect(isSettingsChrome('/projects/abc')).toBe(true)
-    expect(isSettingsChrome('/runs')).toBe(true)
+    expect(isSettingsChrome('/notifications')).toBe(true)
     expect(isSettingsChrome('/dashboard')).toBe(false)
     expect(isSettingsChrome('/gates')).toBe(false)
-    expect(isSettingsChrome('/notifications')).toBe(false)
+    expect(isSettingsChrome('/runs')).toBe(false)
     expect(isSettingsChrome('/runs/rid', true)).toBe(false)
     expect(isSettingsChrome('/sandboxes/sid/console', true)).toBe(false)
   })

@@ -225,10 +225,10 @@ onBeforeUnmount(() => {
       </div>
       <div class="flex flex-col gap-2 md:flex-row md:items-center">
         <span v-if="savedAt" class="text-xs text-ok">{{ t('pages.settings.saved') }}</span>
-        <AppButton class="min-h-11 w-full md:w-auto" variant="ghost" size="sm" icon="refresh" :disabled="loading || saving" @click="loadSettings">
+        <AppButton class="min-h-11 w-full md:min-h-0 md:w-auto" variant="ghost" size="md" icon="refresh" :disabled="loading || saving" @click="loadSettings">
           {{ t('common.buttons.reset') }}
         </AppButton>
-        <AppButton class="min-h-11 w-full md:w-auto" variant="primary" size="sm" icon="check" :disabled="loading || saving || !dirty()" @click="save">
+        <AppButton class="min-h-11 w-full md:min-h-0 md:w-auto" variant="primary" size="md" icon="check" :disabled="loading || saving || !dirty()" @click="save">
           {{ saving ? t('common.buttons.saving') : t('common.buttons.save') }}
         </AppButton>
       </div>
@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
             <p v-if="!isAdmin" class="mt-1 text-[11px] text-warn">{{ t('pages.settings.platformRulesCard.readOnly') }}</p>
           </div>
         </div>
-        <AppButton class="min-h-11" variant="primary" size="sm" icon="chevron-right" @click="router.push('/settings/platform-rules')">
+        <AppButton class="min-h-11 md:min-h-0" variant="primary" size="md" icon="chevron-right" @click="router.push('/settings/platform-rules')">
           {{ isAdmin ? t('pages.settings.platformRulesCard.manage') : t('pages.settings.platformRulesCard.view') }}
         </AppButton>
       </div>
@@ -276,9 +276,9 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <AppButton
-          class="min-h-11"
+          class="min-h-11 md:min-h-0"
           variant="primary"
-          size="sm"
+          size="md"
           icon="chevron-right"
           data-testid="settings-integrations-open"
           @click="openIntegrations"

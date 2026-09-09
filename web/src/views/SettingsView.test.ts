@@ -83,7 +83,7 @@ describe('SettingsView loading source lock', () => {
     expect(src).toMatch(/admin-list-thin-bar bg-accent/)
     expect(src).toMatch(/opacity-\[0\.55\]/)
     expect(src).toMatch(/flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between/)
-    expect(src).toMatch(/min-h-11 w-full md:w-auto/)
+    expect(src).toMatch(/min-h-11 w-full md:min-h-0 md:w-auto/)
   })
 })
 

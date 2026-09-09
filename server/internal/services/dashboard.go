@@ -14,7 +14,7 @@ type DashboardService struct {
 	db       *gorm.DB
 	projects *ProjectService
 
-	// Process-local cache for 5m token buckets (platform-status hot path).
+	// Process-local cache for today token totals (platform-status hot path).
 	statusMu       sync.Mutex
 	statusCache    map[string]platformStatusCacheEntry
 	statusInflight map[string]*platformStatusCall

@@ -43,8 +43,7 @@ vi.mock('@/lib/api/api', () => ({
     artifactDownloadUrl: vi.fn((id: string) => `http://test/api/artifacts/${id}/download`),
     platformStatus: vi.fn().mockResolvedValue({
       cumulativeTokens: null,
-      current5mBucketTokens: null,
-      todayMaxCompleted5mTokens: null,
+      todayTokens: null,
       runningCount: 0,
       queuedCount: 0,
       asOf: '2026-08-12T00:00:00Z',

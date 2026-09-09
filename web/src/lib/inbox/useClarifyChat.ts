@@ -31,6 +31,11 @@ import {
 } from '@/lib/shared/attachments'
 import { imgSrc } from '@/lib/shared/compositeText'
 import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
+import {
+  applyComposerAutoGrow,
+  CLARIFY_AUTO_GROW_MAX,
+  CLARIFY_AUTO_GROW_MIN,
+} from '@/lib/inbox/composerAutoGrow'
 import type { Ref } from 'vue'
 
 /** Element-level clone so queue rows never share annotation object refs with composer. */
@@ -269,17 +274,19 @@ function onUnreadFabClick() {
   void scrollBottom(true)
 }
 
-const AUTO_GROW_MIN = 40
-const AUTO_GROW_MAX = 128
+const AUTO_GROW_MIN = CLARIFY_AUTO_GROW_MIN
+const AUTO_GROW_MAX = CLARIFY_AUTO_GROW_MAX
+
+let composerResizeObserver: ResizeObserver | null = null
 
 function autoGrow() {
   const el = textareaRef.value
   if (!el) return
-  el.style.height = 'auto'
-  const sh = el.scrollHeight
-  const h = Math.min(Math.max(sh, AUTO_GROW_MIN), AUTO_GROW_MAX)
-  el.style.height = `${h}px`
-  overflowScroll.value = sh > AUTO_GROW_MAX
+  overflowScroll.value = applyComposerAutoGrow(el, {
+    min: AUTO_GROW_MIN,
+    max: AUTO_GROW_MAX,
+    emptyHint: inputPlaceholder.value,
+  })
 }
 
 function onTextInput() {
@@ -287,6 +294,8 @@ function onTextInput() {
 }
 
 onBeforeUnmount(() => {
+  composerResizeObserver?.disconnect()
+  composerResizeObserver = null
   unsubStream()
   unsubThought()
   messageReveal.reset()
@@ -618,9 +627,17 @@ function onPaste(e: ClipboardEvent) {
   nextTick(autoGrow)
 }
 
-watch(draft, () => nextTick(autoGrow), { immediate: true })
+watch([draft, inputPlaceholder], () => nextTick(autoGrow), { immediate: true })
 onMounted(() => {
-  nextTick(autoGrow)
+  nextTick(() => {
+    autoGrow()
+    const el = textareaRef.value
+    if (el && typeof ResizeObserver !== 'undefined') {
+      composerResizeObserver?.disconnect()
+      composerResizeObserver = new ResizeObserver(() => autoGrow())
+      composerResizeObserver.observe(el)
+    }
+  })
   // Mount with historical turns: force enter stick (parent v-if remounts on leave/re-enter).
   void enterStickSequence()
 })

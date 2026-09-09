@@ -11,6 +11,7 @@ import SelectionAddToChat from './SelectionAddToChat.vue'
 import UpstreamRequirementContext from './UpstreamRequirementContext.vue'
 import { ARTIFACT_TO_OUTPUT_JSON } from '@/lib/run/structuredArtifacts'
 import { productArtifactName, productArtifactsForType, resolveStructuredProductArtifact } from '@/lib/run/productNodeArtifacts'
+import { artifactFriendlyNameKey } from '@/lib/run/reactArtifactPreview'
 import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
 import { addClarifyAnnotation } from '@/lib/inbox/useClarifyDraft'
 import { useToast } from '@/lib/composables/useToast'
@@ -119,14 +120,8 @@ const rawHtml = ref('')
 const isVisual = computed(() => props.node.type === 'visual' || spec.value?.name === 'page.html')
 
 function artifactTabLabel(name: string): string {
-  const map: Record<string, string> = {
-    'clarified_requirement.json': t('common.gateBodyLabels.clarifiedRequirement'),
-    'plan.json': t('common.gateBodyLabels.plan'),
-    'research.json': t('common.gateBodyLabels.research'),
-    'proposals.json': t('common.gateBodyLabels.proposals'),
-    'page.html': t('common.gateBodyLabels.pagePreview'),
-  }
-  return map[name] || name
+  const key = artifactFriendlyNameKey(name)
+  return key ? t(key) : name
 }
 const loading = ref(false)
 const eligibleVersions = computed(() =>

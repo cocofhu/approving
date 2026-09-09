@@ -39,14 +39,9 @@ describe('StatusMetrics', () => {
     platformStatus.mockReset()
     platformStatus.mockResolvedValue({
       cumulativeTokens: 1240582,
-      current5mBucketTokens: 4812,
-      todayMaxCompleted5mTokens: 12104,
+      todayTokens: 4812,
       runningCount: 3,
       queuedCount: 5,
-      currentBucketStart: '2026-08-12T06:05:00Z',
-      currentBucketEnd: '2026-08-12T06:10:00Z',
-      peakBucketStart: '2026-08-12T03:20:00Z',
-      peakBucketEnd: '2026-08-12T03:25:00Z',
       asOf: '2026-08-12T06:07:00Z',
       timezone: 'Asia/Shanghai',
     })
@@ -58,13 +53,15 @@ describe('StatusMetrics', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders five desktop metrics with /5m rate (plan g2.3)', async () => {
+  it('renders four desktop metrics with today tokens (plan g2.2)', async () => {
     const w = mountMetrics()
     await flushPromises()
     expect(w.find('[data-testid="status-metrics"]').exists()).toBe(true)
     expect(w.find('[data-testid="status-metrics-tokens"]').text()).toContain('1.24M')
-    expect(w.find('[data-testid="status-metrics-rate"]').text()).toMatch(/4\.8K\/5m/i)
-    expect(w.find('[data-testid="status-metrics-peak"]').text()).toContain('12.1K')
+    expect(w.find('[data-testid="status-metrics-today"]').text()).toContain('4.8K')
+    expect(w.find('[data-testid="status-metrics-today"]').text()).not.toContain('/5m')
+    expect(w.find('[data-testid="status-metrics-rate"]').exists()).toBe(false)
+    expect(w.find('[data-testid="status-metrics-peak"]').exists()).toBe(false)
     expect(w.find('[data-testid="status-metrics-running"]').text()).toContain('3')
     expect(w.find('[data-testid="status-metrics-queued"]').text()).toContain('5')
     w.unmount()
@@ -104,8 +101,7 @@ describe('StatusMetrics', () => {
   it('shows — for null token fields and 0 for true-zero counts', async () => {
     platformStatus.mockResolvedValue({
       cumulativeTokens: null,
-      current5mBucketTokens: null,
-      todayMaxCompleted5mTokens: null,
+      todayTokens: null,
       runningCount: 0,
       queuedCount: 0,
       asOf: '2026-08-12T00:00:00Z',
@@ -115,8 +111,7 @@ describe('StatusMetrics', () => {
     await flushPromises()
     await nextTick()
     expect(w.find('[data-testid="status-metrics-tokens"]').text()).toContain('—')
-    expect(w.find('[data-testid="status-metrics-rate"]').text()).toContain('—')
-    expect(w.find('[data-testid="status-metrics-peak"]').text()).toContain('—')
+    expect(w.find('[data-testid="status-metrics-today"]').text()).toContain('—')
     expect(w.find('[data-testid="status-metrics-running"]').text()).toContain('0')
     expect(w.find('[data-testid="status-metrics-queued"]').text()).toContain('0')
     w.unmount()
@@ -145,14 +140,13 @@ describe('StatusMetrics', () => {
     await flushPromises()
     const tips = {
       tokens: w.find('[data-testid="status-metrics-tokens"] .sm-tip').text(),
-      rate: w.find('[data-testid="status-metrics-rate"] .sm-tip').text(),
-      peak: w.find('[data-testid="status-metrics-peak"] .sm-tip').text(),
+      today: w.find('[data-testid="status-metrics-today"] .sm-tip').text(),
       running: w.find('[data-testid="status-metrics-running"] .sm-tip').text(),
       queued: w.find('[data-testid="status-metrics-queued"] .sm-tip').text(),
     }
     expect(tips.tokens).toMatch(/累计 Token:\s*1,240,582/)
-    expect(tips.rate).toMatch(/当前 5 分钟速率:\s*4,812/)
-    expect(tips.peak).toMatch(/今日 5 分钟峰值:\s*12,104/)
+    expect(tips.today).toMatch(/今日 Token:\s*4,812/)
+    expect(w.find('[data-testid="status-metrics-today"]').attributes('aria-label')).toMatch(/今日 Token:\s*4,812/)
     expect(tips.running).toMatch(/执行中:\s*3/)
     expect(tips.queued).toMatch(/排队:\s*5/)
     for (const tip of Object.values(tips)) {
@@ -165,21 +159,21 @@ describe('StatusMetrics', () => {
     w.unmount()
   })
 
-  it('compact tip is five label: value rows aligned with desktop (plan g1.3)', async () => {
+  it('compact tip is four label: value rows aligned with desktop (plan g2.3)', async () => {
     isMobile.value = true
     const w = mountMetrics()
     await flushPromises()
     const tip = w.find('[data-testid="status-metrics-compact"] .sm-tip')
     const lines = tip.findAll('div').map((d) => d.text())
-    expect(lines).toHaveLength(5)
+    expect(lines).toHaveLength(4)
     expect(lines[0]).toMatch(/累计 Token:\s*1,240,582/)
-    expect(lines[1]).toMatch(/当前 5 分钟速率:\s*4,812/)
-    expect(lines[2]).toMatch(/今日 5 分钟峰值:\s*12,104/)
-    expect(lines[3]).toMatch(/执行中:\s*3/)
-    expect(lines[4]).toMatch(/排队:\s*5/)
+    expect(lines[1]).toMatch(/今日 Token:\s*4,812/)
+    expect(lines[2]).toMatch(/执行中:\s*3/)
+    expect(lines[3]).toMatch(/排队:\s*5/)
     const tipText = tip.text()
     expect(tipText).not.toMatch(/完整值/)
     expect(tipText).not.toContain('/5m')
+    expect(tipText).not.toMatch(/5 分钟|速率|峰值/)
     expect(tipText).not.toMatch(/窄屏摘要|完整值|totalTokens/i)
     w.unmount()
   })
@@ -237,8 +231,7 @@ describe('StatusMetrics', () => {
   it('zero counts still show label: 0 in tip', async () => {
     platformStatus.mockResolvedValue({
       cumulativeTokens: 0,
-      current5mBucketTokens: 0,
-      todayMaxCompleted5mTokens: 0,
+      todayTokens: 0,
       runningCount: 0,
       queuedCount: 0,
       asOf: '2026-08-12T00:00:00Z',
@@ -249,6 +242,22 @@ describe('StatusMetrics', () => {
     expect(w.find('[data-testid="status-metrics-running"] .sm-tip').text()).toMatch(/执行中:\s*0/)
     expect(w.find('[data-testid="status-metrics-queued"] .sm-tip').text()).toMatch(/排队:\s*0/)
     expect(w.find('[data-testid="status-metrics-tokens"] .sm-tip').text()).toMatch(/累计 Token:\s*0/)
+    expect(w.find('[data-testid="status-metrics-today"] .sm-tip').text()).toMatch(/今日 Token:\s*0/)
+    w.unmount()
+  })
+
+  it('uses A-set stroke icon paths (plan g2.4)', async () => {
+    const w = mountMetrics()
+    await flushPromises()
+    const html = w.html()
+    expect(html).toContain('cx="12" cy="6.6" rx="7.2" ry="3.1"')
+    expect(html).toContain('M4.8 6.6v4.7c0 1.7 3.2 3.1 7.2 3.1s7.2-1.4 7.2-3.1V6.6')
+    expect(html).toContain('M8.2 3v4.2M15.8 3v4.2M3.4 10.2h17.2')
+    expect(html).toContain('M10.3 8.7l5.4 3.3-5.4 3.3z')
+    expect(html).toContain('M4 7.2h16M4 12h11.5M4 16.8h7')
+    expect(html).not.toContain('M13 3L5 14h7l-1 7 8-11h-7l1-7z')
+    expect(html).not.toContain('fill="currentColor"')
+    expect(html).not.toContain('M5 7h14M5 12h14M5 17h10')
     w.unmount()
   })
 })

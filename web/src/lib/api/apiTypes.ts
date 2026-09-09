@@ -266,16 +266,10 @@ export interface DashboardStats {
 export interface PlatformStatusMetrics {
   /** Platform cumulative tokens; null = never reported (UI "—"). */
   cumulativeTokens: number | null
-  /** Current calendar-aligned 5m bucket sum; null when unavailable. */
-  current5mBucketTokens: number | null
-  /** Max among today's completed 5m buckets; null when none. */
-  todayMaxCompleted5mTokens: number | null
+  /** Client-timezone calendar-day token sum; null when unavailable. */
+  todayTokens: number | null
   runningCount: number
   queuedCount: number
-  currentBucketStart?: string | null
-  currentBucketEnd?: string | null
-  peakBucketStart?: string | null
-  peakBucketEnd?: string | null
   asOf: string
   timezone?: string
 }

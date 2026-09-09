@@ -464,7 +464,7 @@ const {
                         <input
                           v-model="other[curQuestion.id]"
                           type="text"
-                          class="input min-h-0 flex-1 border-0 bg-transparent p-0 text-[12px] shadow-none focus:border-transparent focus:ring-0"
+                          class="input min-h-0 min-w-0 flex-1 border-0 bg-transparent p-0 text-[12px] shadow-none focus:border-transparent focus:ring-0 [overflow-wrap:anywhere]"
                           :placeholder="translate('pages.clarify.otherPlaceholder')"
                           data-testid="clarify-other-input"
                         />
@@ -513,7 +513,7 @@ const {
                     >
                       {{ translate('pages.clarify.next') }} <Icon name="chevron-right" :size="13" />
                     </button>
-                    <div v-else class="flex items-center gap-2">
+                    <div v-else class="flex flex-wrap items-center gap-2">
                       <button
                         v-if="hasRecommended"
                         class="inline-flex items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[12px] font-medium text-accent-2 hover:bg-accent/20 disabled:opacity-50"
@@ -677,10 +677,10 @@ const {
           ><Icon name="close" :size="9" /></button>
         </div>
       </div>
-      <div class="flex items-end gap-2">
+      <div class="flex min-w-0 items-end gap-2" data-testid="clarify-input-row">
         <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
         <button
-          class="flex h-10 w-10 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
           :title="translate('pages.clarify.addImage')"
           data-testid="clarify-attach-btn"
           @click="fileInput?.click()"
@@ -690,7 +690,7 @@ const {
         <textarea
           ref="textareaRef"
           v-model="draft"
-          class="input min-h-[40px] flex-1 resize-none"
+          class="input composer-hint-wrap min-h-[40px] min-w-0 flex-1 resize-none"
           :class="overflowScroll ? 'scroll-area max-h-[128px] overflow-y-auto' : 'overflow-y-hidden'"
           rows="1"
           :placeholder="inputPlaceholder"
@@ -701,9 +701,11 @@ const {
           @compositionend="composing = false"
           @paste="onPaste"
         />
+      </div>
+      <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2" data-testid="clarify-action-row">
         <button
           v-if="sendLabel"
-          class="inline-flex h-10 items-center gap-1 rounded-md bg-accent px-3 text-xs font-semibold text-white hover:bg-accent-2 disabled:opacity-50"
+          class="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-2 disabled:opacity-50"
           data-testid="clarify-send-label"
           :disabled="!draft.trim() && !attachments.length && !annotations.length"
           @click="send"
@@ -712,7 +714,7 @@ const {
         </button>
         <button
           v-else
-          class="flex h-10 w-10 items-center justify-center rounded-md bg-accent text-white hover:bg-accent-2 disabled:opacity-50"
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-white hover:bg-accent-2 disabled:opacity-50"
           data-testid="clarify-send-icon"
           :disabled="!draft.trim() && !attachments.length && !annotations.length"
           @click="send"
@@ -722,7 +724,7 @@ const {
         <button
           v-if="sessionBusy"
           type="button"
-          class="inline-flex h-10 shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 text-xs font-semibold text-txt2 hover:border-line-strong"
+          class="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 py-2 text-xs font-semibold text-txt2 hover:border-line-strong"
           data-testid="clarify-review-cancel"
           title="Cancel"
           @click="cancelReview"
@@ -730,15 +732,15 @@ const {
           Cancel
         </button>
       </div>
-      <div v-if="!hideFinish" class="mt-2 flex items-center justify-between gap-2">
+      <div v-if="!hideFinish" class="mt-2 flex min-w-0 flex-wrap items-start justify-between gap-2">
         <p
           v-if="reviewMode"
-          class="min-w-0 flex-1 text-[11px] leading-snug text-txt3"
+          class="min-w-0 flex-1 basis-40 text-[11px] leading-snug text-txt3 [overflow-wrap:anywhere]"
           data-testid="clarify-confirm-hint"
         >
           {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlowHint') }}
         </p>
-        <span v-else class="flex-1" />
+        <span v-else class="min-w-0 flex-1" />
         <button
           v-if="useConfirmFlowAction"
           class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ok px-3 py-1.5 text-xs font-semibold text-white hover:bg-ok/90 disabled:opacity-50"
@@ -783,6 +785,29 @@ const {
 </template>
 
 <style scoped>
+/* Placeholder must wrap to the textarea width — UA default often clips the 2nd line. */
+.composer-hint-wrap::placeholder {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: unset;
+}
+.composer-hint-wrap::-webkit-input-placeholder {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: unset;
+}
+.composer-hint-wrap::-moz-placeholder {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  opacity: 1;
+}
+
 /* Card-deck step transition: subtle slide + fade as one card advances. */
 .deck-enter-active,
 .deck-leave-active {
