@@ -45,6 +45,7 @@ describe('WorkflowApiTab interactions', () => {
   })
 
   it('loads, creates, copies and revokes API keys', async () => {
+    vi.useFakeTimers()
     mocks.createAPIKey.mockResolvedValue({ key: 'secret-new' })
     mocks.revokeAPIKey.mockResolvedValue(undefined)
     const w = mountTab()
@@ -60,9 +61,12 @@ describe('WorkflowApiTab interactions', () => {
     await flushPromises()
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('secret-new')
     expect(mocks.success).toHaveBeenCalled()
+    vi.advanceTimersByTime(2000)
+    expect((w.vm as any).copied).toBe('')
     await (w.vm as any).revokeKey('k1')
     expect(mocks.revokeAPIKey).toHaveBeenCalledWith('wf-1', 'k1')
     w.unmount()
+    vi.useRealTimers()
   })
 
   it('covers API failures, guards, examples, and clipboard rejection', async () => {

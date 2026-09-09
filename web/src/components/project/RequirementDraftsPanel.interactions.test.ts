@@ -252,6 +252,13 @@ describe('RequirementDraftsPanel interactions', () => {
     await w.get('[data-testid="requirement-drafts-find-next"]').trigger('click')
     await w.get('[data-testid="requirement-drafts-find-close"]').trigger('click')
     await w.get('[data-testid="requirement-drafts-tb-collapse"]').trigger('click')
+    await w.get('[data-testid="requirement-drafts-body"]').trigger('scroll')
+    await w.get('[data-testid="requirement-drafts-body"]').trigger('keydown', { key: 'i', ctrlKey: true })
+    await w.get('[data-testid="requirement-drafts-sash"]').trigger('mousedown')
+    await w.get('[data-testid="requirement-drafts-preview"]').trigger('scroll')
+    await w.get('[data-testid="requirement-drafts-delete"]').trigger('click')
+    await w.vm.$nextTick()
+    await w.get('[data-testid="requirement-drafts-delete-cancel"]').trigger('click')
     await w.get('[data-testid="requirement-drafts-detail"]').trigger('keydown', { key: 's', ctrlKey: true })
     await flushPromises()
     for (const id of ['open', 'done', 'all']) {
