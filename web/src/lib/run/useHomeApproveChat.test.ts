@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   listWorkflows: vi.fn(),
+  patchWorkflowHomeVisibility: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
   reactReply: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock('@/lib/api/api', async () => {
     api: {
       ...actual.api,
       listWorkflows: mocks.listWorkflows,
+      patchWorkflowHomeVisibility: mocks.patchWorkflowHomeVisibility,
       startRun: mocks.startRun,
       getRun: mocks.getRun,
       reactReply: mocks.reactReply,
@@ -127,11 +129,13 @@ describe('useHomeApproveChat', () => {
     mocks.toastError.mockReset()
     mocks.toastSuccess.mockReset()
     mocks.listWorkflows.mockReset()
+    mocks.patchWorkflowHomeVisibility.mockReset()
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
     mocks.reactReply.mockReset()
     mocks.readStoredProjectId.mockReturnValue('proj-1')
     mocks.listWorkflows.mockResolvedValue([approveWf, reactWf])
+    mocks.patchWorkflowHomeVisibility.mockResolvedValue({ ...approveWf, showOnHome: false })
     mocks.startRun.mockResolvedValue({ id: 'run-1', status: 'queued' })
     mocks.getRun.mockResolvedValue({
       id: 'run-1',
@@ -197,6 +201,34 @@ describe('useHomeApproveChat', () => {
     expect(chat.selectedId.value).toBe('wf-lite')
     expect(chat.projectId.value).toBe('proj-2')
     expect(localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)).toBe('wf-lite')
+  })
+
+  it('hides a pipeline optimistically and falls back to the next visible pipeline', async () => {
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+
+    await chat.hidePipelineFromHome(approveWf)
+
+    expect(mocks.patchWorkflowHomeVisibility).toHaveBeenCalledWith('wf-ap', false)
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-lite'])
+    expect(chat.selectedId.value).toBe('wf-lite')
+    expect(localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)).toBe('wf-lite')
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('已更新首页可见')
+  })
+
+  it('rolls back the card and selection when hiding fails', async () => {
+    mocks.listWorkflows.mockResolvedValue([approveWf, approveWfB])
+    mocks.patchWorkflowHomeVisibility.mockRejectedValue(new Error('patch failed'))
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+
+    await chat.hidePipelineFromHome(approveWf)
+
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap', 'wf-lite'])
+    expect(chat.selectedId.value).toBe('wf-ap')
+    expect(localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)).toBe('wf-ap')
+    expect(mocks.toastError).toHaveBeenCalledWith('patch failed')
   })
 
   it('starts a run carrying the first message, then opens inbox', async () => {
