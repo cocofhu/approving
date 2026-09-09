@@ -14,13 +14,12 @@ import {
   DEFAULT_CONFIG_ROOT,
   DEFAULT_WORKSPACE_DIR,
   defaultConfigRootFor,
+  draftPayloadJson,
   fromDraft,
-  fromDraftRaw,
+  hydrateStudioDraft,
   kvToRec,
-  normalizeDraftRegions,
   PROMPT_KEYS,
   recToKV,
-  toDraft,
   type AgentStudioDraft,
 } from '@/lib/agent/agentStudioDraft'
 import {
@@ -73,7 +72,7 @@ function syncTestAgentSelection() {
 
 const dirty = computed(() => {
   if (!draft.value) return false
-  return JSON.stringify(fromDraftRaw(draft.value)) !== originalJson.value
+  return draftPayloadJson(draft.value) !== originalJson.value
 })
 
 const promptCount = computed(() =>
@@ -163,7 +162,7 @@ const derivedPaths = computed(() => {
 })
 
 function sharedToDraft(cfg: ProjectSharedAgentConfig): AgentStudioDraft {
-  const d = toDraft({
+  return hydrateStudioDraft({
     name: '__project_shared__',
     projectId: cfg.defaultProjectId || '',
     acpBackend: (cfg.acpBackend as BackendId) || 'cursor',
@@ -176,14 +175,12 @@ function sharedToDraft(cfg: ProjectSharedAgentConfig): AgentStudioDraft {
     layout: cfg.layout || {},
     prompts: cfg.prompts,
   })
-  normalizeDraftRegions(d)
-  return d
 }
 
 function applyLoaded(cfg: ProjectSharedAgentConfig) {
   const d = sharedToDraft(cfg)
   draft.value = d
-  originalJson.value = JSON.stringify(fromDraftRaw(d))
+  originalJson.value = draftPayloadJson(d)
   configRootTouched = false
 }
 

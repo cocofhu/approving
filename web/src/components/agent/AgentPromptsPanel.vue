@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { AgentStudioDraft, PromptKey } from '@/lib/agent/agentStudioDraft'
+import {
+  normalizePromptText,
+  type AgentStudioDraft,
+  type PromptKey,
+} from '@/lib/agent/agentStudioDraft'
 
-defineProps<{ draft: AgentStudioDraft }>()
+const props = defineProps<{ draft: AgentStudioDraft }>()
+
+function setPrompt(key: PromptKey, value: string) {
+  props.draft.prompts[key] = normalizePromptText(value)
+}
+
+function onPromptInput(key: PromptKey, event: Event) {
+  const el = event.target
+  if (el instanceof HTMLTextAreaElement) setPrompt(key, el.value)
+}
 
 const { t } = useI18n()
 
@@ -47,11 +60,13 @@ const PROMPT_FRAGMENTS = computed(() => [
         <span class="text-[12px] font-medium text-txt2">{{ f.label }}</span>
         <p class="mb-1.5 text-[11px] text-txt3">{{ f.hint }}</p>
         <textarea
-          v-model="draft.prompts[f.key]"
+          :value="draft.prompts[f.key]"
           rows="3"
           spellcheck="false"
+          :data-testid="'prompt-' + f.key"
           :placeholder="t('pages.agentStudio.prompts.defaultPrefix') + f.placeholder"
           class="w-full resize-y rounded-md border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 text-txt outline-none focus:border-accent"
+          @input="onPromptInput(f.key, $event)"
         />
       </label>
     </div>
