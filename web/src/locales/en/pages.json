@@ -3111,7 +3111,6 @@
         "snapshotHint": "You are viewing a snapshot of content that has already arrived. Leave and re-enter later to continue from this snapshot without a full reload."
       },
       "boot": {
-        "intro": "Starting sandbox / waiting for the first Agent event…",
         "stages": {
           "creating": {
             "title": "Creating sandbox",
