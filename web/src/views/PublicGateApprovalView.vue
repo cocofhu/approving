@@ -18,6 +18,11 @@ import type { AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { isAbortError } from '@/lib/run/liveLogRehydrate'
 import { createWsReconnectController } from '@/lib/run/wsReconnect'
 import {
+  createBusySeedRetryController,
+  runBusySeedRetry,
+} from '@/lib/run/busySeedRetry'
+import { pickAcpRails } from '@/lib/run/pendingAcpBuffer'
+import {
   formatRemainingSec,
   mergePublicGatePreview,
   parseShareTokenFromHash,
@@ -538,6 +543,7 @@ function syncChatQueueFromPreview() {
   }
   applyPreviewLiveEvents()
   flushPendingPublicAcp()
+  maybeStartPublicBusySeedRetry()
   refreshLocalChatBusy()
 }
 
@@ -552,6 +558,58 @@ function toAcpEvents(
 
 let pendingPublicAcp: AcpEvent[] | null = null
 let publicWs: WebSocket | undefined
+/** Thought/message rails applied via seed or live — stops busy seed retry. */
+let publicRailsFilled = false
+let publicLiveIncremental = false
+const publicBusySeedRetry = createBusySeedRetryController()
+
+function markPublicRailsFromEvents(events: AcpEvent[] | undefined) {
+  const rails = pickAcpRails(events || [])
+  if (rails.thought || rails.message) {
+    publicRailsFilled = true
+  }
+}
+
+function publicSessionBusy(): boolean {
+  const p = preview.value
+  if (!p) return false
+  const waiting = typeof p.waiting === 'number' ? p.waiting : 0
+  return !!p.sessionBusy || waiting > 0 || !!chatRef.value?.isSessionBusy?.()
+}
+
+function startPublicBusySeedRetry() {
+  publicBusySeedRetry.start(async (signal) => {
+    await runBusySeedRetry({
+      signal,
+      isBusy: () => publicSessionBusy(),
+      hasContent: () => publicRailsFilled,
+      liveIncrementalReceived: () => publicLiveIncremental,
+      seed: async () => {
+        await loadPreview({ silent: true })
+        const events = toAcpEvents(preview.value?.liveEvents)
+        if (!events.length) return publicRailsFilled
+        const applied = deliverPublicAcp(events)
+        if (applied) markPublicRailsFromEvents(events)
+        return publicRailsFilled
+      },
+    })
+  })
+}
+
+/** Start busy-guarded seed when session busy and rails still empty (g2.2). */
+function maybeStartPublicBusySeedRetry() {
+  if (!publicSessionBusy()) {
+    publicBusySeedRetry.stop()
+    return
+  }
+  if (publicRailsFilled || publicLiveIncremental) {
+    publicBusySeedRetry.stop()
+    return
+  }
+  // Already looping — do not reset from silent poll / sync re-entry.
+  if (!publicBusySeedRetry.aborted) return
+  startPublicBusySeedRetry()
+}
 
 function deliverPublicAcp(events: AcpEvent[] | undefined): boolean {
   if (!events?.length) return true
@@ -565,6 +623,7 @@ function deliverPublicAcp(events: AcpEvent[] | undefined): boolean {
     return false
   }
   pendingPublicAcp = null
+  markPublicRailsFromEvents(events)
   return true
 }
 
@@ -593,7 +652,11 @@ function handlePublicWsMessage(raw: string) {
   }
   if (typ === 'acp') {
     const events = Array.isArray(m.events) ? (m.events as AcpEvent[]) : []
-    deliverPublicAcp(events)
+    // ACP busy (if present) must not stop publicBusySeedRetry — platform sessionBusy is authority (g1.2).
+    if (deliverPublicAcp(events)) {
+      const rails = pickAcpRails(events)
+      if (rails.thought || rails.message) publicLiveIncremental = true
+    }
     refreshLocalChatBusy()
   }
 }
@@ -640,10 +703,13 @@ function connectPublicEvents() {
 }
 
 function stopPublicEvents() {
+  publicBusySeedRetry.stop()
   publicWsReconnect.markIntentionalClose()
   publicWs?.close()
   publicWs = undefined
   pendingPublicAcp = null
+  publicRailsFilled = false
+  publicLiveIncremental = false
 }
 
 function clearHash() {
@@ -968,6 +1034,10 @@ async function resumeFromForeground() {
     return
   }
   startRemainingTick()
+  // Same depth as hard load: re-seed liveEvents under busy guard (g2.2).
+  publicRailsFilled = false
+  publicLiveIncremental = false
+  publicBusySeedRetry.stop()
   await loadPreview({ silent: true, issueNonce: true })
   if (canPoll()) startPoll()
 }

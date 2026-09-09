@@ -1292,10 +1292,9 @@ function connectActiveRunWs(runId: string, opts?: { fromReconnect?: boolean }) {
       return
     }
     if (m.type === 'acp') {
-      if (typeof m.busy === 'boolean') {
-        clarifyLiveBusy.value = !!m.busy
-        if (!m.busy) busySeedRetry.stop()
-      }
+      // ACP/sandbox busy is observational only — must not overwrite platform
+      // session busy (clarifyLiveBusy) or stop busySeedRetry (g1.2).
+      // Tear-down / stop retry only from review queue_state idle / turn_done / error.
       applyOrBufferAcpFrame(m as { nodeId?: string; events?: AcpEvent[]; busy?: boolean })
       return
     }
