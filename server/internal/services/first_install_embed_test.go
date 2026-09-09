@@ -38,6 +38,9 @@ func TestFirstInstallEmbedFSHasWorkspaceMarkdown(t *testing.T) {
 		if len(agent.Files) == 0 {
 			t.Fatalf("%s template Files empty after embed load", name)
 		}
+		if got := agent.Env["GIT_REPOS"]; got != "${vars.repos}" {
+			t.Fatalf("%s GIT_REPOS = %q, want ${vars.repos}", name, got)
+		}
 		for _, f := range agent.Files {
 			if looksLikeCloneURL(f.Content) {
 				t.Fatalf("%s file %s contains a clone URL; first-install files must stay host-agnostic", name, f.Path)

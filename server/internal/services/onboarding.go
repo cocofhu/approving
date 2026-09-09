@@ -161,6 +161,10 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 	if err != nil {
 		return OnboardingBootstrapResult{}, fmt.Errorf("publish workflow: %w", err)
 	}
+	published, err = s.WF.UpdateShowOnHome(published.ID, true)
+	if err != nil {
+		return OnboardingBootstrapResult{}, fmt.Errorf("show workflow on home: %w", err)
+	}
 
 	return OnboardingBootstrapResult{
 		AgentIDs:   agentIDs,
