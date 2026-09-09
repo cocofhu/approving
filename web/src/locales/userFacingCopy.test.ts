@@ -3,10 +3,12 @@ import { createI18n } from 'vue-i18n'
 import zhCommon from '@/locales/zh-CN/common.json'
 import zhPages from '@/locales/zh-CN/pages.json'
 import zhMcp from '@/locales/zh-CN/mcp.json'
+import zhNav from '@/locales/zh-CN/nav.json'
 import zhRoute from '@/locales/zh-CN/route.json'
 import enCommon from '@/locales/en/common.json'
 import enPages from '@/locales/en/pages.json'
 import enMcp from '@/locales/en/mcp.json'
+import enNav from '@/locales/en/nav.json'
 import enRoute from '@/locales/en/route.json'
 
 describe('user-facing copy remediation keys', () => {
@@ -74,6 +76,19 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('common.table.title')).toBe('标题')
     expect(zhRoute.route.runs).toBe('运行记录')
     expect(enRoute.route.runs).toBe('Run history')
+  })
+
+  it('uses Start and Needs attention consistently in navigation and page titles', () => {
+    expect(zhNav.nav.dashboard).toBe('开始')
+    expect(zhRoute.route.dashboard).toBe('开始')
+    expect(zhNav.nav.gates).toBe('需要关注')
+    expect(zhRoute.route.gates).toBe('需要关注')
+    expect(zh.global.t('pages.gatesInbox.title')).toBe('需要关注')
+    expect(enNav.nav.dashboard).toBe('Start')
+    expect(enRoute.route.dashboard).toBe('Start')
+    expect(enNav.nav.gates).toBe('Needs attention')
+    expect(enRoute.route.gates).toBe('Needs attention')
+    expect(en.global.t('pages.gatesInbox.title')).toBe('Needs attention')
   })
 
   it('human gate canvas subtitle avoids unconditional ReAct promise', () => {

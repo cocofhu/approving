@@ -86,6 +86,43 @@ test.describe('structured artifact export harness', () => {
     })
   })
 
+  test('raw JSON code board follows dark and light tokens (g3.2)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 })
+
+    await page.goto('/structured-export-harness.html?scenario=structured&theme=dark')
+    await expect(page.getByTestId('export-harness-root')).toBeVisible({ timeout: 15_000 })
+    await page.getByTestId('artifact-preview-mode-raw').click()
+    const darkView = page.getByTestId('artifact-preview-raw-json')
+    await expect(darkView).toBeVisible()
+    await expect(darkView).toHaveCSS('background-color', 'rgb(30, 30, 30)')
+    await expect(darkView.locator('.tok-key').first()).toHaveCSS('color', 'rgb(156, 220, 254)')
+    await page.screenshot({
+      path: path.join(shotDir, '05-raw-json-dark.png'),
+      fullPage: true,
+    })
+
+    await page.getByTestId('artifact-preview-zoom').click()
+    const darkModal = page.getByTestId('artifact-preview-zoom-raw-json')
+    await expect(darkModal).toBeVisible()
+    await expect(darkModal).toHaveCSS('background-color', 'rgb(30, 30, 30)')
+    await page.keyboard.press('Escape')
+
+    await page.goto('/structured-export-harness.html?scenario=structured&theme=light')
+    await expect(page.getByTestId('export-harness-root')).toBeVisible({ timeout: 15_000 })
+    await expect(page.locator('html')).toHaveClass(/light/)
+    await page.getByTestId('artifact-preview-mode-raw').click()
+    const lightView = page.getByTestId('artifact-preview-raw-json')
+    await expect(lightView).toBeVisible()
+    const lightBg = await lightView.evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(lightBg).not.toBe('rgb(30, 30, 30)')
+    expect(lightBg).toMatch(/rgb\(\s*25[0-5],\s*25[0-5],\s*25[0-5]\s*\)/)
+    await expect(lightView.locator('.tok-key').first()).toHaveCSS('color', 'rgb(4, 81, 165)')
+    await page.screenshot({
+      path: path.join(shotDir, '06-raw-json-light.png'),
+      fullPage: true,
+    })
+  })
+
   test('light theme export still produces readable PNG', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 })
     await page.goto('/structured-export-harness.html?scenario=structured&theme=light')

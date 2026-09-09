@@ -25,7 +25,12 @@
       "cardFallback": "Approve 开发前澄清",
       "scrollLeft": "向左滚动",
       "scrollRight": "向右滚动",
-      "draftRestored": "草稿已恢复"
+      "draftRestored": "草稿已恢复",
+      "pipelineMenu": {
+        "more": "更多操作",
+        "hide": "隐藏",
+        "edit": "编辑"
+      }
     },
     "tokenAnalytics": {
       "title": "用量统计",
@@ -354,6 +359,17 @@
       "tokenTipWorkflow": "工作流",
       "tokenTipPm": "项目管理",
       "tokenTipAria": "Token 消耗，悬停查看细节",
+      "newWorkflow": {
+        "scratch": "从零开始",
+        "scratchDesc": "空白画布，自己拖节点搭建",
+        "baseline": "默认基线工作流",
+        "baselineDesc": "套用开箱流水线，填仓库即可运行",
+        "modalTitle": "从默认基线创建",
+        "modalHint": "仓库列表与运行启动页相同。可添加多个，启动时平级 clone 到工作区。",
+        "create": "创建",
+        "creating": "正在创建…",
+        "created": "已创建工作流「{name}」"
+      },
       "tabBoard": "看板",
       "tabWorkflows": "流水线",
       "tabRequirementDrafts": "需求草稿",
@@ -1283,7 +1299,7 @@
       }
     },
     "gatesInbox": {
-      "title": "待审批",
+      "title": "需要关注",
       "subtitleHtml": "<strong class=\"font-medium text-warn\">门禁审批</strong> + <em class=\"not-italic text-n-clarify\">需求澄清</em> 收件箱 · 工作流在此挂起等待人工处理",
       "statusPending": "有新审批 · 待刷新",
       "statusEditing": "正在填写 · 后台同步中",
@@ -2985,20 +3001,20 @@
       "pending": "节点尚未执行,等待进入澄清…",
       "pendingHint": "上游节点完成后会自动开启本轮需求澄清。",
       "stepSandbox": {
-        "title": "正在准备澄清沙箱容器…",
-        "hint": "首次为该 Agent 创建容器可能需要一会儿,请稍候。"
+        "title": "正在准备工作环境…",
+        "hint": "第一次启动可能需要一会儿，请稍候。"
       },
       "stepRuntime": {
-        "title": "正在拉起 Agent 运行时…",
-        "hint": "正在容器内启动 ACP 桥接服务与依赖环境。"
+        "title": "正在启动 Agent…",
+        "hint": "正在准备运行环境，请稍候。"
       },
       "stepAcp": {
-        "title": "正在建立 ACP 连接…",
-        "hint": "与 Agent 握手中,马上就好。"
+        "title": "正在连接 Agent…",
+        "hint": "马上就好，请稍候。"
       },
       "stepQuestions": {
-        "title": "Agent 正在生成第一轮问题…",
-        "hint": "正在整理需要向你澄清的关键问题。"
+        "title": "正在整理第一轮问题…",
+        "hint": "正在整理需要向你确认的事项。"
       }
     },
     "nodeOutput": {
@@ -3072,7 +3088,7 @@
       "nodeNoOutput": "该节点尚未产生输出"
     },
     "liveLog": {
-      "title": "ACP 实时日志",
+      "title": "执行日志",
       "snapshot": "快照",
       "snapshotTip": "节点结束后的只读事件副本。运行中为实时流，不会显示此标签。",
       "builtinMcp": "内置 MCP 调用 · {n}",
@@ -3083,7 +3099,7 @@
       "rehydrate": {
         "loading": "正在恢复执行日志…",
         "errorTitle": "日志恢复失败",
-        "errorBody": "无法恢复当前节点的 ACP 执行日志时间线（事件源暂时不可达或读取失败）。这与「尚未产生首个事件」不同，请手动重试。",
+        "errorBody": "无法恢复当前节点的执行日志时间线（事件源暂时不可达或读取失败）。这与「尚未产生首个事件」不同，请手动重试。",
         "retry": "重试恢复",
         "warnTitle": "历史日志读取异常",
         "warnBody": "REST 再水合失败或超时。下方已到达的实时 / 缓存事件仍然有效，节点并未因此中断。",
@@ -3098,8 +3114,8 @@
             "desc": "网关与容器创建中"
           },
           "acpReady": {
-            "title": "ACP 就绪中",
-            "desc": "等待 Agent 通信通道就绪"
+            "title": "正在连接 Agent",
+            "desc": "等待 Agent 可以开始工作"
           },
           "firstEvent": {
             "title": "等待首个事件",
@@ -3497,16 +3513,16 @@
       },
       "repoPlaceholder": "可选:git clone URL(留空则空工作区)",
       "stepSandbox": {
-        "title": "正在准备沙箱容器…",
-        "hint": "首次为该 Agent 创建容器可能需要一会儿,请稍候。"
+        "title": "正在准备工作环境…",
+        "hint": "第一次启动可能需要一会儿，请稍候。"
       },
       "stepRuntime": {
-        "title": "正在拉起 Agent 运行时…",
-        "hint": "正在容器内启动 ACP 桥接服务与依赖环境。"
+        "title": "正在启动 Agent…",
+        "hint": "正在准备运行环境，请稍候。"
       },
       "stepAcp": {
-        "title": "正在建立 ACP 连接…",
-        "hint": "与 Agent 握手中,马上就好。"
+        "title": "正在连接 Agent…",
+        "hint": "马上就好，请稍候。"
       },
       "stepReady": {
         "title": "即将就绪…",
