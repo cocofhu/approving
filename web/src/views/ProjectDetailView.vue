@@ -87,6 +87,7 @@ const {
   openMenuId,
   newWorkflowMenuOpen,
   baselineModalOpen,
+  baselineName,
   baselineRepos,
   creatingBaseline,
   baselineCreateError,
@@ -1229,6 +1230,19 @@ const {
       <p class="mb-3 text-[13px] leading-relaxed text-txt2">
         {{ t('pages.projectDetail.newWorkflow.modalHint') }}
       </p>
+      <div class="mb-4">
+        <label class="label" for="baseline-workflow-name">
+          {{ t('pages.projectDetail.newWorkflow.nameLabel') }}
+        </label>
+        <input
+          id="baseline-workflow-name"
+          v-model="baselineName"
+          class="input"
+          autocomplete="off"
+          data-testid="baseline-workflow-name"
+          :placeholder="t('pages.projectDetail.newWorkflow.namePlaceholder')"
+        />
+      </div>
       <ReposEditor
         :repos="baselineRepos"
         :min-rows="1"

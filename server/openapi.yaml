@@ -25,8 +25,46 @@ tags:
     description: Platform-wide artifact catalog
   - name: agents
     description: Agent Studio export/import (single agent and org-folder)
+  - name: workflows
+    description: Workflow creation and lifecycle
 
 paths:
+  /workflows/from-baseline:
+    post:
+      operationId: createWorkflowFromBaseline
+      tags: [workflows]
+      summary: Create a published workflow from the embedded default baseline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBaselineWorkflowRequest'
+      responses:
+        '201':
+          description: Published workflow created with the requested name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaselineWorkflow'
+        '400':
+          description: Empty name, missing project, or no repository URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: A workflow with the same name already exists in the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /runs/{id}/gates/{nodeId}/primary-artifacts:
     get:
       operationId: listGatePrimaryArtifacts
@@ -473,6 +511,44 @@ components:
         error:
           type: string
       required: [error]
+
+    CreateBaselineWorkflowRequest:
+      type: object
+      required: [projectId, name, repos]
+      properties:
+        projectId:
+          type: string
+        name:
+          type: string
+          minLength: 1
+          description: Required workflow display name; trimmed and unique within the project
+        repos:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [url]
+            properties:
+              url:
+                type: string
+              name:
+                type: string
+              branch:
+                type: string
+
+    BaselineWorkflow:
+      type: object
+      required: [id, projectId, name, status]
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [published]
 
     ArtifactListItem:
       type: object

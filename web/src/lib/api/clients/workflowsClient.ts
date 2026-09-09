@@ -17,10 +17,10 @@ export const workflowsClient = {
       method: wf.id ? 'PUT' : 'POST',
       body: JSON.stringify(wf),
     }),
-  createWorkflowFromBaseline: (projectId: string, repos: RepoRow[]) =>
+  createWorkflowFromBaseline: (projectId: string, name: string, repos: RepoRow[]) =>
     req<Workflow>('/workflows/from-baseline', {
       method: 'POST',
-      body: JSON.stringify({ projectId, repos }),
+      body: JSON.stringify({ projectId, name, repos }),
     }),
   /** Notify-only: never sends nodes/edges (avoids stale list-cache graph rollback). */
   patchWorkflowNotifyPolicy: (id: string, notifyPolicy: WorkflowNotifyPolicy) =>

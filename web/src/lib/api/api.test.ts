@@ -389,10 +389,10 @@ describe('api.saveWorkflow description payload', () => {
 })
 
 describe('api.createWorkflowFromBaseline', () => {
-  it('POSTs projectId and repos to /workflows/from-baseline (plan g2.3)', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'wf-base', name: 'app', status: 'published' }))
+  it('POSTs the workflow name, projectId, and repos to /workflows/from-baseline (plan g3.1)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'wf-base', name: 'Requirements', status: 'published' }))
     await expect(
-      api.createWorkflowFromBaseline('p1', [
+      api.createWorkflowFromBaseline('p1', 'Requirements', [
         { name: '', url: 'https://github.com/acme/app.git', branch: 'main' },
       ]),
     ).resolves.toMatchObject({ id: 'wf-base', status: 'published' })
@@ -401,6 +401,7 @@ describe('api.createWorkflowFromBaseline', () => {
     expect(call?.[1]).toMatchObject({ method: 'POST' })
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({
       projectId: 'p1',
+      name: 'Requirements',
       repos: [{ name: '', url: 'https://github.com/acme/app.git', branch: 'main' }],
     })
   })
