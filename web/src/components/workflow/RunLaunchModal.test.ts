@@ -64,7 +64,6 @@ function mountModal(open = true, extraProps: Record<string, unknown> = {}) {
         },
         HardLoadLayer: true,
         ReposEditor: true,
-        PrioritySegmented: true,
       },
     },
   })
@@ -298,19 +297,22 @@ describe('RunLaunchModal', () => {
   it('prefills segmented priority from initialPriority (plan g2.2 / g3.4)', async () => {
     const wrapper = mountModal(true, { initialPriority: 'high' })
     await flushPromises()
-    expect(wrapper.vm.priority).toBe('high')
+    const checked = wrapper.findAll('[role="radio"]').find((b) => b.attributes('aria-checked') === 'true')
+    expect(checked?.text()).toBe('高')
     wrapper.unmount()
   })
 
   it('defaults to normal when initialPriority is omitted or invalid (plan g3.4)', async () => {
     const omitted = mountModal(true)
     await flushPromises()
-    expect(omitted.vm.priority).toBe('normal')
+    const omittedChecked = omitted.findAll('[role="radio"]').find((b) => b.attributes('aria-checked') === 'true')
+    expect(omittedChecked?.text()).toBe('普通')
     omitted.unmount()
 
     const invalid = mountModal(true, { initialPriority: 'urgent' })
     await flushPromises()
-    expect(invalid.vm.priority).toBe('normal')
+    const invalidChecked = invalid.findAll('[role="radio"]').find((b) => b.attributes('aria-checked') === 'true')
+    expect(invalidChecked?.text()).toBe('普通')
     invalid.unmount()
   })
 
@@ -318,7 +320,8 @@ describe('RunLaunchModal', () => {
     apiMocks.startRun.mockResolvedValue({ id: 'run-prio' })
     const wrapper = mountModal(true, { initialPriority: 'high' })
     await flushPromises()
-    wrapper.vm.priority = 'low'
+    const lowBtn = wrapper.findAll('[role="radio"]').find((b) => b.text() === '低')
+    await lowBtn!.trigger('click')
     const startBtn = findStartButton(wrapper)
     await startBtn!.trigger('click')
     await flushPromises()
