@@ -60,8 +60,7 @@
     "statusMetrics": {
       "aria": "Platform status metrics",
       "tokens": "Cumulative tokens",
-      "rate": "Current 5-minute rate",
-      "peak": "Today's 5-minute peak",
+      "today": "Today's tokens",
       "running": "Running",
       "queued": "Queued",
       "compactAria": "Platform status summary"
