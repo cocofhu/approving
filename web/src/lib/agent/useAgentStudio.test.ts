@@ -11,6 +11,13 @@ const mocks = vi.hoisted(() => ({
   listAgents: vi.fn(),
   getAgentsOrg: vi.fn(),
   listProjects: vi.fn(),
+  saveAgentsOrg: vi.fn(),
+  patchAgentProject: vi.fn(),
+  saveAgent: vi.fn(),
+  getAgent: vi.fn(),
+  exportAgent: vi.fn(),
+  renameAgent: vi.fn(),
+  deleteAgent: vi.fn(),
 }))
 
 vi.mock('@/lib/api/api', async () => {
@@ -22,6 +29,13 @@ vi.mock('@/lib/api/api', async () => {
       listAgents: mocks.listAgents,
       getAgentsOrg: mocks.getAgentsOrg,
       listProjects: mocks.listProjects,
+      saveAgentsOrg: mocks.saveAgentsOrg,
+      patchAgentProject: mocks.patchAgentProject,
+      saveAgent: mocks.saveAgent,
+      getAgent: mocks.getAgent,
+      exportAgent: mocks.exportAgent,
+      renameAgent: mocks.renameAgent,
+      deleteAgent: mocks.deleteAgent,
     },
   }
 })
@@ -97,6 +111,17 @@ describe('useAgentStudio', () => {
       agents: { 'agent-a': { groupId: 'g1' } },
     })
     mocks.listProjects.mockResolvedValue([{ id: 'proj-1', name: 'Proj 1' }])
+    mocks.saveAgentsOrg.mockResolvedValue({
+      revision: 2,
+      groups: [{ id: 'g1', name: 'Default', parentId: '', agentNames: ['agent-a'] }],
+      agents: { 'agent-a': { groupId: 'g1' } },
+    })
+    mocks.patchAgentProject.mockResolvedValue({})
+    mocks.saveAgent.mockResolvedValue({ name: 'agent-a', projectId: 'proj-1', acpBackend: 'cursor' })
+    mocks.getAgent.mockResolvedValue({ name: 'agent-a', projectId: 'proj-1', acpBackend: 'cursor' })
+    mocks.exportAgent.mockResolvedValue(new Blob(['x']))
+    mocks.renameAgent.mockResolvedValue({ name: 'agent-z', projectId: 'proj-1', acpBackend: 'cursor' })
+    mocks.deleteAgent.mockResolvedValue({ status: 'ok' })
   })
 
   afterEach(() => {
@@ -120,6 +145,50 @@ describe('useAgentStudio', () => {
 
     window.dispatchEvent(new Event('resize'))
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+    studio.openCreateAgent()
+    studio.openCreateTeam()
+    studio.openAgentManage('agent-a')
+    studio.closeAgentManage()
+    studio.onSidebarRenameBlocked('agent-a')
+    studio.gotoManageFromBlocked()
+    studio.closeRenameBlocked()
+    studio.openOrgSheet()
+    studio.toggleOrgSheetNode('g1')
+    studio.orgSheetPadStyle(2)
+    studio.closeOrgSheet()
+    studio.onDataSubTab('memory')
+    studio.requestStudioTab('mcp')
+    studio.leaveConfirmCancel()
+    studio.openSettingsInFiles()
+    studio.discardUnsavedChanges()
+    studio.clearManageSearch()
+    studio.closeAssignModals()
+    studio.openCreateRootGroup()
+    studio.openCreateChildGroup('g1')
+    studio.openRenameGroup('g1')
+    studio.confirmDeleteGroup('g1')
+    await studio.reloadOrg()
+    await studio.refreshAgentsList()
+    studio.showToast('ok')
+    studio.chooseAgent('agent-b')
+    studio.chooseAgentFromSheet('agent-a')
+    studio.resetOrgFromBaseline()
+    studio.onWizardCreated({ name: 'agent-c', projectId: 'proj-1', acpBackend: 'cursor' } as never)
+    studio.onTeamBootstrapStarted({
+      id: 'sess-1',
+      status: 'running',
+      events: [],
+      resources: [],
+      createdAt: '2026-01-01T00:00:00Z',
+    })
+    studio.onTeamBootstrapSelectPm('agent-a')
+    studio.onTeamBootstrapOpenPm('agent-a')
+    await studio.onTeamBootstrapRefresh()
+    studio.onTeamBootstrapDone()
+    await studio.load()
+    await studio.save()
+    await studio.select('agent-a')
 
     app.unmount()
   })

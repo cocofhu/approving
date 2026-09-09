@@ -149,6 +149,25 @@ describe('useProjectDetail', () => {
     expect(detail.tab.value).toBe('workflows')
     detail.closeMenu()
     detail.toggleWorkflowFavorite(sampleWorkflows[0] as any)
+    detail.parseProjectTab('audit')
+    detail.parseProjectTab('cron')
+    detail.setTab('board')
+    detail.setTab('pmLeader')
+    detail.toggleMenu('wf-1')
+    detail.menuIdFor('wf-1')
+    detail.fmtTime('2026-01-01T00:00:00Z')
+    detail.fmtCompactTokenCount(1200)
+    detail.addVarRow()
+    const row = detail.project.value?.variables?.[0]
+    if (row) {
+      expect(typeof detail.isBoolTrue(row)).toBe('boolean')
+      detail.setBoolValue(row, true)
+    }
+    await detail.reloadWorkflows()
+    detail.onNotifyProjectUpdated(sampleProject as any)
+    detail.openNotifyChannelSettings()
+    detail.closeRunModal()
+    detail.closeCopyModal()
 
     document.dispatchEvent(new Event('click'))
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))

@@ -23,18 +23,16 @@ export default defineConfig(({ command }) => {
     test: {
       environment: 'node',
       include: ['src/**/*.test.ts'],
-      setupFiles: ['./vitest.setup.ts'],
+      // Vitest 4: happy-dom omits window.confirm/alert/prompt; stub so vi.spyOn(window, ...) works.
+      setupFiles: ['./src/test/vitest-window-stubs.ts', './vitest.setup.ts'],
       coverage: {
         provider: 'v8',
         reporter: ['text', 'text-summary', 'cobertura', 'json-summary'],
         reportsDirectory: './coverage',
         // Lines 硬门禁：不达标时 vitest 非零退出（ci-web 的 npm test -- --coverage）。
-        // 仅约束 lines；branches/functions 不设阈值。
-        // Vitest 4.x 使用 ast-v8-to-istanbul，同一套用例的 Lines 约为 76%
-        //（Vitest 3.2 + 旧 v8 remap 时 README/badge 约为 86%）。阈值按新口径对齐，
-        // 不删减用例、不放宽 include 分母。
+        // 仅约束 lines；branches/functions 不设阈值。本分支补充用例后保持 85%。
         thresholds: {
-          lines: 75,
+          lines: 85,
         },
         // 收窄分母：计入可测业务代码（含全部 components），排除 views/router/e2e/构建样式配置。
         // CI/MR 的 Lines 正则与 web:coverage-gate 均依赖此口径。
@@ -56,6 +54,8 @@ export default defineConfig(({ command }) => {
           '**/playwright.config.*',
           '**/vite.config.*',
         ],
+        // Vitest 4 remaps coverage through chained Vue source maps; re-apply exclude after remap.
+        excludeAfterRemap: true,
       },
     },
     server: {
