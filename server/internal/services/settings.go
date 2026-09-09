@@ -20,7 +20,22 @@ const (
 	KeyTestSandboxTTLMin = "test_sandbox_ttl_minutes"
 	KeyMaxTestSandboxes  = "max_test_sandboxes"
 	KeyNodeAutoRetryMax  = "node_auto_retry_max"
+	KeyBrandProductName  = "brand_product_name"
+	KeyBrandHomeSubtitle = "brand_home_subtitle"
+
+	BrandProductNameMaxLength  = 40
+	BrandHomeSubtitleMaxLength = 80
 )
+
+type BrandSettings struct {
+	ProductName  string `json:"product_name"`
+	HomeSubtitle string `json:"home_subtitle"`
+}
+
+type BrandPatch struct {
+	ProductName  *string
+	HomeSubtitle *string
+}
 
 // ConcurrencyController is the slice of the engine the settings layer drives:
 // changing the live max_concurrent_runs. Defined here (consumer side) so the
@@ -108,6 +123,15 @@ func (s *SettingsService) Effective() []SettingItem {
 	return out
 }
 
+// Brand returns normalized instance-level brand overrides. Empty values mean
+// callers should use their built-in, locale-aware defaults.
+func (s *SettingsService) Brand() BrandSettings {
+	return BrandSettings{
+		ProductName:  s.dbString(KeyBrandProductName),
+		HomeSubtitle: s.dbString(KeyBrandHomeSubtitle),
+	}
+}
+
 // resolve applies the precedence env > DB > config(file/default) for one knob.
 // The config snapshot already folds env over file over default, so when a knob
 // is env-locked its config value is exactly the env value.
@@ -126,24 +150,60 @@ func (s *SettingsService) resolve(k knob, cfg *config.Config) (value int, source
 // changed), skipping env-locked knobs, then applies the new effective values
 // to the running engine / sandbox service.
 func (s *SettingsService) Update(patch map[string]int) ([]SettingItem, error) {
+	return s.UpdateWithBrand(patch, BrandPatch{})
+}
+
+// UpdateWithBrand validates the complete patch before writing, then persists
+// scheduling and brand values in one transaction.
+func (s *SettingsService) UpdateWithBrand(patch map[string]int, brand BrandPatch) ([]SettingItem, error) {
 	for _, k := range knobs() {
 		v, ok := patch[k.key]
 		if !ok {
 			continue
 		}
-		// An env-locked knob is authoritative from the environment; ignore edits.
-		if k.envVar != "" && strings.TrimSpace(os.Getenv(k.envVar)) != "" {
-			continue
-		}
 		if v < k.min {
 			return nil, fmt.Errorf("%s 不能小于 %d", k.label, k.min)
 		}
-		if err := s.setInt(k.key, v); err != nil {
-			return nil, err
+	}
+	if err := validateBrandPatch(brand); err != nil {
+		return nil, err
+	}
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		for _, k := range knobs() {
+			v, ok := patch[k.key]
+			if !ok || (k.envVar != "" && strings.TrimSpace(os.Getenv(k.envVar)) != "") {
+				continue
+			}
+			if err := setSetting(tx, k.key, strconv.Itoa(v)); err != nil {
+				return err
+			}
 		}
+		if brand.ProductName != nil {
+			if err := setSetting(tx, KeyBrandProductName, strings.TrimSpace(*brand.ProductName)); err != nil {
+				return err
+			}
+		}
+		if brand.HomeSubtitle != nil {
+			if err := setSetting(tx, KeyBrandHomeSubtitle, strings.TrimSpace(*brand.HomeSubtitle)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	s.apply()
 	return s.Effective(), nil
+}
+
+func validateBrandPatch(patch BrandPatch) error {
+	if patch.ProductName != nil && len([]rune(strings.TrimSpace(*patch.ProductName))) > BrandProductNameMaxLength {
+		return fmt.Errorf("产品名不能超过 %d 个字符", BrandProductNameMaxLength)
+	}
+	if patch.HomeSubtitle != nil && len([]rune(strings.TrimSpace(*patch.HomeSubtitle))) > BrandHomeSubtitleMaxLength {
+		return fmt.Errorf("首页副标题不能超过 %d 个字符", BrandHomeSubtitleMaxLength)
+	}
+	return nil
 }
 
 // ApplyOnBoot pushes the persisted (DB) overrides onto the runtime components
@@ -186,5 +246,17 @@ func (s *SettingsService) dbInt(key string) (int, bool) {
 
 func (s *SettingsService) setInt(key string, v int) error {
 	// Key is the primary key, so Save upserts (update when present, else insert).
-	return s.db.Save(&models.Setting{Key: key, Value: strconv.Itoa(v), UpdatedAt: time.Now()}).Error
+	return setSetting(s.db, key, strconv.Itoa(v))
+}
+
+func (s *SettingsService) dbString(key string) string {
+	var row models.Setting
+	if err := s.db.First(&row, "key = ?", key).Error; err != nil {
+		return ""
+	}
+	return strings.TrimSpace(row.Value)
+}
+
+func setSetting(db *gorm.DB, key, value string) error {
+	return db.Save(&models.Setting{Key: key, Value: value, UpdatedAt: time.Now()}).Error
 }

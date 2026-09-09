@@ -286,6 +286,11 @@ export interface SettingItem {
   locked: boolean
 }
 
+export interface BrandSettings {
+  product_name: string
+  home_subtitle: string
+}
+
 export type PlatformRuleSource = 'override' | 'global' | 'embed'
 
 export interface PlatformRuleMeta {

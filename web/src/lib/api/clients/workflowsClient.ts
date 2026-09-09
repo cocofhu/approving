@@ -1,4 +1,5 @@
 import type { Workflow, WorkflowVersion, WorkflowNotifyPolicy, WorkflowGraph } from '../../shared/types'
+import type { RepoRow } from '../../../components/ui/ReposEditor.vue'
 import { req } from '../httpCore'
 
 export const workflowsClient = {
@@ -15,6 +16,11 @@ export const workflowsClient = {
     req<Workflow>(wf.id ? `/workflows/${wf.id}` : '/workflows', {
       method: wf.id ? 'PUT' : 'POST',
       body: JSON.stringify(wf),
+    }),
+  createWorkflowFromBaseline: (projectId: string, repos: RepoRow[]) =>
+    req<Workflow>('/workflows/from-baseline', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, repos }),
     }),
   /** Notify-only: never sends nodes/edges (avoids stale list-cache graph rollback). */
   patchWorkflowNotifyPolicy: (id: string, notifyPolicy: WorkflowNotifyPolicy) =>

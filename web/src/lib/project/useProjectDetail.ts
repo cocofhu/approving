@@ -2,6 +2,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { InputField } from '@/components/workflow/RunLaunchModal.vue'
+import type { RepoRow } from '@/components/ui/ReposEditor.vue'
 import { api } from '@/lib/api/api'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { writeStoredProjectId } from '@/lib/composables/useProjectContext'
@@ -249,6 +250,11 @@ const runInputs = ref<Record<string, string>>({})
 const runImages = ref<Record<string, ClarifyImage[]>>({})
 const draftRestored = ref(false)
 const openMenuId = ref<string | null>(null)
+const newWorkflowMenuOpen = ref(false)
+const baselineModalOpen = ref(false)
+const baselineRepos = ref<RepoRow[]>([{ name: '', url: '', branch: '' }])
+const creatingBaseline = ref(false)
+const baselineCreateError = ref('')
 
 const deleteWfTarget = ref<Workflow | null>(null)
 const deletingWf = ref(false)
@@ -416,10 +422,17 @@ function fieldOptions(f: InputField): string[] {
 
 function closeMenu() {
   openMenuId.value = null
+  newWorkflowMenuOpen.value = false
 }
 
 function toggleMenu(id: string) {
+  newWorkflowMenuOpen.value = false
   openMenuId.value = openMenuId.value === id ? null : id
+}
+
+function toggleNewWorkflowMenu() {
+  openMenuId.value = null
+  newWorkflowMenuOpen.value = !newWorkflowMenuOpen.value
 }
 
 function menuIdFor(id: string) {
@@ -429,10 +442,14 @@ function menuIdFor(id: string) {
 function onDocClick(e: MouseEvent) {
   const el = e.target as Element | null
   if (!el?.closest?.('[data-wf-menu]')) closeMenu()
+  if (!el?.closest?.('[data-new-workflow-menu]')) newWorkflowMenuOpen.value = false
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') closeMenu()
+  if (e.key === 'Escape') {
+    closeMenu()
+    if (baselineModalOpen.value && !creatingBaseline.value) closeBaselineModal()
+  }
 }
 
 function onScrollClose() {
@@ -633,7 +650,41 @@ function onVarValueInput(row: ProjectVariable, raw: string, asNumber = false) {
 }
 
 function newWorkflow() {
+  newWorkflowMenuOpen.value = false
   router.push({ path: '/workflows/new/edit', query: { projectId: projectId.value } })
+}
+
+function openBaselineModal() {
+  newWorkflowMenuOpen.value = false
+  baselineRepos.value = [{ name: '', url: '', branch: '' }]
+  baselineCreateError.value = ''
+  baselineModalOpen.value = true
+}
+
+function closeBaselineModal() {
+  if (creatingBaseline.value) return
+  baselineModalOpen.value = false
+  baselineCreateError.value = ''
+}
+
+const hasValidBaselineRepo = computed(() =>
+  baselineRepos.value.some((repo) => repo.url.trim() !== ''),
+)
+
+async function createFromBaseline() {
+  if (!hasValidBaselineRepo.value || creatingBaseline.value) return
+  creatingBaseline.value = true
+  baselineCreateError.value = ''
+  try {
+    const created = await api.createWorkflowFromBaseline(projectId.value, baselineRepos.value)
+    workflows.value = [created, ...workflows.value.filter((workflow) => workflow.id !== created.id)]
+    baselineModalOpen.value = false
+    toast.success(t('pages.projectDetail.newWorkflow.created', { name: created.name }))
+  } catch (e: any) {
+    baselineCreateError.value = String(e?.message || e)
+  } finally {
+    creatingBaseline.value = false
+  }
 }
 
 function openWorkflow(w: Workflow) {
@@ -867,6 +918,12 @@ onBeforeRouteUpdate(async (to, from) => {
   runImages,
   draftRestored,
   openMenuId,
+  newWorkflowMenuOpen,
+  baselineModalOpen,
+  baselineRepos,
+  creatingBaseline,
+  baselineCreateError,
+  hasValidBaselineRepo,
   deleteWfTarget,
   deletingWf,
   deleteWfError,
@@ -899,6 +956,7 @@ onBeforeRouteUpdate(async (to, from) => {
   fieldOptions,
   closeMenu,
   toggleMenu,
+  toggleNewWorkflowMenu,
   menuIdFor,
   onDocClick,
   onKeydown,
@@ -920,6 +978,9 @@ onBeforeRouteUpdate(async (to, from) => {
   setBoolValue,
   onVarValueInput,
   newWorkflow,
+  openBaselineModal,
+  closeBaselineModal,
+  createFromBaseline,
   openWorkflow,
   openEdit,
   openRun,

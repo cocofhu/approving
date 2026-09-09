@@ -6,6 +6,8 @@ import AppSwitch from '@/components/ui/AppSwitch.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import RunLaunchModal, { type InputField } from '@/components/workflow/RunLaunchModal.vue'
+import ReposEditor from '@/components/ui/ReposEditor.vue'
+import NewWorkflowMenu from '@/components/workflow/NewWorkflowMenu.vue'
 import CopyWorkflowModal from '@/components/workflow/CopyWorkflowModal.vue'
 import ExportVersionModal from '@/components/workflow/ExportVersionModal.vue'
 import BoardView from '@/views/BoardView.vue'
@@ -83,6 +85,12 @@ const {
   runImages,
   draftRestored,
   openMenuId,
+  newWorkflowMenuOpen,
+  baselineModalOpen,
+  baselineRepos,
+  creatingBaseline,
+  baselineCreateError,
+  hasValidBaselineRepo,
   deleteWfTarget,
   deletingWf,
   deleteWfError,
@@ -115,6 +123,7 @@ const {
   fieldOptions,
   closeMenu,
   toggleMenu,
+  toggleNewWorkflowMenu,
   menuIdFor,
   onDocClick,
   onKeydown,
@@ -136,6 +145,9 @@ const {
   setBoolValue,
   onVarValueInput,
   newWorkflow,
+  openBaselineModal,
+  closeBaselineModal,
+  createFromBaseline,
   openWorkflow,
   openEdit,
   openRun,
@@ -455,9 +467,24 @@ const {
           <AppButton variant="outline" icon="input" @click="triggerImport">
             {{ t('common.buttons.import') }}
           </AppButton>
-          <AppButton variant="primary" icon="plus" @click="newWorkflow">
-            {{ t('common.buttons.newWorkflow') }}
-          </AppButton>
+          <div class="relative" data-new-workflow-menu @click.stop>
+            <AppButton
+              variant="primary"
+              icon="plus"
+              data-testid="new-workflow-button"
+              :aria-expanded="newWorkflowMenuOpen"
+              aria-haspopup="menu"
+              @click="toggleNewWorkflowMenu"
+            >
+              {{ t('common.buttons.newWorkflow') }}
+              <Icon name="chevron-down" :size="14" />
+            </AppButton>
+            <NewWorkflowMenu
+              :open="newWorkflowMenuOpen"
+              @scratch="newWorkflow"
+              @baseline="openBaselineModal"
+            />
+          </div>
         </div>
         <div class="scroll-area min-h-0 flex-1 overflow-y-auto">
         <div
@@ -1187,6 +1214,45 @@ const {
       :status="exportTarget.status"
       @close="exportTarget = null"
     />
+
+    <AppModal
+      :open="baselineModalOpen"
+      :title="t('pages.projectDetail.newWorkflow.modalTitle')"
+      close-on-esc
+      :close-on-backdrop="!creatingBaseline"
+      @close="closeBaselineModal"
+    >
+      <p class="mb-3 text-[13px] leading-relaxed text-txt2">
+        {{ t('pages.projectDetail.newWorkflow.modalHint') }}
+      </p>
+      <ReposEditor
+        :repos="baselineRepos"
+        :min-rows="1"
+        @update:repos="baselineRepos = $event"
+      />
+      <div
+        v-if="baselineCreateError"
+        class="mt-3 flex items-start gap-2 rounded-md border border-err/30 bg-err/10 px-3 py-2 text-[12px] text-err"
+        role="alert"
+      >
+        <Icon name="alert" :size="14" class="mt-0.5 shrink-0" />
+        {{ baselineCreateError }}
+      </div>
+      <template #footer>
+        <AppButton variant="ghost" :disabled="creatingBaseline" @click="closeBaselineModal">
+          {{ t('common.buttons.cancel') }}
+        </AppButton>
+        <AppButton
+          variant="primary"
+          :loading="creatingBaseline"
+          :disabled="!hasValidBaselineRepo"
+          data-testid="create-baseline-workflow"
+          @click="createFromBaseline"
+        >
+          {{ creatingBaseline ? t('pages.projectDetail.newWorkflow.creating') : t('pages.projectDetail.newWorkflow.create') }}
+        </AppButton>
+      </template>
+    </AppModal>
 
     <AppModal
       :open="!!deleteWfTarget"

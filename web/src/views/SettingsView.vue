@@ -2,13 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api/api'
+import { api, type BrandSettings, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { isIntegrationsQuery } from '@/data/settingsNav'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
 import IntegrationsPanel from '@/components/settings/IntegrationsPanel.vue'
+import { setBrandSettings } from '@/lib/composables/useBrandSettings'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -61,6 +62,8 @@ function sourceLabelOf(source: string): string {
 
 const items = ref<SettingItem[]>([])
 const form = reactive<Record<string, number>>({})
+const brandForm = reactive<BrandSettings>({ product_name: '', home_subtitle: '' })
+const savedBrand = reactive<BrandSettings>({ product_name: '', home_subtitle: '' })
 const sandboxes = ref<SandboxView[]>([])
 const dashboard = ref<DashboardStats | null>(null)
 const loading = ref(true)
@@ -97,6 +100,14 @@ function itemOf(key: string): SettingItem | undefined {
 function hydrate(list: SettingItem[]) {
   items.value = list
   for (const it of list) form[it.key] = it.value
+}
+
+function hydrateBrand(brand: BrandSettings) {
+  brandForm.product_name = brand?.product_name || ''
+  brandForm.home_subtitle = brand?.home_subtitle || ''
+  savedBrand.product_name = brandForm.product_name
+  savedBrand.home_subtitle = brandForm.home_subtitle
+  setBrandSettings(brand)
 }
 
 function aggregateUsage(list: SandboxView[]) {
@@ -141,6 +152,7 @@ async function loadSettings() {
     const res = await api.getSettings()
     if (!settingsSeq.isCurrentSeq(localSeq)) return
     hydrate(res.items)
+    hydrateBrand(res.brand)
   } catch (e: any) {
     if (!settingsSeq.isCurrentSeq(localSeq)) return
     if (items.value.length > 0) {
@@ -182,12 +194,17 @@ async function save() {
   saving.value = true
   error.value = ''
   try {
-    const patch: Record<string, number> = {}
+    const patch: Record<string, number | string> = {}
     for (const it of items.value) {
       if (!it.locked) patch[it.key] = Number(form[it.key])
     }
+    if (isAdmin.value) {
+      patch.brand_product_name = brandForm.product_name
+      patch.brand_home_subtitle = brandForm.home_subtitle
+    }
     const res = await api.updateSettings(patch)
     hydrate(res.items)
+    hydrateBrand(res.brand)
     savedAt.value = Date.now()
   } catch (e: any) {
     error.value = e?.message || t('pages.settings.saveFailed')
@@ -196,7 +213,11 @@ async function save() {
   }
 }
 
-const dirty = () => items.value.some((it) => !it.locked && Number(form[it.key]) !== it.value)
+const dirty = () =>
+  items.value.some((it) => !it.locked && Number(form[it.key]) !== it.value) ||
+  (isAdmin.value &&
+    (brandForm.product_name !== savedBrand.product_name ||
+      brandForm.home_subtitle !== savedBrand.home_subtitle))
 
 onMounted(() => {
   loadSettings()
@@ -342,6 +363,52 @@ onBeforeUnmount(() => {
 
     <template v-else>
       <div :class="showRefreshProgress ? 'opacity-[0.55]' : ''">
+      <div class="card mb-4" data-testid="brand-settings-group">
+        <div class="border-b border-line px-4 py-3.5">
+          <h3 class="flex items-center gap-2 text-[13px] font-semibold text-txt">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center bg-accent-dim text-accent-2">
+              <Icon name="settings" :size="16" />
+            </span>
+            {{ t('pages.settings.brand.title') }}
+          </h3>
+          <p class="mt-1 text-xs leading-relaxed text-txt3">{{ t('pages.settings.brand.desc') }}</p>
+          <p v-if="!isAdmin" class="mt-1 text-[11px] text-warn">{{ t('pages.settings.brand.readOnly') }}</p>
+        </div>
+        <div class="grid gap-4 px-4 py-3.5 md:grid-cols-2">
+          <div>
+            <label for="setting-brand-product-name" class="text-sm font-medium text-txt">
+              {{ t('pages.settings.brand.productName') }}
+            </label>
+            <input
+              id="setting-brand-product-name"
+              v-model="brandForm.product_name"
+              class="input mt-2 w-full disabled:cursor-not-allowed disabled:opacity-55"
+              data-testid="brand-product-name"
+              type="text"
+              maxlength="40"
+              :placeholder="t('pages.settings.brand.productNamePlaceholder')"
+              :disabled="!isAdmin || saving"
+            />
+            <p class="mt-1.5 text-xs text-txt3">{{ t('pages.settings.brand.productNameHint') }}</p>
+          </div>
+          <div>
+            <label for="setting-brand-home-subtitle" class="text-sm font-medium text-txt">
+              {{ t('pages.settings.brand.homeSubtitle') }}
+            </label>
+            <input
+              id="setting-brand-home-subtitle"
+              v-model="brandForm.home_subtitle"
+              class="input mt-2 w-full disabled:cursor-not-allowed disabled:opacity-55"
+              data-testid="brand-home-subtitle"
+              type="text"
+              maxlength="80"
+              :placeholder="t('pages.settings.brand.homeSubtitlePlaceholder')"
+              :disabled="!isAdmin || saving"
+            />
+            <p class="mt-1.5 text-xs text-txt3">{{ t('pages.settings.brand.homeSubtitleHint') }}</p>
+          </div>
+        </div>
+      </div>
       <div v-for="group in groups" :key="group.id" class="card mb-4">
         <div class="border-b border-line px-4 py-3.5">
           <h3 class="flex items-center gap-2 text-[13px] font-semibold text-txt">
