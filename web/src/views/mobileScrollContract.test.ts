@@ -43,17 +43,20 @@ describe('mobile scroll contract — list A (plan g1 / g3.1)', () => {
     expect(src).toMatch(/scroll-area min-h-0 flex-1 overflow-auto/)
   })
 
-  // plan g1.2 / g1.3: TriggersView & IntegrationsView retired; integrations live in settings modal
-  it('settings integrations modal owns catalog scroll (replaces Triggers/Integrations pages)', () => {
-    const modal = readFileSync(
-      join(dir, '../components/settings/IntegrationsModal.vue'),
+  // Integrations remain inside the settings chrome and own the right-pane scroll exit.
+  it('settings integrations panel owns catalog and detail scroll', () => {
+    const panel = readFileSync(
+      join(dir, '../components/settings/IntegrationsPanel.vue'),
       'utf8',
     )
-    expect(modal).toMatch(/data-testid="integrations-modal-catalog"/)
-    expect(modal).toMatch(/data-testid="integrations-modal-detail"/)
-    expect(modal).toMatch(/AppModal/)
+    expect(panel).toMatch(/data-testid="integrations-panel"/)
+    expect(panel).toMatch(/data-testid="integrations-panel-catalog"/)
+    expect(panel).toMatch(/data-testid="integrations-panel-detail"/)
+    expect(panel).toMatch(/data-testid="integrations-panel-scroll"/)
+    expect(panel).toMatch(/min-h-0 flex-1 overflow-y-auto/)
+    expect(panel).not.toMatch(/AppModal/)
     const settings = read('SettingsView.vue')
-    expect(settings).toMatch(/IntegrationsModal/)
+    expect(settings).toMatch(/IntegrationsPanel v-if="showIntegrations"/)
     expect(settings).toMatch(/data-testid="settings-integrations-card"/)
   })
 
