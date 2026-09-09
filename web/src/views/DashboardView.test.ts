@@ -9,6 +9,7 @@ import type { Workflow } from '@/lib/shared/types'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   listWorkflows: vi.fn(),
+  listProjects: vi.fn(),
   patchWorkflowHomeVisibility: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('@/lib/api/api', async () => {
     api: {
       ...actual.api,
       listWorkflows: mocks.listWorkflows,
+      listProjects: mocks.listProjects,
       patchWorkflowHomeVisibility: mocks.patchWorkflowHomeVisibility,
       startRun: mocks.startRun,
       getRun: mocks.getRun,
@@ -130,12 +132,14 @@ describe('DashboardView home composer', () => {
   beforeEach(() => {
     mocks.push.mockReset()
     mocks.listWorkflows.mockReset()
+    mocks.listProjects.mockReset()
     mocks.patchWorkflowHomeVisibility.mockReset()
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
     mocks.reactReply.mockReset()
     mocks.readStoredProjectId.mockReturnValue('proj-1')
     mocks.listWorkflows.mockResolvedValue([approveWf])
+    mocks.listProjects.mockResolvedValue([{ id: 'proj-1', name: '综合项目组', description: '', variables: [] }])
     mocks.patchWorkflowHomeVisibility.mockResolvedValue({ ...approveWf, showOnHome: false })
     mocks.startRun.mockResolvedValue({ id: 'run-9', status: 'queued' })
     mocks.getRun.mockResolvedValue({
@@ -168,9 +172,49 @@ describe('DashboardView home composer', () => {
     expect(wrapper.find('[data-testid="home-composer"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="home-no-project"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').text()).toContain('自我迭代PRO')
+    expect(wrapper.get('[data-testid="home-pipeline-card-project-wf-ap"]').text()).toBe('综合项目组')
     expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }))
     const call = mocks.listWorkflows.mock.calls[0]?.[0] || {}
     expect(call).not.toHaveProperty('projectId')
+    wrapper.unmount()
+  })
+
+  // plan g2.1 — card title = workflow name, next line = project name; same workflow name, different projects
+  it('shows workflow name above project name and distinguishes same-named workflows', async () => {
+    const other: Workflow = {
+      ...approveWf,
+      id: 'wf-ap-b',
+      name: '自我迭代PRO',
+      projectId: 'proj-2',
+      description: '另一项目的同名工作流',
+    }
+    mocks.listWorkflows.mockResolvedValue([approveWf, other])
+    mocks.listProjects.mockResolvedValue([
+      { id: 'proj-1', name: '综合项目组', description: '', variables: [] },
+      { id: 'proj-2', name: 'SkillHub', description: '', variables: [] },
+    ])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const a = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
+    const b = wrapper.get('[data-testid="home-pipeline-card-wf-ap-b"]')
+    expect(a.get('[data-testid="home-pipeline-card-name"]').text()).toBe('自我迭代PRO')
+    expect(b.get('[data-testid="home-pipeline-card-name"]').text()).toBe('自我迭代PRO')
+    expect(wrapper.get('[data-testid="home-pipeline-card-project-wf-ap"]').text()).toBe('综合项目组')
+    expect(wrapper.get('[data-testid="home-pipeline-card-project-wf-ap-b"]').text()).toBe('SkillHub')
+    expect(a.get('[data-testid="home-pipeline-card-name"]').attributes('title')).toBe('自我迭代PRO')
+    expect(wrapper.get('[data-testid="home-pipeline-card-project-wf-ap"]').attributes('title')).toBe(
+      '综合项目组',
+    )
+    wrapper.unmount()
+  })
+
+  it('omits the project name row when the pipeline has no projectId', async () => {
+    mocks.listWorkflows.mockResolvedValue([{ ...approveWf, projectId: undefined }])
+    mocks.listProjects.mockResolvedValue([{ id: 'proj-1', name: '综合项目组', description: '', variables: [] }])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').text()).toContain('自我迭代PRO')
+    expect(wrapper.find('[data-testid="home-pipeline-card-project-wf-ap"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -456,6 +500,34 @@ describe('DashboardView home composer', () => {
     await search.setValue('')
     await flushPromises()
     expect(teleportedExists('home-pipeline-select-option-wf-ap')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('filters the home combobox by project name as well as workflow name (plan g2.1/g2.2)', async () => {
+    const second: Workflow = {
+      ...approveWf,
+      id: 'wf-lite',
+      name: '默认工作流',
+      projectId: 'proj-2',
+      description: '轻量 Approve 入口',
+    }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    mocks.listProjects.mockResolvedValue([
+      { id: 'proj-1', name: '综合项目组', description: '', variables: [] },
+      { id: 'proj-2', name: 'SkillHub', description: '', variables: [] },
+    ])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').text()).toContain(
+      '综合项目组 · 自我迭代PRO',
+    )
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = teleported('home-pipeline-select-search')
+    await search.setValue('Skill')
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-select-option-wf-lite')).toBe(true)
+    expect(teleportedExists('home-pipeline-select-option-wf-ap')).toBe(false)
     wrapper.unmount()
   })
 

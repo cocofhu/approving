@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-export type HomePipelineOption = { id: string; name: string }
+export type HomePipelineOption = { id: string; name: string; projectName?: string }
 
 const props = withDefaults(
   defineProps<{
@@ -29,16 +29,27 @@ const searchInput = ref<HTMLInputElement | null>(null)
 /** Fixed position below trigger (Teleport escapes .home-shell__content overflow). */
 const panelStyle = ref<Record<string, string>>({})
 
+function triggerLabel(p: HomePipelineOption | undefined): string {
+  if (!p) return ''
+  const project = (p.projectName || '').trim()
+  // No empty " · 工作流名" prefix when project name is missing (g1.3 / F4).
+  return project ? `${project} · ${p.name}` : p.name
+}
+
 const selectedName = computed(() => {
   if (!props.pipelines.length) return t('pages.dashboard.noPipelineShort')
   const hit = props.pipelines.find((p) => p.id === props.modelValue)
-  return hit?.name ?? t('pages.dashboard.noPipelineShort')
+  if (!hit) return t('pages.dashboard.noPipelineShort')
+  return triggerLabel(hit)
 })
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   if (!q) return props.pipelines
-  return props.pipelines.filter((p) => p.name.toLowerCase().includes(q))
+  return props.pipelines.filter(
+    (p) =>
+      p.name.toLowerCase().includes(q) || (p.projectName || '').toLowerCase().includes(q),
+  )
 })
 
 function escapeHtml(s: string): string {
@@ -207,7 +218,7 @@ onBeforeUnmount(() => {
       @click="togglePanel"
       @keydown="onTriggerKeydown"
     >
-      <span class="home-pipeline-select__label">{{ selectedName }}</span>
+      <span class="home-pipeline-select__label" :title="selectedName">{{ selectedName }}</span>
       <span class="home-pipeline-select__chev" aria-hidden="true" />
     </button>
 
@@ -259,7 +270,15 @@ onBeforeUnmount(() => {
               :data-testid="`home-pipeline-select-option-${p.id}`"
               @click.stop="choose(p.id)"
             >
-              <span v-html="highlightName(p.name, search.trim())" />
+              <span
+                class="home-pipeline-select__opt-name"
+                v-html="highlightName(p.name, search.trim())"
+              />
+              <span
+                v-if="p.projectName"
+                class="home-pipeline-select__opt-project"
+                v-html="highlightName(p.projectName, search.trim())"
+              />
             </button>
           </template>
           <div
@@ -375,6 +394,10 @@ onBeforeUnmount(() => {
 
 .home-pipeline-select__opt {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   text-align: left;
   border: 0;
   border-radius: 8px;
@@ -383,6 +406,20 @@ onBeforeUnmount(() => {
   padding: 8px 10px;
   font-size: 13px;
   cursor: pointer;
+}
+
+.home-pipeline-select__opt-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-pipeline-select__opt-project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: rgb(var(--c-txt2));
 }
 
 .home-pipeline-select__opt:hover,

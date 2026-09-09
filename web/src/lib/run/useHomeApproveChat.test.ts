@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   listWorkflows: vi.fn(),
+  listProjects: vi.fn(),
   patchWorkflowHomeVisibility: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock('@/lib/api/api', async () => {
     api: {
       ...actual.api,
       listWorkflows: mocks.listWorkflows,
+      listProjects: mocks.listProjects,
       patchWorkflowHomeVisibility: mocks.patchWorkflowHomeVisibility,
       startRun: mocks.startRun,
       getRun: mocks.getRun,
@@ -57,6 +59,7 @@ import {
   HOME_PRIORITY_MEMORY_KEY,
   HOME_COMPOSER_DRAFT_DEBOUNCE_MS,
   parseRunPriority,
+  resolveHomeProjectName,
 } from './useHomeApproveChat'
 import {
   HOME_COMPOSER_DRAFT_KEY,
@@ -135,12 +138,17 @@ describe('useHomeApproveChat', () => {
     mocks.toastError.mockReset()
     mocks.toastSuccess.mockReset()
     mocks.listWorkflows.mockReset()
+    mocks.listProjects.mockReset()
     mocks.patchWorkflowHomeVisibility.mockReset()
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
     mocks.reactReply.mockReset()
     mocks.readStoredProjectId.mockReturnValue('proj-1')
     mocks.listWorkflows.mockResolvedValue([approveWf, reactWf])
+    mocks.listProjects.mockResolvedValue([
+      { id: 'proj-1', name: '综合项目组', description: '', variables: [] },
+      { id: 'proj-2', name: 'SkillHub', description: '', variables: [] },
+    ])
     mocks.patchWorkflowHomeVisibility.mockResolvedValue({ ...approveWf, showOnHome: false })
     mocks.startRun.mockResolvedValue({ id: 'run-1', status: 'queued' })
     mocks.getRun.mockResolvedValue({
@@ -171,6 +179,45 @@ describe('useHomeApproveChat', () => {
     await chat.load()
     expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap'])
     expect(chat.selected.value?.id).toBe('wf-ap')
+  })
+
+  // plan g2.2 — load listProjects in parallel and attach projectName
+  it('resolves projectName from listProjects in parallel with listWorkflows', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(mocks.listProjects).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(chat.pipelines.value[0]?.projectName).toBe('综合项目组')
+  })
+
+  it('falls back to projectId when the project list has no matching name', async () => {
+    mocks.listProjects.mockResolvedValue([])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.pipelines.value[0]?.projectName).toBe('proj-1')
+  })
+
+  it('leaves projectName empty when the workflow has no projectId', async () => {
+    mocks.listWorkflows.mockResolvedValue([{ ...approveWf, projectId: undefined }, reactWf])
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.pipelines.value[0]?.projectName).toBe('')
+  })
+
+  it('still loads workflows when listProjects fails', async () => {
+    mocks.listProjects.mockRejectedValue(new Error('projects down'))
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.loadError.value).toBeNull()
+    expect(chat.pipelines.value[0]?.id).toBe('wf-ap')
+    expect(chat.pipelines.value[0]?.projectName).toBe('proj-1')
+  })
+
+  it('resolveHomeProjectName prefers mapped name over id', () => {
+    const map = new Map([['proj-1', '综合项目组']])
+    expect(resolveHomeProjectName('proj-1', map)).toBe('综合项目组')
+    expect(resolveHomeProjectName('missing', map)).toBe('missing')
+    expect(resolveHomeProjectName('', map)).toBe('')
+    expect(resolveHomeProjectName(undefined, map)).toBe('')
   })
 
   // plan g2.1 — cross-project list without project gate
