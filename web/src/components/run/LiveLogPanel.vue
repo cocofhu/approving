@@ -476,10 +476,6 @@ watch(
         data-testid="live-log-boot"
         class="mx-auto mt-7 flex w-full max-w-[420px] flex-col px-2 font-sans"
       >
-        <div class="mb-4 text-center text-[12px] text-txt3">
-          <Icon name="spinner" :size="18" class="mb-2 inline-block animate-spin text-accent" />
-          <div>{{ t('pages.liveLog.boot.intro') }}</div>
-        </div>
         <div
           v-for="(stage, i) in bootStages"
           :key="stage.id"

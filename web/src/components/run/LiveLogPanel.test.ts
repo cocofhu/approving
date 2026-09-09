@@ -116,6 +116,7 @@ describe('LiveLogPanel', () => {
     expect(wrapper.text()).toContain('沙箱创建中')
     expect(wrapper.text()).toContain('正在连接 Agent')
     expect(wrapper.text()).toContain('等待首个事件')
+    expect(wrapper.text()).not.toContain('正在启动沙箱 / 等待 Agent 首个事件')
     wrapper.unmount()
   })
 
