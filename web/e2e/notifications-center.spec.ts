@@ -58,8 +58,11 @@ test.describe('shell notification center (IA separation)', () => {
     const badge = page.getByTestId('run-notifications-badge')
     await expect(badge).toBeVisible()
     await expect(badge).toHaveText('3')
-    // Sidebar notifications badge shares the same unreadCount.
-    await expect(page.getByTestId('nav-notifications-badge')).toHaveText('3')
+    // Workspace chrome: unread stays on the bell, not a primary 通知 item (plan g2.1).
+    await expect(page.getByTestId('nav-workspace-chrome')).toBeVisible()
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: '运行' })).toBeVisible()
+    await expect(page.getByTestId('nav-workspace-chrome').getByRole('link', { name: '通知' })).toHaveCount(0)
 
     await page.getByTestId('run-notifications-bell').click()
     const panel = page.getByTestId('run-notifications-panel')
@@ -80,10 +83,11 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('nav-notifications-badge')).toHaveText('3')
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
 
-    // Workspace dual entry: notifications + gates stay; runs live under settings chrome (plan g1.1)
+    // /notifications uses settings chrome: 通知 is highlighted; 运行/待审批 are not in this sidebar.
+    await expect(page.getByTestId('nav-settings-chrome')).toBeVisible()
     await expect(page.getByRole('link', { name: '通知' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '设置' })).toBeVisible()
-    await expect(page.getByRole('link', { name: '待审批' })).toBeVisible()
+    await expect(page.getByTestId('nav-back-home')).toBeVisible()
+    await expect(page.getByRole('link', { name: '待审批' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: '运行' })).toHaveCount(0)
 
     await page.getByTestId('notifications-filter-unread').click()
@@ -99,7 +103,8 @@ test.describe('shell notification center (IA separation)', () => {
     await settleAuth(page)
 
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('7')
-    await expect(page.getByTestId('nav-notifications-badge')).toHaveText('7')
+    await expect(page.getByTestId('nav-workspace-chrome')).toBeVisible()
+    await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
 
     await page.getByTestId('run-notifications-bell').click()
     const panel = page.getByTestId('run-notifications-panel')
@@ -108,6 +113,12 @@ test.describe('shell notification center (IA separation)', () => {
 
     await page.getByTestId('run-notifications-mark-all').click()
     await expect(page.getByTestId('run-notifications-badge')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('run-notifications-panel')).toHaveCount(0)
+    await page.getByRole('link', { name: '设置' }).click()
+    await expect(page.getByTestId('nav-settings-chrome')).toBeVisible()
+    await page.getByRole('link', { name: '通知' }).click()
+    await expect(page.getByTestId('notifications-page')).toBeVisible()
     await expect(page.getByTestId('nav-notifications-badge')).toHaveCount(0)
   })
 

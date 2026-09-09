@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { sidebarNavGroups } from './sidebarNav'
 
 describe('sidebarNav (plan g1.1)', () => {
-  it('workspace primary is exactly home / gates / notifications / settings', () => {
+  it('workspace primary is exactly home / gates / runs / settings', () => {
     expect(sidebarNavGroups).toHaveLength(1)
     expect(sidebarNavGroups[0].titleKey).toBeUndefined()
     expect(sidebarNavGroups[0].items.map((i) => i.to)).toEqual([
       '/dashboard',
       '/gates',
-      '/notifications',
+      '/runs',
       '/settings',
     ])
   })
@@ -17,7 +17,7 @@ describe('sidebarNav (plan g1.1)', () => {
     const allTos = sidebarNavGroups.flatMap((g) => g.items.map((i) => i.to))
     expect(allTos).not.toContain('/stats')
     expect(allTos).not.toContain('/projects')
-    expect(allTos).not.toContain('/runs')
+    expect(allTos).not.toContain('/notifications')
     expect(allTos).not.toContain('/artifacts')
     expect(allTos).not.toContain('/agents')
     expect(allTos).not.toContain('/sandboxes')
@@ -27,9 +27,9 @@ describe('sidebarNav (plan g1.1)', () => {
     expect(sidebarNavGroups.some((g) => g.titleKey === 'nav.groupConfig')).toBe(false)
   })
 
-  it('keeps notifications and gates label keys for badges (plan g1.2)', () => {
+  it('keeps runs and gates label keys in the workspace nav', () => {
     const items = sidebarNavGroups[0].items
-    expect(items.find((i) => i.to === '/notifications')?.labelKey).toBe('nav.notifications')
+    expect(items.find((i) => i.to === '/runs')?.labelKey).toBe('nav.runs')
     expect(items.find((i) => i.to === '/gates')?.labelKey).toBe('nav.gates')
   })
 })
