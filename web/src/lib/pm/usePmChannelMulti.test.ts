@@ -122,6 +122,15 @@ describe('usePmChannelMulti', () => {
     api.setChannelType('qq')
     api.resetForm()
     api.setTargetComboOpen(false)
+    api.setChannelType('feishu')
+    await api.load()
+    await flushPromises()
+    api.openAdd()
+    api.cancelEdit()
+    api.askDelete(api.channelList.value[0] as any)
+    api.deleteOpen.value = false
+    await api.saveNotifyTargets()
+    await api.toggleNotify()
 
     document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
 

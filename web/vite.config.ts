@@ -23,6 +23,8 @@ export default defineConfig(({ command }) => {
     test: {
       environment: 'node',
       include: ['src/**/*.test.ts'],
+      // Vitest 4: happy-dom omits window.confirm; stub so existing vi.spyOn(window, 'confirm') works.
+      setupFiles: ['./src/test/vitest-window-stubs.ts'],
       coverage: {
         provider: 'v8',
         reporter: ['text', 'text-summary', 'cobertura', 'json-summary'],
@@ -52,6 +54,8 @@ export default defineConfig(({ command }) => {
           '**/playwright.config.*',
           '**/vite.config.*',
         ],
+        // Vitest 4 remaps coverage through chained Vue source maps; re-apply exclude after remap.
+        excludeAfterRemap: true,
       },
     },
     server: {

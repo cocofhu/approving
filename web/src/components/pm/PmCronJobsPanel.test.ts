@@ -181,6 +181,7 @@ describe('PmCronJobsPanel', () => {
   it('shows table skeleton before rows arrive', async () => {
     useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
     let release!: (v: unknown) => void
+    apiMocks.listProjectCronJobs.mockReset()
     apiMocks.listProjectCronJobs.mockReturnValue(new Promise((resolve) => { release = resolve }))
     const w = mountPanel()
     await flushPromises()
