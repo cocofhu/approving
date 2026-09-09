@@ -134,6 +134,7 @@ const {
         class="min-h-0 flex-1"
         mobile
         :sidebar-width="400"
+        :drawer-height="320"
         :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
       >
         <template #stage>
@@ -271,92 +272,97 @@ const {
               {{ t('pages.gateApproval.loadingPreviewIssues') }}
             </div>
             <div v-else class="flex min-h-0 flex-1 flex-col">
-              <p
-                v-if="isColdSession"
-                class="mb-2 min-w-0 shrink-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
-                data-testid="gate-cold-help"
-              >
-                {{ helpColdText }}
-              </p>
-              <p
-                v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
-                class="mb-2 min-w-0 shrink-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
-              >
-                <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
-                {{ t('pages.gateApproval.helpApproveDetail') }}
-                <span class="mx-1">·</span>
-                <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                {{ helpReviseDetailNoIssuesText }}
-              </p>
-              <p
-                v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
-                class="mb-2 min-w-0 shrink-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
-              >
-                <template v-if="canReactRevise">
-                  <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
-                  {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
-                  <span class="mx-1">·</span>
-                  {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
-                </template>
-                <template v-else>{{ helpReviseWithIssuesText }}</template>
-              </p>
-              <div
-                v-if="previewIssuesError"
-                class="mb-2 shrink-0 rounded-md border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11px] text-warn"
-                data-testid="mobile-fill-preview-issues-error"
-              >
-                {{ t('pages.gateApproval.loadPreviewIssuesFailed') }}
-                <button
-                  type="button"
-                  class="ml-2 underline"
-                  @click="loadPreviewIssues()"
+              <!--
+                Help + pins + review history scroll on their own so the decision
+                bar below stays pinned inside the drawer on short viewports.
+              -->
+              <div class="scroll-area flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <p
+                  v-if="isColdSession"
+                  class="mb-2 min-w-0 shrink-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
+                  data-testid="gate-cold-help"
                 >
-                  {{ t('pages.gateApproval.previewRetry') }}
-                </button>
-              </div>
-              <!-- Help → scrollable feedback → sticky decisions -->
-              <CommentArtifactSidebar
-                v-if="isVisualBody"
-                class="mb-2 max-h-[36%] shrink-0"
-                :pins="commentPins"
-                :selected-id="commentPinSelectedId"
-                :artifact-committed="commentArtifactCommitted"
-                :writing="commentArtifactWriting"
-                :write-error="commentArtifactWriteError"
-                @select="onCommentPinSelect"
-                @edit="onCommentPinSelect"
-                @delete="onCommentPinDelete"
-                @write="onWriteCommentArtifact"
-              />
-              <div
-                v-if="usesPreviewIssues && run"
-                class="flex min-h-0 flex-1 flex-col"
-                data-testid="mobile-fill-feedback"
-              >
-                <PreviewFeedbackChat
-                  ref="feedbackChatRef"
-                  class="min-h-0 flex-1"
-                  :run-id="run.id"
-                  :node-id="gate.nodeId"
-                  :selector="pickedSelector"
-                  :element-image="pickedElementImage"
-                  v-model:text="reactText"
-                  v-model:images="reactImages"
-                  copy-variant="review"
-                  fill-sidebar
-                  :hide-submit="canReactRevise"
-                  @clear-selector="clearHtmlPreviewPick"
-                  @issues-changed="loadPreviewIssues()"
+                  {{ helpColdText }}
+                </p>
+                <p
+                  v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
+                  class="mb-2 min-w-0 shrink-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
+                >
+                  <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
+                  {{ t('pages.gateApproval.helpApproveDetail') }}
+                  <span class="mx-1">·</span>
+                  <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
+                  {{ helpReviseDetailNoIssuesText }}
+                </p>
+                <p
+                  v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
+                  class="mb-2 min-w-0 shrink-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
+                >
+                  <template v-if="canReactRevise">
+                    <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
+                    {{ t('pages.gateApproval.helpReviseWithIssuesDetail') }}
+                    <span class="mx-1">·</span>
+                    {{ t('pages.reviewComposer.openIssuesConfirmHint') }}
+                  </template>
+                  <template v-else>{{ helpReviseWithIssuesText }}</template>
+                </p>
+                <div
+                  v-if="previewIssuesError"
+                  class="mb-2 shrink-0 rounded-md border border-warn/30 bg-warn/10 px-2.5 py-2 text-[11px] text-warn"
+                  data-testid="mobile-fill-preview-issues-error"
+                >
+                  {{ t('pages.gateApproval.loadPreviewIssuesFailed') }}
+                  <button
+                    type="button"
+                    class="ml-2 underline"
+                    @click="loadPreviewIssues()"
+                  >
+                    {{ t('pages.gateApproval.previewRetry') }}
+                  </button>
+                </div>
+                <!-- Nothing is actionable without pins, and the drawer needs the rows. -->
+                <CommentArtifactSidebar
+                  v-if="isVisualBody && (commentPins.length > 0 || commentArtifactCommitted)"
+                  class="mb-2 max-h-[36%] shrink-0"
+                  :pins="commentPins"
+                  :selected-id="commentPinSelectedId"
+                  :artifact-committed="commentArtifactCommitted"
+                  :writing="commentArtifactWriting"
+                  :write-error="commentArtifactWriteError"
+                  @select="onCommentPinSelect"
+                  @edit="onCommentPinSelect"
+                  @delete="onCommentPinDelete"
+                  @write="onWriteCommentArtifact"
                 />
+                <!-- min-h floor: flex-1 alone collapses to 0 once the composer shell grows. -->
+                <div
+                  v-if="usesPreviewIssues && run"
+                  class="flex min-h-[52px] flex-1 flex-col"
+                  data-testid="mobile-fill-feedback"
+                >
+                  <PreviewFeedbackChat
+                    ref="feedbackChatRef"
+                    class="min-h-0 flex-1"
+                    :run-id="run.id"
+                    :node-id="gate.nodeId"
+                    :selector="pickedSelector"
+                    :element-image="pickedElementImage"
+                    v-model:text="reactText"
+                    v-model:images="reactImages"
+                    copy-variant="review"
+                    fill-sidebar
+                    :hide-submit="canReactRevise"
+                    @clear-selector="clearHtmlPreviewPick"
+                    @issues-changed="loadPreviewIssues()"
+                  />
+                </div>
               </div>
               <div
                 v-if="canReactRevise && usesPreviewIssues"
                 class="mt-2 shrink-0"
                 data-testid="review-composer-gate"
               >
-              
                 <GateHotUnifiedActions layout="mobile" />
-            
               </div>
               <div v-else class="mt-2 flex shrink-0 flex-col gap-2">
                 <GateApprovalColdActions layout="mobile" />

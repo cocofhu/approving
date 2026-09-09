@@ -115,4 +115,22 @@ describe('ParagraphInput', () => {
     expect(typeof (wrapper.vm as { pickFiles?: () => void }).pickFiles).toBe('function')
     wrapper.unmount()
   })
+
+  it('compact embedded starts at two lines so the mobile drawer keeps room (g2.2)', () => {
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { ...common } } })
+    const stubs = { Icon: true, AppModal: PreviewAppModalStub }
+    const roomy = mount(ParagraphInput, {
+      props: { text: '', textOnly: false, embedded: true },
+      global: { plugins: [i18n], stubs },
+    })
+    const compact = mount(ParagraphInput, {
+      props: { text: '', textOnly: false, embedded: true, compact: true },
+      global: { plugins: [i18n], stubs },
+    })
+    expect(roomy.find('[data-testid="paragraph-input"]').classes()).toContain('min-h-[72px]')
+    expect(compact.find('[data-testid="paragraph-input"]').classes()).toContain('min-h-[40px]')
+    expect(compact.find('[data-testid="paragraph-input"]').attributes('rows')).toBe('2')
+    roomy.unmount()
+    compact.unmount()
+  })
 })

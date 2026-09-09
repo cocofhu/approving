@@ -8,6 +8,8 @@ export const CLARIFY_AUTO_GROW_MIN = 40
 export const CLARIFY_AUTO_GROW_MAX = 128
 
 export const PARAGRAPH_AUTO_GROW_MIN = 72
+/** Height-constrained hosts (mobile gate drawer) start at two lines instead of three. */
+export const PARAGRAPH_AUTO_GROW_MIN_COMPACT = 40
 export const PARAGRAPH_AUTO_GROW_MAX = 320
 
 /** Measure how tall `text` is when wrapped to the textarea's current content box. */

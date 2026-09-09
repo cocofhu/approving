@@ -9,7 +9,12 @@ import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
 import type { ClarifyImage } from '@/lib/shared/types'
-import { applyComposerAutoGrow, PARAGRAPH_AUTO_GROW_MAX, PARAGRAPH_AUTO_GROW_MIN } from '@/lib/inbox/composerAutoGrow'
+import {
+  applyComposerAutoGrow,
+  PARAGRAPH_AUTO_GROW_MAX,
+  PARAGRAPH_AUTO_GROW_MIN,
+  PARAGRAPH_AUTO_GROW_MIN_COMPACT,
+} from '@/lib/inbox/composerAutoGrow'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -22,6 +27,8 @@ const props = defineProps<{
    * Attach stays in the shell toolbar via pickFiles().
    */
   embedded?: boolean
+  /** Height-constrained hosts (mobile gate drawer): start at two lines, still auto-grows. */
+  compact?: boolean
 }>()
 
 const { t } = useI18n()
@@ -39,11 +46,13 @@ const defaultPlaceholder = computed(() =>
   props.textOnly ? t('common.paragraphInput.placeholderTextOnly') : t('common.paragraphInput.placeholderWithImages'),
 )
 
+const autoGrowMin = computed(() => (props.compact ? PARAGRAPH_AUTO_GROW_MIN_COMPACT : PARAGRAPH_AUTO_GROW_MIN))
+
 function autoGrow() {
   const el = textareaRef.value
   if (!el) return
   overflowScroll.value = applyComposerAutoGrow(el, {
-    min: PARAGRAPH_AUTO_GROW_MIN,
+    min: autoGrowMin.value,
     max: PARAGRAPH_AUTO_GROW_MAX,
     emptyHint: props.placeholder || defaultPlaceholder.value,
   })
@@ -156,12 +165,13 @@ defineExpose({ pickFiles })
         ref="textareaRef"
         v-model="text"
         data-testid="paragraph-input"
-        rows="3"
+        :rows="compact ? 2 : 3"
         class="composer-hint-wrap min-w-0 w-full resize-none disabled:opacity-60"
         :class="[
           embedded
-            ? 'min-h-[72px] border-0 bg-transparent p-0 text-sm text-txt shadow-none outline-none focus:ring-0'
-            : 'input min-h-[72px] flex-1',
+            ? 'border-0 bg-transparent p-0 text-sm text-txt shadow-none outline-none focus:ring-0'
+            : 'input flex-1',
+          compact ? 'min-h-[40px]' : 'min-h-[72px]',
           overflowScroll ? 'scroll-area max-h-[320px] overflow-y-auto' : 'overflow-y-hidden',
         ]"
         :disabled="disabled"

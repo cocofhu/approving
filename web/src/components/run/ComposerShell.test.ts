@@ -25,6 +25,32 @@ describe('ComposerShell', () => {
     wrapper.unmount()
   })
 
+  it('compact trims the toolbar row for height-constrained hosts (g2.2)', () => {
+    const wrapper = mount(ComposerShell, {
+      props: { compact: true },
+      slots: { input: '<textarea data-testid="shell-ta"></textarea>', footer: '<button class="h-9">ok</button>' },
+    })
+    const toolbar = wrapper.get('[data-testid="composer-shell-toolbar"]')
+    expect(toolbar.classes()).toEqual(expect.arrayContaining(['h-9', 'shrink-0']))
+    expect(toolbar.classes()).not.toContain('h-11')
+    expect(wrapper.get('[data-testid="composer-shell-footer"]').classes()).toContain('mt-1.5')
+    wrapper.unmount()
+  })
+
+  it('drops the hint column when no hint is supplied so the footer stays one row (g2.2)', () => {
+    const withoutHint = mount(ComposerShell, {
+      slots: { footer: '<button data-testid="shell-confirm" class="h-9">ok</button>' },
+    })
+    const withHint = mount(ComposerShell, {
+      slots: { hint: '<p data-testid="shell-hint">hint</p>', footer: '<button class="h-9">ok</button>' },
+    })
+    expect(withoutHint.get('[data-testid="composer-shell-footer"]').element.children).toHaveLength(1)
+    expect(withHint.find('[data-testid="shell-hint"]').exists()).toBe(true)
+    expect(withHint.get('[data-testid="composer-shell-footer"]').element.children).toHaveLength(2)
+    withoutHint.unmount()
+    withHint.unmount()
+  })
+
   it('can hide chrome for confirm-only cold path (g2.3)', () => {
     const wrapper = mount(ComposerShell, {
       props: { showChrome: false, showFooter: true },

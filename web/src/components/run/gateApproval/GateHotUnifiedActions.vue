@@ -8,7 +8,7 @@ import ComposerShell from '../ComposerShell.vue'
 import GateReactStreamPanel from '../GateReactStreamPanel.vue'
 import PendingSendQueuePanel from '../PendingSendQueuePanel.vue'
 
-defineProps<{
+const props = defineProps<{
   /** mobile: always touch-sized; content-fit: min-height only when isMobile */
   layout: 'mobile' | 'content-fit'
 }>()
@@ -17,6 +17,9 @@ const { t } = useI18n()
 const { s } = useGateApprovalCtx()
 
 const paragraphRef = ref<{ pickFiles?: () => void } | null>(null)
+
+/** The mobile drawer shares its height with help copy and the review history. */
+const compact = computed(() => props.layout === 'mobile' || s.isMobile)
 
 const showCancel = computed(
   () => s.canReactRevise && (s.reactThinking || s.reactQueued.length > 0),
@@ -29,13 +32,14 @@ const sendDisabled = computed(
 
 <template>
   <div v-if="s.reactError" class="mb-1.5 text-[11px] text-err">{{ s.reactError }}</div>
-  <ComposerShell>
+  <ComposerShell :compact="compact">
     <template #input>
       <ParagraphInput
         ref="paragraphRef"
         v-model:text="s.reactText"
         v-model:images="s.reactImages"
         embedded
+        :compact="compact"
         :disabled="s.reactSending"
         :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
       />
@@ -43,7 +47,8 @@ const sendDisabled = computed(
     <template #toolbar-start>
       <button
         type="button"
-        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
+        class="flex shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
+        :class="compact ? 'h-8 w-8' : 'h-10 w-10'"
         data-testid="paragraph-input-attach"
         :disabled="s.reactSending"
         :title="t('common.paragraphInput.addImage')"
