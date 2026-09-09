@@ -354,6 +354,17 @@
       "tokenTipWorkflow": "工作流",
       "tokenTipPm": "项目管理",
       "tokenTipAria": "Token 消耗，悬停查看细节",
+      "newWorkflow": {
+        "scratch": "从零开始",
+        "scratchDesc": "空白画布，自己拖节点搭建",
+        "baseline": "默认基线工作流",
+        "baselineDesc": "套用开箱流水线，填仓库即可运行",
+        "modalTitle": "从默认基线创建",
+        "modalHint": "仓库列表与运行启动页相同。可添加多个，启动时平级 clone 到工作区。",
+        "create": "创建",
+        "creating": "正在创建…",
+        "created": "已创建工作流「{name}」"
+      },
       "tabBoard": "看板",
       "tabWorkflows": "流水线",
       "tabRequirementDrafts": "需求草稿",

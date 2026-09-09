@@ -71,3 +71,75 @@ func TestBootstrapOnboardingAPI(t *testing.T) {
 		t.Fatalf("workflow missing in list: %s", w.Body.String())
 	}
 }
+
+func TestCreateWorkflowFromBaselineAPI(t *testing.T) {
+	hn := newHarness(t)
+	pid := models.DefaultProjectID
+
+	if w := hn.do("POST", "/api/projects/"+pid+"/bootstrap-onboarding", map[string]any{
+		"acpBackend": "cursor",
+		"apiKey":     "crsr_test",
+	}); w.Code != http.StatusOK {
+		t.Fatalf("bootstrap: %d %s", w.Code, w.Body.String())
+	}
+
+	if w := hn.do("POST", "/api/workflows/from-baseline", map[string]any{
+		"projectId": pid,
+		"repos":     []map[string]any{{"url": ""}},
+	}); w.Code != http.StatusBadRequest {
+		t.Fatalf("empty repos: %d %s", w.Code, w.Body.String())
+	}
+
+	w := hn.do("POST", "/api/workflows/from-baseline", map[string]any{
+		"projectId": pid,
+		"repos": []map[string]any{
+			{"url": "https://github.com/acme/app.git", "name": "", "branch": "main"},
+			{"url": "https://gitlab.com/acme/app.git", "name": ""},
+			{"url": "https://github.com/acme/ignored.git", "name": "docs"},
+			{"url": "  "},
+		},
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create baseline: %d %s", w.Code, w.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created["name"] != "app" || created["status"] != "published" || created["needsRepo"] != true {
+		t.Fatalf("unexpected workflow: %#v", created)
+	}
+	if created["id"] == "" {
+		t.Fatal("missing new workflow id")
+	}
+	variables, ok := created["variables"].([]any)
+	if !ok {
+		t.Fatalf("missing variables: %#v", created["variables"])
+	}
+	var repos []any
+	for _, raw := range variables {
+		v, _ := raw.(map[string]any)
+		if v["name"] == "repos" {
+			repos, _ = v["value"].([]any)
+		}
+	}
+	if len(repos) != 3 {
+		t.Fatalf("repos length = %d, want 3: %#v", len(repos), repos)
+	}
+	if second, _ := repos[1].(map[string]any); second["name"] != "app-2" {
+		t.Fatalf("second repo not disambiguated: %#v", second)
+	}
+
+	w = hn.do("POST", "/api/workflows/from-baseline", map[string]any{
+		"projectId": pid,
+		"repos":     []map[string]any{{"url": "https://github.com/acme/app.git"}},
+	})
+	if w.Code != http.StatusCreated || jsonField(w.Body.String(), "name") != "app (2)" {
+		t.Fatalf("workflow name not disambiguated: %d %s", w.Code, w.Body.String())
+	}
+
+	w = hn.do("GET", "/api/workflows?projectId="+pid, nil)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), services.OnboardingWorkflowName) {
+		t.Fatalf("default workflow was overwritten: %d %s", w.Code, w.Body.String())
+	}
+}
