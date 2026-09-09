@@ -192,4 +192,73 @@ describe('useAgentStudio', () => {
 
     app.unmount()
   })
+
+  it('g2.1: switching to prompts then back to files stays clean (empty prompts)', async () => {
+    const { studio, app } = await withAgentStudio()
+    await flushPromises()
+    expect(studio.agentDirty.value).toBe(false)
+    studio.requestStudioTab('prompts')
+    await nextTick()
+    expect(studio.tab.value).toBe('prompts')
+    expect(studio.agentDirty.value).toBe(false)
+    studio.requestStudioTab('files')
+    await nextTick()
+    expect(studio.agentDirty.value).toBe(false)
+    app.unmount()
+  })
+
+  it('g2.1: CRLF prompts + textarea LF writeback does not mark dirty', async () => {
+    mocks.listAgents.mockResolvedValue([
+      {
+        name: 'agent-a',
+        projectId: 'proj-1',
+        acpBackend: 'cursor',
+        prompts: { producesContract: '审查要求\r\n第二行' },
+        env: { GIT_SSH_PRIVATE_KEY: 'k', FOO: 'v' },
+      },
+    ])
+    const { studio, app } = await withAgentStudio()
+    await flushPromises()
+    expect(studio.agentDirty.value).toBe(false)
+    studio.requestStudioTab('prompts')
+    await nextTick()
+    const d = studio.draft.value
+    expect(d).toBeTruthy()
+    if (d) {
+      d.prompts.producesContract = d.prompts.producesContract.replace(/\r\n/g, '\n')
+    }
+    expect(studio.agentDirty.value).toBe(false)
+    studio.requestStudioTab('files')
+    expect(studio.agentDirty.value).toBe(false)
+    app.unmount()
+  })
+
+  it('g2.2: editing a prompt fragment marks dirty; save and discard clear it', async () => {
+    mocks.listAgents.mockResolvedValue([
+      {
+        name: 'agent-a',
+        projectId: 'proj-1',
+        acpBackend: 'cursor',
+        prompts: { reactOpenSuffix: 'hello' },
+      },
+    ])
+    mocks.saveAgent.mockImplementation(async (payload: { name: string }) => payload)
+    const { studio, app } = await withAgentStudio()
+    await flushPromises()
+    expect(studio.agentDirty.value).toBe(false)
+    studio.requestStudioTab('prompts')
+    studio.draft.value!.prompts.reactOpenSuffix = 'hello-edited'
+    expect(studio.agentDirty.value).toBe(true)
+    const saved = await studio.save()
+    expect(saved).toBe(true)
+    expect(studio.agentDirty.value).toBe(false)
+
+    studio.draft.value!.prompts.reactOpenSuffix = 'again'
+    expect(studio.agentDirty.value).toBe(true)
+    studio.discardUnsavedChanges()
+    await nextTick()
+    expect(studio.draft.value!.prompts.reactOpenSuffix).toBe('hello-edited')
+    expect(studio.agentDirty.value).toBe(false)
+    app.unmount()
+  })
 })

@@ -57,7 +57,8 @@ func (h *Handlers) CreateWorkflowFromBaseline(c *gin.Context) {
 	wf, err := h.Onboarding.CreateFromBaseline(req)
 	if err != nil {
 		switch {
-		case errors.Is(err, services.ErrWorkflowProjectRequired),
+		case errors.Is(err, services.ErrEmptyWorkflowName),
+			errors.Is(err, services.ErrWorkflowProjectRequired),
 			errors.Is(err, services.ErrBaselineReposRequired):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, services.ErrWorkflowProjectNotFound):

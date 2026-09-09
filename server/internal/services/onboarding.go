@@ -72,6 +72,7 @@ type BaselineRepo struct {
 // CreateBaselineWorkflowRequest is the body for POST /api/workflows/from-baseline.
 type CreateBaselineWorkflowRequest struct {
 	ProjectID string         `json:"projectId"`
+	Name      string         `json:"name"`
 	Repos     []BaselineRepo `json:"repos"`
 }
 
@@ -99,6 +100,10 @@ func (s *OnboardingService) CreateFromBaseline(req CreateBaselineWorkflowRequest
 	if _, ok := s.Projects.Get(projectID); !ok {
 		return models.WorkflowDef{}, ErrWorkflowProjectNotFound
 	}
+	name := strings.TrimSpace(req.Name)
+	if err := s.WF.validateWorkflowName(name, "", projectID); err != nil {
+		return models.WorkflowDef{}, err
+	}
 	repos := normalizeBaselineRepos(req.Repos)
 	if len(repos) == 0 {
 		return models.WorkflowDef{}, ErrBaselineReposRequired
@@ -115,11 +120,6 @@ func (s *OnboardingService) CreateFromBaseline(req CreateBaselineWorkflowRequest
 		return models.WorkflowDef{}, fmt.Errorf("default workflow graph invalid: %w", err)
 	}
 
-	baseName := repos[0].Name
-	name := baseName
-	for suffix := 2; s.WF.NameExists(name, "", projectID); suffix++ {
-		name = fmt.Sprintf("%s (%d)", baseName, suffix)
-	}
 	wf := models.WorkflowDef{
 		ID:          "wf-" + uuid.NewString()[:8],
 		ProjectID:   projectID,

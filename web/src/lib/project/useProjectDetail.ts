@@ -252,6 +252,7 @@ const draftRestored = ref(false)
 const openMenuId = ref<string | null>(null)
 const newWorkflowMenuOpen = ref(false)
 const baselineModalOpen = ref(false)
+const baselineName = ref('')
 const baselineRepos = ref<RepoRow[]>([{ name: '', url: '', branch: '' }])
 const creatingBaseline = ref(false)
 const baselineCreateError = ref('')
@@ -656,6 +657,7 @@ function newWorkflow() {
 
 function openBaselineModal() {
   newWorkflowMenuOpen.value = false
+  baselineName.value = ''
   baselineRepos.value = [{ name: '', url: '', branch: '' }]
   baselineCreateError.value = ''
   baselineModalOpen.value = true
@@ -668,6 +670,7 @@ function closeBaselineModal() {
 }
 
 const hasValidBaselineRepo = computed(() =>
+  baselineName.value.trim() !== '' &&
   baselineRepos.value.some((repo) => repo.url.trim() !== ''),
 )
 
@@ -676,7 +679,11 @@ async function createFromBaseline() {
   creatingBaseline.value = true
   baselineCreateError.value = ''
   try {
-    const created = await api.createWorkflowFromBaseline(projectId.value, baselineRepos.value)
+    const created = await api.createWorkflowFromBaseline(
+      projectId.value,
+      baselineName.value.trim(),
+      baselineRepos.value,
+    )
     workflows.value = [created, ...workflows.value.filter((workflow) => workflow.id !== created.id)]
     baselineModalOpen.value = false
     toast.success(t('pages.projectDetail.newWorkflow.created', { name: created.name }))
@@ -920,6 +927,7 @@ onBeforeRouteUpdate(async (to, from) => {
   openMenuId,
   newWorkflowMenuOpen,
   baselineModalOpen,
+  baselineName,
   baselineRepos,
   creatingBaseline,
   baselineCreateError,

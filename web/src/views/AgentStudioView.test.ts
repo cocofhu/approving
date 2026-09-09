@@ -210,16 +210,25 @@ describe('AgentStudio region UI', () => {
     )
   })
 
-  it('makes a missing region dirty and saves the international default', async () => {
+  it('hydrates a missing region without false dirty; later save still writes international default', async () => {
     mocks.listAgents.mockResolvedValue([agent()])
     const wrapper = await mountStudio()
     await flushPromises()
 
+    expect(wrapper.text()).not.toContain('未保存')
+    await wrapper.findAll('button').find((item) => item.text() === '元信息')!.trigger('click')
+    const workspaceInput = wrapper.findAll('input').find((item) => {
+      return (item.element as HTMLInputElement).value === '/root/workspace'
+    })!
+    await workspaceInput.setValue('/root/workspace-hydrated')
     expect(wrapper.text()).toContain('未保存')
     await wrapper.findAll('button').find((item) => item.text() === '保存')!.trigger('click')
     await flushPromises()
     expect(mocks.saveAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ env: { APPROVING_CODEBUDDY_REGION: 'public' } }),
+      expect.objectContaining({
+        env: { APPROVING_CODEBUDDY_REGION: 'public' },
+        layout: expect.objectContaining({ workspaceDir: '/root/workspace-hydrated' }),
+      }),
     )
   })
 

@@ -59,6 +59,8 @@ export interface Workflow {
   projectId?: string
   name: string
   description: string
+  /** Client-only display name resolved from Project.id (home cards/select). */
+  projectName?: string
   status: 'draft' | 'published'
   version: number
   updatedAt: string
