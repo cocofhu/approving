@@ -18,7 +18,8 @@ const props = withDefaults(
 const cls = computed(() => {
   const base =
     'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition outline-none disabled:opacity-50 disabled:cursor-not-allowed'
-  const sizes = props.size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm'
+  // Height tokens: sm=h-6 (24px), md=h-9 (36px). Vertical padding no longer drives height.
+  const sizes = props.size === 'sm' ? 'h-6 px-2.5 text-xs' : 'h-9 px-3.5 text-sm'
   const variants: Record<string, string> = {
     primary: 'bg-accent text-white hover:bg-accent-2 shadow-glow',
     ghost: 'text-txt2 hover:bg-elevated hover:text-txt',
