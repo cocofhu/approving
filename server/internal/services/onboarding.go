@@ -30,6 +30,8 @@ var (
 	ErrOnboardingAgentConflict = errors.New("onboarding agent already bound to another project")
 	// ErrOnboardingNotDefaultProject is returned when bootstrap is not the default project.
 	ErrOnboardingNotDefaultProject = errors.New("first-install onboarding is only allowed on the default project")
+	// ErrBaselineReposRequired is returned when no non-empty repository URL is submitted.
+	ErrBaselineReposRequired = errors.New("at least one repository URL is required")
 )
 
 // OnboardingBootstrapRequest is the body for POST .../bootstrap-onboarding.
@@ -60,6 +62,19 @@ type OnboardingBootstrapResult struct {
 	GroupName  string   `json:"groupName,omitempty"`
 }
 
+// BaselineRepo is one repository injected into the embedded default workflow.
+type BaselineRepo struct {
+	URL    string `json:"url"`
+	Name   string `json:"name,omitempty"`
+	Branch string `json:"branch,omitempty"`
+}
+
+// CreateBaselineWorkflowRequest is the body for POST /api/workflows/from-baseline.
+type CreateBaselineWorkflowRequest struct {
+	ProjectID string         `json:"projectId"`
+	Repos     []BaselineRepo `json:"repos"`
+}
+
 // OnboardingService bootstraps first-install auth + 综合项目组 + 默认工作流.
 type OnboardingService struct {
 	Projects    *ProjectService
@@ -72,6 +87,101 @@ type OnboardingService struct {
 // NewOnboardingService wires dependencies. org may be nil (agents still saved).
 func NewOnboardingService(projects *ProjectService, skills *AgentService, shared *SharedAgentService, wf *WorkflowService, org *OrgService) *OnboardingService {
 	return &OnboardingService{Projects: projects, Skills: skills, SharedAgent: shared, WF: wf, Org: org}
+}
+
+// CreateFromBaseline clones the embedded first-install workflow into a new
+// published workflow. It does not modify the existing onboarding workflow.
+func (s *OnboardingService) CreateFromBaseline(req CreateBaselineWorkflowRequest) (models.WorkflowDef, error) {
+	projectID := strings.TrimSpace(req.ProjectID)
+	if projectID == "" {
+		return models.WorkflowDef{}, ErrWorkflowProjectRequired
+	}
+	if _, ok := s.Projects.Get(projectID); !ok {
+		return models.WorkflowDef{}, ErrWorkflowProjectNotFound
+	}
+	repos := normalizeBaselineRepos(req.Repos)
+	if len(repos) == 0 {
+		return models.WorkflowDef{}, ErrBaselineReposRequired
+	}
+	envelope, err := loadFirstInstallWorkflowEnvelope()
+	if err != nil {
+		return models.WorkflowDef{}, err
+	}
+	applyBaselineRepos(&envelope.Graph, repos)
+	LiftInputVariables(&envelope.Graph)
+	MigrateOutputNodes(&envelope.Graph)
+	MigrateAgentProfileInGraph(&envelope.Graph)
+	if err := envelope.Graph.Validate(); err != nil {
+		return models.WorkflowDef{}, fmt.Errorf("default workflow graph invalid: %w", err)
+	}
+
+	baseName := repos[0].Name
+	name := baseName
+	for suffix := 2; s.WF.NameExists(name, "", projectID); suffix++ {
+		name = fmt.Sprintf("%s (%d)", baseName, suffix)
+	}
+	wf := models.WorkflowDef{
+		ID:          "wf-" + uuid.NewString()[:8],
+		ProjectID:   projectID,
+		Name:        name,
+		Description: "从默认基线创建。仓库可在启动运行时调整。",
+		Status:      "draft",
+		Version:     1,
+		NeedsRepo:   true,
+		Graph:       envelope.Graph,
+	}
+	if err := s.WF.Save(&wf); err != nil {
+		return models.WorkflowDef{}, err
+	}
+	published, err := s.WF.Publish(wf.ID)
+	if err != nil {
+		_ = s.WF.Delete(wf.ID)
+		return models.WorkflowDef{}, fmt.Errorf("publish baseline workflow: %w", err)
+	}
+	return published, nil
+}
+
+func normalizeBaselineRepos(input []BaselineRepo) []BaselineRepo {
+	out := make([]BaselineRepo, 0, len(input))
+	seen := map[string]bool{}
+	for _, repo := range input {
+		url := strings.TrimSpace(repo.URL)
+		if url == "" {
+			continue
+		}
+		base := strings.TrimSpace(repo.Name)
+		if base == "" || base == "." || base == ".." || strings.ContainsAny(base, "/\\") {
+			base = sandbox.RepoNameFromURL(url)
+		}
+		if base == "" || base == "." || base == ".." || strings.ContainsAny(base, "/\\") {
+			base = "repo"
+		}
+		name := base
+		for suffix := 2; seen[name]; suffix++ {
+			name = fmt.Sprintf("%s-%d", base, suffix)
+		}
+		seen[name] = true
+		out = append(out, BaselineRepo{URL: url, Name: name, Branch: strings.TrimSpace(repo.Branch)})
+	}
+	return out
+}
+
+func applyBaselineRepos(graph *models.Graph, repos []BaselineRepo) {
+	if graph == nil {
+		return
+	}
+	value := make([]any, 0, len(repos))
+	for _, repo := range repos {
+		value = append(value, map[string]any{
+			"url": repo.URL, "name": repo.Name, "branch": repo.Branch,
+		})
+	}
+	for i := range graph.Variables {
+		if graph.Variables[i].Name == "repos" {
+			graph.Variables[i].Value = value
+			return
+		}
+	}
 }
 
 // Bootstrap writes shared-agent env auth, saves the 综合项目组 agents, and publishes

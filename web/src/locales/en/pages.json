@@ -359,6 +359,17 @@
       "tokenTipWorkflow": "Workflow",
       "tokenTipPm": "Project Management",
       "tokenTipAria": "Token usage, hover for details",
+      "newWorkflow": {
+        "scratch": "From scratch",
+        "scratchDesc": "Start with an empty canvas and add nodes",
+        "baseline": "Default baseline workflow",
+        "baselineDesc": "Use the built-in pipeline and add repositories",
+        "modalTitle": "Create from default baseline",
+        "modalHint": "Uses the same repository list as Run launch. Add one or more repositories; each is cloned into the workspace.",
+        "create": "Create",
+        "creating": "Creating…",
+        "created": "Created workflow \"{name}\""
+      },
       "tabBoard": "Board",
       "tabWorkflows": "Pipelines",
       "tabRequirementDrafts": "Requirement drafts",

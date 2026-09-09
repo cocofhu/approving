@@ -212,6 +212,42 @@ test.describe('ProjectDetailView 流水线操作列', () => {
     expect(box?.height).toBeGreaterThanOrEqual(44)
   })
 
+  test('新建工作流下拉以 SVG 分流，从零直接进入空白编辑器', async ({ page }) => {
+    await gotoProjectDetail(page, { width: 1280, height: 800 })
+
+    const button = page.getByTestId('new-workflow-button')
+    await button.click()
+    const menu = page.getByTestId('new-workflow-menu')
+    await expect(menu).toBeVisible()
+    await expect(menu.locator('svg')).toHaveCount(2)
+    await expect(menu).not.toContainText('⚡')
+
+    await page.getByTestId('new-workflow-scratch').click()
+    // This fixture uses Vue Router memory history, so assert the matched route
+    // component instead of the unchanged browser URL.
+    await expect(page.getByTestId('new-edit-page')).toBeVisible()
+  })
+
+  test('默认基线弹窗复用多仓编辑器，空 URL 禁止创建', async ({ page }) => {
+    await gotoProjectDetail(page, { width: 1280, height: 800 })
+
+    await page.getByTestId('new-workflow-button').click()
+    await page.getByTestId('new-workflow-baseline').click()
+    await expect(page.getByRole('dialog')).toContainText('从默认基线创建')
+
+    const create = page.getByTestId('create-baseline-workflow')
+    await expect(create).toBeDisabled()
+    await expect(page.getByRole('dialog').locator('svg')).toHaveCount(3)
+
+    await page.getByPlaceholder('仓库地址 https://…/repo.git').fill('https://github.com/acme/app.git')
+    await expect(create).toBeEnabled()
+    await page.getByRole('dialog').getByRole('button', { name: '添加仓库' }).click()
+    await expect(page.getByPlaceholder('仓库地址 https://…/repo.git')).toHaveCount(2)
+
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
   test('窄屏最后一行更多菜单四项均可见可点', async ({ page }) => {
     await gotoProjectDetail(page, { width: 390, height: 700 })
 
