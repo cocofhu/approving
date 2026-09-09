@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.5-beta — 2026-09-09
+
+- Public beta follow-up on [`v0.3.5-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.5-beta)
+  (relative to `v0.3.4-beta`: PRs #494–#499). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.5-beta` (tag publish does not rewrite these files).
+- Highlights: first-install agents clone `vars.repos` on every node; default
+  workflow shown on Home; floating workspace nav; ReAct stream while still
+  replying.
+
 ## 0.3.4-beta — 2026-09-08
 
 - Public beta follow-up on [`v0.3.4-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.4-beta)
