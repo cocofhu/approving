@@ -34,8 +34,7 @@ describe('usePlatformStatusMetrics', () => {
     platformStatus.mockReset()
     platformStatus.mockResolvedValue({
       cumulativeTokens: 10,
-      current5mBucketTokens: 1,
-      todayMaxCompleted5mTokens: 2,
+      todayTokens: 1,
       runningCount: 0,
       queuedCount: 0,
       asOf: '2026-08-12T00:00:00Z',

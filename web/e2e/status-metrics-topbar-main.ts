@@ -13,36 +13,25 @@ const scene = params.get('scene') || 'ok'
 
 type PlatformPayload = {
   cumulativeTokens: number | null
-  current5mBucketTokens: number | null
-  todayMaxCompleted5mTokens: number | null
+  todayTokens: number | null
   runningCount: number
   queuedCount: number
-  currentBucketStart?: string | null
-  currentBucketEnd?: string | null
-  peakBucketStart?: string | null
-  peakBucketEnd?: string | null
   asOf: string
   timezone: string
 }
 
 const okPayload: PlatformPayload = {
   cumulativeTokens: 1240582,
-  current5mBucketTokens: 4812,
-  todayMaxCompleted5mTokens: 12104,
+  todayTokens: 4812,
   runningCount: 3,
   queuedCount: 5,
-  currentBucketStart: '2026-08-12T06:05:00Z',
-  currentBucketEnd: '2026-08-12T06:10:00Z',
-  peakBucketStart: '2026-08-12T03:20:00Z',
-  peakBucketEnd: '2026-08-12T03:25:00Z',
   asOf: '2026-08-12T06:07:00Z',
   timezone: 'Asia/Shanghai',
 }
 
 const nullPayload: PlatformPayload = {
   cumulativeTokens: null,
-  current5mBucketTokens: null,
-  todayMaxCompleted5mTokens: null,
+  todayTokens: null,
   runningCount: 0,
   queuedCount: 0,
   asOf: '2026-08-12T00:00:00Z',

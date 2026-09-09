@@ -6,15 +6,17 @@ const OUT = '/tmp/status-metrics-shots'
 fs.mkdirSync(OUT, { recursive: true })
 
 test.describe('StatusMetrics topbar E2E', () => {
-  test('desktop: five metrics left of lang, /5m rate, tip, no TOK labels', async ({ page }, testInfo) => {
+  test('desktop: four metrics left of lang, today tokens, tip, no TOK labels', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/status-metrics-topbar.html')
     const metrics = page.getByTestId('status-metrics')
     await expect(metrics).toBeVisible({ timeout: 15_000 })
 
     await expect(page.getByTestId('status-metrics-tokens')).toContainText(/1\.24M/i)
-    await expect(page.getByTestId('status-metrics-rate')).toContainText(/\/5m/)
-    await expect(page.getByTestId('status-metrics-peak')).toBeVisible()
+    await expect(page.getByTestId('status-metrics-today')).toContainText(/4\.8K/)
+    await expect(page.getByTestId('status-metrics-today')).not.toContainText(/\/5m/)
+    await expect(page.getByTestId('status-metrics-rate')).toHaveCount(0)
+    await expect(page.getByTestId('status-metrics-peak')).toHaveCount(0)
     await expect(page.getByTestId('status-metrics-running')).toContainText('3')
     await expect(page.getByTestId('status-metrics-queued')).toContainText('5')
     // Visible values are icon+compact numbers (no TOK/5M/PEAK label chips).
@@ -47,12 +49,12 @@ test.describe('StatusMetrics topbar E2E', () => {
     await expect(tokensTip).not.toContainText('完整值')
     await expect(tokensTip).not.toContainText('/5m')
 
-    const rateTip = page.getByTestId('status-metrics-rate').locator('.sm-tip')
-    await page.getByTestId('status-metrics-rate').hover()
-    await expect(rateTip).toBeVisible()
-    await expect(rateTip).toContainText('速率')
-    await expect(rateTip).toContainText('4,812')
-    await expect(rateTip).not.toContainText('/5m')
+    const todayTip = page.getByTestId('status-metrics-today').locator('.sm-tip')
+    await page.getByTestId('status-metrics-today').hover()
+    await expect(todayTip).toBeVisible()
+    await expect(todayTip).toContainText('今日 Token')
+    await expect(todayTip).toContainText('4,812')
+    await expect(todayTip).not.toContainText('/5m')
 
     // Click pin (tip-open) still works.
     await page.getByTestId('status-metrics-running').click()
@@ -68,7 +70,7 @@ test.describe('StatusMetrics topbar E2E', () => {
     })
   })
 
-  test('narrow: Token·RUN/Q summary; compact tip five label:value rows', async ({ page }) => {
+  test('narrow: Token·RUN/Q summary; compact tip four label:value rows', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/status-metrics-topbar.html')
     await expect(page.getByTestId('status-metrics-compact')).toBeVisible({ timeout: 15_000 })
@@ -82,11 +84,11 @@ test.describe('StatusMetrics topbar E2E', () => {
     const tip = compact.locator('.sm-tip')
     await expect(tip).toBeVisible()
     await expect(tip).toContainText(/累计 Token:\s*1,240,582/)
-    await expect(tip).toContainText(/速率:\s*4,812/)
-    await expect(tip).toContainText(/峰值:\s*12,104/)
+    await expect(tip).toContainText(/今日 Token:\s*4,812/)
     await expect(tip).toContainText(/执行中:\s*3/)
     await expect(tip).toContainText(/排队:\s*5/)
     await expect(tip).not.toContainText('/5m')
+    await expect(tip).not.toContainText('5 分钟')
     await expect(tip).not.toContainText('完整值')
 
     await page.screenshot({
@@ -99,8 +101,7 @@ test.describe('StatusMetrics topbar E2E', () => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/status-metrics-topbar.html?scene=null')
     await expect(page.getByTestId('status-metrics-tokens')).toContainText('—', { timeout: 15_000 })
-    await expect(page.getByTestId('status-metrics-rate')).toContainText('—')
-    await expect(page.getByTestId('status-metrics-peak')).toContainText('—')
+    await expect(page.getByTestId('status-metrics-today')).toContainText('—')
     await expect(page.getByTestId('status-metrics-running')).toContainText('0')
     await expect(page.getByTestId('status-metrics-queued')).toContainText('0')
 
@@ -115,7 +116,7 @@ test.describe('StatusMetrics topbar E2E', () => {
     await page.goto('/status-metrics-topbar.html')
     await expect(page.getByTestId('status-metrics')).toBeVisible({ timeout: 15_000 })
     const urlBefore = page.url()
-    await page.getByTestId('status-metrics-rate').click()
+    await page.getByTestId('status-metrics-today').click()
     await expect(page).toHaveURL(urlBefore)
     await expect(page.getByTestId('page-body')).toBeVisible()
   })

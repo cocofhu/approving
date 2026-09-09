@@ -92,7 +92,7 @@ function cardIconClass(scope: McpServer['scope']): string {
       <div class="flex min-w-0 flex-1 items-center gap-2">
         <button
           type="button"
-          class="inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-[13px] font-semibold text-accent-2 hover:bg-elevated"
+          class="inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-[13px] font-semibold text-accent-2 hover:bg-elevated md:min-h-0"
           data-testid="integrations-modal-back"
           @click="backToCatalog"
         >
@@ -118,7 +118,7 @@ function cardIconClass(scope: McpServer['scope']): string {
         data-testid="integrations-mcp-card"
         @click="openDetail(m)"
       >
-        <div class="flex min-h-11 items-start gap-3">
+        <div class="flex min-h-11 items-start gap-3 md:min-h-0">
           <div
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md"
             :class="cardIconClass(m.scope)"

@@ -27,7 +27,7 @@ const toast = useToast()
 
 // Shared singleton source so approving a gate elsewhere updates the badge immediately.
 const { count: gateCount, peek, refresh } = usePendingGates()
-        // Same unreadCount singleton as shell chrome bell — keep sidebar /notifications badge in sync.
+// Same unreadCount singleton as shell chrome bell — keep the settings notification badge in sync.
 const { unreadCount } = useRunTerminalNotifications()
 const { displayItems, hydrateDisplay, unfavorite, getFavoriteWorkflow, reorderFavorites } = useWorkflowFavorites()
 const { openLaunch } = useWorkflowRunLaunch()
@@ -249,6 +249,11 @@ const settingsItems = settingsNavItems
         >
           <Icon :name="item.icon" :size="17" />
           <span class="flex-1">{{ t(item.labelKey) }}</span>
+          <span
+            v-if="badgeFor(item.to)"
+            class="force-radius-full flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white"
+            :data-testid="item.to === '/notifications' ? 'nav-notifications-badge' : undefined"
+          >{{ badgeFor(item.to) }}</span>
         </RouterLink>
       </template>
     </div>
@@ -268,7 +273,7 @@ const settingsItems = settingsNavItems
         <span
           v-if="badgeFor(item.to)"
           class="force-radius-full flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[11px] font-semibold text-white"
-          :data-testid="item.to === '/notifications' ? 'nav-notifications-badge' : item.to === '/gates' ? 'nav-gates-badge' : undefined"
+          :data-testid="item.to === '/gates' ? 'nav-gates-badge' : undefined"
         >{{ badgeFor(item.to) }}</span>
       </RouterLink>
     </div>
