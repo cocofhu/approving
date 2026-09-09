@@ -148,7 +148,7 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     vi.clearAllMocks()
   })
 
-  it('tabs use single-row horizontal scroll with ~44px touch targets (g1.1/g1.2/g1.3)', async () => {
+  it('tabs use a compact single-row horizontal scroller', async () => {
     const { wrapper } = await mountDetail('board')
     const tabs = wrapper.find('[data-testid="project-detail-tabs"]')
     expect(tabs.exists()).toBe(true)
@@ -159,8 +159,10 @@ describe('ProjectDetailView PM Leader settings inline', () => {
 
     const boardTab = wrapper.find('[data-testid="project-tab-board"]')
     expect(boardTab.classes()).toEqual(
-      expect.arrayContaining(['min-h-11', 'shrink-0', 'whitespace-nowrap', 'border-b-2']),
+      expect.arrayContaining(['shrink-0', 'whitespace-nowrap', 'border-b-2', 'py-1.5']),
     )
+    expect(boardTab.classes()).not.toContain('min-h-11')
+    expect(tabs.classes()).not.toContain('mb-4')
     // Desktop selected underline style preserved
     expect(boardTab.classes()).toEqual(expect.arrayContaining(['border-accent']))
     expect(wrapper.find('[data-testid="project-board-panel"]').classes()).toContain('min-w-0')
