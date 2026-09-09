@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import Icon from '../ui/Icon.vue'
 import AppModal from '../ui/AppModal.vue'
 import AppButton from '../ui/AppButton.vue'
@@ -9,6 +10,10 @@ import StructuredArtifactView from './StructuredArtifactView.vue'
 import SelectionAddToChat from './SelectionAddToChat.vue'
 
 import { useArtifactPreview } from '@/lib/run/useArtifactPreview'
+import {
+  artifactFriendlyNameKey,
+  artifactTechnicalDisplayName,
+} from '@/lib/run/reactArtifactPreview'
 import type { ArtifactPreviewProps, ArtifactPreviewEmit } from '@/lib/run/useArtifactPreview'
 
 const props = withDefaults(defineProps<ArtifactPreviewProps>(), {
@@ -96,13 +101,26 @@ const {
   renderMarkdown,
   fmtTime,
 } = useArtifactPreview(props, emit)
+
+const friendlyName = computed(() => {
+  const key = artifactFriendlyNameKey(displayArtifact.value?.name)
+  return key ? t(key) : ''
+})
+const technicalName = computed(() => artifactTechnicalDisplayName(displayArtifact.value?.name))
+const displayName = computed(() => friendlyName.value || technicalName.value)
+const modalTitle = computed(() =>
+  friendlyName.value ? `${friendlyName.value} · ${technicalName.value}` : technicalName.value,
+)
 </script>
 
 <template>
   <div class="flex h-full min-h-0 min-w-0 flex-1 flex-col">
     <div v-if="displayArtifact" class="flex items-center gap-2 border-b border-line px-4 py-2.5">
       <span class="chip border-n-artifact/30 text-n-artifact">{{ displayArtifact.kind }}</span>
-      <span class="flex-1 truncate text-xs font-medium text-txt">{{ displayArtifact.name }}</span>
+      <span class="min-w-0 flex-1 truncate text-xs font-medium text-txt" :title="technicalName">
+        {{ displayName }}
+        <span v-if="friendlyName" class="ml-1.5 text-[10px] font-normal text-txt3">{{ technicalName }}</span>
+      </span>
       <div
         v-if="showVersionChip"
         class="relative shrink-0"
@@ -360,7 +378,7 @@ const {
     @add="onQuoteAdd"
   />
 
-  <AppModal :open="zoom" :title="displayArtifact?.name" :width="960" @close="zoom = false">
+  <AppModal :open="zoom" :title="modalTitle" :width="960" @close="zoom = false">
     <div
       v-if="displayArtifact && showStructuredUi"
       ref="structuredExportRootZoom"

@@ -453,16 +453,24 @@ describe('reactArtifactPreview helpers', () => {
     ).toEqual(['research.json', 'clarified_requirement.json', 'page.html'])
   })
 
-  it('maps the three friendly display-name keys and keeps other names technical', () => {
-    expect(artifactFriendlyNameKey('research.json')).toBe('pages.reactArtifactStage.friendlyResearch')
+  it('maps every reserved product to the shared friendly display-name keys', () => {
+    expect(artifactFriendlyNameKey('research.json')).toBe('common.gateBodyLabels.research')
     expect(artifactFriendlyNameKey('clarified_requirement.json')).toBe(
-      'pages.reactArtifactStage.friendlyClarified',
+      'common.gateBodyLabels.clarifiedRequirement',
     )
-    expect(artifactFriendlyNameKey('page.html')).toBe('pages.reactArtifactStage.friendlyVisual')
+    expect(artifactFriendlyNameKey('plan.json')).toBe('common.gateBodyLabels.plan')
+    expect(artifactFriendlyNameKey('proposals.json')).toBe('common.gateBodyLabels.proposals')
+    expect(artifactFriendlyNameKey('proposal.json')).toBe('common.gateBodyLabels.proposal')
+    expect(artifactFriendlyNameKey('test_result.json')).toBe('common.gateBodyLabels.testResult')
+    expect(artifactFriendlyNameKey('review.json')).toBe('common.gateBodyLabels.review')
+    expect(artifactFriendlyNameKey('implementation_result.json')).toBe(
+      'common.gateBodyLabels.implementationResult',
+    )
+    expect(artifactFriendlyNameKey('page.html')).toBe('common.gateBodyLabels.pagePreview')
     expect(artifactFriendlyNameKey(visualNodePageName('visual_bqc5'))).toBe(
-      'pages.reactArtifactStage.friendlyVisual',
+      'common.gateBodyLabels.pagePreview',
     )
-    expect(artifactFriendlyNameKey('proposals.json')).toBeNull()
+    expect(artifactFriendlyNameKey('notes.json')).toBeNull()
     expect(artifactTechnicalDisplayName('page.html#iter-2')).toBe('page.html')
     expect(isVisualPreviewArtifactName('page.html')).toBe(true)
     expect(isVisualPreviewArtifactName('visual_1.page.html')).toBe(true)

@@ -38,10 +38,34 @@ function mountList(props: Partial<InstanceType<typeof ArtifactList>['$props']> =
 }
 
 describe('ArtifactList', () => {
-  it('renders artifact names in run scope', () => {
+  it('renders friendly names with technical filenames in run scope', () => {
     const wrapper = mountList()
+    expect(wrapper.text()).toContain('调研')
+    expect(wrapper.text()).toContain('计划')
     expect(wrapper.text()).toContain('research.json')
     expect(wrapper.text()).toContain('plan.json')
+    wrapper.unmount()
+  })
+
+  it('matches platform artifacts by either friendly or technical name', async () => {
+    const requirement = artifact('clarified_requirement.json')
+    const research = artifact('research.json', 'research')
+    const wrapper = mountList({
+      artifacts: [requirement, research],
+      scope: 'platform',
+      runSections: [
+        { runId: 'run-1', runTitle: 'Run 1', items: [requirement, research] },
+      ] as any,
+    })
+    const input = wrapper.get('input[type="search"]')
+    const rowFor = (name: string) =>
+      wrapper.get(`[title="${name}"]`).element.closest('button') as HTMLButtonElement
+    await input.setValue('需求澄清')
+    expect(rowFor('clarified_requirement.json').style.display).not.toBe('none')
+    expect(rowFor('research.json').style.display).toBe('none')
+    await input.setValue('research.json')
+    expect(rowFor('research.json').style.display).not.toBe('none')
+    expect(rowFor('clarified_requirement.json').style.display).toBe('none')
     wrapper.unmount()
   })
 

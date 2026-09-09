@@ -2756,9 +2756,9 @@
       "meta": "{kind} · v{n} · {time}",
       "metaKindTime": "{kind} · {time}",
       "metaNameKindTime": "{name} · {kind} · {time}",
-      "friendlyResearch": "Research findings",
-      "friendlyClarified": "Clarified requirements",
-      "friendlyVisual": "Visual preview",
+      "friendlyResearch": "Research",
+      "friendlyClarified": "Clarified requirement",
+      "friendlyVisual": "Web preview",
       "versionChip": "v{n}",
       "versionChipLatest": "v{n} · latest",
       "versionMenu": "Choose version"

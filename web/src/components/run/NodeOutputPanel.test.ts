@@ -37,6 +37,7 @@ function mountPanel(node: WFNode, nodeRun: NodeRun, run: Run) {
         StatusPill: true,
         CompositeVarBlock: true,
         PlanView: true,
+        StructuredArtifactView: true,
         AppPreviewPanel: true,
         OutputResultCards: true,
       },
@@ -246,6 +247,64 @@ describe('NodeOutputPanel', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('pm')
     expect(wrapper.text()).toContain('结论正文')
+    wrapper.unmount()
+  })
+
+  it('renders structured requirement and plan products for approve outputs', async () => {
+    const node: WFNode = {
+      id: 'approve',
+      type: 'approve',
+      label: 'Approve',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'approve',
+      iteration: 1,
+      status: 'completed',
+      outputs: {
+        clarified_requirement_json: JSON.stringify({ title: '需求', goals: ['目标'] }),
+        plan_json: JSON.stringify({ title: '计划', goals: [] }),
+      },
+    }
+    const run = { id: 'run-1', artifacts: [] } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="node-output-clarified-requirement"]').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'StructuredArtifactView' }).exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'PlanView' }).exists()).toBe(true)
+    expect(apiMocks.artifactContent).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('loads the requirement artifact belonging to the current react node', async () => {
+    apiMocks.artifactContent.mockResolvedValueOnce({
+      content: JSON.stringify({ title: '当前节点需求', goals: ['目标'] }),
+    })
+    const node: WFNode = {
+      id: 'react-current',
+      type: 'react',
+      label: 'React',
+      position: { x: 0, y: 0 },
+      config: {},
+    }
+    const nodeRun: NodeRun = {
+      nodeId: 'react-current',
+      iteration: 1,
+      status: 'completed',
+      outputs: {},
+    }
+    const run = {
+      id: 'run-1',
+      artifacts: [
+        { id: 'other', name: 'clarified_requirement.json', nodeId: 'react-other', sizeBytes: 10 },
+        { id: 'current', name: 'clarified_requirement.json', nodeId: 'react-current', sizeBytes: 20 },
+      ],
+    } as unknown as Run
+    const wrapper = mountPanel(node, nodeRun, run)
+    await flushPromises()
+    expect(apiMocks.artifactContent).toHaveBeenCalledWith('current')
+    expect(wrapper.find('[data-testid="node-output-clarified-requirement"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })

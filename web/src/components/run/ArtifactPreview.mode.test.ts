@@ -122,6 +122,16 @@ describe('ArtifactPreview structured mode + capability trim', () => {
     wrapper.unmount()
   })
 
+  it('shows the friendly product title while retaining the technical filename', async () => {
+    const wrapper = mountPreview(artA)
+    await flushPromises()
+    const header = wrapper.get('.border-b.border-line')
+    expect(header.text()).toContain('需求澄清')
+    expect(header.text()).toContain('clarified_requirement.json')
+    expect(header.text()).toContain('json')
+    wrapper.unmount()
+  })
+
   it('switches to raw JSON and back without losing selection (g1.2)', async () => {
     const wrapper = mountPreview(artA)
     await flushPromises()
