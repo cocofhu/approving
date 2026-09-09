@@ -57,18 +57,45 @@ describe('FloatingNavBall (g2.1–g2.5)', () => {
     wrapper.unmount()
   })
 
-  it('pins on click and runs exit animation; ignores repeat during exit (g2.3)', async () => {
+  it('pins on click without waiting for the exit animation (g1.1)', async () => {
     setSidebarHidden(true)
     const wrapper = mountBall()
     await wrapper.find('[data-testid="floating-nav-ball"]').trigger('click')
+    expect(sidebarHidden.value).toBe(false)
     expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
       'true',
     )
-    await wrapper.find('[data-testid="floating-nav-ball"]').trigger('click')
-    expect(sidebarHidden.value).toBe(true)
-    await vi.advanceTimersByTimeAsync(320)
+    await vi.advanceTimersByTimeAsync(200)
     await nextTick()
     expect(sidebarHidden.value).toBe(false)
+    expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
+      'false',
+    )
+    wrapper.unmount()
+  })
+
+  it('ignores repeat clicks during the exit animation (g2.3)', async () => {
+    setSidebarHidden(true)
+    const wrapper = mountBall()
+    const ball = wrapper.find('[data-testid="floating-nav-ball"]')
+    await ball.trigger('click')
+    await ball.trigger('click')
+    expect(sidebarHidden.value).toBe(false)
+    await vi.advanceTimersByTimeAsync(200)
+    await nextTick()
+    expect(sidebarHidden.value).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reappears at once when the sidebar is hidden again mid-exit (g2.1)', async () => {
+    setSidebarHidden(true)
+    const wrapper = mountBall()
+    await wrapper.find('[data-testid="floating-nav-ball"]').trigger('click')
+    setSidebarHidden(true)
+    await nextTick()
+    const wrap = wrapper.find('[data-testid="floating-nav-ball-wrap"]')
+    expect(wrap.attributes('data-exiting')).toBe('false')
+    expect(wrap.classes()).toContain('pointer-events-auto')
     wrapper.unmount()
   })
 

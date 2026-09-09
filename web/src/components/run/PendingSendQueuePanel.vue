@@ -78,7 +78,7 @@ function onDrop(toIndex: number, e: DragEvent) {
         v-for="(q, qi) in items"
         :key="q.id || qi"
         data-testid="clarify-queue-item"
-        class="flex items-center gap-2 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2 transition-colors"
+        class="flex min-w-0 flex-wrap items-center gap-2 rounded border border-line bg-surface px-2 py-1 text-[12px] text-txt2 transition-colors"
         :class="dragIndex === qi ? 'opacity-60 shadow-sm' : ''"
         draggable="true"
         @dragstart="onDragStart(qi, $event)"
