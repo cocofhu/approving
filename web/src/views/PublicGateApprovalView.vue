@@ -1363,7 +1363,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
           <button
             v-if="hasUpstream"
             type="button"
-            class="inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
+            class="rounded-md inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
             data-testid="public-gate-upstream-enlarge"
             @click="openUpstreamModal"
           >
@@ -1449,7 +1449,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
         <p class="text-err">{{ t('pages.gateApproval.upstreamLoadFailed', { error: upstreamLoadErr }) }}</p>
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
+          class="rounded-md inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
           data-testid="public-gate-upstream-retry"
           @click="retryUpstreamLoad"
         >

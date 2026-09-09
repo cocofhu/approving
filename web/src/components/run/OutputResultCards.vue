@@ -178,7 +178,7 @@ function closeEnlarge() {
     <!-- Multi-card name+status list (g1.2 / g3.2): no max-height / own overflow. -->
     <div
       v-if="showList"
-      class="rounded-lg mb-3 border border-line bg-base"
+      class="rounded-lg mb-3 overflow-hidden border border-line bg-base"
       role="listbox"
       :aria-label="t('pages.nodeOutput.outputCards.listTitle')"
       data-testid="output-result-list"
@@ -241,7 +241,7 @@ function closeEnlarge() {
         <button
           v-if="canEnlarge"
           type="button"
-          class="inline-flex shrink-0 items-center bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
+          class="rounded-lg inline-flex shrink-0 items-center bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
           data-testid="output-result-enlarge"
           @click="openEnlarge"
         >

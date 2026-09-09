@@ -1193,6 +1193,7 @@ onUnmounted(() => {
   background: rgb(var(--c-elevated));
   padding: 3px;
   gap: 2px;
+  border-radius: 8px;
 }
 .seg button {
   border: 0;
@@ -1204,6 +1205,7 @@ onUnmounted(() => {
   color: rgb(var(--c-txt2));
   cursor: pointer;
   font-weight: 500;
+  border-radius: 6px;
 }
 .seg button:hover {
   color: rgb(var(--c-txt));
@@ -1234,6 +1236,7 @@ onUnmounted(() => {
   border: 1px solid rgb(var(--c-line));
   background: rgb(var(--c-surface));
   padding: 0 10px;
+  border-radius: 8px;
 }
 .search:focus-within {
   border-color: rgb(var(--c-accent));
@@ -1282,6 +1285,7 @@ onUnmounted(() => {
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
+  border-radius: 8px;
 }
 .btn:hover:not(:disabled) {
   background: rgb(var(--c-elevated));
@@ -1745,6 +1749,7 @@ tr.detail td {
   color: inherit;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease;
+  border-radius: 12px;
 }
 .event-card:hover {
   border-color: rgb(var(--c-accent));

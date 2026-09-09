@@ -1229,6 +1229,7 @@ defineExpose({
   padding: 3px;
   background: rgb(var(--c-elevated));
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
 }
 .seg button {
   border: 0;
@@ -1242,6 +1243,7 @@ defineExpose({
   cursor: pointer;
   font-weight: 500;
   white-space: nowrap;
+  border-radius: 6px;
 }
 .seg button:hover {
   color: rgb(var(--c-txt));

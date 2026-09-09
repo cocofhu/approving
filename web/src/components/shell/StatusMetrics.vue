@@ -224,7 +224,7 @@ function onBlurTip(id: string) {
       v-else
       ref="compactTrigger"
       type="button"
-      class="sm-item sm-compact relative inline-flex w-full items-center gap-2 border-0 bg-elevated px-2 py-1.5 text-[11px] text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
+      class="sm-item sm-compact relative inline-flex w-full items-center gap-2 rounded-md border-0 bg-elevated px-2 py-1.5 text-[11px] text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
       :class="tipOpen === 'compact' ? 'text-txt tip-open' : ''"
       data-testid="status-metrics-compact"
       :aria-label="t('shell.statusMetrics.compactAria')"
