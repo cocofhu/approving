@@ -366,6 +366,8 @@
         "baselineDesc": "Use the built-in pipeline and add repositories",
         "modalTitle": "Create from default baseline",
         "modalHint": "Uses the same repository list as Run launch. Add one or more repositories; each is cloned into the workspace.",
+        "nameLabel": "Workflow name (required)",
+        "namePlaceholder": "For example, Requirement alignment",
         "create": "Create",
         "creating": "Creating…",
         "created": "Created workflow \"{name}\""

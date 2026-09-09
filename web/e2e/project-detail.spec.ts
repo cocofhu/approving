@@ -228,7 +228,7 @@ test.describe('ProjectDetailView 流水线操作列', () => {
     await expect(page.getByTestId('new-edit-page')).toBeVisible()
   })
 
-  test('默认基线弹窗复用多仓编辑器，空 URL 禁止创建', async ({ page }) => {
+  test('默认基线弹窗要求工作流名称和仓库 URL 后才能创建', async ({ page }) => {
     await gotoProjectDetail(page, { width: 1280, height: 800 })
 
     await page.getByTestId('new-workflow-button').click()
@@ -237,9 +237,13 @@ test.describe('ProjectDetailView 流水线操作列', () => {
 
     const create = page.getByTestId('create-baseline-workflow')
     await expect(create).toBeDisabled()
+    const workflowName = page.getByTestId('baseline-workflow-name')
+    await expect(workflowName).toHaveAttribute('placeholder', '例如 需求对齐流水线')
     await expect(page.getByRole('dialog').locator('svg')).toHaveCount(3)
 
     await page.getByPlaceholder('仓库地址 https://…/repo.git').fill('https://github.com/acme/app.git')
+    await expect(create).toBeDisabled()
+    await workflowName.fill('需求对齐流水线')
     await expect(create).toBeEnabled()
     await page.getByRole('dialog').getByRole('button', { name: '添加仓库' }).click()
     await expect(page.getByPlaceholder('仓库地址 https://…/repo.git')).toHaveCount(2)

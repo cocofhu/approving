@@ -85,13 +85,23 @@ func TestCreateWorkflowFromBaselineAPI(t *testing.T) {
 
 	if w := hn.do("POST", "/api/workflows/from-baseline", map[string]any{
 		"projectId": pid,
+		"name":      "Empty repositories",
 		"repos":     []map[string]any{{"url": ""}},
 	}); w.Code != http.StatusBadRequest {
 		t.Fatalf("empty repos: %d %s", w.Code, w.Body.String())
 	}
 
+	if w := hn.do("POST", "/api/workflows/from-baseline", map[string]any{
+		"projectId": pid,
+		"name":      "　 ",
+		"repos":     []map[string]any{{"url": "https://github.com/acme/app.git"}},
+	}); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), services.ErrEmptyWorkflowName.Error()) {
+		t.Fatalf("empty name: %d %s", w.Code, w.Body.String())
+	}
+
 	w := hn.do("POST", "/api/workflows/from-baseline", map[string]any{
 		"projectId": pid,
+		"name":      "  Requirements pipeline  ",
 		"repos": []map[string]any{
 			{"url": "https://github.com/acme/app.git", "name": "", "branch": "main"},
 			{"url": "https://gitlab.com/acme/app.git", "name": ""},
@@ -106,7 +116,7 @@ func TestCreateWorkflowFromBaselineAPI(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	if created["name"] != "app" || created["status"] != "published" || created["needsRepo"] != true {
+	if created["name"] != "Requirements pipeline" || created["status"] != "published" || created["needsRepo"] != true {
 		t.Fatalf("unexpected workflow: %#v", created)
 	}
 	if created["id"] == "" {
@@ -132,10 +142,11 @@ func TestCreateWorkflowFromBaselineAPI(t *testing.T) {
 
 	w = hn.do("POST", "/api/workflows/from-baseline", map[string]any{
 		"projectId": pid,
+		"name":      "Requirements pipeline",
 		"repos":     []map[string]any{{"url": "https://github.com/acme/app.git"}},
 	})
-	if w.Code != http.StatusCreated || jsonField(w.Body.String(), "name") != "app (2)" {
-		t.Fatalf("workflow name not disambiguated: %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), services.ErrWorkflowNameExists.Error()) {
+		t.Fatalf("duplicate workflow name not rejected: %d %s", w.Code, w.Body.String())
 	}
 
 	w = hn.do("GET", "/api/workflows?projectId="+pid, nil)
