@@ -643,4 +643,206 @@ describe('useGatesInbox actions', () => {
     inbox.dismissStartFailure()
     app.unmount()
   })
+
+  it('reconciles processed rows only after an absent-then-present cycle', async () => {
+    const { inbox, app } = await withInbox()
+    const first = inbox.listItems.value[0]!
+    inbox.markProcessed(first)
+    inbox.reconcileProcessedWithList([])
+    expect(inbox.confirmedAbsentTriples.size).toBe(1)
+    inbox.reconcileProcessedWithList([first])
+    expect(inbox.isProcessedTriple(first)).toBe(false)
+
+    inbox.listItems.value = [first]
+    inbox.active.value = first
+    shared.draft.value = 'dirty'
+    await nextTick()
+    inbox.syncActiveAfterApply([], 'run-gate:gate')
+    expect(inbox.showProcessedBanner.value).toBe(true)
+    shared.draft.value = ''
+    await nextTick()
+    inbox.syncActiveAfterApply([], 'run-gate:gate')
+    expect(inbox.active.value).toBeNull()
+
+    inbox.active.value = null
+    inbox.syncActiveAfterApply([first], null)
+    expect(inbox.active.value).toBe(first)
+    inbox.syncActiveAfterApply([first], 'run-gate:gate')
+    expect(inbox.showProcessedBanner.value).toBe(false)
+    app.unmount()
+  })
+
+  it('drops a completed deep-link ghost and retains a failed startup card', async () => {
+    mocks.listGates.mockResolvedValue({ items: [], total: 0 })
+    mocks.getRun.mockResolvedValue(contextRun('finished', { status: 'completed' }))
+    const completed = await withInbox('/inbox?run=finished&node=approve')
+    await flushPromises()
+    expect(completed.inbox.incomingGhost.value).toBeNull()
+    expect(completed.inbox.incomingArmed.value).toBe(false)
+    completed.app.unmount()
+
+    mocks.getRun.mockResolvedValue(contextRun('failed', { status: 'failed' }))
+    const failed = await withInbox('/inbox?run=failed&node=approve')
+    await flushPromises()
+    expect(failed.inbox.incomingGhost.value).toBeNull()
+    expect(failed.inbox.startFailedItem.value?.runId).toBe('failed')
+    expect(failed.inbox.startFailedActive.value).toBe(true)
+    failed.inbox.dismissStartFailure()
+    expect(failed.inbox.startFailedItem.value).toBeNull()
+    failed.app.unmount()
+  })
+
+  it('restores session snapshots and derives producer node ids', async () => {
+    const { inbox, app } = await withInbox()
+    const applyReviewFrame = vi.fn(() => true)
+    inbox.gateApprovalRef.value = { applyReviewFrame, isEditing: false } as never
+    expect(inbox.activeDialogueNodeId(contextRun('run-gate'))).toBe('producer')
+    inbox.restoreReactSessions(contextRun('run-gate', {
+      reactSessions: {
+        producer: { busy: true, waiting: 1, items: [{ id: 'q1', text: 'wait' }] },
+      },
+    }))
+    expect(inbox.clarifyLiveBusy.value).toBe(true)
+    expect(applyReviewFrame).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'queue_state',
+      nodeId: 'producer',
+      busy: true,
+    }))
+
+    const clarify = inbox.listItems.value[1]!
+    inbox.active.value = clarify
+    await nextTick()
+    expect(inbox.activeDialogueNodeId()).toBe('react')
+    inbox.reviewChatRef.value = null
+    inbox.restoreReactSessions(contextRun('run-chat', {
+      reactSessions: { react: { busy: false, waiting: 0, items: [] } },
+    }))
+    inbox.reviewChatRef.value = { applyReviewFrame }
+    inbox.flushPendingReviewFrames()
+    expect(applyReviewFrame).toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it('handles clarify websocket busy guards and artifact patch failures', async () => {
+    const { inbox, app } = await withInbox()
+    const clarify = inbox.listItems.value[1]!
+    inbox.active.value = clarify
+    await flushPromises()
+    const socket = MockWebSocket.instances.at(-1)!
+    const applyReviewFrame = vi.fn(() => true)
+    inbox.reviewChatRef.value = {
+      applyReviewFrame,
+      applyAcpEvents: vi.fn(() => true),
+      isSessionBusy: () => true,
+    }
+    expect(inbox.isClarifySoftRefreshBlocked()).toBe(true)
+    socket.message({ type: 'review', event: 'turn_begin', nodeId: 'react' })
+    socket.message({ type: 'artifact_edit', previewArtifact: 'preview.png' })
+    await flushPromises()
+    expect(mocks.runArtifacts).toHaveBeenCalled()
+    socket.message({ type: 'review', event: 'error', nodeId: 'react', message: 'turn failed' })
+    await flushPromises()
+    expect(inbox.clarifyLiveBusy.value).toBe(false)
+
+    mocks.runArtifacts.mockRejectedValueOnce(new Error('offline'))
+    await inbox.patchActiveRunArtifacts()
+    expect(inbox.activeRun.value).not.toBeNull()
+
+    inbox.reviewChatRef.value = { isSessionBusy: () => false }
+    expect(inbox.isClarifySoftRefreshBlocked()).toBe(false)
+    inbox.clarifyLiveBusy.value = true
+    expect(inbox.isClarifySoftRefreshBlocked()).toBe(true)
+    app.unmount()
+  })
+
+  it('derives status, preview and composer presentation states', async () => {
+    const { inbox, app } = await withInbox()
+    expect(inbox.statusPillClass.value).toBe('idle')
+    expect(inbox.statusPillText.value).toBeTruthy()
+    shared.draft.value = 'draft'
+    await nextTick()
+    expect(inbox.statusPillClass.value).toBe('editing')
+    shared.hasPendingUpdate.value = true
+    shared.pendingMeta.value = { added: 1 }
+    await nextTick()
+    expect(inbox.statusPillClass.value).toBe('pending')
+    expect(inbox.updateBannerDetail.value).toBeTruthy()
+
+    const clarify = inbox.listItems.value[1]!
+    inbox.active.value = clarify
+    inbox.activeRun.value = contextRun('run-chat', {
+      nodes: [{ id: 'react', type: 'app_preview', config: {} }],
+      status: 'running',
+    })
+    await nextTick()
+    expect(inbox.inboxAppPreviewActive.value).toBe(true)
+    expect(inbox.inboxStageNodeType.value).toBe('app_preview')
+    expect(inbox.clarifyInputActive.value).toBe(true)
+    expect(inbox.clarifyComposerNodeId.value).toBe('react')
+    expect(inbox.clarifyComposerIteration.value).toBe(1)
+    expect(inbox.clarifyComposerTurns.value).toEqual([])
+    expect(inbox.clarifyComposerDone.value).toBe(false)
+
+    inbox.onAppPreviewReviewPick({ selector: '#new', url: ' https://app/ ', tagName: 'A' })
+    expect(inbox.lastStagedAppPreviewPick.value).toBeNull()
+    inbox.active.value = gateItem()
+    inbox.onAppPreviewReviewPick({ selector: '#ignored', url: '', tagName: 'DIV' })
+    app.unmount()
+  })
+
+  it('starts and stops the bounded startup poll', async () => {
+    vi.useFakeTimers()
+    const { inbox, app } = await withInbox()
+    const starting = gateItem('booting', { state: 'starting' })
+    inbox.listItems.value = [starting]
+    inbox.active.value = starting
+    await nextTick()
+    mocks.listGates.mockClear()
+    inbox.startStartingPoll()
+    await vi.advanceTimersByTimeAsync(inbox.STARTING_POLL_MS)
+    expect(mocks.listGates).toHaveBeenCalled()
+
+    inbox.active.value = null
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(inbox.STARTING_POLL_MS)
+    inbox.stopStartingPoll()
+    app.unmount()
+    vi.useRealTimers()
+  })
+
+  it('handles websocket construction failures and explicit closes', async () => {
+    const { inbox, app } = await withInbox()
+    inbox.connectActiveRunWs('')
+    expect(inbox.activeRunWsRunId).toBe('')
+
+    vi.stubGlobal('WebSocket', class {
+      constructor() {
+        throw new Error('socket denied')
+      }
+    })
+    inbox.connectActiveRunWs('run-gate')
+    expect(inbox.activeRunWsRunId).toBe('')
+    inbox.closeActiveRunWs()
+    expect(inbox.clarifyLiveBusy.value).toBe(false)
+    app.unmount()
+  })
+
+  it('handles inbox-context 404s and incoming-ghost transient checks', async () => {
+    const { inbox, app } = await withInbox()
+    const first = inbox.listItems.value[0]!
+    inbox.active.value = first
+    mocks.inboxContext.mockRejectedValueOnce(Object.assign(new Error('gone'), { status: 404 }))
+    await inbox.loadActiveRun(true)
+    expect(inbox.listItems.value.some((it) => it.runId === first.runId)).toBe(false)
+
+    inbox.incomingArmed.value = true
+    mocks.getRun.mockRejectedValueOnce(new Error('temporary'))
+    await inbox.confirmIncomingGhostStillNeeded({ runId: 'new-run', nodeId: 'approve' })
+    expect(inbox.incomingGhostConfirmInFlight).toBe('')
+
+    const rows = [clarifyItem()]
+    inbox.incomingArmed.value = false
+    expect(inbox.mergeIncomingGhost(rows)).toBe(rows)
+    app.unmount()
+  })
 })

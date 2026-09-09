@@ -428,4 +428,161 @@ describe('useClarifyChat actions', () => {
     expect(chat.showTurnCompleted({ ...agent, streaming: false, interrupted: false })).toBe(true)
     app.unmount()
   })
+
+  it('covers composer growth, attachment input, annotation removal and image labels', async () => {
+    class Reader {
+      result: string | ArrayBuffer | null = null
+      onload: (() => void) | null = null
+      readAsDataURL(file: File) {
+        this.result = `data:${file.type};base64,YQ==`
+        this.onload?.()
+      }
+    }
+    vi.stubGlobal('FileReader', Reader)
+    const { chat, app, models } = withChat()
+    await flushPromises()
+    const textarea = document.createElement('textarea')
+    Object.defineProperty(textarea, 'scrollHeight', { value: 90 })
+    chat.textareaRef.value = textarea
+    chat.autoGrow()
+    chat.onTextInput()
+    expect(textarea.style.height).toBeTruthy()
+
+    const file = new File(['a'], '', { type: 'image/png' })
+    const input = document.createElement('input')
+    Object.defineProperty(input, 'files', {
+      value: { 0: file, length: 1, item: () => file },
+    })
+    chat.fileInput.value = input
+    chat.onPickFiles({ target: input } as unknown as Event)
+    expect(models.attachments.value[0]?.name).toBe('attachment-1')
+    expect(input.value).toBe('')
+    expect(chat.imagePreviewLabel(models.attachments.value, 0)).toBeTruthy()
+    expect(chat.imagePreviewLabel([image(), image('')], 1)).toBeTruthy()
+
+    models.annotations.value = [annotation(), annotation({ selector: '#two' })]
+    chat.removeAnnotation(0)
+    expect(models.annotations.value).toHaveLength(1)
+    app.unmount()
+  })
+
+  it('parses persisted choice replies and locates replies for agent questions', () => {
+    const q = question()
+    const choice = '我的选择:\n- 选择环境 → 开发、其他'
+    const turns = [
+      { role: 'agent', text: 'ask', at: '1', questions: [q] },
+      { role: 'human', text: choice, at: '2' },
+    ]
+    const { chat, app } = withChat({ turns })
+    expect(chat.textHasChoicePrefix(choice)).toBe(true)
+    expect(chat.stripChoicePrefix(choice)).toContain('选择环境')
+    expect(chat.isChoiceReply(choice)).toBe(true)
+    expect(chat.latestQuestionTurnIndex(turns as never)).toBe(0)
+    expect(chat.hasHumanReplyAfter(turns as never, 0)).toBe(true)
+    const rows = chat.choiceRowsForAgentTurn(0)
+    expect(rows?.[0]?.answers).toEqual(['开发', '其他'])
+    expect(chat.selectedLabelsForQuestion(q, rows)).toEqual(['开发', '其他'])
+    expect(chat.isActiveTurn(0)).toBe(false)
+    app.unmount()
+  })
+
+  it('covers queue-state trimming, live completion, and wrong-node frames', () => {
+    const { chat, app } = withChat()
+    chat.sendMessage('one')
+    chat.sendMessage('two')
+    chat.sendMessage('three')
+    chat.applyQueueState(1, [{ id: 'one', text: 'one' }], true)
+    expect(chat.queued.value).toHaveLength(1)
+
+    chat.applyReviewFrame({ event: 'turn_begin', nodeId: 'wrong', item: { text: 'ignored' } })
+    expect(chat.liveAgentIdx.value).toBe(-1)
+    chat.applyReviewFrame({ event: 'turn_begin', item: { id: 'missing', text: 'active' } })
+    chat.applyAcpEvents([{ kind: 'message', text: 'complete' }])
+    chat.applyQueueState(0, [], false)
+    expect(chat.liveTurns.value.at(-1)?.streaming).toBe(false)
+    expect(chat.liveAgentIdx.value).toBe(-1)
+    expect(chat.showTurnCompleted(chat.liveTurns.value.at(-1)!)).toBe(true)
+
+    chat.forceAuthoritativeIdle()
+    chat.discardLastQueued()
+    app.unmount()
+  })
+
+  it('handles approve placeholders, done state and empty seed images', async () => {
+    const { chat, app, props } = withChat({ nodeType: 'approve', seedHumanImages: [image()] })
+    expect(chat.showApproveEmptyHint.value).toBe(false)
+    expect(chat.useConfirmFlowAction.value).toBe(true)
+    expect(chat.inputPlaceholder.value).toBeTruthy()
+    expect(chat.seedHumanTurn.value?.images).toHaveLength(1)
+    chat.thinking.value = true
+    chat.validating.value = true
+    props.done = true
+    await nextTick()
+    expect(chat.thinking.value).toBe(false)
+    expect(chat.validating.value).toBe(false)
+    app.unmount()
+  })
+
+  it('clears live bubbles when persisted turns catch up', async () => {
+    const { chat, app, props } = withChat()
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'hello' } })
+    chat.applyAcpEvents([{ kind: 'message', text: 'answer' }])
+    expect(chat.liveTurns.value).toHaveLength(2)
+    props.turns = [
+      { role: 'human', text: 'hello', at: '1' },
+      { role: 'agent', text: 'answer', at: '2' },
+    ] as never
+    await nextTick()
+    expect(chat.liveTurns.value).toEqual([])
+    expect(chat.liveAgentIdx.value).toBe(-1)
+    expect(chat.thinking.value).toBe(false)
+    app.unmount()
+  })
+
+  it('extracts pasted files through DataTransfer and prevents native paste', async () => {
+    class Reader {
+      result = 'data:image/png;base64,YQ=='
+      onload: (() => void) | null = null
+      readAsDataURL() {
+        this.onload?.()
+      }
+    }
+    class Transfer {
+      files: File[] = []
+      items = { add: (f: File) => this.files.push(f) }
+    }
+    vi.stubGlobal('FileReader', Reader)
+    vi.stubGlobal('DataTransfer', Transfer)
+    const { chat, app, models } = withChat()
+    const file = new File(['a'], 'paste.png', { type: 'image/png' })
+    const preventDefault = vi.fn()
+    chat.onPaste({
+      preventDefault,
+      clipboardData: {
+        items: [
+          { kind: 'string', getAsFile: () => null },
+          { kind: 'file', getAsFile: () => file },
+        ],
+      },
+    } as unknown as ClipboardEvent)
+    await nextTick()
+    expect(preventDefault).toHaveBeenCalled()
+    expect(models.attachments.value[0]?.name).toBe('paste.png')
+    app.unmount()
+  })
+
+  it('settles a non-empty live slot when queue authority becomes idle', () => {
+    const { chat, app } = withChat()
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'hello' } })
+    chat.applyAcpEvents([{ kind: 'message', text: 'answer' }])
+    chat.applyQueueState(1, [{ id: 'wait', text: 'wait' }], false)
+    expect(chat.liveTurns.value[1]?.text).toBe('answer')
+    expect(chat.liveTurns.value[1]?.streaming).toBe(false)
+    expect(chat.liveAgentIdx.value).toBe(-1)
+
+    chat.queued.value.push({ text: 'ghost', images: [], annotations: [] })
+    chat.settleAfterTurnEnd()
+    expect(chat.queued.value).toEqual([])
+    app.unmount()
+  })
 })

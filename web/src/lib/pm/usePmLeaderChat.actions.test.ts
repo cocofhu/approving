@@ -405,4 +405,308 @@ describe('usePmLeaderChat actions', () => {
     expect(mocks.toastError).toHaveBeenCalled()
     app.unmount()
   })
+
+  it('resumes a live server draft from its sequence watermark', async () => {
+    mocks.listPmMessages.mockResolvedValueOnce({
+      items: [message('live', 'user', { status: 'sending' })],
+      hasMore: false,
+    })
+    mocks.getPmDraft.mockResolvedValueOnce({
+      draft: { status: 'streaming', userMsgId: 'live', partialText: 'partial', eventSeq: 4 },
+      live: true,
+      hasFinal: false,
+    })
+    const { chat, app } = withChat()
+    await flushPromises()
+    expect(chat.resuming.value).toBe(true)
+    expect(chat.streamText.value).toBe('partial')
+    expect(chat.lastEventSeq.value).toBe(4)
+    expect(JSON.parse(MockWebSocket.instances[0]!.sent[0]!)).toEqual({ type: 'resume', afterSeq: 4 })
+    app.unmount()
+  })
+
+  it('classifies resume failures and dead streaming drafts', async () => {
+    mocks.listPmMessages.mockResolvedValueOnce({
+      items: [message('dead', 'user', { status: 'sending' })],
+      hasMore: false,
+    })
+    mocks.getPmDraft.mockResolvedValueOnce({
+      draft: { status: 'streaming', userMsgId: 'dead', partialText: '', eventSeq: 2 },
+      live: false,
+      hasFinal: false,
+    })
+    const { chat, app } = withChat()
+    await flushPromises()
+    expect(chat.messages.value[0]?.failKind).toBe('connection')
+
+    mocks.ensurePmSandbox.mockRejectedValueOnce(new Error('resume unavailable'))
+    await chat.beginResume('th-1', 'old', 1, 'dead')
+    expect(chat.messages.value[0]?.status).toBe('failed')
+    expect(mocks.toastError).toHaveBeenCalledWith('resume unavailable')
+    app.unmount()
+  })
+
+  it('handles failed message loads and retries the active thread', async () => {
+    mocks.listPmMessages.mockRejectedValueOnce(new Error('messages down'))
+    const { chat, app } = withChat()
+    await flushPromises()
+    expect(chat.messagesLoadFailed.value).toBe(true)
+    expect(mocks.toastError).toHaveBeenCalled()
+
+    mocks.listPmMessages.mockResolvedValueOnce({ items: [message('ok')], hasMore: false })
+    await chat.retryLoadMessages()
+    expect(chat.messagesLoadFailed.value).toBe(false)
+    expect(chat.messages.value[0]?.id).toBe('ok')
+    chat.messagesLoading.value = true
+    await chat.retryLoadMessages()
+    app.unmount()
+  })
+
+  it('selects threads on mobile and honors busy navigation guards', async () => {
+    shared.isMobile.value = true
+    mocks.listPmThreads.mockResolvedValue({ items: [thread(), thread({ id: 'th-2' })] })
+    const { chat, app, emit, props } = withChat({ restoreMobileChat: true })
+    await flushPromises()
+    expect(chat.mobileView.value).toBe('chat')
+    expect(emit).toHaveBeenCalledWith('restoredMobileChat')
+    chat.backToThreads()
+    expect(chat.mobileView.value).toBe('threads')
+    await chat.selectThread('th-1')
+    expect(chat.mobileView.value).toBe('chat')
+    await chat.selectThread('th-2')
+    expect(chat.activeId.value).toBe('th-2')
+
+    chat.sending.value = true
+    chat.backToThreads()
+    await chat.selectThread('th-1')
+    expect(chat.activeId.value).toBe('th-2')
+    chat.sending.value = false
+    props.projectId = 'proj-2'
+    await flushPromises()
+    expect(mocks.listPmThreads).toHaveBeenCalledWith('proj-2')
+    app.unmount()
+  })
+
+  it('restores send state when append fails and blocks unavailable sends', async () => {
+    mocks.appendPmMessage.mockRejectedValueOnce(new Error('append down'))
+    const { chat, app, emit } = withChat()
+    await flushPromises()
+    chat.input.value = 'keep me'
+    chat.attachments.value = [imageAttachment()]
+    await chat.send()
+    expect(chat.input.value).toBe('keep me')
+    expect(chat.attachments.value).toHaveLength(1)
+    expect(mocks.toastError).toHaveBeenCalledWith('append down')
+
+    chat.input.value = 'disabled'
+    ;(chat.enabled as { value: boolean }).value
+    const disabled = withChat({ binding: { enabled: false, agentAvailable: true } })
+    await flushPromises()
+    disabled.chat.input.value = 'hello'
+    await disabled.chat.send()
+    expect(disabled.emit).toHaveBeenCalledWith('openSettings')
+    emit.mockClear()
+    disabled.app.unmount()
+    app.unmount()
+  })
+
+  it('falls back locally when failure persistence and clearing fail', async () => {
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.messages.value = [message('u', 'user', { status: 'ok' }) as never]
+    mocks.patchPmMessage.mockRejectedValueOnce(new Error('persist down'))
+    await chat.persistFailure('u', 'unknown')
+    expect(chat.messages.value[0]).toMatchObject({ status: 'failed', failKind: 'unknown' })
+    mocks.patchPmMessage.mockRejectedValueOnce(new Error('clear down'))
+    await chat.clearFailure('u')
+    expect(chat.messages.value[0]).toMatchObject({ status: 'ok', failKind: '' })
+    expect(mocks.toastError).toHaveBeenCalledWith('clear down')
+    app.unmount()
+  })
+
+  it('reports final refetch failures and clears cancelled turn completion', async () => {
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.input.value = 'turn'
+    await chat.send()
+    mocks.listPmMessages.mockRejectedValueOnce(new Error('refresh down'))
+    MockWebSocket.instances.at(-1)!.frame({ type: 'turn_done' })
+    await flushPromises()
+    expect(chat.finalizingRefetchFailed.value).toBe(true)
+    expect(chat.finalizing.value).toBe(true)
+
+    await chat.onTurnDone()
+    expect(chat.finalizing.value).toBe(false)
+    expect(chat.streamText.value).toBe('')
+    app.unmount()
+  })
+
+  it('handles malformed frames, ACP deltas, and channel context guards', async () => {
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.input.value = 'start'
+    await chat.send()
+    const socket = MockWebSocket.instances.at(-1)!
+    socket.onmessage?.(new MessageEvent('message', { data: '{bad' }))
+    chat.handleAcp({
+      type: 'session_update',
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { text: 'delta' },
+      },
+    })
+    chat.handleAcp({ type: 'tool_call', content: 'ignored' })
+    expect(chat.streamText.value).toContain('delta')
+    chat.openChannelCtx(new MouseEvent('contextmenu'), thread() as never)
+    expect(chat.channelCtx.value).toBeNull()
+    chat.openChannelDetail()
+    chat.closeChannelCtx()
+    chat.onChannelCtxAction()
+    app.unmount()
+  })
+
+  it('covers computed view states and message merge helpers', async () => {
+    const { chat, app } = withChat()
+    await flushPromises()
+    expect(chat.mergeMessagesKeepPrefix([], [message('a') as never])).toHaveLength(1)
+    expect(chat.mergeMessagesKeepPrefix([message('a') as never], [])).toHaveLength(1)
+    expect(
+      chat.mergeMessagesKeepPrefix(
+        [message('a', 'user', { content: 'old' }) as never],
+        [message('a', 'user', { content: 'new' }) as never, message('b') as never],
+      ),
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'a', content: 'new' })]))
+    chat.finalizing.value = true
+    expect(chat.mainViewState.value).toBe('finalizing')
+    expect(chat.busyHint.value).toBeTruthy()
+    chat.finalizing.value = false
+    chat.resuming.value = true
+    expect(chat.mainViewState.value).toBe('resuming')
+    chat.resuming.value = false
+    chat.messagesLoading.value = true
+    expect(chat.mainViewState.value).toBe('messagesLoading')
+    chat.messagesLoading.value = false
+    chat.messagesLoadFailed.value = true
+    expect(chat.mainViewState.value).toBe('errorEmpty')
+    expect(chat.failMeta('not-real').kind).toBe('unknown')
+
+    for (const [kind, classPart] of [
+      ['wecom', 'accent'],
+      ['feishu', 'cyan'],
+      ['dingtalk', 'blue'],
+      ['qq', 'accent'],
+    ]) {
+      const th = thread({ userId: `${kind}:c2c:peer` }) as never
+      expect(chat.channelBadgeLabel(th)).toBeTruthy()
+      expect(chat.channelBadgeClass(th)).toContain(classPart)
+      expect(chat.channelReadonlyTitle(th)).toBeTruthy()
+      expect(chat.channelReadonlyHint(th)).toBeTruthy()
+    }
+    expect(chat.threadDisplayTitle(thread({ title: '  ' }) as never)).toBeTruthy()
+    expect(chat.channelSourceLine(thread({ userId: 'qq:c2c:peer' }) as never)).toContain('peer')
+    chat.messagesLoadFailed.value = false
+    chat.messages.value = [message('u', 'user') as never, message('a', 'assistant') as never]
+    expect(chat.showIdleSuggestions.value).toBe(true)
+    chat.historyLoading.value = true
+    expect(chat.historyTipText.value).toBeTruthy()
+    expect(chat.historyTipClass.value).toContain('accent')
+    chat.historyLoading.value = false
+    chat.historyLoadFailed.value = true
+    expect(chat.historyTipClass.value).toContain('err')
+    app.unmount()
+  })
+
+  it('fails a fresh turn when sandbox preparation rejects', async () => {
+    mocks.ensurePmSandbox.mockRejectedValueOnce(new Error('sandbox boot exploded'))
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.input.value = 'question'
+    await chat.send()
+    expect(chat.messages.value[0]).toMatchObject({ id: 'u-new', status: 'failed' })
+    expect(chat.sending.value).toBe(false)
+    expect(mocks.toastError).toHaveBeenCalledWith('sandbox boot exploded')
+    app.unmount()
+  })
+
+  it('persists stopped when cancellation happens during thread creation', async () => {
+    let resolveCreate!: (value: ReturnType<typeof thread>) => void
+    mocks.listPmThreads.mockResolvedValueOnce({ items: [] })
+    mocks.createPmThread.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.input.value = 'slow create'
+    const sending = chat.send()
+    chat.stop()
+    resolveCreate(thread({ id: 'created' }))
+    await sending
+    expect(chat.sending.value).toBe(false)
+    expect(mocks.appendPmMessage).not.toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it('persists stopped when cancellation happens during message append', async () => {
+    let resolveAppend!: (value: ReturnType<typeof message>) => void
+    mocks.appendPmMessage.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveAppend = resolve
+      }),
+    )
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.input.value = 'slow append'
+    const sending = chat.send()
+    chat.stop()
+    resolveAppend(message('slow', 'user', { content: 'slow append' }))
+    await sending
+    expect(mocks.patchPmMessage).toHaveBeenCalledWith(
+      'proj-1',
+      'th-1',
+      'slow',
+      expect.objectContaining({ failKind: 'stopped' }),
+    )
+    app.unmount()
+  })
+
+  it('aborts readiness and times out websocket opening', async () => {
+    const { chat, app } = withChat()
+    await flushPromises()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(chat.ensureSandbox(true, controller.signal)).rejects.toThrow('Aborted')
+    await expect(chat.waitReady(7, controller.signal)).rejects.toThrow('Aborted')
+
+    vi.useFakeTimers()
+    const connecting = new MockWebSocket('ws://timeout')
+    connecting.readyState = MockWebSocket.CONNECTING
+    const pending = chat.waitWsOpen(connecting as never, 10)
+    vi.advanceTimersByTime(10)
+    await expect(pending).rejects.toThrow('ws open timeout')
+    app.unmount()
+  })
+
+  it('handles turn errors when message refresh itself fails', async () => {
+    const { chat, app } = withChat()
+    await flushPromises()
+    chat.input.value = 'unknown'
+    await chat.send()
+    mocks.listPmMessages.mockRejectedValueOnce(new Error('refresh failed'))
+    MockWebSocket.instances.at(-1)!.frame({ type: 'error', failKind: 'bogus', error: 'server detail' })
+    await flushPromises()
+    expect(mocks.patchPmMessage).toHaveBeenCalledWith(
+      'proj-1',
+      'th-1',
+      'u-new',
+      expect.objectContaining({ failKind: 'unknown' }),
+    )
+    expect(mocks.toastError).toHaveBeenCalledWith('server detail')
+    app.unmount()
+  })
 })
+
+function imageAttachment() {
+  return { data: 'YQ==', mimeType: 'image/png', name: 'a.png' }
+}

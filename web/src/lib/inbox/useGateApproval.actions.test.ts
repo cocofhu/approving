@@ -595,4 +595,136 @@ describe('useGateApproval actions', () => {
     expect(approval.reactText.value).toBe('')
     app.unmount()
   })
+
+  it('handles queue authority transitions with completed and empty rails', async () => {
+    const { approval, app } = withApproval()
+    await flushPromises()
+    approval.reactInFlight.value = true
+    approval.reactThinking.value = true
+    approval.reactStreamText.value = 'completed answer'
+    approval.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'producer',
+      waiting: 1,
+      busy: false,
+      items: [{ id: 'server-1', text: 'next' }],
+    })
+    expect(approval.reactInFlight.value).toBe(false)
+    expect(approval.reactStreamCompletedAt.value).toBeTruthy()
+    expect(approval.reactQueued.value[0]?.id).toBe('server-1')
+
+    approval.reactInFlight.value = true
+    approval.reactStreamText.value = ''
+    approval.reactStreamThought.value = ''
+    approval.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'producer',
+      waiting: 1,
+      busy: false,
+      items: [{ text: 'anonymous' }],
+    })
+    expect(approval.reactInFlight.value).toBe(false)
+    expect(approval.reactStreamCompletedAt.value).toBeNull()
+
+    approval.reactQueued.value.push({ text: 'ghost', images: [], annotations: [] })
+    approval.reactInFlight.value = true
+    approval.reactStreamThought.value = 'thought'
+    approval.forceReactAuthoritativeIdle()
+    expect(approval.reactQueued.value).toEqual([])
+    expect(approval.reactStreamCompletedAt.value).toBeTruthy()
+
+    approval.reactQueued.value = [
+      { text: 'ghost', images: [], annotations: [] },
+      { id: 'real', text: 'real', images: [], annotations: [] },
+    ]
+    approval.reactInFlight.value = true
+    approval.settleReactAfterTurnEnd()
+    expect(approval.reactQueued.value.map((q) => q.id)).toEqual(['real'])
+    app.unmount()
+  })
+
+  it('uses fallback preview issue APIs and composer action routing', async () => {
+    const { approval, app, emit } = withApproval({
+      run: run({ nodes: [{ id: 'gate-1', type: 'app_preview', config: {} }] }),
+    })
+    await flushPromises()
+    approval.feedbackChatRef.value = null
+    approval.reactText.value = 'fallback issue'
+    approval.reactImages.value = [{ data: 'img', mimeType: 'image/png', name: 'shot.png' }]
+    approval.pickedElementImage.value = { data: 'picked', mimeType: 'image/jpeg' }
+    approval.pickedSelector.value = '#picked'
+    expect(approval.collectUnifiedIssueImages()).toHaveLength(2)
+    expect(await approval.flushFeedbackDraft()).toBe(true)
+    expect(mocks.createPreviewIssue).toHaveBeenCalledWith(
+      'run-1',
+      'gate-1',
+      'fallback issue',
+      '#picked',
+      0,
+      expect.any(Array),
+    )
+
+    approval.reactAnnotations.value = [{ selector: '#only', label: 'Only annotation' }]
+    expect(await approval.syncHotRejectHistory(approval.reactAnnotations.value)).toBe(true)
+    expect(approval.hotRejectHistorySynced.value).toBe(true)
+
+    approval.hotRejectHistorySynced.value = false
+    mocks.createPreviewIssue.mockRejectedValueOnce(new Error('history denied'))
+    expect(await approval.syncHotRejectHistory(approval.reactAnnotations.value)).toBe(false)
+    expect(approval.reactError.value).toBe('history denied')
+
+    approval.previewIssues.value = []
+    approval.actionSubmitting.value = false
+    approval.resolved.value = null
+    approval.onComposerPass()
+    expect(emit).toHaveBeenCalledWith('resolve', 'pass', expect.any(Object))
+
+    approval.resolved.value = null
+    approval.actionSubmitting.value = false
+    approval.reactText.value = 'revise'
+    approval.onComposerReject()
+    await flushPromises()
+    expect(mocks.gateReactRevise).toHaveBeenCalled()
+    app.unmount()
+  })
+
+  it('evaluates fill layouts, action help and product guard branches', async () => {
+    isMobile.value = true
+    const productRun = run({
+      nodes: [
+        { id: 'gate-1', type: 'approve', config: { body_template: '{{nodes.producer.outputs.page}}' } },
+        { id: 'producer', type: 'output', config: {} },
+      ],
+      artifacts: [],
+      nodeExecutions: {},
+    })
+    const { approval, app, props } = withApproval({
+      run: productRun,
+      fillPreview: true,
+      mobileFillRemaining: true,
+      unifiedPreviewBudget: true,
+    })
+    await flushPromises()
+    expect(approval.useMobileFillRemaining.value).toBe(true)
+    expect(approval.useReviewShellLayout.value).toBe(false)
+    expect(approval.useUnifiedPreviewBudget.value).toBe(false)
+    expect(approval.helpColdText.value).toBeTruthy()
+    expect(approval.helpReviseDetailNoIssuesText.value).toBeTruthy()
+    expect(approval.helpReviseWithIssuesText.value).toBeTruthy()
+    expect(approval.contentFitChromeOffsetPx.value).toBe(0)
+    expect(approval.upstreamOutputs()).toEqual({ outputs: null, pointerMiss: false })
+
+    approval.apiPrimaryProducts.value = [{ name: 'missing.json', kind: 'structured' } as never]
+    expect(await approval.loadOneProductContent(approval.apiPrimaryProducts.value[0]!)).toBe('')
+    await approval.loadProduct({ force: true })
+    expect(approval.productDoc.value).toBeNull()
+
+    props.gate = gate({ actions: [{ id: 'p1', label: 'Proposal' }] })
+    await nextTick()
+    expect(approval.isProposalSelect.value).toBe(true)
+    expect(approval.composerPassDisabled.value).toBe(true)
+    approval.onComposerPass()
+    approval.onComposerReject()
+    app.unmount()
+  })
 })
