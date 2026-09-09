@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { api, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
+import { isIntegrationsQuery } from '@/data/settingsNav'
 import AppButton from '@/components/ui/AppButton.vue'
 import Icon from '@/components/ui/Icon.vue'
-import IntegrationsModal from '@/components/settings/IntegrationsModal.vue'
+import IntegrationsPanel from '@/components/settings/IntegrationsPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -78,37 +79,14 @@ const showSkeleton = computed(
   () => loading.value && items.value.length === 0 && !loadFailed.value && !loadDenied.value,
 )
 
-// plan g2.1–g2.3: integrations entry + modal (independent of settings load state)
-const integrationsOpen = ref(false)
+const showIntegrations = computed(() => isIntegrationsQuery(route.query.integrations))
 
-function openIntegrationsModal() {
-  integrationsOpen.value = true
+function openIntegrations() {
+  void router.push({
+    path: '/settings',
+    query: { ...route.query, integrations: '1' },
+  })
 }
-
-function closeIntegrationsModal() {
-  integrationsOpen.value = false
-}
-
-function shouldAutoOpenIntegrations(raw: unknown): boolean {
-  if (Array.isArray(raw)) return raw.some((v) => shouldAutoOpenIntegrations(v))
-  return raw === '1' || raw === 'true'
-}
-
-async function consumeIntegrationsQuery() {
-  if (!shouldAutoOpenIntegrations(route.query.integrations)) return
-  openIntegrationsModal()
-  const nextQuery = { ...route.query }
-  delete nextQuery.integrations
-  await router.replace({ path: '/settings', query: nextQuery })
-}
-
-watch(
-  () => route.query.integrations,
-  () => {
-    void consumeIntegrationsQuery()
-  },
-  { immediate: true },
-)
 
 let poll: number | undefined
 
@@ -238,6 +216,8 @@ onBeforeUnmount(() => {
     data-testid="settings-panel"
     :aria-busy="loading || saving ? 'true' : 'false'"
   >
+    <IntegrationsPanel v-if="showIntegrations" />
+    <template v-else>
     <div class="mb-5 flex shrink-0 flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.settings.title') }}</h2>
@@ -301,7 +281,7 @@ onBeforeUnmount(() => {
           size="md"
           icon="chevron-right"
           data-testid="settings-integrations-open"
-          @click="openIntegrationsModal"
+          @click="openIntegrations"
         >
           {{ t('pages.settings.integrationsCard.view') }}
         </AppButton>
@@ -496,8 +476,7 @@ onBeforeUnmount(() => {
       {{ t('pages.settings.priorityNote') }}
     </p>
     </div>
-
-    <IntegrationsModal :open="integrationsOpen" @close="closeIntegrationsModal" />
+    </template>
   </div>
 </template>
 
