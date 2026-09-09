@@ -704,8 +704,21 @@ onBeforeUnmount(() => {
               </span>
             </div>
             <div class="px-3 py-2.5">
-              <div class="truncate text-[13px] font-medium text-txt">{{ p.name }}</div>
-              <div class="mt-0.5 line-clamp-2 text-[11px] text-txt3">
+              <div
+                class="truncate text-[13px] font-medium text-txt"
+                :title="p.name"
+                data-testid="home-pipeline-card-name"
+              >{{ p.name }}</div>
+              <div
+                v-if="p.projectName"
+                class="mt-0.5 truncate text-[11px] text-txt2"
+                :title="p.projectName"
+                :data-testid="`home-pipeline-card-project-${p.id}`"
+              >{{ p.projectName }}</div>
+              <div
+                class="mt-0.5 line-clamp-2 text-[11px] text-txt3"
+                :title="p.description || t('pages.dashboard.cardFallback')"
+              >
                 {{ p.description || t('pages.dashboard.cardFallback') }}
               </div>
             </div>

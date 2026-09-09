@@ -7,7 +7,7 @@ import pages from '@/locales/zh-CN/pages.json'
 import HomePipelineSelect from './HomePipelineSelect.vue'
 
 function mountSelect(props: {
-  pipelines?: { id: string; name: string }[]
+  pipelines?: { id: string; name: string; projectName?: string }[]
   modelValue?: string
   disabled?: boolean
 } = {}) {
@@ -143,6 +143,79 @@ describe('HomePipelineSelect', () => {
     search.dispatchEvent(new Event('input'))
     await flushPromises()
     expect(document.querySelector('[data-testid="home-pipeline-select-option-wf-hidden"]')).toBeNull()
+    expect(document.querySelector('[data-testid="home-pipeline-select-empty"]')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  // plan g2.2 — trigger "项目名 · 工作流名"; search matches projectName; no empty · prefix
+  it('shows projectName · workflow name on the trigger', async () => {
+    const wrapper = mountSelect({
+      pipelines: [
+        { id: 'wf-a', name: '默认工作流', projectName: '综合项目组' },
+        { id: 'wf-b', name: '默认工作流', projectName: 'SkillHub' },
+      ],
+      modelValue: 'wf-a',
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').text()).toContain(
+      '综合项目组 · 默认工作流',
+    )
+    wrapper.unmount()
+  })
+
+  it('does not prefix the trigger with an empty · when projectName is missing', async () => {
+    const wrapper = mountSelect({
+      pipelines: [{ id: 'wf-a', name: '自我迭代PRO' }],
+      modelValue: 'wf-a',
+    })
+    await flushPromises()
+    const text = wrapper.get('[data-testid="home-pipeline-select-trigger"]').text()
+    expect(text).toContain('自我迭代PRO')
+    expect(text).not.toContain('·')
+    wrapper.unmount()
+  })
+
+  it('filters options by project name substring and highlights both fields', async () => {
+    const wrapper = mountSelect({
+      pipelines: [
+        { id: 'wf-a', name: '默认工作流', projectName: '综合项目组' },
+        { id: 'wf-b', name: '默认工作流', projectName: 'SkillHub' },
+      ],
+      modelValue: 'wf-a',
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const optA = document.querySelector('[data-testid="home-pipeline-select-option-wf-a"]')
+    expect(optA?.querySelector('.home-pipeline-select__opt-name')?.textContent).toBe('默认工作流')
+    expect(optA?.querySelector('.home-pipeline-select__opt-project')?.textContent).toBe('综合项目组')
+    const search = document.querySelector(
+      '[data-testid="home-pipeline-select-search"]',
+    ) as HTMLInputElement
+    search.value = 'Skill'
+    search.dispatchEvent(new Event('input'))
+    await flushPromises()
+    expect(document.querySelector('[data-testid="home-pipeline-select-option-wf-a"]')).toBeNull()
+    const optB = document.querySelector('[data-testid="home-pipeline-select-option-wf-b"]')
+    expect(optB).toBeTruthy()
+    expect(optB!.querySelector('mark')?.textContent).toBe('Skill')
+    wrapper.unmount()
+  })
+
+  it('shows the no-match empty state when neither name nor projectName hits', async () => {
+    const wrapper = mountSelect({
+      pipelines: [{ id: 'wf-a', name: '默认工作流', projectName: '综合项目组' }],
+      modelValue: 'wf-a',
+    })
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = document.querySelector(
+      '[data-testid="home-pipeline-select-search"]',
+    ) as HTMLInputElement
+    search.value = 'zzzz'
+    search.dispatchEvent(new Event('input'))
+    await flushPromises()
     expect(document.querySelector('[data-testid="home-pipeline-select-empty"]')).toBeTruthy()
     wrapper.unmount()
   })

@@ -16,7 +16,7 @@ import { setHomeApproveHandoff } from '@/lib/run/homeApproveHandoff'
 import { clipRunTitle } from '@/lib/run/runTitle'
 import { missingRequiredAskField, seedAskLaunchFields } from '@/lib/run/useWorkflowAskInputs'
 import { attachmentDisplayName } from '@/lib/shared/attachments'
-import type { ClarifyImage, Workflow } from '@/lib/shared/types'
+import type { ClarifyImage, Project, Workflow } from '@/lib/shared/types'
 import type { RunPriority } from '@/components/ui/PrioritySegmented.vue'
 
 /** Remember last selected home pipeline across visits (plan g2.4). */
@@ -57,6 +57,25 @@ function pickDefaultPipelineId(list: Workflow[], preferred: string): string {
   return list[0]?.id || ''
 }
 
+/** Map projectId → name; missing list entry falls back to id; no projectId → empty. */
+export function resolveHomeProjectName(
+  projectId: string | undefined,
+  namesById: Map<string, string>,
+): string {
+  const id = (projectId || '').trim()
+  if (!id) return ''
+  const name = namesById.get(id)?.trim()
+  return name || id
+}
+
+function projectNameMap(projects: Project[] | null | undefined): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const p of Array.isArray(projects) ? projects : []) {
+    if (p?.id) map.set(p.id, p.name || '')
+  }
+  return map
+}
+
 export function parseRunPriority(raw: string | null | undefined): RunPriority {
   if (raw === 'high' || raw === 'normal' || raw === 'low') return raw
   return 'normal'
@@ -85,6 +104,7 @@ export function useHomeApproveChat() {
   const attach = useImageAttachments()
 
   const workflows = ref<Workflow[]>([])
+  const projectNamesById = ref<Map<string, string>>(new Map())
   const loading = ref(false)
   const loadError = ref<string | null>(null)
   const selectedId = ref('')
@@ -114,7 +134,12 @@ export function useHomeApproveChat() {
   let quotaToastShown = false
 
   const pipelines = computed(() =>
-    workflows.value.filter((w) => isPublishedApproveFirst(w) && !!w.showOnHome),
+    workflows.value
+      .filter((w) => isPublishedApproveFirst(w) && !!w.showOnHome)
+      .map((w) => ({
+        ...w,
+        projectName: resolveHomeProjectName(w.projectId, projectNamesById.value),
+      })),
   )
   const selected = computed(
     () => pipelines.value.find((w) => w.id === selectedId.value) || pipelines.value[0] || null,
@@ -244,13 +269,19 @@ export function useHomeApproveChat() {
     loadError.value = null
     try {
       // Cross-project: omit projectId so the API returns all visible workflows.
-      const list = await api.listWorkflows({ signal: ac.signal })
+      // Parallel listProjects so home cards can show names without a flash of UUID (g1.1).
+      const [list, projects] = await Promise.all([
+        api.listWorkflows({ signal: ac.signal }),
+        api.listProjects({ signal: ac.signal }).catch(() => [] as Project[]),
+      ])
       if (ac.signal.aborted) return
       workflows.value = Array.isArray(list) ? list : []
+      projectNamesById.value = projectNameMap(projects)
     } catch (e: any) {
       if (ac.signal.aborted || e?.name === 'AbortError') return
       loadError.value = String(e?.message || e)
       workflows.value = []
+      projectNamesById.value = new Map()
     } finally {
       if (!ac.signal.aborted) loading.value = false
     }
