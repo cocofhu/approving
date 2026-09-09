@@ -246,7 +246,8 @@ const {
         />
         <div class="flex flex-wrap items-center gap-2">
           <span
-            class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-medium"
+            class="toolbar-control inline-flex items-center gap-1.5 border text-[11px] font-medium"
+            data-testid="gates-inbox-status-pill"
             :class="{
               'border-info/40 bg-info/10 text-info': statusPillClass === 'pending',
               'border-accent/40 bg-accent-dim/50 text-accent-2': statusPillClass === 'editing',
@@ -264,7 +265,8 @@ const {
             {{ statusPillText }}
           </span>
           <button
-            class="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-txt transition hover:border-line-strong hover:bg-elevated disabled:opacity-45"
+            class="toolbar-control inline-flex items-center gap-1.5 border border-line bg-surface text-xs font-medium text-txt transition hover:border-line-strong hover:bg-elevated disabled:opacity-45"
+            data-testid="gates-inbox-refresh"
             :disabled="manualRefreshing || processingLock"
             :aria-busy="processingLock || undefined"
             @click="onManualRefresh"
