@@ -103,7 +103,7 @@ test.describe('desktop sidebar hide', () => {
     expect((ballBox?.y ?? 0) + (ballBox?.height ?? 0)).toBeGreaterThan(700)
     await expect(ball).toHaveAttribute('aria-label', '打开导航')
     await ball.click()
-    await expect(aside).toBeVisible({ timeout: 5_000 })
+    await expect(aside).toBeVisible({ timeout: 250 })
     await expect(page.getByTestId('floating-nav-ball')).toBeHidden()
 
     await hide.click()
@@ -133,7 +133,7 @@ test.describe('desktop sidebar hide', () => {
     await page.screenshot({ path: path.join(shotDir, '03-full-run-hidden-ball.png') })
 
     await ball.click()
-    await expect(sidebar(page)).toBeVisible({ timeout: 5_000 })
+    await expect(sidebar(page)).toBeVisible({ timeout: 250 })
     await expect(page.getByTestId('floating-nav-ball')).toBeHidden()
 
     await page.getByTestId('desktop-nav-hide').click()

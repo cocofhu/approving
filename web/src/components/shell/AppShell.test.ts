@@ -53,13 +53,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import AppShell from './AppShell.vue'
 
-function mountShell(opts?: { stubSidebar?: boolean }) {
+function mountShell(opts?: { stubSidebar?: boolean; attachToBody?: boolean }) {
   const i18n = createI18n({
     legacy: false,
     locale: 'zh-CN',
     messages: { 'zh-CN': { ...common, ...pages, ...shell } },
   })
   return mount(AppShell, {
+    attachTo: opts?.attachToBody ? document.body : undefined,
     slots: { default: '<div data-testid="main">内容</div>' },
     global: {
       plugins: [i18n],
@@ -130,22 +131,33 @@ describe('AppShell (no topbar + floating ball)', () => {
     wrapper.unmount()
   })
 
-  it('click floating ball pins sidebar with exit animation (g2.2 / g2.3)', async () => {
+  it('click floating ball pins sidebar immediately, ball exits in parallel (g1.1 / g2.2)', async () => {
     setSidebarHidden(true)
     const wrapper = mountShell()
     const ball = wrapper.find('[data-testid="floating-nav-ball"]')
     expect(ball.attributes('aria-label')).toBe('打开导航')
     await ball.trigger('click')
+    expect(sidebarHidden.value).toBe(false)
     expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
       'true',
     )
-    expect(sidebarHidden.value).toBe(true)
-    await vi.advanceTimersByTimeAsync(320)
+    await vi.advanceTimersByTimeAsync(200)
     await nextTick()
     expect(sidebarHidden.value).toBe(false)
     expect(wrapper.find('[data-testid="floating-nav-ball-wrap"]').attributes('data-exiting')).toBe(
       'false',
     )
+    wrapper.unmount()
+  })
+
+  it('moves focus to desktop-nav-hide after pinning from the ball (g2.3)', async () => {
+    setSidebarHidden(true)
+    const wrapper = mountShell({ stubSidebar: false, attachToBody: true })
+    await wrapper.find('[data-testid="floating-nav-ball"]').trigger('click')
+    expect(sidebarHidden.value).toBe(false)
+    await nextTick()
+    await nextTick()
+    expect(document.activeElement).toBe(wrapper.find('[data-testid="desktop-nav-hide"]').element)
     wrapper.unmount()
   })
 

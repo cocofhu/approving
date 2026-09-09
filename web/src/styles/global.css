@@ -383,8 +383,8 @@ html.light .app-sidebar-card {
   /* Floating visible: overflow visible so card shadow is not square-clipped (gray corner).
      Collapsed / docked: overflow-hidden via utility classes on the aside. */
   transition:
-    width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-    border-right-width 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+    width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    border-right-width 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
