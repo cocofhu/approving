@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/approving/internal/config"
 	"github.com/cocofhu/approving/internal/models"
 	"github.com/cocofhu/approving/internal/services"
 	"github.com/cocofhu/approving/internal/shutdown"
@@ -24,6 +25,28 @@ func TestSettingsAndLiveEndpoints(t *testing.T) {
 	}
 	if w := h.do("GET", "/api/settings", nil); w.Code != 200 {
 		t.Fatalf("get settings: %d %s", w.Code, w.Body)
+	}
+	if w := h.do("PUT", "/api/settings", map[string]any{
+		services.KeyBrandProductName: "Acme",
+	}); w.Code != http.StatusForbidden {
+		t.Fatalf("non-admin brand update: %d %s", w.Code, w.Body)
+	}
+	cfg := config.GetConfig()
+	cfg.Auth.Users[0].IsAdmin = true
+	config.StoreConfig(cfg)
+	if w := h.do("PUT", "/api/settings", map[string]any{
+		services.KeyBrandProductName:  " Acme ",
+		services.KeyBrandHomeSubtitle: " Build clearly ",
+	}); w.Code != http.StatusOK {
+		t.Fatalf("admin brand update: %d %s", w.Code, w.Body)
+	}
+	if got := h.h.Settings.Brand(); got.ProductName != "Acme" || got.HomeSubtitle != "Build clearly" {
+		t.Fatalf("saved brand: %+v", got)
+	}
+	if w := h.do("PUT", "/api/settings", map[string]any{
+		services.KeyBrandProductName: string(make([]rune, services.BrandProductNameMaxLength+1)),
+	}); w.Code != http.StatusBadRequest {
+		t.Fatalf("overlong brand update: %d %s", w.Code, w.Body)
 	}
 	if w := h.do("PUT", "/api/settings", map[string]int{
 		services.KeyMaxConcurrentRuns: 3,

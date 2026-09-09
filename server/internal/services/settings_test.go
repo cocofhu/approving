@@ -2,6 +2,7 @@ package services
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,5 +124,40 @@ func TestSettingsServiceDBOverride(t *testing.T) {
 	}
 	if _, ok := svc.dbInt("bad-num"); !ok {
 		t.Fatal("expected stored int")
+	}
+}
+
+func TestSettingsServiceBrandUpdateFallbackAndValidation(t *testing.T) {
+	db, err := database.OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.StoreConfig(&config.Config{})
+	svc := NewSettingsService(db, nil, nil)
+	name, subtitle := "  Acme Flow  ", "  Clarify before coding  "
+	if _, err := svc.UpdateWithBrand(nil, BrandPatch{
+		ProductName: &name, HomeSubtitle: &subtitle,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.Brand(); got.ProductName != "Acme Flow" || got.HomeSubtitle != "Clarify before coding" {
+		t.Fatalf("brand: %+v", got)
+	}
+
+	blank := "　 "
+	if _, err := svc.UpdateWithBrand(nil, BrandPatch{ProductName: &blank}); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.Brand().ProductName; got != "" {
+		t.Fatalf("blank product name should mean fallback, got %q", got)
+	}
+
+	tooLong := strings.Repeat("界", BrandProductNameMaxLength+1)
+	before := svc.Brand()
+	if _, err := svc.UpdateWithBrand(nil, BrandPatch{ProductName: &tooLong}); err == nil {
+		t.Fatal("expected product name length error")
+	}
+	if got := svc.Brand(); got != before {
+		t.Fatalf("invalid patch changed brand: before=%+v after=%+v", before, got)
 	}
 }

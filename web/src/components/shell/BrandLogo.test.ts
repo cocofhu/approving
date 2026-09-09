@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import BrandLogo from './BrandLogo.vue'
+import { setBrandSettings } from '@/lib/composables/useBrandSettings'
 
 describe('BrandLogo', () => {
   it('renders app name and tagline by default', () => {
@@ -42,6 +43,25 @@ describe('BrandLogo', () => {
     expect(wrapper.find('.brand-logo__mark').exists()).toBe(false)
     expect(wrapper.classes()).not.toContain('brand-logo--with-mark')
     wrapper.unmount()
+  })
+
+  it('uses custom product name only when authenticated shell opts in', () => {
+    setBrandSettings({ product_name: 'Acme Flow' })
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const shellLogo = mount(BrandLogo, {
+      props: { useCustomBrand: true },
+      global: { plugins: [i18n] },
+    })
+    const loginLogo = mount(BrandLogo, { global: { plugins: [i18n] } })
+    expect(shellLogo.get('.brand-logo__name').text()).toBe('Acme Flow')
+    expect(loginLogo.get('.brand-logo__name').text()).toBe('Approving')
+    shellLogo.unmount()
+    loginLogo.unmount()
+    setBrandSettings(null)
   })
 
   it('does not leak mark markup to login, boot shell, or mobile drawer (g3.2)', () => {
