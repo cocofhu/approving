@@ -25,6 +25,7 @@
     ],
     "composables": [
       "useAuth.ts",
+      "useBrandSettings.ts",
       "useBreakpoint.ts",
       "useChatImagePreview.ts",
       "useDelayedBusy.ts",
@@ -177,7 +178,7 @@
   "totals": {
     "agent": 15,
     "api": 3,
-    "composables": 16,
+    "composables": 17,
     "inbox": 21,
     "pm": 7,
     "project": 4,
