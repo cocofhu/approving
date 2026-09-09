@@ -297,6 +297,11 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
     expect(wrapper.find('[data-testid="review-composer-pass"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-cold-note"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="review-composer-footer-hint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-composer-footer-hint"]').classes().join(' ')).toContain(
+      '[overflow-wrap:anywhere]',
+    )
+    // g2.1 walkthrough: gate action row already flex-wrap; send/confirm min-w-0 so they
+    // wrap instead of colliding with ParagraphInput (buttons stay below input).
     expect(wrapper.findComponent({ name: 'ParagraphInput' }).exists()).toBe(true)
     wrapper.unmount()
   })

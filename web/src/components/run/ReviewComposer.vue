@@ -274,11 +274,11 @@ function onConfirm() {
         />
         <div v-if="rejectError" class="mt-1.5 text-[11px] text-err">{{ rejectError }}</div>
       </template>
-      <div class="mt-2 flex flex-wrap gap-2">
+      <div class="mt-2 flex min-w-0 flex-wrap gap-2">
         <button
           v-if="!coldSession && canReject"
           type="button"
-          class="inline-flex flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="review-composer-send"
           :disabled="!canSubmitGate"
           @click="onSend"
@@ -289,7 +289,7 @@ function onConfirm() {
         <button
           v-if="canPass"
           type="button"
-          class="inline-flex flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 py-2 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
+          class="inline-flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 py-2 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="review-composer-pass"
           :disabled="passDisabled"
           :title="passTitle"
@@ -327,7 +327,7 @@ function onConfirm() {
           :interrupted="interrupted"
           :completed-at="streamCompletedAt"
         />
-        <p class="mt-2 text-[11px] leading-relaxed text-txt3" data-testid="review-composer-footer-hint">
+        <p class="mt-2 min-w-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]" data-testid="review-composer-footer-hint">
           {{ gateFooterHint }}
         </p>
       </template>

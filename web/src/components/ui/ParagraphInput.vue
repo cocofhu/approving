@@ -9,7 +9,8 @@ import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
 import type { ClarifyImage } from '@/lib/shared/types'
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { applyComposerAutoGrow, PARAGRAPH_AUTO_GROW_MAX, PARAGRAPH_AUTO_GROW_MIN } from '@/lib/inbox/composerAutoGrow'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   disabled?: boolean
@@ -27,6 +28,7 @@ const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = u
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const overflowScroll = ref(false)
+let composerResizeObserver: ResizeObserver | null = null
 
 const defaultPlaceholder = computed(() =>
   props.textOnly ? t('common.paragraphInput.placeholderTextOnly') : t('common.paragraphInput.placeholderWithImages'),
@@ -35,10 +37,11 @@ const defaultPlaceholder = computed(() =>
 function autoGrow() {
   const el = textareaRef.value
   if (!el) return
-  el.style.height = 'auto'
-  const h = Math.min(Math.max(el.scrollHeight, 72), 320)
-  el.style.height = `${h}px`
-  overflowScroll.value = el.scrollHeight > 320
+  overflowScroll.value = applyComposerAutoGrow(el, {
+    min: PARAGRAPH_AUTO_GROW_MIN,
+    max: PARAGRAPH_AUTO_GROW_MAX,
+    emptyHint: props.placeholder || defaultPlaceholder.value,
+  })
 }
 
 function onTextInput() {
@@ -66,7 +69,21 @@ watch(
 )
 watch(text, () => nextTick(autoGrow), { immediate: true })
 watch(attachments, () => nextTick(autoGrow), { deep: true })
-onMounted(() => nextTick(autoGrow))
+onMounted(() => {
+  nextTick(() => {
+    autoGrow()
+    const el = textareaRef.value
+    if (el && typeof ResizeObserver !== 'undefined') {
+      composerResizeObserver?.disconnect()
+      composerResizeObserver = new ResizeObserver(() => autoGrow())
+      composerResizeObserver.observe(el)
+    }
+  })
+})
+onBeforeUnmount(() => {
+  composerResizeObserver?.disconnect()
+  composerResizeObserver = null
+})
 </script>
 
 <template>
@@ -111,7 +128,7 @@ onMounted(() => nextTick(autoGrow))
         </button>
       </div>
     </div>
-    <div class="flex items-end gap-2">
+    <div class="flex min-w-0 items-end gap-2">
       <input v-if="!textOnly" ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
       <button
         v-if="!textOnly"
@@ -128,7 +145,7 @@ onMounted(() => nextTick(autoGrow))
         ref="textareaRef"
         v-model="text"
         data-testid="paragraph-input"
-        class="input min-h-[72px] flex-1 resize-none disabled:opacity-60"
+        class="input composer-hint-wrap min-h-[72px] min-w-0 flex-1 resize-none disabled:opacity-60"
         :class="overflowScroll ? 'scroll-area max-h-[320px] overflow-y-auto' : 'overflow-y-hidden'"
         :disabled="disabled"
         :placeholder="placeholder || defaultPlaceholder"
@@ -145,3 +162,21 @@ onMounted(() => nextTick(autoGrow))
     />
   </div>
 </template>
+
+<style scoped>
+.composer-hint-wrap::placeholder {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: unset;
+}
+.composer-hint-wrap::-webkit-input-placeholder {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: unset;
+}
+</style>
+

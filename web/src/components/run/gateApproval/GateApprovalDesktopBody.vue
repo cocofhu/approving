@@ -418,14 +418,14 @@ const {
         <div v-else>
           <p
             v-if="isColdSession"
-            class="mb-2 text-[11px] leading-relaxed text-txt3"
+            class="mb-2 min-w-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
             data-testid="gate-cold-help"
           >
             {{ helpColdText }}
           </p>
           <p
             v-else-if="usesPreviewIssues && openPreviewIssueCount === 0"
-            class="mb-2 text-[11px] leading-relaxed text-txt3"
+            class="mb-2 min-w-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
           >
             <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
             {{ t('pages.gateApproval.helpApproveDetail') }}
@@ -435,7 +435,7 @@ const {
           </p>
           <p
             v-else-if="usesPreviewIssues && openPreviewIssueCount >= 1"
-            class="mb-2 text-[11px] leading-relaxed text-txt3"
+            class="mb-2 min-w-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]"
           >
             <template v-if="canReactRevise">
               <b class="font-medium text-txt2">{{ t('pages.reviewComposer.send') }}</b>
@@ -445,7 +445,7 @@ const {
             </template>
             <template v-else>{{ helpReviseWithIssuesText }}</template>
           </p>
-          <p v-else-if="canEditProducts" class="mb-2 text-[11px] leading-relaxed text-txt3">
+          <p v-else-if="canEditProducts" class="mb-2 min-w-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]">
             <b class="font-medium text-txt2">{{ t('pages.clarify.confirmFlow') }}</b>
             {{ t('pages.gateApproval.helpApproveDetail') }}
             <span class="mx-1">·</span>

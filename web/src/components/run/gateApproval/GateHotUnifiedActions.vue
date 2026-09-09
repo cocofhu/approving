@@ -59,7 +59,7 @@ const cancelBtnClass = computed(() => {
       {{ t('pages.gateApproval.reviewFeedback.record') }}
     </button>
   </div>
-  <div class="flex flex-wrap gap-2" data-testid="review-composer-actions">
+  <div class="flex min-w-0 flex-wrap gap-2" data-testid="review-composer-actions">
     <button
       v-if="s.showHotReject"
       type="button"
