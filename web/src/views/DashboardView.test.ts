@@ -44,6 +44,7 @@ vi.mock('@/lib/composables/useToast', () => ({
 }))
 
 import { HOME_COMPOSER_DRAFT_KEY } from '@/lib/run/homeComposerDraft'
+import { setBrandSettings } from '@/lib/composables/useBrandSettings'
 import DashboardView from './DashboardView.vue'
 
 const HomePreviewAppModalStub = {
@@ -144,6 +145,7 @@ describe('DashboardView home composer', () => {
     })
     mocks.reactReply.mockResolvedValue({ status: 'ok' })
     stubReducedMotion(false)
+    setBrandSettings(null)
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
     vi.useFakeTimers()
   })
@@ -317,6 +319,30 @@ describe('DashboardView home composer', () => {
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
     expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     wrapper.unmount()
+  })
+
+  it('uses the same configured product name for typewriter, static mode, and aria label', async () => {
+    setBrandSettings({ product_name: 'Acme Flow' })
+    stubReducedMotion(true)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Acme Flow')
+    expect(wrapper.get('[data-testid="home-brand"]').attributes('aria-label')).toBe('Acme Flow')
+    wrapper.unmount()
+  })
+
+  it('uses a configured home subtitle and falls back to the locale message when blank', async () => {
+    setBrandSettings({ home_subtitle: 'Clarify together' })
+    const custom = mountDashboard()
+    await flushPromises()
+    expect(custom.get('[data-testid="home-title"]').text()).toBe('Clarify together')
+    custom.unmount()
+
+    setBrandSettings({ home_subtitle: '　 ' })
+    const fallback = mountDashboard()
+    await flushPromises()
+    expect(fallback.get('[data-testid="home-title"]').text()).toBe('从一句话开始一次开发前澄清')
+    fallback.unmount()
   })
 
   // plan g1.2 — placeholder typewriter when idle/empty

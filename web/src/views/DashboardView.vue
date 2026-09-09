@@ -12,14 +12,15 @@ import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useHomeApproveChat } from '@/lib/run/useHomeApproveChat'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
 import { imgSrc } from '@/lib/shared/compositeText'
+import { useBrandSettings } from '@/lib/composables/useBrandSettings'
 import type { Workflow } from '@/lib/shared/types'
 
 const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
-const BRAND_TEXT = 'Approving'
-
 const router = useRouter()
 const { t, tm } = useI18n()
+const { productName, homeSubtitle } = useBrandSettings()
+const effectiveSubtitle = computed(() => homeSubtitle.value || String(t('pages.dashboard.title')))
 const {
   projectId,
   pipelines,
@@ -121,16 +122,16 @@ function runBrandTypewriter() {
   brandCursorBlink.value = false
   brandCursorGone.value = false
   if (prefersReducedMotion()) {
-    brandVisible.value = BRAND_TEXT
+    brandVisible.value = productName.value
     brandCursorGone.value = true
     return
   }
   brandVisible.value = ''
   let i = 0
   const typeNext = () => {
-    if (i < BRAND_TEXT.length) {
+    if (i < productName.value.length) {
       i += 1
-      brandVisible.value = BRAND_TEXT.slice(0, i)
+      brandVisible.value = productName.value.slice(0, i)
       scheduleBrand(typeNext, 78)
       return
     }
@@ -406,6 +407,7 @@ function openFilePicker() {
 }
 
 watch(draft, () => nextTick(autoGrow))
+watch(productName, () => runBrandTypewriter(), { immediate: true })
 watch(showPhTypewriter, () => runPlaceholderTypewriter(), { immediate: true })
 watch(placeholderLines, () => {
   if (showPhTypewriter.value) runPlaceholderTypewriter()
@@ -420,7 +422,6 @@ watch(
 )
 
 onMounted(() => {
-  runBrandTypewriter()
   nextTick(() => {
     autoGrow()
     syncPipelineNav()
@@ -451,7 +452,7 @@ onBeforeUnmount(() => {
     <div
       class="home-shell__content relative z-[1] mx-auto flex w-full max-w-3xl min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-10"
     >
-      <h1 class="home-brand" data-testid="home-brand" aria-label="Approving">
+      <h1 class="home-brand" data-testid="home-brand" :aria-label="productName">
         <span class="home-brand__text" data-testid="home-brand-text">{{ brandVisible }}</span>
         <span
           class="home-brand__cursor"
@@ -464,7 +465,7 @@ onBeforeUnmount(() => {
         />
       </h1>
       <p class="home-hint mt-[18px] text-center" data-testid="home-title">
-        {{ t('pages.dashboard.title') }}
+        {{ effectiveSubtitle }}
       </p>
 
       <div class="mt-[30px] w-full">

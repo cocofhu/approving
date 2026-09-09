@@ -1535,6 +1535,17 @@
       "usageRefreshFailed": "用量刷新失败",
       "minTestSandboxes": "最大测试沙箱数不能小于 1",
       "priorityNote": "优先级：环境变量（锁定）> 页面自定义 > 配置文件 > 默认值。保存后立即生效，无需重启。",
+      "brand": {
+        "title": "品牌文案",
+        "desc": "为全站已登录用户设置侧栏与首页使用的实例级文案；留空会回退内置默认。",
+        "readOnly": "仅管理员可修改品牌文案。",
+        "productName": "产品名",
+        "productNamePlaceholder": "Approving",
+        "productNameHint": "侧栏与首页打字机共用，最多 40 个字符；留空回退 Approving。",
+        "homeSubtitle": "首页副标题",
+        "homeSubtitlePlaceholder": "从一句话开始一次开发前澄清",
+        "homeSubtitleHint": "最多 80 个字符；留空回退当前语言包默认句。"
+      },
       "groups": {
         "concurrency": {
           "title": "调度并发",

@@ -42,6 +42,7 @@ import SettingsView from './SettingsView.vue'
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'SettingsView.vue'), 'utf8')
 
 const SETTINGS = {
+  brand: { product_name: 'Acme Flow', home_subtitle: 'Clarify together' },
   items: [
     { key: 'max_concurrent_runs', value: 4, min: 1, source: 'ui', locked: false },
     { key: 'run_sandbox_ttl_minutes', value: 30, min: 1, source: 'ui', locked: false },
@@ -84,6 +85,33 @@ describe('SettingsView loading source lock', () => {
     expect(src).toMatch(/opacity-\[0\.55\]/)
     expect(src).toMatch(/flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between/)
     expect(src).toMatch(/min-h-11 w-full md:min-h-0 md:w-auto/)
+  })
+})
+
+describe('SettingsView brand copy', () => {
+  it('hydrates and saves both brand fields with scheduling values', async () => {
+    apiMocks.getSettings.mockResolvedValue(SETTINGS)
+    apiMocks.listSandboxes.mockResolvedValue([])
+    apiMocks.dashboard.mockResolvedValue({ running: 0 })
+    apiMocks.updateSettings.mockResolvedValue({
+      ...SETTINGS,
+      brand: { product_name: 'New Name', home_subtitle: 'New subtitle' },
+    })
+    const w = mountSettings()
+    await flushPromises()
+    expect(w.get('[data-testid="brand-product-name"]').element).toHaveProperty('value', 'Acme Flow')
+    expect(w.get('[data-testid="brand-home-subtitle"]').element).toHaveProperty('value', 'Clarify together')
+    await w.get('[data-testid="brand-product-name"]').setValue('New Name')
+    await w.get('[data-testid="brand-home-subtitle"]').setValue('New subtitle')
+    const saveButton = w.findAll('button').find((button) => button.text().includes('保存'))
+    await saveButton!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      brand_product_name: 'New Name',
+      brand_home_subtitle: 'New subtitle',
+      max_concurrent_runs: 4,
+    }))
+    w.unmount()
   })
 })
 

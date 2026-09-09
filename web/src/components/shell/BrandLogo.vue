@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { detectLocale } from '@/lib/shared/locale'
+import { useBrandSettings } from '@/lib/composables/useBrandSettings'
 
 const props = withDefaults(
   defineProps<{
@@ -9,15 +10,19 @@ const props = withDefaults(
     align?: 'start' | 'center'
     /** When false, hide tagline (desktop sidebar compact wordmark). */
     showTagline?: boolean
+    /** Opt in for authenticated shell locations; login keeps built-in branding. */
+    useCustomBrand?: boolean
   }>(),
   {
     size: 'sm',
     align: 'start',
     showTagline: true,
+    useCustomBrand: false,
   },
 )
 
 const { t, te } = useI18n()
+const { productName } = useBrandSettings()
 
 const rootClass = computed(() => [
   'brand-logo',
@@ -26,7 +31,10 @@ const rootClass = computed(() => [
 ])
 
 /** Both locales use "Approving"; keep literal fallback so brand paints before locale JSON. */
-const appName = computed(() => (te('shell.appName') ? String(t('shell.appName')) : 'Approving'))
+const appName = computed(() => {
+  if (props.useCustomBrand) return productName.value
+  return te('shell.appName') ? String(t('shell.appName')) : 'Approving'
+})
 const TAGLINE_FALLBACK = {
   'zh-CN': '开发工作流编排',
   en: 'Dev workflow orchestration',

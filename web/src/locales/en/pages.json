@@ -1535,6 +1535,17 @@
       "usageRefreshFailed": "Usage refresh failed",
       "minTestSandboxes": "Max test sandboxes must be at least 1",
       "priorityNote": "Priority: env (locked) > UI override > config file > default. Takes effect immediately.",
+      "brand": {
+        "title": "Brand copy",
+        "desc": "Set instance-wide copy used by the sidebar and Home for all signed-in users. Leave blank for built-in defaults.",
+        "readOnly": "Only administrators can change brand copy.",
+        "productName": "Product name",
+        "productNamePlaceholder": "Approving",
+        "productNameHint": "Shared by the sidebar and Home typewriter, up to 40 characters. Blank uses Approving.",
+        "homeSubtitle": "Home subtitle",
+        "homeSubtitlePlaceholder": "Start a pre-dev clarification in one sentence",
+        "homeSubtitleHint": "Up to 80 characters. Blank uses the current locale default."
+      },
       "groups": {
         "concurrency": {
           "title": "Scheduling concurrency",
