@@ -499,7 +499,6 @@ describe('usePmLeaderChat actions', () => {
     expect(mocks.toastError).toHaveBeenCalledWith('append down')
 
     chat.input.value = 'disabled'
-    ;(chat.enabled as { value: boolean }).value
     const disabled = withChat({ binding: { enabled: false, agentAvailable: true } })
     await flushPromises()
     disabled.chat.input.value = 'hello'
