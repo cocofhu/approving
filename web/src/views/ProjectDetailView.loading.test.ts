@@ -71,6 +71,32 @@ const PROJ_A = {
 const PROJ_B = { ...PROJ_A, id: 'proj-b', name: 'Project B', description: 'B' }
 
 describe('ProjectDetailView loading source lock', () => {
+  it('keeps the original token card in the top-aligned back row', () => {
+    const headerTestId = vueSrc.indexOf('data-testid="project-detail-header-row"')
+    const headerStart = vueSrc.lastIndexOf('<div', headerTestId)
+    const titleStart = vueSrc.indexOf('data-testid="project-detail-title-row"')
+    const header = vueSrc.slice(headerStart, titleStart)
+    const tokenTestId = header.indexOf('data-testid="project-token-stat"')
+    const tokenStart = header.lastIndexOf('<div', tokenTestId)
+    const tokenEnd = header.indexOf('</div>', tokenStart)
+    const token = header.slice(tokenStart, tokenEnd)
+
+    expect(headerStart).toBeGreaterThan(0)
+    expect(header).toMatch(/items-start justify-between/)
+    expect(header).toContain('data-testid="project-token-stat"')
+    expect(token).toMatch(/min-w-\[132px\]/)
+    expect(token).toMatch(/shrink-0/)
+    expect(token).toMatch(/px-3 py-2/)
+    expect(header).toMatch(/text-\[11px\]/)
+    expect(header).toMatch(/text-\[22px\]/)
+    expect(header).toMatch(/aria-describedby/)
+    expect(header).toContain('<TokenUsageHoverTip')
+    expect(token).not.toMatch(/-m[trblxy]?-\d|translate-/)
+    expect(vueSrc.slice(titleStart, vueSrc.indexOf('</template>', titleStart))).not.toContain(
+      'project-token-stat',
+    )
+  })
+
   it('first load shows title + tabs + content skeleton together', () => {
     expect(src).toMatch(/data-testid="project-detail-title-skeleton"/)
     expect(src).toMatch(/data-testid="project-detail-content-skeleton"/)

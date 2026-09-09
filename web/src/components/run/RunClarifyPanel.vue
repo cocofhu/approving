@@ -7,9 +7,9 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import ClarifyChat from '@/components/run/ClarifyChat.vue'
-import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
+import ReactConnectingState from '@/components/run/ReactConnectingState.vue'
 import {
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_CLARIFY,
@@ -127,7 +127,9 @@ defineExpose({
     :storage-key="REVIEW_SHELL_WIDTH_KEY_CLARIFY"
   >
     <template #stage>
+      <ReactConnectingState v-if="!clarify" mode="stage" />
       <ReactArtifactStage
+        v-else
         :artifacts="artifacts"
         :preview-artifact="previewArtifact"
         :run-id="runId"
@@ -140,8 +142,9 @@ defineExpose({
       />
     </template>
     <template #sidebar>
+      <ReactConnectingState v-if="!clarify" :show-confirm="false" />
       <ClarifyChat
-        v-if="clarify"
+        v-else
         ref="reviewChatRef"
         :run-id="runId"
         :node-id="clarify.nodeId"
@@ -163,7 +166,6 @@ defineExpose({
         @queue-remove="(itemId, index) => emit('queue-remove', itemId, index)"
         @queue-reorder="(itemIds) => emit('queue-reorder', itemIds)"
       />
-      <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
     </template>
   </ReviewShell>
 </template>

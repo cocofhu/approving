@@ -18,6 +18,17 @@ function mountFilter(modelValue: string[] = []) {
 }
 
 describe('StatusFilter', () => {
+  it('trigger uses shared toolbar-control sizing (g3.3 g4.4)', () => {
+    const wrapper = mountFilter([])
+    const trigger = wrapper.get('button')
+    const cls = trigger.classes().join(' ')
+    expect(trigger.classes()).toContain('toolbar-control')
+    expect(cls).not.toContain('min-h-[44px]')
+    expect(cls).not.toContain('px-3')
+    expect(cls).not.toContain('py-1.5')
+    wrapper.unmount()
+  })
+
   it('shows all statuses label when nothing selected', () => {
     const wrapper = mountFilter([])
     expect(wrapper.text()).toMatch(/全部|all/i)

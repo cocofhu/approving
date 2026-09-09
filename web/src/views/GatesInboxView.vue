@@ -11,9 +11,9 @@ import InboxStartFailedPane from '@/components/inbox/InboxStartFailedPane.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
-import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
+import ReactConnectingState from '@/components/run/ReactConnectingState.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import AppInlineError from '@/components/ui/AppInlineError.vue'
 import Pagination from '@/components/ui/Pagination.vue'
@@ -246,7 +246,8 @@ const {
         />
         <div class="flex flex-wrap items-center gap-2">
           <span
-            class="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[11px] font-medium"
+            class="toolbar-control inline-flex items-center gap-1.5 border text-[11px] font-medium"
+            data-testid="gates-inbox-status-pill"
             :class="{
               'border-info/40 bg-info/10 text-info': statusPillClass === 'pending',
               'border-accent/40 bg-accent-dim/50 text-accent-2': statusPillClass === 'editing',
@@ -264,7 +265,8 @@ const {
             {{ statusPillText }}
           </span>
           <button
-            class="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-txt transition hover:border-line-strong hover:bg-elevated disabled:opacity-45"
+            class="toolbar-control inline-flex items-center gap-1.5 border border-line bg-surface text-xs font-medium text-txt transition hover:border-line-strong hover:bg-elevated disabled:opacity-45"
+            data-testid="gates-inbox-refresh"
             :disabled="manualRefreshing || processingLock"
             :aria-busy="processingLock || undefined"
             @click="onManualRefresh"
@@ -422,12 +424,6 @@ const {
           @open-share="openSharePanel(active)"
         />
         <InboxStartFailedPane v-else-if="startFailedActive" @dismiss="dismissStartFailure" />
-        <ClarifyBootLoader
-          v-else-if="activeStarting"
-          class="min-h-0 flex-1"
-          phase="starting"
-          data-testid="inbox-boot-loader"
-        />
         <ReviewShell
           v-else-if="showClarifyReviewShell"
           :key="active.runId + active.nodeId"
@@ -437,7 +433,8 @@ const {
           :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
         >
           <template #stage>
-            <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
+            <ReactConnectingState v-if="activeStarting" mode="stage" />
+            <ArtifactLoadingPane v-else-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
             <ReactArtifactStage
               v-else
               :artifacts="activeRun?.artifacts || []"
@@ -453,7 +450,9 @@ const {
             />
           </template>
           <template #sidebar>
+            <ReactConnectingState v-if="activeStarting" :show-confirm="composerMode === 'review'" />
             <ReviewComposer
+              v-else
               ref="reviewChatRef"
               :mode="composerMode"
               :run-id="active.runId"
@@ -539,12 +538,6 @@ const {
               @open-share="openSharePanel(active)"
             />
             <InboxStartFailedPane v-else-if="startFailedActive" @dismiss="dismissStartFailure" />
-            <ClarifyBootLoader
-              v-else-if="activeStarting"
-              class="min-h-0 flex-1"
-              phase="starting"
-              data-testid="inbox-boot-loader"
-            />
             <ReviewShell
               v-else-if="showClarifyReviewShell"
               :key="active.runId + active.nodeId"
@@ -553,7 +546,8 @@ const {
               :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
             >
               <template #stage>
-                <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
+                <ReactConnectingState v-if="activeStarting" mode="stage" />
+                <ArtifactLoadingPane v-else-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
                 <ReactArtifactStage
                   v-else
                   :artifacts="activeRun?.artifacts || []"
@@ -569,7 +563,9 @@ const {
                 />
               </template>
               <template #sidebar>
+                <ReactConnectingState v-if="activeStarting" :show-confirm="composerMode === 'review'" />
                 <ReviewComposer
+                  v-else
                   ref="reviewChatRef"
                   :mode="composerMode"
                   :run-id="active.runId"

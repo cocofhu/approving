@@ -202,6 +202,17 @@ describe('AppShell (no topbar + floating ball)', () => {
     wrapper.unmount()
   })
 
+  it('only reduces workspace top padding (compact layout g1.1)', () => {
+    const wrapper = mountShell()
+    const workspace = wrapper.find('[data-testid="app-shell-workspace"]')
+    const content = workspace.find('.scroll-area > div')
+    expect(content.classes()).toEqual(
+      expect.arrayContaining(['px-4', 'pt-2', 'pb-4', 'md:px-6', 'md:pt-3', 'md:pb-6']),
+    )
+    expect(content.classes()).not.toEqual(expect.arrayContaining(['py-4', 'md:py-6']))
+    wrapper.unmount()
+  })
+
   it('full pages skip dotted canvas and sidebar pad (plan g3.1)', () => {
     routeState.meta = { full: true }
     const wrapper = mountShell()

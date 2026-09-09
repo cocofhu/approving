@@ -45,6 +45,17 @@ beforeEach(() => {
 })
 
 describe('TagFilter', () => {
+  it('trigger uses shared toolbar-control sizing (g3.3 g4.4)', () => {
+    const wrapper = mountFilter()
+    const trigger = wrapper.get('[data-testid="tag-filter-trigger"]')
+    const cls = trigger.classes().join(' ')
+    expect(trigger.classes()).toContain('toolbar-control')
+    expect(cls).not.toContain('min-h-[44px]')
+    expect(cls).not.toContain('px-3')
+    expect(cls).not.toContain('py-1.5')
+    wrapper.unmount()
+  })
+
   it('shows label trigger without count when empty', () => {
     const wrapper = mountFilter()
     expect(wrapper.get('[data-testid="tag-filter-trigger"]').text()).toContain('标签')

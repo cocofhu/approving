@@ -87,6 +87,24 @@ describe('ProjectSharedAgentPanel chat test picker', () => {
     wrapper.unmount()
   })
 
+  it('replaces the standalone hint with an accessible help disclosure', async () => {
+    apiMocks.listAgents.mockResolvedValue([])
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="shared-agent-hint"]').exists()).toBe(false)
+    const help = wrapper.get('[data-testid="shared-agent-help"]')
+    const summary = help.get('summary')
+    expect(summary.text()).toBe('?')
+    expect(summary.attributes('aria-label')).toContain('extend')
+    expect(summary.classes()).toEqual(expect.arrayContaining(['h-[18px]', 'w-[18px]']))
+    expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).toContain('extend')
+    expect(wrapper.get('[data-testid="project-shared-agent-panel"]').classes()).toEqual(
+      expect.arrayContaining(['min-h-0', 'flex-1']),
+    )
+    wrapper.unmount()
+  })
+
   it('shows empty state when no project-bound agents exist', async () => {
     apiMocks.listAgents.mockResolvedValue([
       { name: 'other', projectId: 'proj-b' },
