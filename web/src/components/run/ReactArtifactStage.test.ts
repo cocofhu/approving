@@ -973,17 +973,17 @@ describe('ReactArtifactStage', () => {
     })
     await flushPromises()
     const researchCard = wrapper.get('[data-testid="react-artifact-card-research.json"]')
-    expect(researchCard.text()).toContain('调研结论')
+    expect(researchCard.text()).toContain('调研')
     expect(researchCard.text()).toContain('research.json')
     expect(researchCard.text()).toContain('JSON')
     expect(wrapper.get('[data-testid="react-artifact-card-clarified_requirement.json"]').text()).toContain(
-      '需求澄清文件',
+      '需求澄清',
     )
-    expect(wrapper.get('[data-testid="react-artifact-card-page.html"]').text()).toContain('视觉预览文件')
-    expect(wrapper.get('[data-testid="react-artifact-card-proposals.json"]').text()).toContain('proposals.json')
+    expect(wrapper.get('[data-testid="react-artifact-card-page.html"]').text()).toContain('网页预览')
+    expect(wrapper.get('[data-testid="react-artifact-card-proposals.json"]').text()).toContain('候选方案')
     await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').text()).toContain('调研结论')
+    expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').text()).toContain('调研')
     wrapper.unmount()
   })
 
@@ -1110,7 +1110,7 @@ describe('ReactArtifactStage', () => {
     // closed page.html must not be restored even though visual pin would otherwise open it
     expect(second.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
     expect(second.get('[data-testid="react-artifact-tab-clarified_requirement.json"]').text()).toContain(
-      '需求澄清文件',
+      '需求澄清',
     )
     second.unmount()
     resetStageOpenStateForTests()

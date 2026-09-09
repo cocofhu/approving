@@ -11,6 +11,7 @@ import { useNodeDefs } from '@/lib/run/useNodeDefs'
 import { resolveNodeDisplayLabelFromNode } from '@/lib/run/resolveNodeDisplayLabel'
 import CompositeVarBlock from '@/components/ui/CompositeVarBlock.vue'
 import PlanView, { type PlanDoc } from './PlanView.vue'
+import StructuredArtifactView from './StructuredArtifactView.vue'
 import AppPreviewPanel from './AppPreviewPanel.vue'
 import OutputResultCards from './OutputResultCards.vue'
 import type { NodeRun, WFNode, Run, OutputCard } from '@/lib/shared/types'
@@ -82,8 +83,12 @@ const narration = computed(() => outputs.value.narration_summary as string | und
 // content is fetched by id and re-fetched whenever the plan artifact changes
 // (size/id) — e.g. as an implement node marks progress mid-run.
 const planArtifact = computed(() => {
-  if (props.node.type !== 'plan' && props.node.type !== 'implement') return null
-  return props.run.artifacts.find((x) => x.name === 'plan.json') || null
+  if (!['plan', 'implement', 'approve'].includes(props.node.type)) return null
+  return (
+    props.run.artifacts.find(
+      (x) => x.name === 'plan.json' && (props.node.type === 'implement' || x.nodeId === props.node.id),
+    ) || null
+  )
 })
 const planDoc = ref<PlanDoc | null>(null)
 async function loadPlan() {
@@ -117,6 +122,53 @@ watch(
     return `${props.nodeRun.iteration ?? 0}:${snap}:${a ? `${a.id}:${a.sizeBytes}` : ''}`
   },
   () => loadPlan(),
+  { immediate: true },
+)
+
+const clarifiedArtifact = computed(() => {
+  if (!isClarifyInteractive(props.node.type)) return null
+  return (
+    props.run.artifacts.find(
+      (x) => x.name === 'clarified_requirement.json' && x.nodeId === props.node.id,
+    ) || null
+  )
+})
+const clarifiedDoc = ref<Record<string, any> | null>(null)
+async function loadClarifiedRequirement() {
+  const raw = props.nodeRun.outputs?.clarified_requirement_json
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const doc = JSON.parse(raw) as Record<string, any>
+      clarifiedDoc.value = doc && typeof doc === 'object' && !Array.isArray(doc) ? doc : null
+    } catch {
+      clarifiedDoc.value = null
+    }
+    return
+  }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    clarifiedDoc.value = raw as Record<string, any>
+    return
+  }
+  const a = clarifiedArtifact.value
+  if (!a) {
+    clarifiedDoc.value = null
+    return
+  }
+  try {
+    const full = await api.artifactContent(a.id)
+    const doc = JSON.parse(full.content || '{}') as Record<string, any>
+    clarifiedDoc.value = doc && typeof doc === 'object' && !Array.isArray(doc) ? doc : null
+  } catch {
+    clarifiedDoc.value = null
+  }
+}
+watch(
+  () => {
+    const snap = props.nodeRun.outputs?.clarified_requirement_json || ''
+    const a = clarifiedArtifact.value
+    return `${props.nodeRun.iteration ?? 0}:${JSON.stringify(snap)}:${a ? `${a.id}:${a.sizeBytes}` : ''}`
+  },
+  () => loadClarifiedRequirement(),
   { immediate: true },
 )
 
@@ -335,9 +387,19 @@ function fileStatusClass(s: string): string {
       <div v-else class="text-[12px] text-txt3">{{ t('pages.nodeOutput.noVarSnapshot') }}</div>
     </div>
 
-    <!-- plan.json: structured two-level plan visualization (plan/implement nodes) -->
+    <!-- plan.json: structured two-level plan visualization (plan/implement/approve nodes) -->
     <div v-if="planDoc" class="card mb-3 p-3">
       <PlanView :doc="planDoc" :accent="hex" :artifacts="run.artifacts" />
+    </div>
+
+    <div v-if="clarifiedDoc" class="card mb-3 p-3" data-testid="node-output-clarified-requirement">
+      <StructuredArtifactView
+        name="clarified_requirement.json"
+        :doc="clarifiedDoc"
+        :accent="hex"
+        :run-id="run.id"
+        :artifacts="run.artifacts"
+      />
     </div>
 
     <!-- structured framework-card product: rendered markdown of the reserved
