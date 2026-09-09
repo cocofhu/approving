@@ -47,4 +47,24 @@ describe('AppButton', () => {
     idle.unmount()
     loading.unmount()
   })
+
+  it('size sm uses h-6 (24px) height token, not padding-driven height', () => {
+    const wrapper = mountBtn({ size: 'sm' })
+    const cls = wrapper.classes().join(' ')
+    expect(cls).toMatch(/\bh-6\b/)
+    expect(cls).toMatch(/\bpx-2.5\b/)
+    expect(cls).toMatch(/\btext-xs\b/)
+    expect(cls).not.toMatch(/\bpy-/)
+    wrapper.unmount()
+  })
+
+  it('size md uses h-9 (36px) height token, not padding-driven height', () => {
+    const wrapper = mountBtn({ size: 'md' })
+    const cls = wrapper.classes().join(' ')
+    expect(cls).toMatch(/\bh-9\b/)
+    expect(cls).toMatch(/\bpx-3.5\b/)
+    expect(cls).toMatch(/\btext-sm\b/)
+    expect(cls).not.toMatch(/\bpy-/)
+    wrapper.unmount()
+  })
 })

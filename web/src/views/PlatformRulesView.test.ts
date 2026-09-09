@@ -293,7 +293,7 @@ describe('PlatformRulesView help modal replaces the third pane', () => {
 
     const help = w.find('[data-testid="platform-rules-help"]')
     expect(help.attributes('variant')).toBe('ghost')
-    expect(help.attributes('size')).toBe('sm')
+    expect(help.attributes('size')).toBe('md')
     expect(help.attributes('icon')).toBe('help')
     expect(help.attributes('aria-haspopup')).toBe('dialog')
     expect(help.text()).toBe('帮助')

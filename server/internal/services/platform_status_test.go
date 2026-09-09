@@ -30,9 +30,9 @@ func TestPlatformStatus_emptyNullAndTrueZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.CumulativeTokens != nil || got.Current5mBucketTokens != nil || got.TodayMaxCompleted5mTokens != nil {
-		t.Fatalf("want null token fields, got cum=%v cur=%v peak=%v",
-			got.CumulativeTokens, got.Current5mBucketTokens, got.TodayMaxCompleted5mTokens)
+	if got.CumulativeTokens != nil || got.TodayTokens != nil {
+		t.Fatalf("want null token fields, got cum=%v today=%v",
+			got.CumulativeTokens, got.TodayTokens)
 	}
 	if got.RunningCount != 0 || got.QueuedCount != 0 {
 		t.Fatalf("want running/queued 0, got %d/%d", got.RunningCount, got.QueuedCount)
@@ -61,8 +61,8 @@ func TestPlatformStatus_emptyNullAndTrueZero(t *testing.T) {
 	}
 }
 
-func TestPlatformStatus_fiveMinuteBucketsAndPeak(t *testing.T) {
-	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "platform_status_5m.db"))
+func TestPlatformStatus_todayTokensSum(t *testing.T) {
+	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "platform_status_today.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,6 @@ func TestPlatformStatus_fiveMinuteBucketsAndPeak(t *testing.T) {
 	dash := NewDashboardService(db, projects)
 
 	loc := time.FixedZone("UTC+8", 8*3600)
-	// Current incomplete bucket: 14:05–14:10; now = 14:07
 	now := time.Date(2026, 8, 12, 14, 7, 0, 0, loc)
 	mustCreate := func(v any) {
 		t.Helper()
@@ -85,34 +84,31 @@ func TestPlatformStatus_fiveMinuteBucketsAndPeak(t *testing.T) {
 	}
 	mustCreate(&models.WorkflowDef{ID: "wf1", ProjectID: p.ID, Name: "w", Status: "draft", Version: 1})
 
-	// Completed bucket 11:20–11:25 → peak candidate 12104
-	peakStart := time.Date(2026, 8, 12, 11, 22, 0, 0, loc)
-	mustCreate(&models.Run{ID: "run-peak", WorkflowID: "wf1", Status: "completed", StartedAt: peakStart.UTC(), CreatedAt: peakStart.UTC()})
-	srPeak := peakStart.UTC()
+	morning := time.Date(2026, 8, 12, 11, 22, 0, 0, loc)
+	mustCreate(&models.Run{ID: "run-a", WorkflowID: "wf1", Status: "completed", StartedAt: morning.UTC(), CreatedAt: morning.UTC()})
+	srA := morning.UTC()
 	mustCreate(&models.StateRun{
-		RunID: "run-peak", NodeID: "n1", Status: "completed",
-		Usage: &models.TokenUsage{InputTokens: 12104}, StartedAt: &srPeak,
+		RunID: "run-a", NodeID: "n1", Status: "completed",
+		Usage: &models.TokenUsage{InputTokens: 12104}, StartedAt: &srA,
 	})
 
-	// Smaller completed bucket 10:00–10:05
-	smallStart := time.Date(2026, 8, 12, 10, 1, 0, 0, loc)
-	mustCreate(&models.Run{ID: "run-small", WorkflowID: "wf1", Status: "completed", StartedAt: smallStart.UTC(), CreatedAt: smallStart.UTC()})
-	srSmall := smallStart.UTC()
+	mid := time.Date(2026, 8, 12, 10, 1, 0, 0, loc)
+	mustCreate(&models.Run{ID: "run-b", WorkflowID: "wf1", Status: "completed", StartedAt: mid.UTC(), CreatedAt: mid.UTC()})
+	srB := mid.UTC()
 	mustCreate(&models.StateRun{
-		RunID: "run-small", NodeID: "n1", Status: "completed",
-		Usage: &models.TokenUsage{InputTokens: 100}, StartedAt: &srSmall,
+		RunID: "run-b", NodeID: "n1", Status: "completed",
+		Usage: &models.TokenUsage{InputTokens: 100}, StartedAt: &srB,
 	})
 
-	// Current bucket 14:05–14:10 → 4812 (must NOT be peak)
-	curStart := time.Date(2026, 8, 12, 14, 6, 0, 0, loc)
-	mustCreate(&models.Run{ID: "run-cur", WorkflowID: "wf1", Status: "running", StartedAt: curStart.UTC(), CreatedAt: curStart.UTC()})
-	srCur := curStart.UTC()
+	cur := time.Date(2026, 8, 12, 14, 6, 0, 0, loc)
+	mustCreate(&models.Run{ID: "run-c", WorkflowID: "wf1", Status: "running", StartedAt: cur.UTC(), CreatedAt: cur.UTC()})
+	srC := cur.UTC()
 	mustCreate(&models.StateRun{
-		RunID: "run-cur", NodeID: "n1", Status: "running",
-		Usage: &models.TokenUsage{InputTokens: 4812}, StartedAt: &srCur,
+		RunID: "run-c", NodeID: "n1", Status: "running",
+		Usage: &models.TokenUsage{InputTokens: 4812}, StartedAt: &srC,
 	})
 
-	// Yesterday usage should not affect today peak
+	// Yesterday must not enter todayTokens (g1.2/g1.3).
 	yest := time.Date(2026, 8, 11, 15, 0, 0, 0, loc)
 	mustCreate(&models.Run{ID: "run-yest", WorkflowID: "wf1", Status: "completed", StartedAt: yest.UTC(), CreatedAt: yest.UTC()})
 	srY := yest.UTC()
@@ -131,29 +127,13 @@ func TestPlatformStatus_fiveMinuteBucketsAndPeak(t *testing.T) {
 	if got.CumulativeTokens == nil || *got.CumulativeTokens != 12104+100+4812+999999 {
 		t.Fatalf("cumulative=%v", got.CumulativeTokens)
 	}
-	if got.Current5mBucketTokens == nil || *got.Current5mBucketTokens != 4812 {
-		t.Fatalf("current5m=%v want 4812", got.Current5mBucketTokens)
-	}
-	if got.TodayMaxCompleted5mTokens == nil || *got.TodayMaxCompleted5mTokens != 12104 {
-		t.Fatalf("peak=%v want 12104", got.TodayMaxCompleted5mTokens)
-	}
-	if got.CurrentBucketStart == nil || got.CurrentBucketEnd == nil {
-		t.Fatal("expected current bucket bounds")
-	}
-	wantCurStart := time.Date(2026, 8, 12, 14, 5, 0, 0, loc)
-	if !got.CurrentBucketStart.Equal(wantCurStart) {
-		t.Fatalf("current start=%v want %v", got.CurrentBucketStart, wantCurStart)
-	}
-	if got.PeakBucketStart == nil {
-		t.Fatal("expected peak bucket start")
-	}
-	wantPeakStart := time.Date(2026, 8, 12, 11, 20, 0, 0, loc)
-	if !got.PeakBucketStart.In(loc).Equal(wantPeakStart) {
-		t.Fatalf("peak start=%v want %v", got.PeakBucketStart.In(loc), wantPeakStart)
+	wantToday := int64(12104 + 100 + 4812)
+	if got.TodayTokens == nil || *got.TodayTokens != wantToday {
+		t.Fatalf("todayTokens=%v want %d", got.TodayTokens, wantToday)
 	}
 }
 
-func TestPlatformStatus_crossDayPeakReset(t *testing.T) {
+func TestPlatformStatus_crossDayTodayReset(t *testing.T) {
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "platform_status_day.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +162,7 @@ func TestPlatformStatus_crossDayPeakReset(t *testing.T) {
 		Usage: &models.TokenUsage{InputTokens: 5000}, StartedAt: &sr1,
 	})
 
-	// New day 00:07 — no completed bucket yet today → peak null
+	// New day 00:07 — yesterday excluded; today zero while cumulative exists (g1.3).
 	day2 := time.Date(2026, 8, 12, 0, 7, 0, 0, loc)
 	got, err := dash.PlatformStatus(context.Background(), PlatformStatusQuery{
 		UTCOffsetMinutes: intPtr(8 * 60),
@@ -191,12 +171,11 @@ func TestPlatformStatus_crossDayPeakReset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.TodayMaxCompleted5mTokens != nil {
-		t.Fatalf("cross-day peak should reset to null, got %v", *got.TodayMaxCompleted5mTokens)
+	if got.CumulativeTokens == nil || *got.CumulativeTokens != 5000 {
+		t.Fatalf("cumulative=%v want 5000", got.CumulativeTokens)
 	}
-	// Current bucket 00:05–00:10 still empty → 0 (cumulative exists)
-	if got.Current5mBucketTokens == nil || *got.Current5mBucketTokens != 0 {
-		t.Fatalf("current bucket want 0, got %v", got.Current5mBucketTokens)
+	if got.TodayTokens == nil || *got.TodayTokens != 0 {
+		t.Fatalf("cross-day todayTokens want 0, got %v", got.TodayTokens)
 	}
 }
 
@@ -232,8 +211,8 @@ func TestPlatformStatus_cacheHitSkipsRescan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Current5mBucketTokens == nil || *first.Current5mBucketTokens != 10 {
-		t.Fatalf("first current=%v", first.Current5mBucketTokens)
+	if first.TodayTokens == nil || *first.TodayTokens != 10 {
+		t.Fatalf("first today=%v", first.TodayTokens)
 	}
 
 	// Add more usage in same bucket; cache should still return 10 until TTL.
@@ -247,8 +226,8 @@ func TestPlatformStatus_cacheHitSkipsRescan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Current5mBucketTokens == nil || *second.Current5mBucketTokens != 10 {
-		t.Fatalf("cache miss? current=%v want stale 10", second.Current5mBucketTokens)
+	if second.TodayTokens == nil || *second.TodayTokens != 10 {
+		t.Fatalf("cache miss? today=%v want stale 10", second.TodayTokens)
 	}
 
 	// After TTL, recompute.
@@ -257,8 +236,8 @@ func TestPlatformStatus_cacheHitSkipsRescan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if third.Current5mBucketTokens == nil || *third.Current5mBucketTokens != 100 {
-		t.Fatalf("after clear current=%v want 100", third.Current5mBucketTokens)
+	if third.TodayTokens == nil || *third.TodayTokens != 100 {
+		t.Fatalf("after clear today=%v want 100", third.TodayTokens)
 	}
 }
 

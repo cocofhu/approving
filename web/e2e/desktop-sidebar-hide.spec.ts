@@ -31,8 +31,7 @@ async function mockApi(page: Page) {
       await route.fulfill({
         json: {
           cumulativeTokens: null,
-          current5mBucketTokens: null,
-          todayMaxCompleted5mTokens: null,
+          todayTokens: null,
           runningCount: 0,
           queuedCount: 0,
           asOf: '2026-08-19T00:00:00Z',
