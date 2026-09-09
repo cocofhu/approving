@@ -216,7 +216,7 @@ onMounted(loadAll)
           variant="ghost"
           size="md"
           icon="help"
-          :class="isMobile ? 'min-h-11' : ''"
+          class="min-h-11 md:min-h-0"
           aria-haspopup="dialog"
           data-testid="platform-rules-help"
           @click="helpOpen = true"
@@ -475,8 +475,8 @@ onMounted(loadAll)
       <template #footer>
         <AppButton
           variant="outline"
-          size="sm"
-          :class="isMobile ? 'min-h-11' : ''"
+          size="md"
+          class="min-h-11 md:min-h-0"
           data-testid="platform-rules-help-close"
           @click="helpOpen = false"
         >
