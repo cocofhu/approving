@@ -9,7 +9,7 @@ import AgentFilesPanel from './AgentFilesPanel.vue'
 const ModalStub = {
   props: ['open', 'title'],
   emits: ['close'],
-  template: '<div v-if="open" class="modal"><h2>{{ title }}</h2><slot/><slot name="footer"/></div>',
+  template: '<div v-if="open" class="modal"><h2>{{ title }}</h2><button class="modal-close" @click="$emit(\'close\')">x</button><slot/><slot name="footer"/></div>',
 }
 const ContextStub = {
   name: 'ExplorerContextMenu',
@@ -58,8 +58,8 @@ function mountPanel(extra: Record<string, unknown> = {}) {
         Icon: true,
         AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
         AppModal: ModalStub,
-        CodeEditor: { props: ['modelValue'], template: '<textarea data-testid="code" :value="modelValue" />' },
-        MarkdownSplitEditor: { props: ['modelValue'], template: '<textarea data-testid="markdown" :value="modelValue" />' },
+        CodeEditor: { props: ['modelValue'], emits: ['update:modelValue'], template: '<textarea data-testid="code" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+        MarkdownSplitEditor: { props: ['modelValue'], emits: ['update:modelValue'], template: '<textarea data-testid="markdown" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
         ExplorerContextMenu: ContextStub,
         AgentWorkspaceHistoryPanel: {
           emits: ['toggle-collapse', 'restored'],
@@ -187,6 +187,112 @@ describe('AgentFilesPanel interactions', () => {
     await w.setProps({ isMobile: false })
     await flushPromises()
     expect(document.querySelector('[data-test="explorer-more-menu"]')).toBeNull()
+    w.unmount()
+  })
+
+  it('drives remaining desktop template callbacks', async () => {
+    const d = draft()
+    const w = mountPanel({ draft: d })
+    ;(w.vm as any).selectDefaultFile()
+    await flushPromises()
+    await w.get('[data-testid="markdown"]').setValue('# changed')
+    expect(d.files[0].content).toBe('# changed')
+
+    const rootFolder = w.findAll('button').find((b) => b.attributes('title')?.includes('新建文件夹'))!
+    await rootFolder.trigger('click')
+    await flushPromises()
+    let create = w.get('input[data-create]')
+    await create.setValue('tmp')
+    await create.trigger('keyup', { key: 'Escape' })
+    expect(w.find('input[data-create]').exists()).toBe(false)
+
+    await rootFolder.trigger('click')
+    await flushPromises()
+    create = w.get('input[data-create]')
+    await create.setValue('docs')
+    await create.trigger('blur')
+    expect(w.text()).toContain('docs')
+
+    const srcToggle = w.findAll('button').find((b) => b.text().includes('src'))!
+    await srcToggle.trigger('click')
+    await flushPromises()
+    const srcAction = (index: number) => {
+      const toggle = w.findAll('button').find((b) => b.text().includes('src'))!
+      const row = toggle.element.closest('.group')!
+      return Array.from(row.querySelectorAll('[data-test="file-row-action"]'))[index] as HTMLButtonElement
+    }
+    srcAction(0).click()
+    await flushPromises()
+    create = w.get('input[data-create]')
+    await create.setValue('util.ts')
+    await create.trigger('blur')
+    expect(d.files.some((f: any) => f.path === 'src/util.ts')).toBe(true)
+
+    srcAction(1).click()
+    await flushPromises()
+    create = w.get('input[data-create]')
+    await create.setValue('nested')
+    await create.trigger('keyup', { key: 'Enter' })
+    expect(w.text()).toContain('nested')
+
+    const main = w.findAll('button').find((b) => b.text().includes('main.ts'))!
+    const mainRow = main.element.closest('.group')!
+    await mainRow.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }))
+    await flushPromises()
+    expect(w.find('[data-testid="context"]').exists()).toBe(true)
+    const renameButton = Array.from(mainRow.querySelectorAll('[data-test="file-row-action"]')).at(-2) as HTMLButtonElement
+    renameButton.click()
+    await flushPromises()
+    await w.get('input[data-rename]').trigger('keyup', { key: 'Escape' })
+
+    await main.trigger('click')
+    await flushPromises()
+    await w.get('[data-testid="code"]').setValue('updated')
+    const readmeTab = w.findAll('.group').find((r) => r.text().includes('README.md') && r.find('button').exists())
+    if (readmeTab) await readmeTab.trigger('click')
+    const closeTab = w.findAll('button').find((b) => b.attributes('title')?.includes('关闭'))!
+    await closeTab.trigger('click')
+
+    const deleteMain = Array.from(mainRow.querySelectorAll('[data-test="file-row-action"]')).at(-1) as HTMLButtonElement
+    deleteMain.click()
+    await flushPromises()
+    await w.get('.modal-close').trigger('click')
+    w.unmount()
+  })
+
+  it('executes mobile menu backdrop and each action', async () => {
+    const w = mountPanel({ isMobile: true, dirty: false, agentName: '' })
+    const openMore = async (path: string) => {
+      const button = w.get(`[data-test="file-row-more"][data-path="${path}"]`)
+      await button.trigger('click')
+      await flushPromises()
+    }
+    await openMore('README.md')
+    const backdrop = document.querySelector('[data-test="explorer-more-backdrop"]') as HTMLElement
+    backdrop.click()
+    await flushPromises()
+
+    await openMore('README.md')
+    ;(document.querySelector('[data-action="rename"]') as HTMLElement).click()
+    await flushPromises()
+    await w.get('input[data-rename]').trigger('blur')
+
+    await openMore('README.md')
+    ;(document.querySelector('[data-action="delete"]') as HTMLElement).click()
+    await flushPromises()
+    await w.get('.modal-close').trigger('click')
+
+    await w.findAll('button').find((b) => b.text().includes('src'))!.trigger('click')
+    await flushPromises()
+    await openMore('src')
+    ;(document.querySelector('[data-action="newFile"]') as HTMLElement).click()
+    await flushPromises()
+    await w.get('input[data-create]').trigger('keyup', { key: 'Escape' })
+
+    await openMore('src')
+    ;(document.querySelector('[data-action="newFolder"]') as HTMLElement).click()
+    await flushPromises()
+    await w.get('input[data-create]').trigger('keyup', { key: 'Escape' })
     w.unmount()
   })
 })

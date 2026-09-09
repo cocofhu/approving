@@ -172,4 +172,56 @@ describe('RequirementDraftsPanel interactions', () => {
     expect(mocks.list).toHaveBeenCalledWith('p2', expect.any(Object))
     w.unmount()
   })
+
+  it('renders loading, empty, editor controls and all confirmation modals', async () => {
+    const w = mountPanel(); await flushPromises()
+    const vm = w.vm as any
+    vm.items = []; vm.loading = true; vm.setViewMode('edit')
+    await w.vm.$nextTick()
+    expect(w.text()).toContain('加载')
+    vm.loading = false
+    await w.vm.$nextTick()
+    expect(w.find('[data-testid="requirement-drafts-list-empty"]').exists()).toBe(true)
+    vm.items = [req, child, milestone]; vm.catalog = [req, child, milestone]
+    vm.selectDraft('r1')
+    await w.vm.$nextTick()
+    for (const id of ['h1', 'h2', 'h3', 'bold', 'italic', 'ul', 'ol', 'link', 'code', 'fence', 'table']) {
+      await w.get(`[data-testid="requirement-drafts-tb-${id}"]`).trigger('click')
+    }
+    await w.get('[data-testid="requirement-drafts-schedule-kind"]').setValue('milestone')
+    await w.get('[data-testid="requirement-drafts-schedule-kind"]').trigger('change')
+    await flushPromises()
+    vm.showDelete = true; await w.vm.$nextTick()
+    expect(w.findAll('[data-testid="visible-modal"]').length).toBeGreaterThan(0)
+    await w.get('[data-testid="requirement-drafts-delete-cancel"]').trigger('click')
+    vm.editTitle = 'dirty'
+    const leave = vm.requestLeave(); await w.vm.$nextTick()
+    await w.get('[data-testid="requirement-drafts-leave-confirm"]').trigger('click')
+    expect(await leave).toBe(true)
+    vm.openNewModal(); await w.vm.$nextTick()
+    await w.get('[data-testid="requirement-drafts-new-kind-milestone"]').trigger('click')
+    await w.vm.$nextTick()
+    expect(w.find('[data-testid="requirement-drafts-new-milestone-due"]').exists()).toBe(true)
+    await w.get('[data-testid="modal-close"]').trigger('click')
+    w.unmount()
+  })
+
+  it('renders gantt empty states and selected milestone inspector controls', async () => {
+    const w = mountPanel(); await flushPromises()
+    const vm = w.vm as any
+    vm.items = []; vm.catalog = []; vm.setViewMode('gantt')
+    await w.vm.$nextTick()
+    expect(w.text()).toContain('无匹配')
+    vm.items = [milestone]; vm.catalog = [milestone]; vm.selectDraft('m1')
+    await w.vm.$nextTick()
+    expect(w.find('[data-testid="requirement-drafts-inspector-kind"]').exists()).toBe(true)
+    await w.get('[data-testid="requirement-drafts-inspector-kind"]').setValue('requirement')
+    await w.get('[data-testid="requirement-drafts-inspector-kind"]').trigger('change')
+    await flushPromises()
+    vm.setViewMode('milestones'); await w.vm.$nextTick()
+    await w.get('[data-testid="requirement-drafts-milestone-due"]').setValue('2026-10-10')
+    await w.get('[data-testid="requirement-drafts-milestone-due"]').trigger('change')
+    await flushPromises()
+    w.unmount()
+  })
 })

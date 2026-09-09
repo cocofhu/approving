@@ -160,4 +160,51 @@ describe('PmChannelMultiPanel interactions', () => {
     expect(mocks.error).toHaveBeenCalledWith('load failed')
     w.unmount()
   })
+
+  it('renders every provider edit form, notify receipts, and primary-delete choices', async () => {
+    const w = mountPanel(); await flushPromises()
+    const vm = w.vm as any
+    for (const ch of channels) {
+      vm.openEdit(ch)
+      await w.vm.$nextTick()
+      expect(w.find('[data-testid="channel-panel-edit"]').exists()).toBe(true)
+      if (ch.type === 'qq') expect(w.find('[data-testid="channel-qq-only"]').exists()).toBe(true)
+      if (ch.type === 'feishu') expect(w.find('[data-testid="channel-region"]').exists()).toBe(true)
+      if (ch.type === 'dingtalk') expect(w.find('[data-testid="channel-dingtalk-hint"]').exists()).toBe(true)
+    }
+    vm.openAdd()
+    for (const type of ['qq', 'wecom', 'feishu', 'dingtalk']) {
+      vm.setChannelType(type)
+      await w.vm.$nextTick()
+      expect(vm.chType).toBe(type)
+    }
+    vm.chCronDeliver = true; vm.targetComboOpen = true
+    vm.recentTargets = [{ value: 'guild:1', label: 'Guild', unspoken: true }]
+    await w.vm.$nextTick()
+    expect(w.find('[role="listbox"]').exists()).toBe(true)
+    await w.find('[role="listbox"] button').trigger('click')
+    vm.notifySelected = []; vm.tab = 'notify'; await w.vm.$nextTick()
+    expect(w.find('[data-testid="channel-deliver-log"]').text()).toContain('boom')
+    const checkbox = w.find('input[type="checkbox"]')
+    await checkbox.trigger('change')
+    vm.askDelete(channels[0]); await w.vm.$nextTick()
+    expect(w.find('[data-testid="channel-delete-primary-modal"]').exists()).toBe(true)
+    vm.deleteMode = 'none'; await w.vm.$nextTick()
+    expect(w.find('[data-testid="channel-delete-primary-modal"]').text()).toBeTruthy()
+    w.unmount()
+  })
+
+  it('renders list loading/empty states and blocks add without a free agent', async () => {
+    const w = mountPanel(); await flushPromises()
+    const vm = w.vm as any
+    vm.loading = true; await w.vm.$nextTick()
+    expect(w.text()).toContain('加载')
+    vm.loading = false; vm.channelList = []; vm.freeAgents = []; vm.tab = 'list'
+    await w.vm.$nextTick()
+    vm.openAdd()
+    expect(mocks.error).toHaveBeenCalled()
+    vm.notifySelected = []; vm.tab = 'notify'; await w.vm.$nextTick()
+    expect(w.find('[data-testid="notify-empty-hint"]').exists()).toBe(true)
+    w.unmount()
+  })
 })

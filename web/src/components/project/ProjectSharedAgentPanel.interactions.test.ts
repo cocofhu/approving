@@ -123,4 +123,23 @@ describe('ProjectSharedAgentPanel interactions', () => {
     expect((w.vm as any).subTab).toBe('files')
     w.unmount()
   })
+
+  it('renders every subpanel plus special-region and SSH metadata states', async () => {
+    mocks.getConfig.mockResolvedValueOnce({ ...cfg, env: { CURSOR_REGION: 'legacy-special' }, gitSshPrivateKey: 'private', gitSshKnownHosts: 'host key' })
+    const w = mountPanel(); await flushPromises()
+    const vm = w.vm as any
+    for (const tab of ['mcp', 'env', 'prompts', 'meta', 'test']) {
+      await w.get(`[data-testid="shared-agent-subtab-${tab}"]`).trigger('click')
+      await flushPromises()
+    }
+    vm.subTab = 'meta'; await w.vm.$nextTick()
+    expect((w.find('[data-test="shared-ssh-private-key"]').element as HTMLTextAreaElement).value).toBe('private')
+    vm.draft.layout.configRoot = ''
+    await w.vm.$nextTick()
+    expect(vm.derivedPaths[0].path).toContain('mcp.json')
+    vm.testAgentName = 'a1'
+    vm.syncTestAgentSelection()
+    expect(vm.testAgentName).toBe('a1')
+    w.unmount()
+  })
 })

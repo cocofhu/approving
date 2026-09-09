@@ -101,4 +101,25 @@ describe('WorkflowApiTab interactions', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalled()
     w.unmount()
   })
+
+  it('renders loading and both create-key modal bodies', async () => {
+    let resolve!: (value: any[]) => void
+    mocks.listAPIKeys.mockImplementationOnce(() => new Promise((r) => { resolve = r }))
+    const w = mountTab()
+    await w.vm.$nextTick()
+    expect((w.vm as any).loadingKeys).toBe(true)
+    resolve([])
+    await flushPromises()
+    ;(w.vm as any).openCreateKey()
+    await w.vm.$nextTick()
+    expect(w.find('[data-testid="key-modal"] input').exists()).toBe(true)
+    ;(w.vm as any).keyName = 'deploy'
+    mocks.createAPIKey.mockResolvedValueOnce({ key: 'wk_plain' })
+    await (w.vm as any).confirmCreateKey()
+    await flushPromises()
+    expect(w.find('[data-testid="key-modal"]').text()).toContain('wk_plain')
+    await w.get('[data-testid="modal-x"]').trigger('click')
+    expect((w.vm as any).showCreateKey).toBe(false)
+    w.unmount()
+  })
 })
