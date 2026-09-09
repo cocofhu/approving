@@ -16,6 +16,14 @@ describe('toolbar-control shared sizing (g2.1 g2.2 g4.1 g4.2 g4.4)', () => {
     expect(block).not.toMatch(/border-line|bg-surface|text-txt|hover:/)
   })
 
+  it('caps count chips so they cannot grow the control (g3.4 g4.1)', () => {
+    const block = css.match(/\.toolbar-control\s+\.chip\s*\{[^}]+\}/)?.[0] ?? ''
+    expect(block).toMatch(/h-5/)
+    expect(block).toMatch(/py-0\b/)
+    expect(block).toMatch(/leading-none/)
+    expect(block).toMatch(/shrink-0/)
+  })
+
   it('RunListView toolbar still hosts the four shared filters without local size classes (g4.1)', () => {
     expect(runList).toContain('<TagFilter')
     expect(runList).toContain('<ProjectFilter')

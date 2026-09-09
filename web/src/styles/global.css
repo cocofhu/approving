@@ -263,6 +263,14 @@ html.light .app-sidebar-card {
   .toolbar-control {
     @apply min-h-[44px] rounded-md px-3 py-1.5 md:min-h-[34px];
   }
+  /*
+   * A count badge inside a toolbar control must not grow it: .chip alone is
+   * 22px tall (text-xs + py-0.5 + border) and would push the 34px desktop
+   * trigger to 36px. Cap it to the text-sm line box (20px).
+   */
+  .toolbar-control .chip {
+    @apply h-5 shrink-0 py-0 leading-none;
+  }
   .nav-item {
     @apply flex items-center gap-2.5 px-3 py-[9px] text-sm text-txt2 transition
       hover:bg-elevated hover:text-txt;
