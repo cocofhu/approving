@@ -1288,7 +1288,7 @@
       }
     },
     "gatesInbox": {
-      "title": "待审批",
+      "title": "需要关注",
       "subtitleHtml": "<strong class=\"font-medium text-warn\">门禁审批</strong> + <em class=\"not-italic text-n-clarify\">需求澄清</em> 收件箱 · 工作流在此挂起等待人工处理",
       "statusPending": "有新审批 · 待刷新",
       "statusEditing": "正在填写 · 后台同步中",
