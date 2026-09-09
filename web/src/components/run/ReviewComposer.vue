@@ -113,6 +113,7 @@ const chatRef = ref<{
   applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string) => boolean | void
   cancelReview: () => void
   discardLastQueued: () => void
+  isSessionBusy?: () => boolean
 } | null>(null)
 
 defineExpose({
@@ -133,6 +134,11 @@ defineExpose({
   cancelReview: () => chatRef.value?.cancelReview(),
   discardLastQueued: () => chatRef.value?.discardLastQueued(),
   isChatReady: () => !!chatRef.value,
+  /**
+   * Platform session busy from ClarifyChat (thinking / queued / live slot).
+   * Hosts gate soft-refresh on this — must not be missing through the composer (g1.3).
+   */
+  isSessionBusy: () => !!chatRef.value?.isSessionBusy?.(),
 })
 
 const { t } = useI18n()

@@ -147,4 +147,49 @@ describe('stream resume acceptance (g5.2 three surfaces × four scenarios)', () 
     expect(runEntry).toMatch(/projectDialogueAfterLoad/)
     expect(runWs).toMatch(/projectDialogueAfterLoad/)
   })
+
+  it('g1.2: ACP busy=false must not stop busySeedRetry or clear platform session busy', () => {
+    const inbox = readSrc('lib/inbox/useGatesInbox.ts')
+    const runWs = readSrc('lib/run/useRunDetailWs.ts')
+    // Inbox: acp branch must not assign clarifyLiveBusy or stop retry on !busy.
+    const acpInbox = inbox.slice(inbox.indexOf("if (m.type === 'acp')"))
+    const acpInboxBlock = acpInbox.slice(0, acpInbox.indexOf('return') + 20)
+    expect(acpInboxBlock).not.toMatch(/clarifyLiveBusy\.value = !!m\.busy/)
+    expect(acpInboxBlock).not.toMatch(/if \(!m\.busy\) busySeedRetry\.stop\(\)/)
+    expect(acpInboxBlock).toMatch(/observational only|must not overwrite platform|g1\.2/)
+    // Run: ACP may update liveBusy for LiveLog, but must not stop dialogue retry.
+    const acpRun = runWs.slice(runWs.indexOf("if (m.type === 'acp' && m.nodeId)"))
+    const acpRunBlock = acpRun.slice(0, 600)
+    expect(acpRunBlock).not.toMatch(/if \(!m\.busy\) busySeedRetry\.stop\(\)/)
+    expect(runWs).toMatch(/dialoguePlatformBusy/)
+    expect(runWs).toMatch(/Platform session busy only/)
+  })
+
+  it('g1.3: ReviewComposer exposes isSessionBusy', () => {
+    const composer = readSrc('components/run/ReviewComposer.vue')
+    expect(composer).toMatch(/isSessionBusy:\s*\(\)\s*=>/)
+    expect(composer).toMatch(/chatRef\.value\?\.isSessionBusy/)
+  })
+
+  it('g2.2: Public page wires busySeedRetry + foreground re-seed', () => {
+    const pub = readSrc('views/PublicGateApprovalView.vue')
+    expect(pub).toMatch(/createBusySeedRetryController/)
+    expect(pub).toMatch(/maybeStartPublicBusySeedRetry|startPublicBusySeedRetry/)
+    expect(pub).toMatch(/resumeFromForeground/)
+    const resumeIdx = pub.indexOf('async function resumeFromForeground')
+    expect(resumeIdx).toBeGreaterThan(-1)
+    const resumeSlice = pub.slice(resumeIdx, resumeIdx + 500)
+    expect(resumeSlice).toMatch(/publicRailsFilled = false/)
+    expect(resumeSlice).toMatch(/publicBusySeedRetry\.stop/)
+  })
+
+  it('g2.3: applyAcpEvents false must buffer on all three surfaces', () => {
+    const inbox = readSrc('lib/inbox/useGatesInbox.ts')
+    const runWs = readSrc('lib/run/useRunDetailWs.ts')
+    const pub = readSrc('views/PublicGateApprovalView.vue')
+    expect(inbox).toMatch(/deliverOrBufferDialogueAcp/)
+    expect(runWs).toMatch(/deliverOrBufferDialogueAcp/)
+    expect(pub).toMatch(/applyAcpEvents\(events\) === false/)
+    expect(pub).toMatch(/pendingPublicAcp = events/)
+  })
 })

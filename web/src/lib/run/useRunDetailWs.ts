@@ -82,6 +82,12 @@ export function useRunDetailWs(opts: {
   /** Rails applied via seed or live — stops busy seed retry (g3). */
   let dialogueRailsFilled = false
   let dialogueLiveIncremental = false
+  /**
+   * Platform review/clarify session busy per node (queue_state / turn_begin /
+   * reactSessions). Separate from liveBusy which also tracks ACP sandbox dips
+   * for LiveLog — dialogue seed retry must not go idle on ACP busy=false (g1.2).
+   */
+  const dialoguePlatformBusy: Record<string, boolean> = Object.create(null)
   const busySeedRetry = createBusySeedRetryController()
   const wsReconnect = createWsReconnectController({
     connect: () => connectWs({ fromReconnect: true }),
@@ -113,6 +119,7 @@ export function useRunDetailWs(opts: {
     for (const [nodeId, snap] of Object.entries(sessions)) {
       if (!snap || typeof snap !== 'object') continue
       liveBusy[nodeId] = !!snap.busy
+      dialoguePlatformBusy[nodeId] = !!snap.busy
       if (snap.busy) busyNodes.push(nodeId)
       const frame = {
         event: 'queue_state',
@@ -155,7 +162,10 @@ export function useRunDetailWs(opts: {
     await nextTick()
     flushPendingDialogueAcp()
     const stillEmptyBusy = nodeIds.filter(
-      (nid) => liveBusy[nid] && !dialogueRailsFilled && !dialogueLiveIncremental,
+      (nid) =>
+        (!!dialoguePlatformBusy[nid] || !!liveBusy[nid]) &&
+        !dialogueRailsFilled &&
+        !dialogueLiveIncremental,
     )
     if (stillEmptyBusy.length) {
       startDialogueBusySeedRetry(stillEmptyBusy)
@@ -206,13 +216,20 @@ export function useRunDetailWs(opts: {
     busySeedRetry.start(async (signal) => {
       await runBusySeedRetry({
         signal,
-        isBusy: () => nodeIds.some((nid) => !!liveBusy[nid]),
+        // Platform session busy only — ACP sandbox busy=false must not idle out (g1.2).
+        isBusy: () =>
+          nodeIds.some(
+            (nid) =>
+              !!dialoguePlatformBusy[nid] ||
+              !!run.value.reactSessions?.[nid]?.busy ||
+              !!reviewChatRef.value?.isSessionBusy?.(),
+          ),
         hasContent: () => dialogueRailsFilled,
         liveIncrementalReceived: () => dialogueLiveIncremental,
         seed: async () => {
           let any = false
           for (const nid of nodeIds) {
-            if (!liveBusy[nid]) continue
+            if (!dialoguePlatformBusy[nid] && !run.value.reactSessions?.[nid]?.busy) continue
             if (await seedDialogueNodeOnce(nid)) any = true
           }
           flushPendingDialogueAcp()
@@ -292,6 +309,7 @@ export function useRunDetailWs(opts: {
     pendingDialogueAcp.clear()
     dialogueRailsFilled = false
     dialogueLiveIncremental = false
+    for (const k of Object.keys(dialoguePlatformBusy)) delete dialoguePlatformBusy[k]
     busySeedRetry.stop()
   }
 
@@ -408,8 +426,9 @@ export function useRunDetailWs(opts: {
         const wsEvents: AcpEvent[] = m.events || []
         mergeLiveWsAcpPage(m.nodeId, wsEvents)
         if (typeof m.busy === 'boolean') {
+          // LiveLog / sandbox bridge only. Do not stop dialogue busySeedRetry and
+          // do not treat ACP busy=false as platform session idle (g1.2).
           liveBusy[m.nodeId] = m.busy
-          if (!m.busy) busySeedRetry.stop()
         }
         liveNode.value = m.nodeId
         if (!manual.value) selected.value = m.nodeId
@@ -417,9 +436,14 @@ export function useRunDetailWs(opts: {
         applyOrBufferDialogueAcp(m.nodeId, wsEvents, m.busy)
       } else if (m.type === 'review' && m.nodeId) {
         // Prefer matching producer; components also filter by nodeId defensively.
-        if (m.event === 'turn_begin') liveBusy[m.nodeId] = true
+        // Platform session busy (review) is the authority for dialogue seed retry.
+        if (m.event === 'turn_begin') {
+          liveBusy[m.nodeId] = true
+          dialoguePlatformBusy[m.nodeId] = true
+        }
         if (m.event === 'queue_state' && typeof m.busy === 'boolean') {
           liveBusy[m.nodeId] = !!m.busy
+          dialoguePlatformBusy[m.nodeId] = !!m.busy
           if (!m.busy) busySeedRetry.stop()
         }
         if (!selClarify.value || selClarify.value.nodeId === m.nodeId) {
@@ -428,6 +452,7 @@ export function useRunDetailWs(opts: {
         gateApprovalRef.value?.applyReviewFrame?.(m)
         if (m.event === 'turn_done' || m.event === 'error') {
           liveBusy[m.nodeId] = false
+          dialoguePlatformBusy[m.nodeId] = false
           busySeedRetry.stop()
           loadRun(false)
         }
