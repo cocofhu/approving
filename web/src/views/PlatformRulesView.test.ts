@@ -60,6 +60,11 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+/** AppModal teleports to body, so the help dialog is not inside the wrapper tree. */
+function helpModal(): HTMLElement | null {
+  return document.body.querySelector('[data-testid="platform-rules-help-modal"]')
+}
+
 function mountRules() {
   const i18n = createI18n({
     legacy: false,
@@ -224,6 +229,20 @@ describe('PlatformRulesView mobile list/detail step', () => {
     w.unmount()
   })
 
+  it('shows the help button and opens the same modal on narrow screens', async () => {
+    apiMocks.listPlatformRules.mockResolvedValue({ items: [FILE_A] })
+    apiMocks.getPlatformRule.mockResolvedValue({ ...FILE_A, content: 'CONTENT-A' })
+    const w = mountRules()
+    await flushPromises()
+
+    expect(w.find('[data-testid="platform-rules-help"]').exists()).toBe(true)
+    expect(helpModal()).toBeNull()
+
+    await w.find('[data-testid="platform-rules-help"]').trigger('click')
+    expect(helpModal()?.textContent).toContain('运行时加载优先级')
+    w.unmount()
+  })
+
   it('mobile skeleton is single-column and failure stays readable', async () => {
     let releaseList!: (v: unknown) => void
     apiMocks.listPlatformRules.mockReturnValue(new Promise((resolve) => { releaseList = resolve }))
@@ -240,5 +259,120 @@ describe('PlatformRulesView mobile list/detail step', () => {
     expect(failed.text()).toContain('重试')
     failed.unmount()
     void releaseList
+  })
+})
+
+describe('PlatformRulesView help modal replaces the third pane', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    breakpointMocks.isMobile.value = false
+    apiMocks.listPlatformRules.mockResolvedValue({ items: [FILE_A] })
+    apiMocks.getPlatformRule.mockResolvedValue({ ...FILE_A, content: 'CONTENT-A' })
+  })
+
+  it('never reserves a 280px explanation column', () => {
+    expect(src).not.toMatch(/grid-cols-\[240px_1fr_280px\]/)
+    expect(src).toMatch(/grid-cols-\[240px_1fr\]/)
+  })
+
+  it('renders two panes with no persistent explanation aside', async () => {
+    const w = mountRules()
+    await flushPromises()
+
+    const panel = w.find('[data-testid="platform-rules-list"]').element.parentElement
+    expect(panel?.className).toContain('grid-cols-[240px_1fr]')
+    expect(w.text()).not.toContain('运行时加载优先级')
+    expect(w.text()).not.toContain('BuildCursorHome 注入顺序')
+    expect(w.find('[data-testid="platform-rules-editor"]').exists()).toBe(true)
+    w.unmount()
+  })
+
+  it('help button is a ghost AppButton using the shared help icon and 帮助 label', async () => {
+    const w = mountRules()
+    await flushPromises()
+
+    const help = w.find('[data-testid="platform-rules-help"]')
+    expect(help.attributes('variant')).toBe('ghost')
+    expect(help.attributes('size')).toBe('sm')
+    expect(help.attributes('icon')).toBe('help')
+    expect(help.attributes('aria-haspopup')).toBe('dialog')
+    expect(help.text()).toBe('帮助')
+    expect(help.text()).not.toContain('？')
+
+    const actions = help.element.parentElement
+    const labels = Array.from(actions?.querySelectorAll('button') ?? []).map((b) => b.textContent?.trim())
+    expect(labels.indexOf('帮助')).toBeLessThan(labels.indexOf('恢复内置默认'))
+    w.unmount()
+  })
+
+  it('opens all three explanation sections and closes via button, backdrop and Esc', async () => {
+    const w = mountRules()
+    await flushPromises()
+    expect(helpModal()).toBeNull()
+
+    await w.find('[data-testid="platform-rules-help"]').trigger('click')
+    const body = helpModal()?.textContent ?? ''
+    expect(body).toContain('运行时加载优先级')
+    expect(body).toContain('Agent 覆盖')
+    expect(body).toContain('全局默认')
+    expect(body).toContain('内置兜底')
+    expect(body).toContain('BuildCursorHome 注入顺序')
+    expect(body).toContain('Agent 工作目录')
+    expect(body).toContain('约束')
+    expect(body).toContain('节点→规则映射仍由 nodereg 代码决定')
+    expect(body).toContain('Agent 覆盖为整文件替换')
+    expect(body).toContain('不含 skills/、mcp.json 等其他 embed 资产')
+    expect(document.body.textContent).toContain('平台规则说明')
+
+    const close = document.body.querySelector<HTMLElement>('[data-testid="platform-rules-help-close"]')
+    close!.dispatchEvent(new Event('click'))
+    await flushPromises()
+    expect(helpModal()).toBeNull()
+
+    await w.find('[data-testid="platform-rules-help"]').trigger('click')
+    expect(helpModal()).not.toBeNull()
+    document.body
+      .querySelector<HTMLElement>('.bg-black\\/60')!
+      .dispatchEvent(new Event('click'))
+    await flushPromises()
+    expect(helpModal()).toBeNull()
+
+    await w.find('[data-testid="platform-rules-help"]').trigger('click')
+    expect(helpModal()).not.toBeNull()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(helpModal()).toBeNull()
+    w.unmount()
+  })
+
+  it('keeps the editor mounted after closing help', async () => {
+    const w = mountRules()
+    await flushPromises()
+
+    await w.find('[data-testid="platform-rules-help"]').trigger('click')
+    const close = document.body.querySelector<HTMLElement>('[data-testid="platform-rules-help-close"]')
+    close!.dispatchEvent(new Event('click'))
+    await flushPromises()
+
+    expect(w.find('[data-testid="platform-rules-editor"]').text()).toContain('CONTENT-A')
+    w.unmount()
+  })
+
+  it('help stays reachable when the rule list fails or is denied', async () => {
+    apiMocks.listPlatformRules.mockRejectedValue(Object.assign(new Error('down'), { status: 500 }))
+    const failed = mountRules()
+    await flushPromises()
+    expect(failed.find('[data-testid="platform-rules-failed"]').exists()).toBe(true)
+    await failed.find('[data-testid="platform-rules-help"]').trigger('click')
+    expect(helpModal()?.textContent).toContain('运行时加载优先级')
+    failed.unmount()
+
+    apiMocks.listPlatformRules.mockRejectedValue(Object.assign(new Error('denied'), { status: 403 }))
+    const denied = mountRules()
+    await flushPromises()
+    expect(denied.find('[data-testid="platform-rules-denied"]').exists()).toBe(true)
+    await denied.find('[data-testid="platform-rules-help"]').trigger('click')
+    expect(helpModal()?.textContent).toContain('运行时加载优先级')
+    denied.unmount()
   })
 })

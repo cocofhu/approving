@@ -8,6 +8,7 @@ import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { fmtTime } from '@/lib/shared/format'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import AppButton from '@/components/ui/AppButton.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import Icon from '@/components/ui/Icon.vue'
 import MarkdownSplitEditor from '@/components/agent/MarkdownSplitEditor.vue'
 
@@ -16,6 +17,8 @@ const router = useRouter()
 const { user } = useAuth()
 const { isMobile } = useBreakpoint()
 const mobileStep = ref<'list' | 'detail'>('list')
+/** Help text moved out of the former third pane; not persisted anywhere. */
+const helpOpen = ref(false)
 
 const items = ref<PlatformRuleMeta[]>([])
 const activeFile = ref('')
@@ -206,10 +209,22 @@ onMounted(loadAll)
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.platformRules.title') }}</h2>
         <p class="text-sm text-txt3">{{ t('pages.platformRules.subtitle') }}</p>
       </div>
-      <div v-if="!isMobile" class="flex items-center gap-2">
-        <span v-if="!canWrite" class="text-xs text-warn">{{ t('pages.platformRules.readOnlyHint') }}</span>
-        <span v-if="savedAt" class="text-xs text-ok">{{ t('pages.settings.saved') }}</span>
+      <div class="flex items-center gap-2">
+        <span v-if="!isMobile && !canWrite" class="text-xs text-warn">{{ t('pages.platformRules.readOnlyHint') }}</span>
+        <span v-if="!isMobile && savedAt" class="text-xs text-ok">{{ t('pages.settings.saved') }}</span>
         <AppButton
+          variant="ghost"
+          size="sm"
+          icon="help"
+          :class="isMobile ? 'min-h-11' : ''"
+          aria-haspopup="dialog"
+          data-testid="platform-rules-help"
+          @click="helpOpen = true"
+        >
+          {{ t('pages.platformRules.helpButton') }}
+        </AppButton>
+        <AppButton
+          v-if="!isMobile"
           variant="ghost"
           size="sm"
           icon="refresh"
@@ -219,6 +234,7 @@ onMounted(loadAll)
           {{ resetting ? t('common.buttons.saving') : t('pages.platformRules.resetEmbed') }}
         </AppButton>
         <AppButton
+          v-if="!isMobile"
           variant="primary"
           size="sm"
           icon="check"
@@ -247,7 +263,7 @@ onMounted(loadAll)
     <div
       v-if="showSkeleton"
       class="card min-h-0 flex-1 overflow-hidden"
-      :class="isMobile ? 'flex flex-col' : 'grid grid-cols-[240px_1fr_280px]'"
+      :class="isMobile ? 'flex flex-col' : 'grid grid-cols-[240px_1fr]'"
       data-testid="platform-rules-skeleton"
       aria-hidden="true"
     >
@@ -259,10 +275,6 @@ onMounted(loadAll)
         <div class="h-4 w-48 bg-elevated animate-pulse" />
         <div class="h-48 w-full bg-elevated animate-pulse" />
       </section>
-      <aside v-if="!isMobile" class="border-l border-line p-3">
-        <div class="h-3 w-20 bg-elevated animate-pulse" />
-        <div class="mt-3 h-24 w-full bg-elevated animate-pulse" />
-      </aside>
     </div>
 
     <div
@@ -314,7 +326,7 @@ onMounted(loadAll)
       v-else
       class="card min-h-0 flex-1 overflow-hidden"
       :class="[
-        isMobile ? 'flex flex-col' : 'grid grid-cols-[240px_1fr_280px]',
+        isMobile ? 'flex flex-col' : 'grid grid-cols-[240px_1fr]',
         showRefreshProgress ? 'opacity-[0.55]' : '',
       ]"
     >
@@ -407,9 +419,17 @@ onMounted(loadAll)
           />
         </div>
       </section>
+    </div>
 
-      <aside v-if="!isMobile" class="scroll-area min-h-0 overflow-y-auto border-l border-line bg-base/20">
-        <div class="border-b border-line px-3 py-3">
+    <AppModal
+      :open="helpOpen"
+      :title="t('pages.platformRules.helpTitle')"
+      :width="520"
+      close-on-esc
+      @close="helpOpen = false"
+    >
+      <div data-testid="platform-rules-help-modal" class="space-y-5">
+        <div>
           <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.platformRules.priorityTitle') }}</h4>
           <ol class="mt-3 space-y-3 text-[12px]">
             <li class="flex gap-2">
@@ -435,7 +455,7 @@ onMounted(loadAll)
             </li>
           </ol>
         </div>
-        <div class="border-b border-line px-3 py-3">
+        <div class="border-t border-line pt-4">
           <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.platformRules.injectTitle') }}</h4>
           <div class="mt-2 space-y-2 text-[11px] text-txt2">
             <div class="rounded-lg border border-line bg-base px-2 py-1.5">1. {{ t('pages.platformRules.injectAgentDir') }}</div>
@@ -443,7 +463,7 @@ onMounted(loadAll)
             <div class="rounded-lg border border-accent/30 bg-accent-dim px-2 py-1.5 text-txt">2. {{ t('pages.platformRules.injectPlatformRules') }}</div>
           </div>
         </div>
-        <div class="px-3 py-3">
+        <div class="border-t border-line pt-4">
           <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.platformRules.constraintsTitle') }}</h4>
           <ul class="mt-2 space-y-2 text-[11px] leading-relaxed text-txt2">
             <li>{{ t('pages.platformRules.constraintNodereg') }}</li>
@@ -451,7 +471,18 @@ onMounted(loadAll)
             <li>{{ t('pages.platformRules.constraintScope') }}</li>
           </ul>
         </div>
-      </aside>
-    </div>
+      </div>
+      <template #footer>
+        <AppButton
+          variant="outline"
+          size="sm"
+          :class="isMobile ? 'min-h-11' : ''"
+          data-testid="platform-rules-help-close"
+          @click="helpOpen = false"
+        >
+          {{ t('common.buttons.close') }}
+        </AppButton>
+      </template>
+    </AppModal>
   </div>
 </template>
