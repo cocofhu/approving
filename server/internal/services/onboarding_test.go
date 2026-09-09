@@ -95,6 +95,9 @@ func TestOnboardingBootstrapCreatesTeamAndDefaultWorkflow(t *testing.T) {
 		if a.AcpBackend != "cursor" {
 			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
 		}
+		if got := a.Env["GIT_REPOS"]; got != "${vars.repos}" {
+			t.Fatalf("agent %s GIT_REPOS = %q, want ${vars.repos}", name, got)
+		}
 	}
 
 	wf, ok := svc.WF.Get(res.WorkflowID)
@@ -103,6 +106,9 @@ func TestOnboardingBootstrapCreatesTeamAndDefaultWorkflow(t *testing.T) {
 	}
 	if wf.Name != services.OnboardingWorkflowName || wf.Status != "published" || !wf.NeedsRepo {
 		t.Fatalf("workflow meta: name=%s status=%s needsRepo=%v", wf.Name, wf.Status, wf.NeedsRepo)
+	}
+	if !wf.ShowOnHome {
+		t.Fatal("default workflow should be visible on Home")
 	}
 	assertDefaultWorkflowGraph(t, wf.Graph)
 }
@@ -265,6 +271,9 @@ func TestOnboardingBootstrapIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
+	if _, err := svc.WF.UpdateShowOnHome(r1.WorkflowID, false); err != nil {
+		t.Fatalf("hide before second bootstrap: %v", err)
+	}
 	req.APIKey = "k2-rotated"
 	r2, err := svc.Bootstrap(projectID, req)
 	if err != nil {
@@ -282,6 +291,10 @@ func TestOnboardingBootstrapIdempotent(t *testing.T) {
 	shared := svc.SharedAgent.Get(projectID)
 	if shared.Env["APPROVING_CURSOR_API_KEY"] != "k2-rotated" {
 		t.Fatalf("auth not updated: %+v", shared.Env)
+	}
+	wf, ok := svc.WF.Get(r2.WorkflowID)
+	if !ok || !wf.ShowOnHome {
+		t.Fatalf("second bootstrap should restore Home visibility: ok=%v showOnHome=%v", ok, wf.ShowOnHome)
 	}
 }
 

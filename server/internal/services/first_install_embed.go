@@ -53,6 +53,9 @@ func loadFirstInstallAgentTemplate(name string) (Agent, error) {
 		env[k] = v
 	}
 	env = stripTokenKeysFromEnvMap(env)
+	if _, ok := env["GIT_REPOS"]; !ok {
+		env["GIT_REPOS"] = "${vars.repos}"
+	}
 	mcp := cfg.MCP
 	if len(mcp) == 0 {
 		mcp = DefaultPlatformMCP()
