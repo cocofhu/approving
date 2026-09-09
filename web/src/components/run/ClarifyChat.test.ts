@@ -533,21 +533,20 @@ describe('ClarifyChat', () => {
     wrapper.unmount()
   })
 
-  it('splits attach+textarea from send/cancel so input keeps remaining width', async () => {
+  it('keeps send and cancel inside the input chrome; confirm stays in the footer', async () => {
     const wrapper = mountChat({ sendLabel: '发送澄清回复' })
     const inputRow = wrapper.get('[data-testid="clarify-input-row"]')
     const actionRow = wrapper.get('[data-testid="clarify-action-row"]')
     expect(inputRow.find('[data-testid="clarify-input"]').exists()).toBe(true)
     expect(inputRow.find('[data-testid="clarify-attach-btn"]').exists()).toBe(true)
-    expect(inputRow.find('[data-testid="clarify-send-label"]').exists()).toBe(false)
-    expect(inputRow.find('[data-testid="clarify-send-icon"]').exists()).toBe(false)
+    expect(inputRow.find('[data-testid="clarify-send-label"]').exists()).toBe(true)
     expect(actionRow.find('[data-testid="clarify-send-label"]').exists()).toBe(true)
     expect(actionRow.find('[data-testid="clarify-send-label"]').text()).toContain('发送澄清回复')
     expect(wrapper.find('[data-testid="clarify-input"]').classes()).toContain('composer-hint-wrap')
     wrapper.unmount()
   })
 
-  it('confirm hint wraps by width and stays visible with send on a separate row', async () => {
+  it('confirm hint wraps by width and stays outside the input chrome', async () => {
     const wrapper = mountChat({ reviewMode: true })
     const hint = wrapper.get('[data-testid="clarify-confirm-hint"]')
     expect(hint.classes().join(' ')).toContain('[overflow-wrap:anywhere]')
@@ -555,19 +554,32 @@ describe('ClarifyChat', () => {
       false,
     )
     expect(wrapper.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-confirm-flow"]').classes().join(' ')).toContain('h-9')
     wrapper.unmount()
   })
 
-  it('shows Cancel on the action row (not the input row) while session is busy', async () => {
+  it('shows Cancel inside the input chrome while session is busy', async () => {
     const wrapper = mountChat()
     await wrapper.find('[data-testid="clarify-input"]').setValue('排队')
     await clickSend(wrapper)
     expect(wrapper.find('[data-testid="clarify-input-row"]').find('[data-testid="clarify-review-cancel"]').exists()).toBe(
-      false,
+      true,
     )
     expect(wrapper.find('[data-testid="clarify-action-row"]').find('[data-testid="clarify-review-cancel"]').exists()).toBe(
       true,
     )
+    wrapper.unmount()
+  })
+
+  it('keeps paperclip SVG box and a fixed toolbar when draft is multiline (g1.1 g3.1)', async () => {
+    const wrapper = mountChat({ draft: 'line1\nline2\nline3' })
+    const ta = wrapper.find('[data-testid="clarify-input"]').element as HTMLTextAreaElement
+    expect(ta.tagName).toBe('TEXTAREA')
+    expect(ta.value).toContain('\n')
+    const attach = wrapper.get('[data-testid="clarify-attach-btn"]')
+    expect(attach.classes()).toEqual(expect.arrayContaining(['h-10', 'w-10', 'shrink-0']))
+    const toolbar = wrapper.get('[data-testid="clarify-action-row"]')
+    expect(toolbar.classes()).toEqual(expect.arrayContaining(['h-11', 'shrink-0']))
     wrapper.unmount()
   })
 

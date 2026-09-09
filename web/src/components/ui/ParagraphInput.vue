@@ -17,6 +17,11 @@ const props = defineProps<{
   placeholder?: string
   /** When true, hide image paste/upload UI and only expose textarea. */
   textOnly?: boolean
+  /**
+   * ComposerShell host: full-width multiline textarea, no side-by-side attach.
+   * Attach stays in the shell toolbar via pickFiles().
+   */
+  embedded?: boolean
 }>()
 
 const { t } = useI18n()
@@ -84,6 +89,12 @@ onBeforeUnmount(() => {
   composerResizeObserver?.disconnect()
   composerResizeObserver = null
 })
+
+function pickFiles() {
+  fileInput.value?.click()
+}
+
+defineExpose({ pickFiles })
 </script>
 
 <template>
@@ -128,10 +139,10 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
-    <div class="flex min-w-0 items-end gap-2">
+    <div :class="embedded ? 'min-w-0' : 'flex min-w-0 items-end gap-2'">
       <input v-if="!textOnly" ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
       <button
-        v-if="!textOnly"
+        v-if="!textOnly && !embedded"
         type="button"
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
         data-testid="paragraph-input-attach"
@@ -145,8 +156,14 @@ onBeforeUnmount(() => {
         ref="textareaRef"
         v-model="text"
         data-testid="paragraph-input"
-        class="input composer-hint-wrap min-h-[72px] min-w-0 flex-1 resize-none disabled:opacity-60"
-        :class="overflowScroll ? 'scroll-area max-h-[320px] overflow-y-auto' : 'overflow-y-hidden'"
+        rows="3"
+        class="composer-hint-wrap min-w-0 w-full resize-none disabled:opacity-60"
+        :class="[
+          embedded
+            ? 'min-h-[72px] border-0 bg-transparent p-0 text-sm text-txt shadow-none outline-none focus:ring-0'
+            : 'input min-h-[72px] flex-1',
+          overflowScroll ? 'scroll-area max-h-[320px] overflow-y-auto' : 'overflow-y-hidden',
+        ]"
         :disabled="disabled"
         :placeholder="placeholder || defaultPlaceholder"
         @input="onTextInput"

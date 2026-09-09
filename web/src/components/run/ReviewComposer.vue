@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import ClarifyChat from './ClarifyChat.vue'
+import ComposerShell from './ComposerShell.vue'
 import ParagraphInput from '../ui/ParagraphInput.vue'
 import GateReactStreamPanel from './GateReactStreamPanel.vue'
 import PendingSendQueuePanel, { type PendingQueueRow } from './PendingSendQueuePanel.vue'
@@ -107,6 +108,8 @@ const emit = defineEmits<{
   (e: 'queue-cancel-item', index: number): void
   (e: 'queue-reorder-indexes', fromIndex: number, toIndex: number): void
 }>()
+
+const paragraphRef = ref<{ pickFiles?: () => void } | null>(null)
 
 const chatRef = ref<{
   applyReviewFrame: (frame: any) => void
@@ -253,7 +256,6 @@ function onConfirm() {
       </slot>
     </div>
     <div class="shrink-0 border-t border-line p-3" data-testid="review-composer-actions">
-      <!-- Hot path: in-place edit input + send. Cold: unmount entirely (no disabled hint). -->
       <template v-if="!coldSession">
         <div v-if="annotations.length" class="mb-2 flex flex-wrap gap-1.5">
           <AnnotationChip
@@ -265,50 +267,76 @@ function onConfirm() {
             @remove="removeAnnotation(ai)"
           />
         </div>
-        <ParagraphInput
-          v-model:text="draft"
-          v-model:images="attachments"
-          :text-only="textOnly"
-          :disabled="rejecting || !canReject"
-          :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
-        />
-        <div v-if="rejectError" class="mt-1.5 text-[11px] text-err">{{ rejectError }}</div>
+        <div v-if="rejectError" class="mb-1.5 text-[11px] text-err">{{ rejectError }}</div>
       </template>
-      <div class="mt-2 flex min-w-0 flex-wrap gap-2">
-        <button
-          v-if="!coldSession && canReject"
-          type="button"
-          class="inline-flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 bg-accent/15 px-3 py-2 text-sm font-medium text-accent-2 transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-50"
-          data-testid="review-composer-send"
-          :disabled="!canSubmitGate"
-          @click="onSend"
-        >
-          <Icon name="arrow-left" :size="14" />
-          {{ rejecting ? t('pages.gateApproval.reactRevise.sending') : sendButtonLabel }}
-        </button>
-        <button
-          v-if="canPass"
-          type="button"
-          class="inline-flex min-h-[40px] min-w-0 flex-1 items-center justify-center gap-1.5 bg-ok/15 px-3 py-2 text-sm font-medium text-ok transition hover:bg-ok/25 disabled:cursor-not-allowed disabled:opacity-50"
-          data-testid="review-composer-pass"
-          :disabled="passDisabled"
-          :title="passTitle"
-          @click="onConfirm"
-        >
-          <Icon name="check" :size="14" />
-          {{ confirmButtonLabel }}
-        </button>
-        <button
-          v-if="!coldSession && showGateCancel"
-          type="button"
-          class="rounded-lg inline-flex items-center justify-center gap-1.5 border border-line bg-elevated px-3 py-2 text-sm font-medium text-txt2"
-          data-testid="gate-react-cancel"
-          title="Cancel"
-          @click="emit('cancel')"
-        >
-          Cancel
-        </button>
-      </div>
+      <ComposerShell :show-chrome="!coldSession" :show-footer="true">
+        <template v-if="!coldSession" #input>
+          <ParagraphInput
+            ref="paragraphRef"
+            v-model:text="draft"
+            v-model:images="attachments"
+            embedded
+            :text-only="textOnly"
+            :disabled="rejecting || !canReject"
+            :placeholder="t('pages.gateApproval.reactRevise.placeholder')"
+          />
+        </template>
+        <template v-if="!coldSession" #toolbar-start>
+          <button
+            v-if="!textOnly"
+            type="button"
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
+            data-testid="paragraph-input-attach"
+            :disabled="rejecting || !canReject"
+            :title="t('common.paragraphInput.addImage')"
+            @click="paragraphRef?.pickFiles?.()"
+          >
+            <Icon name="paperclip" :size="16" />
+          </button>
+        </template>
+        <template v-if="!coldSession" #toolbar-end>
+          <button
+            v-if="showGateCancel"
+            type="button"
+            class="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-2.5 text-xs font-semibold text-txt2"
+            data-testid="gate-react-cancel"
+            title="Cancel"
+            @click="emit('cancel')"
+          >
+            Cancel
+          </button>
+          <button
+            v-if="canReject"
+            type="button"
+            class="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 text-xs font-semibold text-white hover:bg-accent-2 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="review-composer-send"
+            :disabled="!canSubmitGate"
+            @click="onSend"
+          >
+            <Icon name="arrow-left" :size="14" />
+            {{ rejecting ? t('pages.gateApproval.reactRevise.sending') : sendButtonLabel }}
+          </button>
+        </template>
+        <template v-if="!coldSession" #hint>
+          <p class="m-0 min-w-0 text-[11px] leading-snug [overflow-wrap:anywhere]" data-testid="review-composer-footer-hint">
+            {{ gateFooterHint }}
+          </p>
+        </template>
+        <template #footer>
+          <button
+            v-if="canPass"
+            type="button"
+            class="inline-flex h-9 shrink-0 items-center gap-1 rounded-md bg-ok px-3.5 text-sm font-medium text-white hover:bg-ok/90 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="review-composer-pass"
+            :disabled="passDisabled"
+            :title="passTitle"
+            @click="onConfirm"
+          >
+            <Icon name="check" :size="14" />
+            {{ confirmButtonLabel }}
+          </button>
+        </template>
+      </ComposerShell>
       <template v-if="!coldSession">
         <PendingSendQueuePanel
           v-if="gateQueued.length"
@@ -327,9 +355,6 @@ function onConfirm() {
           :interrupted="interrupted"
           :completed-at="streamCompletedAt"
         />
-        <p class="mt-2 min-w-0 text-[11px] leading-relaxed text-txt3 [overflow-wrap:anywhere]" data-testid="review-composer-footer-hint">
-          {{ gateFooterHint }}
-        </p>
       </template>
     </div>
   </div>

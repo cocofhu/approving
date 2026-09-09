@@ -26,7 +26,7 @@ const { s } = useGateApprovalCtx()
       class="inline-flex items-center justify-center gap-1.5 rounded-md px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50"
       :class="[
         actionVariantClasses(actionVariant(a.id)),
-        layout === 'mobile' || s.isMobile ? 'min-h-[44px] flex-1' : 'py-2',
+        layout === 'mobile' || s.isMobile ? 'h-9 min-h-9 flex-1' : 'h-9',
       ]"
       :disabled="s.isActionDisabled(a.id) || s.reactSending"
       :aria-busy="s.actionSubmitting && s.resolved === a.id ? 'true' : undefined"

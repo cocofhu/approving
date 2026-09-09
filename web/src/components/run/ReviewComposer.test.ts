@@ -303,6 +303,15 @@ describe('ReviewComposer gate review semantics (send + confirm)', () => {
     // g2.1 walkthrough: gate action row already flex-wrap; send/confirm min-w-0 so they
     // wrap instead of colliding with ParagraphInput (buttons stay below input).
     expect(wrapper.findComponent({ name: 'ParagraphInput' }).exists()).toBe(true)
+    const send = wrapper.find('[data-testid="review-composer-send"]')
+    expect(send.classes().join(' ')).not.toMatch(/\bflex-1\b/)
+    expect(wrapper.get('[data-testid="composer-shell-box"]').find('[data-testid="review-composer-send"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.get('[data-testid="composer-shell-footer"]').find('[data-testid="review-composer-pass"]').exists()).toBe(
+      true,
+    )
+    expect(wrapper.get('[data-testid="review-composer-pass"]').classes().join(' ')).toContain('h-9')
     wrapper.unmount()
   })
 

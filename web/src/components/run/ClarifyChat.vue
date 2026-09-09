@@ -2,6 +2,7 @@
 import Icon from '../ui/Icon.vue'
 import ChatImageThumb from '../ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '../ui/ChatImagePreviewModal.vue'
+import ComposerShell from './ComposerShell.vue'
 import ClarifyDemoFrame from './ClarifyDemoFrame.vue'
 import ThoughtSummaryStatus from './ThoughtSummaryStatus.vue'
 import AnnotationChip from './AnnotationChip.vue'
@@ -677,91 +678,101 @@ const {
           ><Icon name="close" :size="9" /></button>
         </div>
       </div>
-      <div class="flex min-w-0 items-end gap-2" data-testid="clarify-input-row">
-        <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
-        <button
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
-          :title="translate('pages.clarify.addImage')"
-          data-testid="clarify-attach-btn"
-          @click="fileInput?.click()"
-        >
-          <Icon name="paperclip" :size="16" />
-        </button>
-        <textarea
-          ref="textareaRef"
-          v-model="draft"
-          class="input composer-hint-wrap min-h-[40px] min-w-0 flex-1 resize-none"
-          :class="overflowScroll ? 'scroll-area max-h-[128px] overflow-y-auto' : 'overflow-y-hidden'"
-          rows="1"
-          :placeholder="inputPlaceholder"
-          data-testid="clarify-input"
-          @input="onTextInput"
-          @keydown="onComposerKeydown"
-          @compositionstart="composing = true"
-          @compositionend="composing = false"
-          @paste="onPaste"
-        />
-      </div>
-      <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2" data-testid="clarify-action-row">
-        <button
-          v-if="sendLabel"
-          class="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-2 disabled:opacity-50"
-          data-testid="clarify-send-label"
-          :disabled="!draft.trim() && !attachments.length && !annotations.length"
-          @click="send"
-        >
-          <Icon name="send" :size="14" /> {{ sendLabel }}
-        </button>
-        <button
-          v-else
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-white hover:bg-accent-2 disabled:opacity-50"
-          data-testid="clarify-send-icon"
-          :disabled="!draft.trim() && !attachments.length && !annotations.length"
-          @click="send"
-        >
-          <Icon name="send" :size="17" />
-        </button>
-        <button
-          v-if="sessionBusy"
-          type="button"
-          class="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 py-2 text-xs font-semibold text-txt2 hover:border-line-strong"
-          data-testid="clarify-review-cancel"
-          title="Cancel"
-          @click="cancelReview"
-        >
-          Cancel
-        </button>
-      </div>
-      <div v-if="!hideFinish" class="mt-2 flex min-w-0 flex-wrap items-start justify-between gap-2">
-        <p
-          v-if="reviewMode"
-          class="min-w-0 flex-1 basis-40 text-[11px] leading-snug text-txt3 [overflow-wrap:anywhere]"
-          data-testid="clarify-confirm-hint"
-        >
-          {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlowHint') }}
-        </p>
-        <span v-else class="min-w-0 flex-1" />
-        <button
-          v-if="useConfirmFlowAction"
-          class="inline-flex shrink-0 items-center gap-1 rounded-md bg-ok px-3 py-1.5 text-xs font-semibold text-white hover:bg-ok/90 disabled:opacity-50"
-          data-testid="clarify-confirm-flow"
-          :disabled="confirmDisabled"
-          :title="translate('pages.clarify.confirmFlowTitle')"
-          @click="finishEarly"
-        >
-          <Icon name="check" :size="13" />
-          {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlow') }}
-        </button>
-        <button
-          v-else
-          class="inline-flex shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-2.5 py-1 text-xs font-medium text-txt2 hover:border-line-strong disabled:opacity-50"
-          :disabled="confirmDisabled"
-          :title="translate('pages.clarify.finishEarlyTitle')"
-          @click="finishEarly"
-        >
-          <Icon name="check" :size="13" /> {{ translate('pages.clarify.finishEarly') }}
-        </button>
-      </div>
+      <ComposerShell :show-footer="!hideFinish" box-test-id="clarify-input-row" toolbar-test-id="clarify-action-row">
+        <template #input>
+          <input ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
+          <textarea
+            ref="textareaRef"
+            v-model="draft"
+            class="composer-hint-wrap min-h-[40px] min-w-0 w-full resize-none border-0 bg-transparent p-0 text-sm text-txt shadow-none outline-none focus:ring-0"
+            :class="overflowScroll ? 'scroll-area max-h-[128px] overflow-y-auto' : 'overflow-y-hidden'"
+            rows="1"
+            :placeholder="inputPlaceholder"
+            data-testid="clarify-input"
+            @input="onTextInput"
+            @keydown="onComposerKeydown"
+            @compositionstart="composing = true"
+            @compositionend="composing = false"
+            @paste="onPaste"
+          />
+        </template>
+        <template #toolbar-start>
+          <button
+            type="button"
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
+            :title="translate('pages.clarify.addImage')"
+            data-testid="clarify-attach-btn"
+            @click="fileInput?.click()"
+          >
+            <Icon name="paperclip" :size="16" />
+          </button>
+        </template>
+        <template #toolbar-end>
+          <button
+            v-if="sessionBusy"
+            type="button"
+            class="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-2.5 text-xs font-semibold text-txt2 hover:border-line-strong"
+            data-testid="clarify-review-cancel"
+            title="Cancel"
+            @click="cancelReview"
+          >
+            Cancel
+          </button>
+          <button
+            v-if="sendLabel"
+            type="button"
+            class="inline-flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 text-xs font-semibold text-white hover:bg-accent-2 disabled:opacity-50"
+            data-testid="clarify-send-label"
+            :disabled="!draft.trim() && !attachments.length && !annotations.length"
+            @click="send"
+          >
+            <Icon name="send" :size="14" /> {{ sendLabel }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-accent text-white hover:bg-accent-2 disabled:opacity-50"
+            data-testid="clarify-send-icon"
+            :disabled="!draft.trim() && !attachments.length && !annotations.length"
+            @click="send"
+          >
+            <Icon name="send" :size="14" />
+          </button>
+        </template>
+        <template #hint>
+          <p
+            v-if="reviewMode"
+            class="m-0 min-w-0 text-[11px] leading-snug text-txt3 [overflow-wrap:anywhere]"
+            data-testid="clarify-confirm-hint"
+          >
+            {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlowHint') }}
+          </p>
+        </template>
+        <template #footer>
+          <button
+            v-if="useConfirmFlowAction"
+            type="button"
+            class="inline-flex h-9 shrink-0 items-center gap-1 rounded-md bg-ok px-3.5 text-sm font-medium text-white hover:bg-ok/90 disabled:opacity-50"
+            data-testid="clarify-confirm-flow"
+            :disabled="confirmDisabled"
+            :title="translate('pages.clarify.confirmFlowTitle')"
+            @click="finishEarly"
+          >
+            <Icon name="check" :size="13" />
+            {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlow') }}
+          </button>
+          <button
+            v-else
+            type="button"
+            class="inline-flex h-9 shrink-0 items-center gap-1 rounded-md border border-line bg-elevated px-3 text-sm font-medium text-txt2 hover:border-line-strong disabled:opacity-50"
+            :disabled="confirmDisabled"
+            :title="translate('pages.clarify.finishEarlyTitle')"
+            @click="finishEarly"
+          >
+            <Icon name="check" :size="13" /> {{ translate('pages.clarify.finishEarly') }}
+          </button>
+        </template>
+      </ComposerShell>
     </div>
     <div
       v-if="confirmError && !done"

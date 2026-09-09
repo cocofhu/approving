@@ -164,7 +164,7 @@ const PreviewFeedbackStub = defineComponent({
       :data-fill-sidebar="fillSidebar ? '1' : '0'"
       :data-hide-submit="hideSubmit ? '1' : '0'"
     >
-      <div data-testid="paragraph-input-root" data-text-only="0">
+      <div v-if="!hideSubmit" data-testid="paragraph-input-root" data-text-only="0">
         <button
           type="button"
           data-testid="paragraph-input-attach"
@@ -194,12 +194,18 @@ const PlanStub = defineComponent({
 
 const ParagraphInputStub = defineComponent({
   name: 'ParagraphInput',
-  props: { text: String, images: Array, textOnly: Boolean, placeholder: String },
+  props: { text: String, images: Array, textOnly: Boolean, placeholder: String, embedded: Boolean, disabled: Boolean },
   emits: ['update:text', 'update:images'],
+  setup(props, { emit, expose }) {
+    expose({
+      pickFiles: () => emit('update:images', [{ data: 'abc', mimeType: 'image/png' }]),
+    })
+    return {}
+  },
   template: `
     <div data-testid="paragraph-input-root" :data-text-only="textOnly ? '1' : '0'">
       <button
-        v-if="!textOnly"
+        v-if="!textOnly && !embedded"
         type="button"
         data-testid="paragraph-input-attach"
         @click="$emit('update:images', [{ data: 'abc', mimeType: 'image/png' }])"

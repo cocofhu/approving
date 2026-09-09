@@ -97,4 +97,22 @@ describe('ParagraphInput', () => {
     expect(wrapper.find('[data-testid="paragraph-draft-image-thumb"]').exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('embedded layout keeps multiline textarea and hides side attach (g1.1)', () => {
+    const wrapper = mount(ParagraphInput, {
+      props: { text: 'a\nb', textOnly: false, embedded: true },
+      global: {
+        plugins: [
+          createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { ...common } } }),
+        ],
+        stubs: { Icon: true, AppModal: PreviewAppModalStub },
+      },
+    })
+    expect(wrapper.find('[data-testid="paragraph-input-attach"]').exists()).toBe(false)
+    const ta = wrapper.find('[data-testid="paragraph-input"]').element as HTMLTextAreaElement
+    expect(ta.tagName).toBe('TEXTAREA')
+    expect(ta.value).toContain('\n')
+    expect(typeof (wrapper.vm as { pickFiles?: () => void }).pickFiles).toBe('function')
+    wrapper.unmount()
+  })
 })
