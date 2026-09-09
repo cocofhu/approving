@@ -28,7 +28,7 @@ describe('ClarifyBootLoader', () => {
   it('renders starting phase with cycling steps', async () => {
     vi.useFakeTimers()
     const wrapper = mountLoader('starting')
-    expect(wrapper.text()).toMatch(/沙箱|ACP|问题/)
+    expect(wrapper.text()).toMatch(/工作环境|启动 Agent|连接 Agent|问题/)
     vi.advanceTimersByTime(2700)
     await wrapper.vm.$nextTick()
     expect(wrapper.findAll('span.rounded-full, span.h-1\\.5').length).toBeGreaterThan(0)
