@@ -16,11 +16,14 @@ vi.mock('@/lib/api/api', async () => {
 })
 vi.mock('@/lib/composables/useToast', () => ({ useToast: () => mocks }))
 vi.mock('@/lib/run/useWorkflowAskInputs', () => ({
-  useWorkflowAskInputs: () => ({ fields: { value: [
-    { key: 'count', type: 'number', required: true, desc: 'Count' },
-    { key: 'enabled', type: 'boolean', required: false, desc: '' },
-    { key: 'topic', type: 'text', required: false, desc: 'Topic' },
-  ] } }),
+  useWorkflowAskInputs: () => {
+    const { ref } = require('vue') as typeof import('vue')
+    return { fields: ref([
+      { key: 'count', type: 'number', required: true, desc: 'Count' },
+      { key: 'enabled', type: 'boolean', required: false, desc: '' },
+      { key: 'topic', type: 'text', required: false, desc: 'Topic' },
+    ]) }
+  },
 }))
 import WorkflowApiTab from './WorkflowApiTab.vue'
 
@@ -51,6 +54,10 @@ describe('WorkflowApiTab interactions', () => {
     const w = mountTab()
     await flushPromises()
     expect(w.text()).toContain('CI')
+    const revoke = w.findAll('button').find((b) => /吊销|Revoke/.test(b.text()))
+    await revoke!.trigger('click')
+    await flushPromises()
+    expect(mocks.revokeAPIKey).toHaveBeenCalledWith('wf-1', 'k1')
     await (w.vm as any).openCreateKey()
     ;(w.vm as any).keyName = 'automation'
     await (w.vm as any).confirmCreateKey()
