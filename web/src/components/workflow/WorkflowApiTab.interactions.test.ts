@@ -113,9 +113,10 @@ describe('WorkflowApiTab interactions', () => {
     ;(w.vm as any).openCreateKey()
     await w.vm.$nextTick()
     expect(w.find('[data-testid="key-modal"] input').exists()).toBe(true)
-    ;(w.vm as any).keyName = 'deploy'
+    await w.get('[data-testid="key-modal"] input').setValue('deploy')
     mocks.createAPIKey.mockResolvedValueOnce({ key: 'wk_plain' })
-    await (w.vm as any).confirmCreateKey()
+    const create = w.findAll('[data-testid="key-modal"] button').find((b) => /创建|Create/.test(b.text()))
+    await create!.trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="key-modal"]').text()).toContain('wk_plain')
     await w.get('[data-testid="modal-x"]').trigger('click')

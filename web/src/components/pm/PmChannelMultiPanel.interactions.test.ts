@@ -207,4 +207,37 @@ describe('PmChannelMultiPanel interactions', () => {
     expect(w.find('[data-testid="notify-empty-hint"]').exists()).toBe(true)
     w.unmount()
   })
+
+  it('drives rendered edit controls and provider selectors', async () => {
+    const w = mountPanel(); await flushPromises()
+    await w.findAll('[data-testid="channel-row"]')[1]!.findAll('button')[0]!.trigger('click')
+    await w.vm.$nextTick()
+    const vm = w.vm as any
+    await w.get('#ch-multi-name').setValue('Edited')
+    await w.get('#ch-multi-agent').setValue('agent1')
+    await w.get('[data-testid="channel-appid"]').setValue('appid')
+    await w.get('[data-testid="channel-secret"]').setValue('secret')
+    await w.get('#ch-multi-timeout').setValue('20')
+    await w.get('[data-testid="channel-region"]').setValue('cn')
+    for (const sw of w.findAll('button[role="switch"]')) await sw.trigger('click')
+    await w.get('[data-testid="channel-save"]').trigger('click')
+    await flushPromises()
+    await w.get('[data-testid="channel-add"]').trigger('click')
+    await w.vm.$nextTick()
+    for (const type of ['qq', 'wecom', 'feishu', 'dingtalk']) {
+      await w.get(`[data-testid="channel-type-${type}"]`).trigger('click')
+      await w.vm.$nextTick()
+    }
+    await w.get('[data-testid="channel-type-qq"]').trigger('click')
+    await w.vm.$nextTick()
+    await w.get('#ch-multi-intents').setValue('9')
+    const role = w.get('[data-testid="channel-role"]')
+    await role.setValue('primary')
+    vm.chCronDeliver = true
+    await w.vm.$nextTick()
+    await w.get('[data-testid="cron-deliver-target-input"]').setValue('guild:9')
+    await w.get('[data-testid="cron-deliver-target-input"]').trigger('focus')
+    await w.get('[data-testid="cron-deliver-target-input"]').trigger('keydown', { key: 'Escape' })
+    w.unmount()
+  })
 })

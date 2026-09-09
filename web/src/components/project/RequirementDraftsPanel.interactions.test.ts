@@ -224,4 +224,42 @@ describe('RequirementDraftsPanel interactions', () => {
     await flushPromises()
     w.unmount()
   })
+
+  it('drives rendered toolbar, filters, schedule fields and keyboard handlers', async () => {
+    const w = mountPanel(); await flushPromises()
+    for (const id of ['day', 'week', 'month']) await w.get(`[data-testid="requirement-drafts-scale-${id}"]`).trigger('click')
+    const row = w.find('.rd-gantt-scroll .rd-gantt-row')
+    await row.trigger('click')
+    await w.get('[data-testid="requirement-drafts-open-body"]').trigger('click')
+    await w.vm.$nextTick()
+    await w.get('[data-testid="requirement-drafts-title"]').setValue('Edited')
+    await w.get('[data-testid="requirement-drafts-body"]').setValue('find this')
+    for (const id of ['start', 'due', 'progress']) {
+      const el = w.get(`[data-testid="requirement-drafts-schedule-${id}"]`)
+      await el.setValue(id === 'progress' ? '70' : '2026-09-15')
+      await el.trigger('change')
+      await flushPromises()
+    }
+    if (w.find('[data-testid="requirement-drafts-schedule-parent"]').exists()) {
+      await w.get('[data-testid="requirement-drafts-schedule-parent"]').setValue('m1')
+      await w.get('[data-testid="requirement-drafts-schedule-parent"]').trigger('change')
+      await flushPromises()
+    }
+    await w.get('[data-testid="requirement-drafts-tb-find"]').trigger('click')
+    await w.vm.$nextTick()
+    await w.get('[data-testid="requirement-drafts-find-input"]').setValue('find')
+    await w.get('[data-testid="requirement-drafts-find-input"]').trigger('keydown', { key: 'Enter' })
+    await w.get('[data-testid="requirement-drafts-find-next"]').trigger('click')
+    await w.get('[data-testid="requirement-drafts-find-close"]').trigger('click')
+    await w.get('[data-testid="requirement-drafts-tb-collapse"]').trigger('click')
+    await w.get('[data-testid="requirement-drafts-detail"]').trigger('keydown', { key: 's', ctrlKey: true })
+    await flushPromises()
+    for (const id of ['open', 'done', 'all']) {
+      await w.get(`[data-testid="requirement-drafts-filter-${id}"]`).trigger('click')
+      await flushPromises()
+    }
+    await w.get('[data-testid="requirement-drafts-search"]').setValue('needle')
+    await w.get('[data-testid="requirement-drafts-search"]').trigger('input')
+    w.unmount()
+  })
 })
