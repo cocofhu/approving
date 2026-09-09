@@ -211,7 +211,7 @@ onMounted(loadAll)
         <span v-if="savedAt" class="text-xs text-ok">{{ t('pages.settings.saved') }}</span>
         <AppButton
           variant="ghost"
-          size="sm"
+          size="md"
           icon="refresh"
           :disabled="loading || saving || resetting || !canWrite"
           @click="resetToEmbed"
@@ -220,7 +220,7 @@ onMounted(loadAll)
         </AppButton>
         <AppButton
           variant="primary"
-          size="sm"
+          size="md"
           icon="check"
           :disabled="loading || saving || resetting || !canWrite"
           @click="save"
@@ -280,7 +280,7 @@ onMounted(loadAll)
       <button
         v-if="isMobile && mobileStep === 'detail'"
         type="button"
-        class="mt-3 min-h-11 text-xs text-txt3 hover:text-txt2"
+        class="mt-3 min-h-11 text-xs text-txt3 hover:text-txt2 md:min-h-0"
         data-testid="platform-rules-back-list"
         @click="backToRuleList"
       >
@@ -302,7 +302,7 @@ onMounted(loadAll)
       <button
         v-if="isMobile && mobileStep === 'detail'"
         type="button"
-        class="mt-3 min-h-11 text-xs text-txt3 hover:text-txt2"
+        class="mt-3 min-h-11 text-xs text-txt3 hover:text-txt2 md:min-h-0"
         data-testid="platform-rules-back-list"
         @click="backToRuleList"
       >
@@ -338,7 +338,7 @@ onMounted(loadAll)
             class="mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] transition"
             :class="[
               activeFile === item.file ? 'bg-accent-dim text-txt' : 'text-txt3 hover:bg-elevated hover:text-txt2',
-              isMobile ? 'min-h-11' : '',
+              'min-h-11 md:min-h-0',
             ]"
             data-testid="platform-rules-file"
             @click="selectFile(item.file)"
@@ -363,7 +363,7 @@ onMounted(loadAll)
         <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
           <button
             type="button"
-            class="min-h-11 text-[12px] text-txt2 hover:text-txt"
+            class="min-h-11 text-[12px] text-txt2 hover:text-txt md:min-h-0"
             data-testid="platform-rules-back-list"
             @click="backToRuleList"
           >

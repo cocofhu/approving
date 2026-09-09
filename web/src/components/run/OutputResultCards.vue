@@ -8,6 +8,7 @@ import {
   visualHtmlArtifactName,
 } from '@/lib/run/isVisualHtmlCard'
 import OutputResultCardBody from './OutputResultCardBody.vue'
+import AppButton from '../ui/AppButton.vue'
 import AppModal from '../ui/AppModal.vue'
 import Icon from '../ui/Icon.vue'
 import type { OutputCard, Run } from '@/lib/shared/types'
@@ -238,15 +239,17 @@ function closeEnlarge() {
           class="rounded-md shrink-0 border border-line px-1.5 py-0.5 text-[10px] text-txt3"
           data-testid="output-result-detail-kind"
         >{{ detailKindLabel(currentCard) }}</span>
-        <button
+        <AppButton
           v-if="canEnlarge"
-          type="button"
-          class="rounded-lg inline-flex shrink-0 items-center bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
+          variant="outline"
+          size="sm"
+          icon="expand"
+          class="shrink-0"
           data-testid="output-result-enlarge"
           @click="openEnlarge"
         >
           {{ t('pages.nodeOutput.outputCards.enlarge') }}
-        </button>
+        </AppButton>
       </div>
 
       <div :data-testid="`output-result-card-body-${selectedIndex}`">
