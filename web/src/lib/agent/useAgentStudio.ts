@@ -22,7 +22,7 @@ import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
 import { useAgentImport } from '@/lib/agent/useAgentImport'
 import { isManagedRegionKey } from '@/lib/shared/regionPolicy'
 import {
-  PROMPT_KEYS, toDraft, fromDraft, fromDraftRaw, normalizeDraftRegions,
+  PROMPT_KEYS, fromDraft, hydrateStudioDraft, draftPayloadJson,
   type AgentStudioDraft as Draft,
 } from '@/lib/agent/agentStudioDraft'
 
@@ -297,9 +297,8 @@ const agentImport = useAgentImport({
       agents.value = list || []
       if (activeName.value && agents.value.some((a) => a.name === activeName.value)) {
         const a = agents.value.find((x) => x.name === activeName.value)!
-        const loaded = toDraft(a)
-        originalJson.value = JSON.stringify(fromDraftRaw(loaded))
-        normalizeDraftRegions(loaded)
+        const loaded = hydrateStudioDraft(a)
+        originalJson.value = draftPayloadJson(loaded)
         draft.value = loaded
       } else if (agents.value.length) {
         select(agents.value[0].name)
@@ -343,7 +342,7 @@ function orgSnapshot(o: AgentOrg): string {
 }
 
 const agentDirty = computed(
-  () => !!draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value,
+  () => !!draft.value && draftPayloadJson(draft.value) !== originalJson.value,
 )
 const orgDirty = computed(() => orgSnapshot(org.value) !== orgBaseline.value)
 const dirty = computed(() => agentDirty.value || orgDirty.value)
@@ -746,9 +745,8 @@ function discardUnsavedChanges() {
   resetOrgFromBaseline()
   const a = agents.value.find((x) => x.name === activeName.value)
   if (!a) return
-  const loaded = toDraft(a)
-  originalJson.value = JSON.stringify(fromDraftRaw(loaded))
-  normalizeDraftRegions(loaded)
+  const loaded = hydrateStudioDraft(a)
+  originalJson.value = draftPayloadJson(loaded)
   draft.value = loaded
   nextTick(() => filesPanelRef.value?.restoreAfterDiscard(snap))
   justSaved.value = false
@@ -871,9 +869,8 @@ function select(
   const a = agents.value.find((x) => x.name === name)
   if (!a) return
   activeName.value = name
-  const loaded = toDraft(a)
-  originalJson.value = JSON.stringify(fromDraftRaw(loaded))
-  normalizeDraftRegions(loaded)
+  const loaded = hydrateStudioDraft(a)
+  originalJson.value = draftPayloadJson(loaded)
   draft.value = loaded
   tab.value = opts?.tab || 'files'
   if (opts?.dataSub) dataSubTab.value = opts.dataSub
@@ -953,7 +950,7 @@ async function save(reason?: string) {
   saving.value = true
   error.value = ''
   try {
-    if (draft.value && JSON.stringify(fromDraft(draft.value)) !== originalJson.value) {
+    if (draft.value && draftPayloadJson(draft.value) !== originalJson.value) {
       const payload = fromDraft(draft.value)
       if (typeof reason === 'string' && reason.trim()) {
         await api.saveAgent(payload, { reason: reason.trim() })
@@ -996,8 +993,9 @@ async function reloadAgentFromServer(name: string) {
     const i = agents.value.findIndex((x) => x.name === name)
     if (i >= 0) agents.value[i] = fresh
     if (activeName.value === name) {
-      draft.value = toDraft(fresh)
-      originalJson.value = JSON.stringify(fromDraft(draft.value))
+      const loaded = hydrateStudioDraft(fresh)
+      draft.value = loaded
+      originalJson.value = draftPayloadJson(loaded)
       justSaved.value = false
     }
     historyRefreshKey.value++

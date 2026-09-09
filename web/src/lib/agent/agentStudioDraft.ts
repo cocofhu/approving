@@ -74,6 +74,11 @@ export function emptyPrompts(): PromptDraft {
   return { upstreamArtifactsHeader: '', producesContract: '', reactOpenSuffix: '', producesRetry: '' }
 }
 
+/** Textarea / HTTP payloads treat CRLF and CR as LF; keep draft and dirty compare aligned. */
+export function normalizePromptText(s: string): string {
+  return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+}
+
 export function recToKV(rec?: Record<string, string>): KV[] {
   return Object.entries(rec || {}).map(([k, v]) => ({ k, v }))
 }
@@ -121,7 +126,7 @@ export function defaultConfigRootFor(backend: BackendId): string {
 
 export function toDraft(a: Agent): AgentStudioDraft {
   const prompts = emptyPrompts()
-  for (const k of PROMPT_KEYS) prompts[k] = a.prompts?.[k] ?? ''
+  for (const k of PROMPT_KEYS) prompts[k] = normalizePromptText(a.prompts?.[k] ?? '')
   return {
     name: a.name,
     projectId: a.projectId || '',
@@ -144,8 +149,9 @@ export function draftPromptsToApi(p: PromptDraft): AgentPrompts | undefined {
   const out: AgentPrompts = {}
   let any = false
   for (const k of PROMPT_KEYS) {
-    if (p[k].trim()) {
-      out[k] = p[k]
+    const text = normalizePromptText(p[k])
+    if (text.trim()) {
+      out[k] = text
       any = true
     }
   }
@@ -180,6 +186,18 @@ export function fromDraft(d: AgentStudioDraft): Agent {
     delete payload.env.GIT_SSH_KNOWN_HOSTS
   }
   return payload
+}
+
+/** Canonical payload JSON for originalJson / agentDirty (same serializer both sides). */
+export function draftPayloadJson(d: AgentStudioDraft): string {
+  return JSON.stringify(fromDraft(d))
+}
+
+/** Load API agent into a studio draft and apply region normalization before snapshotting. */
+export function hydrateStudioDraft(a: Agent): AgentStudioDraft {
+  const loaded = toDraft(a)
+  normalizeDraftRegions(loaded)
+  return loaded
 }
 
 export type PlatformPresetKind = 'artifact' | 'memory' | 'context' | 'scheduler'
