@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.6-beta — 2026-09-09
+
+- Public beta follow-up on [`v0.3.6-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.6-beta)
+  (relative to `v0.3.5-beta`: PRs #501–#524). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.6-beta` (tag publish does not rewrite these files).
+- Highlights: home Composer run priority; instance brand settings; dashboard
+  pipeline menu; workflow create from scratch/baseline; Runs in workspace nav;
+  today's tokens in the topbar.
+
 ## 0.3.5-beta — 2026-09-09
 
 - Public beta follow-up on [`v0.3.5-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.5-beta)
