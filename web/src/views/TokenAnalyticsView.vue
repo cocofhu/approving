@@ -605,7 +605,11 @@ watch([windowSel], () => void load())
       </div>
       <template v-else-if="data">
         <section id="overview" class="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3" data-testid="token-analytics-kpis">
-          <div class="rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-total">
+          <div
+            class="rounded-lg border border-line bg-surface p-3.5"
+            data-testid="token-analytics-kpi-total"
+            :data-token-count="data.kpi.total"
+          >
             <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiTotal') }}</div>
             <div class="mt-1 text-[22px] font-bold tabular-nums">{{ fmtCompactTokenCount(data.kpi.total) }}</div>
             <div class="mt-1 text-[11px]" :class="deltaClass">{{ deltaLabel }}</div>
@@ -618,11 +622,23 @@ watch([windowSel], () => void load())
             <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiInOutCache') }}</div>
             <div class="mt-2.5 flex justify-between gap-3 text-[13px] text-txt2">
               <span>{{ t('pages.executionTimeline.partInput') }}</span>
-              <b class="text-base font-bold tabular-nums text-txt">{{ fmtCompactTokenCount(data.kpi.inputTokens) }}</b>
+              <b
+                class="text-base font-bold tabular-nums text-txt"
+                data-testid="token-analytics-kpi-input"
+                :data-token-count="data.kpi.inputTokens + data.kpi.cacheReadTokens + data.kpi.cacheWriteTokens"
+              >
+                {{ fmtCompactTokenCount(data.kpi.inputTokens + data.kpi.cacheReadTokens + data.kpi.cacheWriteTokens) }}
+              </b>
             </div>
             <div class="mt-2.5 flex justify-between gap-3 text-[13px] text-txt2">
               <span>{{ t('pages.executionTimeline.partOutput') }}</span>
-              <b class="text-base font-bold tabular-nums text-txt">{{ fmtCompactTokenCount(data.kpi.outputTokens) }}</b>
+              <b
+                class="text-base font-bold tabular-nums text-txt"
+                data-testid="token-analytics-kpi-output"
+                :data-token-count="data.kpi.outputTokens"
+              >
+                {{ fmtCompactTokenCount(data.kpi.outputTokens) }}
+              </b>
             </div>
             <div
               class="token-analytics-kpi-tip absolute left-3.5 top-[calc(100%-8px)] z-10 hidden min-w-[200px] rounded-lg border border-line bg-elevated p-2.5 text-xs shadow-md"
