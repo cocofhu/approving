@@ -52,6 +52,16 @@ async function bootstrap() {
         path: '/projects',
         component: { render: () => h('div', { 'data-testid': 'projects-page' }, 'projects') },
       },
+      {
+        path: '/workflows/:id/edit',
+        component: defineComponent({
+          setup() {
+            const route = useRoute()
+            return () =>
+              h('div', { 'data-testid': 'workflow-editor-page' }, String(route.params.id || ''))
+          },
+        }),
+      },
     ],
   })
 
