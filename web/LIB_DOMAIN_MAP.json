@@ -44,6 +44,7 @@
     "inbox": [
       "clarifyDemo.ts",
       "clarifyInboxStage.ts",
+      "composerAutoGrow.ts",
       "gateShareLink.ts",
       "gateUpstream.ts",
       "inboxActiveSelection.ts",
@@ -177,7 +178,7 @@
     "agent": 15,
     "api": 3,
     "composables": 16,
-    "inbox": 20,
+    "inbox": 21,
     "pm": 7,
     "project": 4,
     "run": 53,
