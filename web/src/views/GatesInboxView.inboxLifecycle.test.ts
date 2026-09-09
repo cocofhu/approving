@@ -1706,7 +1706,7 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     wrapper.unmount()
   })
 
-  it('shows a starting ghost card with the boot loader while listGates is still empty', async () => {
+  it('shows a starting ghost card with the connecting ReAct panes while listGates is still empty', async () => {
     routeState.query = { run: 'run-home', node: 'ap' }
     setHomeApproveHandoff({
       runId: 'run-home',
@@ -1722,7 +1722,14 @@ describe('GatesInboxView inbox-context lifecycle', () => {
     await flushPromises()
     expect(wrapper.findComponent({ name: 'EmptyState' }).exists()).toBe(false)
     expect(wrapper.find('[data-testid="inbox-item-card"]').attributes('data-starting')).toBe('true')
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-connecting-stage"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-connecting-pill"]').text()).toContain('连接中')
+    expect(
+      (wrapper.get('[data-testid="react-connecting-input"]').element as HTMLTextAreaElement)
+        .disabled,
+    ).toBe(true)
     expect(wrapper.findComponent({ name: 'ReviewComposer' }).exists()).toBe(false)
     wrapper.unmount()
   })
