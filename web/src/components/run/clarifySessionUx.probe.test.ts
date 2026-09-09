@@ -133,6 +133,70 @@ describe('[approving] ClarifyChat clarify-path UX (non-reviewMode)', () => {
     w.unmount()
   })
 
+  /**
+   * Screenshot repro (g1.1 / g3.1): Inbox 需求对齐 — persisted human only,
+   * session still busy, no agent body → must show 思考中… then resume message.
+   */
+  it('screenshot: persisted human + busy + no agent → thinking then resume message (g1.1/g3.1)', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const humanText = '还是有很多直角按钮和面板啊'
+    const w = mount(ClarifyChat, {
+      props: {
+        runId: 'run-1',
+        nodeId: 'clarify',
+        iteration: 1,
+        turns: [{ role: 'human', text: humanText, at: '2026-09-09T01:00:00Z' }],
+        done: false,
+        active: true,
+        reviewMode: true,
+        annotateEnabled: true,
+        hideFinish: false,
+        sendLabel: '发送回复',
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: true, ClarifyDemoFrame: true },
+      },
+    })
+    await nextTick()
+    // Broken UI: header would stay at 共 1 条 with only the human bubble.
+    expect(w.text()).toContain(humanText)
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+
+    const vm = w.vm as unknown as {
+      applyReviewFrame: (f: Record<string, unknown>) => void
+      applyAcpEvents: (e: { kind: string; text: string }[]) => void
+    }
+    vm.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'clarify',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: humanText },
+    })
+    await nextTick()
+    // Live slot rebuilt despite human already in persisted turns.
+    const placeholder = w.find('[data-testid="clarify-busy-placeholder"]')
+    expect(placeholder.exists()).toBe(true)
+    expect(placeholder.text()).toContain('思考中')
+    // Must not stop at 共 1 条 — agent streaming bubble is present.
+    const humans = (w.text().match(new RegExp(humanText, 'g')) || []).length
+    expect(humans).toBeGreaterThanOrEqual(1)
+
+    vm.applyAcpEvents([{ kind: 'message', text: '好的，我会按圆角口径把按钮和面板改掉…' }])
+    await nextTick()
+    expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
+    expect(w.text()).toContain('好的，我会按圆角口径把按钮和面板改掉…')
+    expect(w.find('[data-testid="clarify-busy-status"]').text()).toContain('输出中')
+    expect(w.find('[data-testid="clarify-stream-caret"]').exists()).toBe(true)
+    w.unmount()
+  })
+
   it('hard-refresh seed: thought-only then message after remount (g4.1)', async () => {
     // Simulate host seed-then-live: rebuild slot → seed ACP after (re)mount.
     const w = mountClarify()

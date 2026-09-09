@@ -224,6 +224,26 @@ describe('ReviewComposer nested ClarifyChat delivery', () => {
     expect(vm.applyAcpEvents?.([{ kind: 'thought', text: 'buffer me' }], 'react-1')).toBe(false)
     wrapper.unmount()
   })
+
+  it('exposes isSessionBusy from nested ClarifyChat (g1.3)', async () => {
+    const wrapper = mountClarify()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    expect(typeof vm.isSessionBusy).toBe('function')
+    expect(vm.isSessionBusy()).toBe(false)
+    vm.applyReviewFrame?.({
+      event: 'queue_state',
+      nodeId: 'react-1',
+      waiting: 0,
+      items: [],
+      busy: true,
+      activeItem: { text: '还是有很多直角按钮和面板啊' },
+    })
+    await flushPromises()
+    expect(vm.isSessionBusy()).toBe(true)
+    expect(wrapper.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })
 
 describe('ReviewComposer gate review semantics (send + confirm)', () => {
