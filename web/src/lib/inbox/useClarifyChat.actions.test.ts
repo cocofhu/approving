@@ -582,7 +582,7 @@ describe('useClarifyChat actions', () => {
 
     chat.queued.value.push({ text: 'ghost', images: [], annotations: [] })
     chat.settleAfterTurnEnd()
-    expect(chat.queued.value).toEqual([])
+    expect(chat.queued.value.map((q) => q.id)).toEqual(['wait'])
     app.unmount()
   })
 })

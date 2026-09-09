@@ -727,4 +727,70 @@ describe('useGateApproval actions', () => {
     approval.onComposerReject()
     app.unmount()
   })
+
+  it('requeues an existing draft before editing a server-backed queue item', async () => {
+    const { approval, app } = withApproval()
+    await flushPromises()
+    approval.reactQueued.value = [
+      {
+        id: 'target',
+        text: 'edit target',
+        images: [{ data: 'old', mimeType: 'image/png' }],
+        annotations: [{ selector: '#old' }],
+      },
+    ]
+    approval.reactText.value = 'stash first'
+    approval.reactImages.value = [{ data: 'new', mimeType: 'image/png' }]
+    approval.reactAnnotations.value = [{ selector: '#new' }]
+    expect(approval.isEditing.value).toBe(true)
+    await approval.editReactQueuedItem(0)
+    expect(mocks.gateReactRevise).toHaveBeenCalled()
+    expect(mocks.gateReactQueueRemove).toHaveBeenCalledWith('run-1', 'gate-1', 'target')
+    expect(approval.reactText.value).toBe('edit target')
+    expect(approval.reactAnnotations.value[0]?.selector).toBe('#old')
+
+    approval.reactQueued.value = [{ id: 'wait', text: 'wait', images: [], annotations: [] }]
+    approval.reactThinking.value = true
+    approval.applyReviewFrame({
+      event: 'queue_state',
+      nodeId: 'producer',
+      waiting: 0,
+      busy: true,
+      activeItem: { id: 'active', text: 'active' },
+    })
+    expect(approval.reactQueued.value).toEqual([])
+    expect(approval.reactThinking.value).toBe(true)
+
+    approval.clearUnifiedDraft()
+    approval.formText.value.note = 'form edit'
+    expect(approval.isEditing.value).toBe(true)
+    approval.formText.value.note = ''
+    approval.formImages.value.note = [{ data: 'x', mimeType: 'image/png' }]
+    expect(approval.isEditing.value).toBe(true)
+    app.unmount()
+  })
+
+  it('updates structured saved products and reports annotation invalidation errors', async () => {
+    const { approval, app } = withApproval()
+    await flushPromises()
+    approval.onProductSaved({ name: 'plan.json', content: '{"name":"new"}' })
+    expect(approval.productDoc.value).toEqual({ name: 'new' })
+    approval.onProductSaved({ name: 'plan.json', content: '{invalid' })
+    expect(approval.productDoc.value).toEqual({ name: 'new' })
+
+    mocks.saveAnnotationArtifact.mockRejectedValueOnce(new Error('invalidate denied'))
+    await approval.invalidateServerAnnotationArtifact()
+    expect(approval.commentArtifactWriteError.value).toBe('invalidate denied')
+    expect(mocks.toastWarn).toHaveBeenCalled()
+
+    const noProposalArtifact = withApproval({
+      gate: gate({ actions: [{ id: 'p1', label: 'One' }] }),
+      run: run({ nodes: [{ id: 'gate-1', type: 'proposal_select', config: {} }], artifacts: [] }),
+    })
+    await flushPromises()
+    await noProposalArtifact.approval.loadProposals()
+    expect(noProposalArtifact.approval.proposalsDoc.value).toBeNull()
+    noProposalArtifact.app.unmount()
+    app.unmount()
+  })
 })

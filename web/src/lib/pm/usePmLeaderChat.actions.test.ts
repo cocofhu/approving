@@ -613,6 +613,16 @@ describe('usePmLeaderChat actions', () => {
     chat.historyLoading.value = false
     chat.historyLoadFailed.value = true
     expect(chat.historyTipClass.value).toContain('err')
+    chat.input.value = 'ready'
+    expect(chat.canSend.value).toBe(true)
+    chat.sending.value = true
+    expect(chat.showStreamBubble.value).toBe(true)
+    expect(chat.showStreamTypingDots.value).toBe(true)
+    chat.sending.value = false
+    chat.streaming.value = true
+    chat.syncStreamText('working')
+    expect(chat.busyHint.value).toBeTruthy()
+    chat.streaming.value = false
     app.unmount()
   })
 

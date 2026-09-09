@@ -406,6 +406,13 @@ describe('useGatesInbox actions', () => {
     await inbox.onClarifyQueueRemove(undefined)
     await inbox.onClarifyQueueReorder([])
 
+    mocks.reactReply.mockClear()
+    inbox.onClarifyFinish()
+    await flushPromises()
+    expect(mocks.reactReply).toHaveBeenCalled()
+    await inbox.onReactRevised()
+    expect(typeof inbox.itemSecondary(inbox.active.value!)).toBe('string')
+
     inbox.active.value = gateItem()
     await inbox.onClarifyCancel()
     await inbox.onClarifyQueueRemove('x')
@@ -770,11 +777,11 @@ describe('useGatesInbox actions', () => {
 
     const clarify = inbox.listItems.value[1]!
     inbox.active.value = clarify
+    await flushPromises()
     inbox.activeRun.value = contextRun('run-chat', {
       nodes: [{ id: 'react', type: 'app_preview', config: {} }],
       status: 'running',
     })
-    await nextTick()
     expect(inbox.inboxAppPreviewActive.value).toBe(true)
     expect(inbox.inboxStageNodeType.value).toBe('app_preview')
     expect(inbox.clarifyInputActive.value).toBe(true)
@@ -793,7 +800,7 @@ describe('useGatesInbox actions', () => {
   it('starts and stops the bounded startup poll', async () => {
     vi.useFakeTimers()
     const { inbox, app } = await withInbox()
-    const starting = gateItem('booting', { state: 'starting' })
+    const starting = clarifyItem('booting', { state: 'starting' })
     inbox.listItems.value = [starting]
     inbox.active.value = starting
     await nextTick()
@@ -831,7 +838,7 @@ describe('useGatesInbox actions', () => {
     const { inbox, app } = await withInbox()
     const first = inbox.listItems.value[0]!
     inbox.active.value = first
-    mocks.inboxContext.mockRejectedValueOnce(Object.assign(new Error('gone'), { status: 404 }))
+    mocks.inboxContext.mockRejectedValueOnce(new Error('no pending inbox item'))
     await inbox.loadActiveRun(true)
     expect(inbox.listItems.value.some((it) => it.runId === first.runId)).toBe(false)
 
@@ -843,6 +850,72 @@ describe('useGatesInbox actions', () => {
     const rows = [clarifyItem()]
     inbox.incomingArmed.value = false
     expect(inbox.mergeIncomingGhost(rows)).toBe(rows)
+    app.unmount()
+  })
+
+  it('projects busy clarify sessions and websocket snapshots after reconnect', async () => {
+    const { inbox, app } = await withInbox()
+    const clarify = inbox.listItems.value[1]!
+    inbox.active.value = clarify
+    await flushPromises()
+    const applyReviewFrame = vi.fn(() => true)
+    const applyAcpEvents = vi.fn(() => true)
+    inbox.reviewChatRef.value = { applyReviewFrame, applyAcpEvents, isSessionBusy: () => false }
+    const busyRun = contextRun('run-chat', {
+      reactSessions: {
+        react: {
+          busy: true,
+          waiting: 1,
+          items: [{ id: 'q1', text: 'queued' }],
+          activeItem: { id: 'active', text: 'active' },
+        },
+      },
+    })
+    inbox.activeRun.value = busyRun
+    mocks.nodeEvents.mockResolvedValue({
+      events: [{ kind: 'thought', text: 'seed thought' }, { kind: 'message', text: 'seed answer' }],
+      hasMore: false,
+    })
+    await inbox.projectClarifySessionAfterLoad(busyRun)
+    expect(applyReviewFrame).toHaveBeenCalled()
+    expect(applyAcpEvents).toHaveBeenCalled()
+
+    const current = MockWebSocket.instances.at(-1)!
+    current.message({
+      type: 'snapshot',
+      run: { reactSessions: { react: { busy: false, waiting: 0, items: [] } } },
+    })
+    await flushPromises()
+    expect(inbox.activeRun.value?.reactSessions?.react?.busy).toBe(false)
+
+    inbox.connectActiveRunWs('run-chat', { fromReconnect: true })
+    const replacement = MockWebSocket.instances.at(-1)!
+    replacement.open()
+    await flushPromises()
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1)
+
+    await inbox.reseedAfterWsReconnect('other-run')
+    inbox.activeRun.value = null
+    await inbox.reseedAfterWsReconnect('run-chat')
+    app.unmount()
+  })
+
+  it('derives a matching home seed and merges retained startup failures', async () => {
+    const { inbox, app } = await withInbox()
+    inbox.homeSeed.value = {
+      runId: 'run-gate',
+      nodeId: 'gate',
+      text: 'Started from home',
+    } as never
+    expect(inbox.activeHomeSeed.value?.text).toBe('Started from home')
+    inbox.active.value = null
+    expect(inbox.activeHomeSeed.value).toBeNull()
+
+    const failed = clarifyItem('failed-start', { state: 'starting' })
+    inbox.startFailedItem.value = failed
+    expect(inbox.mergeFailedStarting([gateItem()])[0]?.runId).toBe('failed-start')
+    expect(inbox.mergeFailedStarting([failed, gateItem()])[0]?.runId).toBe('failed-start')
+    expect(inbox.startFailedItem.value).toBeNull()
     app.unmount()
   })
 })
