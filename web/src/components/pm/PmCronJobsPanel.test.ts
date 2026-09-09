@@ -181,7 +181,9 @@ describe('PmCronJobsPanel', () => {
   it('shows table skeleton before rows arrive', async () => {
     useAuth().setUser({ username: 'u', expiresAt: 't', isAdmin: false })
     let release!: (v: unknown) => void
-    apiMocks.listProjectCronJobs.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    apiMocks.listProjectCronJobs.mockImplementation(
+      () => new Promise((resolve) => { release = resolve }),
+    )
     const w = mountPanel()
     await flushPromises()
     expect(w.find('[data-testid="cron-table-skeleton"]').exists()).toBe(true)
