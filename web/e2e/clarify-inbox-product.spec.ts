@@ -72,12 +72,31 @@ test.describe('GatesInbox clarify 产物台', () => {
 
     await page.getByTestId('upstream-modal-mode-raw').click()
     await expect(page.locator('.json-code-view--modal')).toBeVisible()
+    await expect(page.locator('.json-code-view--modal')).toHaveCSS(
+      'background-color',
+      'rgb(30, 30, 30)',
+    )
     await page.screenshot({ path: `${SHOT_DIR}/05-inbox-visual-upstream-modal-json.png`, fullPage: true })
     await page.getByTestId('upstream-modal-mode-structured').click()
     await expect(modalBody).toContainText('复审产物台展示上游澄清需求文档')
 
     await page.keyboard.press('Escape')
     await expect(modalBody).toBeVisible()
+  })
+
+  test('浅色主题下上游原始 JSON 不是黑底（g3.2）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await page.goto('/clarify-inbox-product.html?scenario=visual&theme=light')
+    await expect(page.getByTestId('clarify-product-stage')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('html')).toHaveClass(/light/)
+    await page.getByTestId('upstream-enlarge').click()
+    await page.getByTestId('upstream-modal-mode-raw').click()
+    const jsonView = page.locator('.json-code-view--modal')
+    await expect(jsonView).toBeVisible()
+    const bg = await jsonView.evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(bg).not.toBe('rgb(30, 30, 30)')
+    expect(bg).toMatch(/rgb\(\s*25[0-5],\s*25[0-5],\s*25[0-5]\s*\)/)
+    await page.screenshot({ path: `${SHOT_DIR}/07-inbox-visual-upstream-json-light.png`, fullPage: true })
   })
 
   test('三态空态、重试恢复与加载中不闪尚未执行', async ({ page }) => {

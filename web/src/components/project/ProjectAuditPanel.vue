@@ -1839,9 +1839,6 @@ tr.detail td {
     width: 100%;
   }
 }
-:deep(.tok-key) {
-  color: #7dd3c7;
-}
 :deep(.audit-mask) {
   color: #b45309;
 }
