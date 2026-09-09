@@ -64,7 +64,6 @@ function mountModal(open = true, extraProps: Record<string, unknown> = {}) {
         },
         HardLoadLayer: true,
         ReposEditor: true,
-        PrioritySegmented: true,
       },
     },
   })
@@ -295,11 +294,45 @@ describe('RunLaunchModal', () => {
     wrapper.unmount()
   })
 
-  it('keeps empty tag suggestions when tags is non-array', async () => {
-    apiMocks.listProjectRunTags.mockResolvedValue({ tags: { foo: 1 } as unknown as string[] })
-    const wrapper = mountModal(true, { projectId: 'proj-1' })
+  it('prefills segmented priority from initialPriority (plan g2.2 / g3.4)', async () => {
+    const wrapper = mountModal(true, { initialPriority: 'high' })
     await flushPromises()
-    expect(apiMocks.listProjectRunTags).toHaveBeenCalled()
+    const checked = wrapper.findAll('[role="radio"]').find((b) => b.attributes('aria-checked') === 'true')
+    expect(checked?.text()).toBe('高')
+    wrapper.unmount()
+  })
+
+  it('defaults to normal when initialPriority is omitted or invalid (plan g3.4)', async () => {
+    const omitted = mountModal(true)
+    await flushPromises()
+    const omittedChecked = omitted.findAll('[role="radio"]').find((b) => b.attributes('aria-checked') === 'true')
+    expect(omittedChecked?.text()).toBe('普通')
+    omitted.unmount()
+
+    const invalid = mountModal(true, { initialPriority: 'urgent' })
+    await flushPromises()
+    const invalidChecked = invalid.findAll('[role="radio"]').find((b) => b.attributes('aria-checked') === 'true')
+    expect(invalidChecked?.text()).toBe('普通')
+    invalid.unmount()
+  })
+
+  it('starts with the modal priority after the user changes it (plan g2.2)', async () => {
+    apiMocks.startRun.mockResolvedValue({ id: 'run-prio' })
+    const wrapper = mountModal(true, { initialPriority: 'high' })
+    await flushPromises()
+    const lowBtn = wrapper.findAll('[role="radio"]').find((b) => b.text() === '低')
+    await lowBtn!.trigger('click')
+    const startBtn = findStartButton(wrapper)
+    await startBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.startRun).toHaveBeenCalledWith(
+      'wf-1',
+      expect.objectContaining({ topic: 'hello' }),
+      'manual',
+      'low',
+      [],
+      expect.anything(),
+    )
     wrapper.unmount()
   })
 })

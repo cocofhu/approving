@@ -72,6 +72,8 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/data-testid="home-composer"/)
     expect(src).toMatch(/data-testid="home-composer-plus"/)
     expect(src).toMatch(/HomePipelineSelect/)
+    expect(src).toMatch(/HomePrioritySelect/)
+    expect(src).toMatch(/:initial-priority="launchPriority"/)
     expect(pipelineSelectSrc).toMatch(/data-testid="home-pipeline-select"/)
     expect(src).not.toMatch(/<select[^>]*home-pipeline-select/)
     expect(src).toMatch(/data-testid="home-composer-send"/)
@@ -158,5 +160,19 @@ describe('DashboardView home chat layout', () => {
       /@media \(max-width: 520px\)[\s\S]*\.home-shell__content[\s\S]*justify-content:\s*center/,
     )
     expect(src).toMatch(/justify-center/)
+  })
+
+  // plan g1.2 — keep overflow-hidden on composer; priority panel teleports instead
+  it('keeps .home-composer overflow-hidden and does not raise other z-index layers', () => {
+    expect(src).toMatch(/\.home-composer\s*\{[^}]*overflow:\s*hidden/s)
+    expect(src).toMatch(/z-\[9999\]/)
+    const prioritySrc = readFileSync(
+      join(dir, '../components/dashboard/HomePrioritySelect.vue'),
+      'utf8',
+    )
+    expect(prioritySrc).toMatch(/Teleport to="body"/)
+    expect(prioritySrc).toMatch(/z-index:\s*60/)
+    expect(prioritySrc).toMatch(/zIndex:\s*'60'/)
+    expect(prioritySrc).toMatch(/addEventListener\('scroll', onScrollOrResize, true\)/)
   })
 })

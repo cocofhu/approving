@@ -44,6 +44,7 @@ vi.mock('@/lib/composables/useToast', () => ({
 }))
 
 import { HOME_COMPOSER_DRAFT_KEY } from '@/lib/run/homeComposerDraft'
+import { HOME_PRIORITY_MEMORY_KEY } from '@/lib/run/useHomeApproveChat'
 import { setBrandSettings } from '@/lib/composables/useBrandSettings'
 import DashboardView from './DashboardView.vue'
 
@@ -147,11 +148,13 @@ describe('DashboardView home composer', () => {
     stubReducedMotion(false)
     setBrandSettings(null)
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
+    localStorage.removeItem(HOME_PRIORITY_MEMORY_KEY)
     vi.useFakeTimers()
   })
 
   afterEach(() => {
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
+    localStorage.removeItem(HOME_PRIORITY_MEMORY_KEY)
     vi.useRealTimers()
     vi.unstubAllGlobals()
     document.body.innerHTML = ''
@@ -521,6 +524,46 @@ describe('DashboardView home composer', () => {
     expect(empty.text()).toContain('首页可见')
     expect(empty.text()).not.toContain('丢失')
     expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').element).toHaveProperty('disabled', true)
+    wrapper.unmount()
+  })
+
+  // plan g1.1 — toolbar chip to the right of pipeline select, default 普通
+  it('renders a compact priority chip next to the pipeline select defaulting to 普通', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="home-priority-select-trigger"]')
+    expect(trigger.text()).toContain('普通')
+    expect(trigger.attributes('aria-label')).toBe('优先级')
+    expect(wrapper.get('[data-testid="home-priority-select"]').element.compareDocumentPosition(
+      wrapper.get('[data-testid="home-pipeline-select"]').element,
+    ) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('disables the priority chip when no home pipelines are visible (plan g1.1)', async () => {
+    mocks.listWorkflows.mockResolvedValue([{ ...approveWf, showOnHome: false }])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-priority-select-trigger"]').element).toHaveProperty('disabled', true)
+    wrapper.unmount()
+  })
+
+  it('sends startRun with high after choosing 高 in the toolbar (plan g2.1 / g3.3)', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-priority-select-trigger"]').trigger('click')
+    await flushPromises()
+    await teleported('home-priority-select-option-high').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-priority-select-trigger"]').text()).toContain('高')
+    expect(wrapper.getComponent({ name: 'RunLaunchModal' }).props('initialPriority')).toBe('high')
+    await wrapper.get('[data-testid="home-composer-input"]').setValue('紧急登录')
+    await wrapper.get('[data-testid="home-composer"]').trigger('submit')
+    await flushPromises()
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'high', [], {
+      title: '紧急登录',
+      firstMessage: { text: '紧急登录', images: [] },
+    })
     wrapper.unmount()
   })
 
