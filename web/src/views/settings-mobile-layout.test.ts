@@ -16,19 +16,22 @@ describe('settings-family narrow-screen stacking (g3)', () => {
     expect(src).toMatch(/min-h-11 w-full md:w-auto/)
   })
 
-  // plan g2.1 / g2.4: integrations card + modal replace IntegrationsView page layout
-  it('Integrations modal availability badges wrap; settings open button keeps touch height', () => {
-    const modal = readFileSync(
-      join(dir, '../components/settings/IntegrationsModal.vue'),
+  it('Integrations panel availability badges wrap and keeps mobile touch targets', () => {
+    const panel = readFileSync(
+      join(dir, '../components/settings/IntegrationsPanel.vue'),
       'utf8',
     )
-    expect(modal).toMatch(/flex flex-wrap items-center gap-2/)
-    expect(modal).toMatch(/availabilityBadgeClass\(m\.scope\)/)
-    expect(modal).not.toMatch(/inline-flex shrink-0 items-center gap-1 rounded-full border/)
-    expect(modal).toMatch(/min-h-11 items-start gap-3/)
+    expect(panel).toMatch(/flex flex-wrap items-center gap-2/)
+    expect(panel).toMatch(/availabilityBadgeClass\(m\.scope\)/)
+    expect(panel).not.toMatch(/inline-flex shrink-0 items-center gap-1 rounded-full border/)
+    expect(panel).toMatch(/min-h-11 items-start gap-3/)
+    expect(panel).toMatch(/data-testid="integrations-panel-back"/)
+    expect(panel).toMatch(/mb-2 inline-flex min-h-11/)
+    expect(panel).not.toMatch(/AppModal/)
     const settings = read('SettingsView.vue')
     expect(settings).toMatch(/data-testid="settings-integrations-open"/)
     expect(settings).toMatch(/class="min-h-11"/)
+    expect(settings).toMatch(/router\.push\(\{[\s\S]*?integrations: '1'/)
     expect(settings).not.toMatch(/TriggersView/)
   })
 
