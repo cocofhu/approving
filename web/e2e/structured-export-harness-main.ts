@@ -81,8 +81,9 @@ const App = defineComponent({
 })
 
 installIdleScrollbar()
-initLocale()
-setLocale(locale as 'zh-CN' | 'en')
-setTheme(theme === 'light' ? 'light' : 'dark')
-
-createApp(App).use(i18n).mount('#app')
+void (async () => {
+  await initLocale()
+  await setLocale(locale as 'zh-CN' | 'en')
+  setTheme(theme === 'light' ? 'light' : 'dark')
+  createApp(App).use(i18n).mount('#app')
+})()

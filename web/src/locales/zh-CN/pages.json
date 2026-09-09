@@ -25,7 +25,12 @@
       "cardFallback": "Approve 开发前澄清",
       "scrollLeft": "向左滚动",
       "scrollRight": "向右滚动",
-      "draftRestored": "草稿已恢复"
+      "draftRestored": "草稿已恢复",
+      "pipelineMenu": {
+        "more": "更多操作",
+        "hide": "隐藏",
+        "edit": "编辑"
+      }
     },
     "tokenAnalytics": {
       "title": "用量统计",

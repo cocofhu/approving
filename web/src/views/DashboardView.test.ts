@@ -9,6 +9,7 @@ import type { Workflow } from '@/lib/shared/types'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   listWorkflows: vi.fn(),
+  patchWorkflowHomeVisibility: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
   reactReply: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/lib/api/api', async () => {
     api: {
       ...actual.api,
       listWorkflows: mocks.listWorkflows,
+      patchWorkflowHomeVisibility: mocks.patchWorkflowHomeVisibility,
       startRun: mocks.startRun,
       getRun: mocks.getRun,
       reactReply: mocks.reactReply,
@@ -85,7 +87,6 @@ function mountDashboard() {
     global: {
       plugins: [i18n],
       stubs: {
-        Icon: true,
         RunLaunchModal: true,
         AppModal: HomePreviewAppModalStub,
         Teleport: false,
@@ -127,11 +128,13 @@ describe('DashboardView home composer', () => {
   beforeEach(() => {
     mocks.push.mockReset()
     mocks.listWorkflows.mockReset()
+    mocks.patchWorkflowHomeVisibility.mockReset()
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
     mocks.reactReply.mockReset()
     mocks.readStoredProjectId.mockReturnValue('proj-1')
     mocks.listWorkflows.mockResolvedValue([approveWf])
+    mocks.patchWorkflowHomeVisibility.mockResolvedValue({ ...approveWf, showOnHome: false })
     mocks.startRun.mockResolvedValue({ id: 'run-9', status: 'queued' })
     mocks.getRun.mockResolvedValue({
       id: 'run-9',
@@ -206,6 +209,84 @@ describe('DashboardView home composer', () => {
     expect(card.classes()).toContain('home-shell__card')
     expect(card.classes()).not.toContain('card')
     expect(card.classes()).toContain('border')
+    wrapper.unmount()
+  })
+
+  it('opens the icon menu on contextmenu and prevents the browser menu', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const card = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 48,
+      clientY: 72,
+    })
+    card.element.dispatchEvent(event)
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(true)
+    const menu = teleported('home-pipeline-menu')
+    expect(menu.text()).toContain('隐藏')
+    expect(menu.text()).toContain('编辑')
+    expect(teleported('home-pipeline-menu-hide').find('svg').exists()).toBe(true)
+    expect(teleported('home-pipeline-menu-edit').find('svg').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('opens the same menu from more without changing the selected pipeline and edits the target', async () => {
+    const second: Workflow = { ...approveWf, id: 'wf-lite', name: '快速澄清 Lite' }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="home-pipeline-more-wf-lite"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    expect(teleportedExists('home-pipeline-menu')).toBe(true)
+    await teleported('home-pipeline-menu-edit').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith('/workflows/wf-lite/edit')
+    expect(teleportedExists('home-pipeline-menu')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('opens on a 500ms touch hold and cancels when the finger moves', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const card = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
+
+    await card.trigger('pointerdown', { pointerType: 'touch', clientX: 20, clientY: 20 })
+    await card.trigger('pointermove', { pointerType: 'touch', clientX: 40, clientY: 20 })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-menu')).toBe(false)
+
+    await card.trigger('pointerdown', { pointerType: 'touch', clientX: 20, clientY: 20 })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-menu')).toBe(true)
+    await card.trigger('click')
+    await flushPromises()
+    expect(card.classes()).toContain('home-shell__card--selected')
+    wrapper.unmount()
+  })
+
+  it('hides a pipeline through home-visibility and falls back to the next card', async () => {
+    const second: Workflow = { ...approveWf, id: 'wf-lite', name: '快速澄清 Lite' }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').trigger('contextmenu')
+    await teleported('home-pipeline-menu-hide').trigger('click')
+    await flushPromises()
+    expect(mocks.patchWorkflowHomeVisibility).toHaveBeenCalledWith('wf-ap', false)
+    expect(wrapper.find('[data-testid="home-pipeline-card-wf-ap"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
     wrapper.unmount()
   })
 
