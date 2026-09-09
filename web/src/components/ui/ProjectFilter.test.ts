@@ -27,6 +27,26 @@ beforeEach(() => {
 })
 
 describe('ProjectFilter', () => {
+  it('trigger uses shared toolbar-control sizing (g3.3 g4.4)', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common } },
+    })
+    const wrapper = mount(ProjectFilter, {
+      props: { modelValue: '' },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="project-filter"] button')
+    const cls = trigger.classes().join(' ')
+    expect(trigger.classes()).toContain('toolbar-control')
+    expect(cls).not.toContain('min-h-[44px]')
+    expect(cls).not.toContain('px-3')
+    expect(cls).not.toContain('py-1.5')
+    wrapper.unmount()
+  })
+
   it('loads projects on mount', async () => {
     const i18n = createI18n({
       legacy: false,
