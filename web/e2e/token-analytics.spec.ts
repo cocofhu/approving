@@ -92,6 +92,22 @@ test.describe('Global token analytics', () => {
     await expect(page.getByText('用量统计')).toBeVisible()
   })
 
+  test('input-side total plus output matches total KPI', async ({ page }) => {
+    await openStatsPage(page)
+    const input = page.getByTestId('token-analytics-kpi-input')
+    const output = page.getByTestId('token-analytics-kpi-output')
+    const total = page.getByTestId('token-analytics-kpi-total')
+
+    await expect(input).toHaveText('6K')
+    await expect(output).toHaveText('3K')
+    await expect(input).toHaveAttribute('data-token-count', '6000')
+    await expect(output).toHaveAttribute('data-token-count', '3000')
+    await expect(total).toHaveAttribute('data-token-count', '9000')
+    const merge = page.getByTestId('token-analytics-kpi-merge')
+    await expect(merge.getByText('缓存读', { exact: true })).not.toBeVisible()
+    await expect(merge.getByText('缓存写', { exact: true })).not.toBeVisible()
+  })
+
   test('tablet viewport has no section nav and shows main chart sections', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 })
     await openStatsPage(page)
