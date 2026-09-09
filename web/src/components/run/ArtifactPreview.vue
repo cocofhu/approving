@@ -509,8 +509,6 @@ const modalTitle = computed(() =>
 
 <style scoped>
 .json-code-view {
-  background: #1e1e1e;
-  border: 1px solid rgb(var(--c-line, 38 38 43));
   padding: 12px 14px;
   overflow: auto;
   max-height: 100%;
@@ -518,15 +516,6 @@ const modalTitle = computed(() =>
 .json-code-view--modal {
   border: none;
   max-height: none;
-}
-.json-code-view pre {
-  margin: 0;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12.5px;
-  line-height: 1.55;
-  white-space: pre;
-  tab-size: 2;
-  color: #d4d4d4;
 }
 .fallback-tag {
   display: inline-flex;
@@ -538,22 +527,5 @@ const modalTitle = computed(() =>
   color: rgb(var(--c-warn, 251 191 36));
   border: 1px solid rgba(251, 191, 36, 0.35);
   background: rgba(251, 191, 36, 0.08);
-}
-.json-code-view :deep(.tok-key) {
-  color: #9cdcfe;
-}
-.json-code-view :deep(.tok-str) {
-  color: #ce9178;
-}
-.json-code-view :deep(.tok-num) {
-  color: #b5cea8;
-}
-.json-code-view :deep(.tok-bool),
-.json-code-view :deep(.tok-null) {
-  color: #569cd6;
-}
-.json-code-view :deep(.tok-punc),
-.json-code-view :deep(.tok-plain) {
-  color: #d4d4d4;
 }
 </style>

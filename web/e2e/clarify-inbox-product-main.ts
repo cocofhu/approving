@@ -368,7 +368,8 @@ const Fixture = defineComponent({
 async function boot() {
   await initLocale()
   await setLocale('zh-CN')
-  setTheme('dark')
+  const theme = new URLSearchParams(location.search).get('theme')
+  setTheme(theme === 'light' ? 'light' : 'dark')
   installIdleScrollbar()
   createApp(Fixture).use(i18n).mount('#app')
 }
