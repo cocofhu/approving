@@ -26,7 +26,7 @@ const Fixture = defineComponent({
           h(
             'div',
             {
-              class: 'flex h-full min-h-0 flex-col px-4 py-4 md:px-6 md:py-6',
+              class: 'flex h-full min-h-0 flex-col px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-3',
             },
             [h(GatesInboxView)],
           ),

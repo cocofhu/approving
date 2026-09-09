@@ -187,15 +187,51 @@ const {
       class="flex min-h-0 flex-1 flex-col"
       :class="showRefreshProgress ? 'opacity-[0.55]' : ''"
     >
-    <div class="mb-4 shrink-0">
-      <button
-        type="button"
-        class="mb-2 inline-flex items-center gap-1 text-xs text-txt3 hover:text-txt2"
-        @click="router.push('/projects')"
+    <div class="mb-1.5 shrink-0">
+      <div
+        class="mb-1.5 flex items-start justify-between gap-3"
+        data-testid="project-detail-header-row"
       >
-        <Icon name="chevron-right" :size="12" class="rotate-180" />
-        {{ t('pages.projectDetail.back') }}
-      </button>
+        <button
+          type="button"
+          class="inline-flex min-w-0 items-center gap-1 truncate text-xs text-txt3 hover:text-txt2"
+          @click="router.push('/projects')"
+        >
+          <Icon name="chevron-right" :size="12" class="shrink-0 rotate-180" />
+          <span class="truncate">{{ t('pages.projectDetail.back') }}</span>
+        </button>
+        <div
+          v-if="!initialLoading && project"
+          class="group relative min-w-[132px] shrink-0 rounded-[10px] border border-accent/35 bg-gradient-to-b from-accent-dim/90 to-surface px-3 py-2 text-left transition-[box-shadow,border-color] md:text-right"
+          :class="project.totalTokens != null ? 'cursor-help hover:border-accent hover:shadow-[0_0_0_3px_rgba(123,97,255,0.14)]' : ''"
+          data-testid="project-token-stat"
+          :aria-label="
+            project.totalTokens != null
+              ? t('pages.projectDetail.tokenTipAria')
+              : t('pages.projectDetail.tokenUsage')
+          "
+          :aria-describedby="project.totalTokens != null ? 'project-token-detail-tip' : undefined"
+          :tabindex="project.totalTokens != null ? 0 : undefined"
+        >
+          <div class="text-[11px] font-semibold tracking-wide text-accent-2">
+            {{ t('pages.projectDetail.tokenUsage') }}
+          </div>
+          <div
+            class="mt-0.5 text-[22px] font-bold leading-tight tracking-tight tabular-nums"
+            :class="project.totalTokens == null ? 'text-txt3' : 'text-txt'"
+            data-testid="project-token-stat-value"
+          >
+            {{ fmtCompactTokenCount(project.totalTokens) }}
+          </div>
+          <TokenUsageHoverTip
+            v-if="project.totalTokens != null"
+            tip-id="project-token-detail-tip"
+            :total-tokens="project.totalTokens"
+            :workflow-tokens="project.workflowTokens"
+            :pm-tokens="project.pmTokens"
+          />
+        </div>
+      </div>
       <div
         v-if="initialLoading"
         data-testid="project-detail-title-skeleton"
@@ -205,43 +241,11 @@ const {
         <div class="mt-2 h-3 w-72 bg-elevated animate-pulse" />
       </div>
       <template v-else-if="project">
-        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div class="min-w-0">
-            <h2 class="text-lg font-semibold text-txt">{{ project.name }}</h2>
-            <p v-if="project.description" class="mt-0.5 text-sm text-txt3">{{ project.description }}</p>
-          </div>
-          <div class="flex flex-wrap items-start gap-2" data-testid="project-detail-header-actions">
-            <div
-              class="group relative min-w-[132px] rounded-[10px] border border-accent/35 bg-gradient-to-b from-accent-dim/90 to-surface px-3 py-2 text-left transition-[box-shadow,border-color] md:text-right"
-              :class="project.totalTokens != null ? 'cursor-help hover:border-accent hover:shadow-[0_0_0_3px_rgba(123,97,255,0.14)]' : ''"
-              data-testid="project-token-stat"
-              :aria-label="
-                project.totalTokens != null
-                  ? t('pages.projectDetail.tokenTipAria')
-                  : t('pages.projectDetail.tokenUsage')
-              "
-              :aria-describedby="project.totalTokens != null ? 'project-token-detail-tip' : undefined"
-              :tabindex="project.totalTokens != null ? 0 : undefined"
-            >
-              <div class="text-[11px] font-semibold tracking-wide text-accent-2">
-                {{ t('pages.projectDetail.tokenUsage') }}
-              </div>
-              <div
-                class="mt-0.5 text-[22px] font-bold leading-tight tracking-tight tabular-nums"
-                :class="project.totalTokens == null ? 'text-txt3' : 'text-txt'"
-                data-testid="project-token-stat-value"
-              >
-                {{ fmtCompactTokenCount(project.totalTokens) }}
-              </div>
-              <TokenUsageHoverTip
-                v-if="project.totalTokens != null"
-                tip-id="project-token-detail-tip"
-                :total-tokens="project.totalTokens"
-                :workflow-tokens="project.workflowTokens"
-                :pm-tokens="project.pmTokens"
-              />
-            </div>
-          </div>
+        <div class="min-w-0" data-testid="project-detail-title-row">
+          <h2 class="truncate text-lg font-semibold text-txt">{{ project.name }}</h2>
+          <p v-if="project.description" class="mt-0.5 truncate text-sm text-txt3">
+            {{ project.description }}
+          </p>
         </div>
       </template>
       <div
@@ -274,14 +278,14 @@ const {
 
     <template v-if="initialLoading || project">
       <div
-        class="scroll-area mb-4 flex shrink-0 flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-line [-webkit-overflow-scrolling:touch]"
+        class="scroll-area flex shrink-0 flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-line [-webkit-overflow-scrolling:touch]"
         data-testid="project-detail-tabs"
       >
         <button
           v-for="tb in tabs"
           :key="tb.id"
           type="button"
-          class="min-h-11 shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition"
+          class="shrink-0 whitespace-nowrap border-b-2 px-3 py-1.5 text-sm transition"
           :class="
             tab === tb.id
               ? 'border-accent text-accent-2'

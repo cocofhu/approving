@@ -300,15 +300,6 @@ onMounted(() => {
     data-testid="project-shared-agent-panel"
   >
     <div
-      class="shrink-0 border-b border-line bg-elevated/55 px-3 py-2.5"
-      data-testid="shared-agent-hint"
-    >
-      <p class="text-[12px] leading-5 text-txt2">
-        {{ t('pages.projectDetail.sharedAgent.extendHint') }}
-      </p>
-    </div>
-
-    <div
       v-if="loading"
       class="flex flex-1 items-center justify-center text-[13px] text-txt3"
     >
@@ -324,7 +315,21 @@ onMounted(() => {
     </div>
 
     <template v-else-if="draft">
-      <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2">
+      <div class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+        <details class="relative shrink-0" data-testid="shared-agent-help">
+          <summary
+            class="flex h-[18px] w-[18px] cursor-pointer list-none items-center justify-center rounded-full border border-line text-[11px] font-semibold text-accent-2 transition hover:border-accent hover:bg-accent-dim [&::-webkit-details-marker]:hidden"
+            :aria-label="t('pages.projectDetail.sharedAgent.extendHint')"
+          >
+            ?
+          </summary>
+          <p
+            class="absolute left-0 top-[24px] z-30 m-0 w-[min(280px,calc(100vw-48px))] rounded-md border border-line-strong bg-elevated px-3 py-2 text-[11px] leading-5 text-txt2 shadow-lg"
+            data-testid="shared-agent-help-text"
+          >
+            {{ t('pages.projectDetail.sharedAgent.extendHint') }}
+          </p>
+        </details>
         <div class="scroll-area flex min-w-0 flex-1 gap-1 overflow-x-auto">
           <button
             v-for="tabItem in subTabs"

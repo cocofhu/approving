@@ -109,7 +109,7 @@ function expectFillGeometry(
   // Desktop aligns inbox-unified-budget (card > 70% viewport). Mobile header stacks
   // (title + tools) so remaining ratio is lower; still must fill leftover height.
   expect(m.cardBox!.height).toBeGreaterThan(m.viewportH * minRatio)
-  // No large void under the card — only AppShell padding (py-4 / md:py-6) remains.
+  // No large void under the card — only AppShell bottom padding (pb-4 / md:pb-6) remains.
   expect(m.viewportH - m.cardBox!.bottom).toBeLessThan(48)
   expect(m.cardBox!.bottom).toBeGreaterThan(m.viewportH * 0.9)
   // Must be stretched vs content-sized EmptyState (~py-14 + icon), not a short bar.
