@@ -11,14 +11,15 @@ vi.mock('vue-router', () => ({
   useRoute: () => route,
   RouterLink: { props: ['to'], emits: ['click'], template: '<a :data-to="typeof to === \'string\' ? to : to.path" @click="$emit(\'click\')"><slot/></a>' },
 }))
-const mocks = vi.hoisted(() => ({
-  count: { value: 3 },
-  unread: { value: 5 },
-  items: { value: [] as any[] },
-  mobile: { value: false },
-  peek: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), unfavorite: vi.fn(),
-  getWorkflow: vi.fn(), reorder: vi.fn(), launch: vi.fn(), toastError: vi.fn(),
-}))
+const mocks = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- vi.hoisted runs before ESM imports
+  const { ref } = require('vue') as typeof import('vue')
+  return {
+    count: ref(3), unread: ref(5), items: ref<any[]>([]), mobile: ref(false),
+    peek: vi.fn(), refresh: vi.fn(), hydrate: vi.fn(), unfavorite: vi.fn(),
+    getWorkflow: vi.fn(), reorder: vi.fn(), launch: vi.fn(), toastError: vi.fn(),
+  }
+})
 vi.mock('@/lib/inbox/usePendingGates', () => ({ usePendingGates: () => ({ count: mocks.count, peek: mocks.peek, refresh: mocks.refresh }) }))
 vi.mock('@/lib/run/useRunTerminalNotifications', () => ({ useRunTerminalNotifications: () => ({ unreadCount: mocks.unread }) }))
 vi.mock('@/lib/run/useWorkflowFavorites', () => ({ useWorkflowFavorites: () => ({

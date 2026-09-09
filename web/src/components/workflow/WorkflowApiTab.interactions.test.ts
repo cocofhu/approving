@@ -16,13 +16,15 @@ vi.mock('@/lib/api/api', async () => {
 })
 vi.mock('@/lib/composables/useToast', () => ({ useToast: () => mocks }))
 vi.mock('@/lib/run/useWorkflowAskInputs', () => ({
-  useWorkflowAskInputs: () => ({
-    fields: { value: [
+  useWorkflowAskInputs: () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- mock factory runs before ESM imports
+    const { ref } = require('vue') as typeof import('vue')
+    return { fields: ref([
       { key: 'count', type: 'number', required: true, desc: 'Count' },
       { key: 'enabled', type: 'boolean', required: false, desc: '' },
       { key: 'topic', type: 'text', required: false, desc: 'Topic' },
-    ] },
-  }),
+    ]) }
+  },
 }))
 import WorkflowApiTab from './WorkflowApiTab.vue'
 
