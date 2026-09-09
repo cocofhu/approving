@@ -11,9 +11,9 @@ import InboxStartFailedPane from '@/components/inbox/InboxStartFailedPane.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import ArtifactLoadingPane from '@/components/run/ArtifactLoadingPane.vue'
-import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
 import ClarifyProductStage from '@/components/run/ClarifyProductStage.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
+import ReactConnectingState from '@/components/run/ReactConnectingState.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import AppInlineError from '@/components/ui/AppInlineError.vue'
 import Pagination from '@/components/ui/Pagination.vue'
@@ -424,12 +424,6 @@ const {
           @open-share="openSharePanel(active)"
         />
         <InboxStartFailedPane v-else-if="startFailedActive" @dismiss="dismissStartFailure" />
-        <ClarifyBootLoader
-          v-else-if="activeStarting"
-          class="min-h-0 flex-1"
-          phase="starting"
-          data-testid="inbox-boot-loader"
-        />
         <ReviewShell
           v-else-if="showClarifyReviewShell"
           :key="active.runId + active.nodeId"
@@ -439,7 +433,8 @@ const {
           :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
         >
           <template #stage>
-            <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
+            <ReactConnectingState v-if="activeStarting" mode="stage" />
+            <ArtifactLoadingPane v-else-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
             <ReactArtifactStage
               v-else
               :artifacts="activeRun?.artifacts || []"
@@ -455,7 +450,9 @@ const {
             />
           </template>
           <template #sidebar>
+            <ReactConnectingState v-if="activeStarting" :show-confirm="composerMode === 'review'" />
             <ReviewComposer
+              v-else
               ref="reviewChatRef"
               :mode="composerMode"
               :run-id="active.runId"
@@ -541,12 +538,6 @@ const {
               @open-share="openSharePanel(active)"
             />
             <InboxStartFailedPane v-else-if="startFailedActive" @dismiss="dismissStartFailure" />
-            <ClarifyBootLoader
-              v-else-if="activeStarting"
-              class="min-h-0 flex-1"
-              phase="starting"
-              data-testid="inbox-boot-loader"
-            />
             <ReviewShell
               v-else-if="showClarifyReviewShell"
               :key="active.runId + active.nodeId"
@@ -555,7 +546,8 @@ const {
               :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
             >
               <template #stage>
-                <ArtifactLoadingPane v-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
+                <ReactConnectingState v-if="activeStarting" mode="stage" />
+                <ArtifactLoadingPane v-else-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
                 <ReactArtifactStage
                   v-else
                   :artifacts="activeRun?.artifacts || []"
@@ -571,7 +563,9 @@ const {
                 />
               </template>
               <template #sidebar>
+                <ReactConnectingState v-if="activeStarting" :show-confirm="composerMode === 'review'" />
                 <ReviewComposer
+                  v-else
                   ref="reviewChatRef"
                   :mode="composerMode"
                   :run-id="active.runId"

@@ -192,4 +192,59 @@ describe('Run detail panel shells (Demo entry assembly)', () => {
     await flushPromises()
     review.unmount()
   })
+
+  it('keeps clarify and review shells mounted while their sessions connect', () => {
+    const plugins = [i18n()]
+    const ReviewShellStub = defineComponent({
+      template: '<div data-testid="run-review-shell"><slot name="stage" /><slot name="sidebar" /></div>',
+    })
+    const global = {
+      plugins,
+      stubs: {
+        Icon: true,
+        StatusPill: true,
+        ReviewShell: ReviewShellStub,
+      },
+    }
+
+    const clarify = mount(RunClarifyPanel, {
+      props: {
+        sandboxFailed: false,
+        nodeLabel: '澄清',
+        nodeId: 'c1',
+        clarify: null,
+        runId: 'run-1',
+        run: stubRun,
+        draft: '',
+        attachments: [],
+        inputActive: false,
+        selStatus: 'pending',
+      },
+      global,
+    })
+    expect(clarify.find('[data-testid="run-review-shell"]').exists()).toBe(true)
+    expect(clarify.find('[data-testid="react-connecting-stage"]').exists()).toBe(true)
+    expect(clarify.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
+    expect(clarify.find('[data-testid="react-connecting-confirm"]').exists()).toBe(false)
+
+    const review = mount(RunReviewPanel, {
+      props: {
+        mobile: false,
+        node: stubNode,
+        nodeRun: stubNodeRun,
+        run: stubRun,
+        clarify: null,
+        draft: '',
+        attachments: [],
+        annotations: [],
+        inputActive: false,
+        selStatus: 'starting',
+      },
+      global,
+    })
+    expect(review.find('[data-testid="run-review-shell"]').exists()).toBe(true)
+    expect(review.find('[data-testid="react-connecting-stage"]').exists()).toBe(true)
+    expect(review.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
+    expect((review.get('[data-testid="react-connecting-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
+  })
 })

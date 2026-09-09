@@ -1,6 +1,6 @@
 {
   "route": {
-    "dashboard": "首页",
+    "dashboard": "开始",
     "stats": "用量统计",
     "board": "看板",
     "projects": "项目",
@@ -9,7 +9,7 @@
     "workflowEditor": "画布编辑",
     "runs": "运行记录",
     "runDetail": "运行详情",
-    "gates": "待审批",
+    "gates": "需要关注",
     "artifacts": "产物",
     "notifications": "通知",
     "agents": "Agent 管理",

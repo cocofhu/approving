@@ -47,16 +47,15 @@ const iconName = computed(() => {
 const iconClass = computed(() => inboxIconToneClass(inboxBadgeTone(props.item)))
 const badgeClass = computed(() => inboxBadgeToneClass(inboxBadgeTone(props.item)))
 const badgeText = computed(() => t(inboxBadgeLabelKey(props.item)))
-// Nothing to share until the session exists.
-const showShare = computed(() => !starting.value && isShareableInboxItem(props.item))
+const showShare = computed(() => isShareableInboxItem(props.item))
 const itemShareLink = computed((): GateShareInboxStatus | undefined => {
   if (!showShare.value) return undefined
   return 'shareLink' in props.item ? props.item.shareLink : undefined
 })
 const shareLabel = computed(() => (showShare.value ? shareStatusLabel(itemShareLink.value, t) : ''))
 const shareUsed = computed(() => showShare.value && itemShareLink.value?.state === 'used')
-/** covers card `disabled` (incl. parent processingLock) and used share tokens */
-const shareDisabled = computed(() => Boolean(props.disabled) || shareUsed.value)
+/** covers session startup, card `disabled` (incl. parent processingLock), and used share tokens */
+const shareDisabled = computed(() => starting.value || Boolean(props.disabled) || shareUsed.value)
 
 function onOpenShare() {
   if (shareDisabled.value) return

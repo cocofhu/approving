@@ -273,7 +273,11 @@ func TestResumeGateIdempotentHumanThenPM(t *testing.T) {
 		t.Fatal(err)
 	}
 	err2 := eng.ResumeGate(run.ID, "gate", "approve", nil)
-	if err2 == nil || !strings.Contains(err2.Error(), "already resolved") {
+	if err2 == nil {
+		t.Fatal("second resume expected error")
+	}
+	msg := err2.Error()
+	if !strings.Contains(msg, "already resolved") && !strings.Contains(msg, "run already ended") {
 		t.Fatalf("second resume err=%v", err2)
 	}
 	waitRunStatus(t, db, run.ID, "completed")

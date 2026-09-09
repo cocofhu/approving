@@ -5,8 +5,8 @@
 import { computed, ref } from 'vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
 import ReviewComposer from '@/components/run/ReviewComposer.vue'
-import ClarifyBootLoader from '@/components/run/ClarifyBootLoader.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
+import ReactConnectingState from '@/components/run/ReactConnectingState.vue'
 import {
   REVIEW_SIDEBAR,
   REVIEW_SHELL_WIDTH_KEY_REVIEW,
@@ -83,7 +83,9 @@ defineExpose({
     :storage-key="REVIEW_SHELL_WIDTH_KEY_REVIEW"
   >
     <template #stage>
+      <ReactConnectingState v-if="!clarify" mode="stage" />
       <ReactArtifactStage
+        v-else
         :artifacts="run.artifacts || []"
         :preview-artifact="clarify?.previewArtifact"
         :run-id="run.id"
@@ -97,8 +99,9 @@ defineExpose({
       />
     </template>
     <template #sidebar>
+      <ReactConnectingState v-if="!clarify" />
       <ReviewComposer
-        v-if="clarify"
+        v-else
         ref="reviewChatRef"
         mode="review"
         :run-id="run.id"
@@ -120,7 +123,6 @@ defineExpose({
         @queue-remove="(itemId, index) => emit('queue-remove', itemId, index)"
         @queue-reorder="(itemIds) => emit('queue-reorder', itemIds)"
       />
-      <ClarifyBootLoader v-else :phase="selStatus === 'pending' ? 'pending' : 'starting'" />
     </template>
   </ReviewShell>
 </template>

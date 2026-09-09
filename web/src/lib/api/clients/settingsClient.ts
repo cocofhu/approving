@@ -1,6 +1,7 @@
 import type { InboxItem } from '../../shared/types'
 import { req, rootWsUrl } from '../httpCore'
 import type {
+  BrandSettings,
   ChannelConfig,
   ChannelConfigInput,
   ChannelDeleteOpts,
@@ -13,6 +14,8 @@ import type {
   PlatformStatusMetrics,
   SettingItem,
 } from '../apiTypes'
+
+export type SettingsResponse = { items: SettingItem[]; brand: BrandSettings }
 
 export const settingsClient = {
   health: () => req<HealthResponse>(`/health`),
@@ -54,9 +57,9 @@ export const settingsClient = {
     return req<PlatformStatusMetrics>(qs ? `/stats/platform-status?${qs}` : '/stats/platform-status')
   },
   // platform settings (scheduling params)
-  getSettings: () => req<{ items: SettingItem[] }>('/settings'),
-  updateSettings: (patch: Record<string, number>) =>
-    req<{ items: SettingItem[] }>('/settings', {
+  getSettings: () => req<SettingsResponse>('/settings'),
+  updateSettings: (patch: Record<string, number | string>) =>
+    req<SettingsResponse>('/settings', {
       method: 'PUT',
       body: JSON.stringify(patch),
     }),
