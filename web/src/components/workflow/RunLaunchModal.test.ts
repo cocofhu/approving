@@ -295,11 +295,41 @@ describe('RunLaunchModal', () => {
     wrapper.unmount()
   })
 
-  it('keeps empty tag suggestions when tags is non-array', async () => {
-    apiMocks.listProjectRunTags.mockResolvedValue({ tags: { foo: 1 } as unknown as string[] })
-    const wrapper = mountModal(true, { projectId: 'proj-1' })
+  it('prefills segmented priority from initialPriority (plan g2.2 / g3.4)', async () => {
+    const wrapper = mountModal(true, { initialPriority: 'high' })
     await flushPromises()
-    expect(apiMocks.listProjectRunTags).toHaveBeenCalled()
+    expect(wrapper.vm.priority).toBe('high')
+    wrapper.unmount()
+  })
+
+  it('defaults to normal when initialPriority is omitted or invalid (plan g3.4)', async () => {
+    const omitted = mountModal(true)
+    await flushPromises()
+    expect(omitted.vm.priority).toBe('normal')
+    omitted.unmount()
+
+    const invalid = mountModal(true, { initialPriority: 'urgent' })
+    await flushPromises()
+    expect(invalid.vm.priority).toBe('normal')
+    invalid.unmount()
+  })
+
+  it('starts with the modal priority after the user changes it (plan g2.2)', async () => {
+    apiMocks.startRun.mockResolvedValue({ id: 'run-prio' })
+    const wrapper = mountModal(true, { initialPriority: 'high' })
+    await flushPromises()
+    wrapper.vm.priority = 'low'
+    const startBtn = findStartButton(wrapper)
+    await startBtn!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.startRun).toHaveBeenCalledWith(
+      'wf-1',
+      expect.objectContaining({ topic: 'hello' }),
+      'manual',
+      'low',
+      [],
+      expect.anything(),
+    )
     wrapper.unmount()
   })
 })

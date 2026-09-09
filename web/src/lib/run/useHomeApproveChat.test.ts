@@ -51,7 +51,13 @@ vi.mock('@/lib/api/api', async () => {
   }
 })
 
-import { useHomeApproveChat, HOME_PIPELINE_MEMORY_KEY, HOME_COMPOSER_DRAFT_DEBOUNCE_MS } from './useHomeApproveChat'
+import {
+  useHomeApproveChat,
+  HOME_PIPELINE_MEMORY_KEY,
+  HOME_PRIORITY_MEMORY_KEY,
+  HOME_COMPOSER_DRAFT_DEBOUNCE_MS,
+  parseRunPriority,
+} from './useHomeApproveChat'
 import {
   HOME_COMPOSER_DRAFT_KEY,
   __resetHomeComposerDraftMigrationForTests,
@@ -147,6 +153,7 @@ describe('useHomeApproveChat', () => {
     __setDraftIdbBackendForTests(createMemoryDraftIdb())
     __resetHomeComposerDraftMigrationForTests()
     localStorage.removeItem(HOME_PIPELINE_MEMORY_KEY)
+    localStorage.removeItem(HOME_PRIORITY_MEMORY_KEY)
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
   })
 
@@ -155,6 +162,7 @@ describe('useHomeApproveChat', () => {
     __resetDraftIdbForTests()
     __resetHomeComposerDraftMigrationForTests()
     localStorage.removeItem(HOME_PIPELINE_MEMORY_KEY)
+    localStorage.removeItem(HOME_PRIORITY_MEMORY_KEY)
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
   })
 
@@ -229,6 +237,44 @@ describe('useHomeApproveChat', () => {
     expect(chat.selectedId.value).toBe('wf-ap')
     expect(localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)).toBe('wf-ap')
     expect(mocks.toastError).toHaveBeenCalledWith('patch failed')
+  })
+
+  it('parseRunPriority falls back to normal for empty or illegal values (plan g1.4)', () => {
+    expect(parseRunPriority('high')).toBe('high')
+    expect(parseRunPriority('low')).toBe('low')
+    expect(parseRunPriority('normal')).toBe('normal')
+    expect(parseRunPriority('')).toBe('normal')
+    expect(parseRunPriority('urgent')).toBe('normal')
+    expect(parseRunPriority(null)).toBe('normal')
+  })
+
+  it('restores last priority from localStorage and rejects illegal values (plan g1.4)', async () => {
+    localStorage.setItem(HOME_PRIORITY_MEMORY_KEY, 'high')
+    const highChat = withSetup(() => useHomeApproveChat())
+    expect(highChat.launchPriority.value).toBe('high')
+
+    localStorage.setItem(HOME_PRIORITY_MEMORY_KEY, 'urgent')
+    const fallback = withSetup(() => useHomeApproveChat())
+    expect(fallback.launchPriority.value).toBe('normal')
+  })
+
+  it('persists priority via selectPriority without writing Composer IndexedDB draft (plan g1.4)', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    chat.selectPriority('low')
+    expect(localStorage.getItem(HOME_PRIORITY_MEMORY_KEY)).toBe('low')
+    expect(chat.launchPriority.value).toBe('low')
+  })
+
+  it('passes the selected priority as startRun fourth argument (plan g2.1 / g3.3)', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    chat.draft.value = '紧急需求'
+    chat.selectPriority('high')
+    await chat.send()
+    expect(mocks.startRun).toHaveBeenCalledWith('wf-ap', {}, 'manual', 'high', [], {
+      title: '紧急需求',
+      firstMessage: { text: '紧急需求', images: [] },
+    })
   })
 
   it('starts a run carrying the first message, then opens inbox', async () => {

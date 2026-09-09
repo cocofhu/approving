@@ -17,9 +17,13 @@ import { clipRunTitle } from '@/lib/run/runTitle'
 import { missingRequiredAskField, seedAskLaunchFields } from '@/lib/run/useWorkflowAskInputs'
 import { attachmentDisplayName } from '@/lib/shared/attachments'
 import type { ClarifyImage, Workflow } from '@/lib/shared/types'
+import type { RunPriority } from '@/components/ui/PrioritySegmented.vue'
 
 /** Remember last selected home pipeline across visits (plan g2.4). */
 export const HOME_PIPELINE_MEMORY_KEY = 'approving.home.lastPipelineId'
+
+/** Remember last home Composer priority (plan g1.4). Not stored in IndexedDB draft. */
+export const HOME_PRIORITY_MEMORY_KEY = 'approving.home.lastPriority'
 
 /** Debounce for auto-save (plan g2.2; NFR ~300–800ms). */
 export const HOME_COMPOSER_DRAFT_DEBOUNCE_MS = 400
@@ -53,6 +57,27 @@ function pickDefaultPipelineId(list: Workflow[], preferred: string): string {
   return list[0]?.id || ''
 }
 
+export function parseRunPriority(raw: string | null | undefined): RunPriority {
+  if (raw === 'high' || raw === 'normal' || raw === 'low') return raw
+  return 'normal'
+}
+
+function readLastPriority(): RunPriority {
+  try {
+    return parseRunPriority(localStorage.getItem(HOME_PRIORITY_MEMORY_KEY))
+  } catch {
+    return 'normal'
+  }
+}
+
+function writeLastPriority(value: RunPriority) {
+  try {
+    localStorage.setItem(HOME_PRIORITY_MEMORY_KEY, value)
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 export function useHomeApproveChat() {
   const router = useRouter()
   const toast = useToast()
@@ -63,6 +88,7 @@ export function useHomeApproveChat() {
   const loading = ref(false)
   const loadError = ref<string | null>(null)
   const selectedId = ref('')
+  const launchPriority = ref<RunPriority>(readLastPriority())
   const draft = ref('')
   const sending = ref(false)
   const hidingPipelineId = ref<string | null>(null)
@@ -237,6 +263,11 @@ export function useHomeApproveChat() {
     writeLastPipelineId(id)
   }
 
+  function selectPriority(value: RunPriority) {
+    launchPriority.value = parseRunPriority(value)
+    writeLastPriority(launchPriority.value)
+  }
+
   async function hidePipelineFromHome(wf: Workflow) {
     if (hidingPipelineId.value) return
     const previousWorkflows = workflows.value
@@ -324,7 +355,7 @@ export function useHomeApproveChat() {
         await seedLaunch(wf)
         return
       }
-      const res = await api.startRun(wf.id, {}, 'manual', 'normal', [], {
+      const res = await api.startRun(wf.id, {}, 'manual', launchPriority.value, [], {
         title: titleFromDraft(text, images),
         firstMessage: { text, images },
       })
@@ -388,6 +419,7 @@ export function useHomeApproveChat() {
     pipelines,
     selected,
     selectedId,
+    launchPriority,
     draft,
     sending,
     hidingPipelineId,
@@ -410,6 +442,7 @@ export function useHomeApproveChat() {
     removeAttachment: attach.removeAttachment,
     load,
     selectPipeline,
+    selectPriority,
     hidePipelineFromHome,
     send,
     closeLaunch,

@@ -49,6 +49,11 @@ const props = defineProps<{
    * delivers it into the approve node's sandbox once that node parks.
    */
   firstMessage?: { text: string; images?: ClarifyImage[] } | null
+  /**
+   * Prefill segmented priority when the modal opens (home Composer path).
+   * Unset / invalid values still default to normal (plan g2.2).
+   */
+  initialPriority?: RunPriority
 }>()
 
 const emit = defineEmits<{
@@ -114,7 +119,8 @@ watch(
       phase.value = 'form'
       startError.value = ''
       successRunId.value = ''
-      priority.value = 'normal'
+      const seed = props.initialPriority
+      priority.value = seed === 'high' || seed === 'low' || seed === 'normal' ? seed : 'normal'
       scrollAreaMinHeight.value = undefined
       reposDraft.value = {}
       tags.value = []

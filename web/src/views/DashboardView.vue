@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import HomeParticleMeshBackground from '@/components/dashboard/HomeParticleMeshBackground.vue'
 import HomePipelineSelect from '@/components/dashboard/HomePipelineSelect.vue'
+import HomePrioritySelect from '@/components/dashboard/HomePrioritySelect.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
@@ -26,6 +27,7 @@ const {
   pipelines,
   selected,
   selectedId,
+  launchPriority,
   draft,
   sending,
   hidingPipelineId,
@@ -48,6 +50,7 @@ const {
   removeAttachment,
   load,
   selectPipeline,
+  selectPriority,
   hidePipelineFromHome,
   send,
   closeLaunch,
@@ -579,6 +582,11 @@ onBeforeUnmount(() => {
               :disabled="!pipelines.length || sending"
               @update:model-value="selectPipeline"
             />
+            <HomePrioritySelect
+              :model-value="launchPriority"
+              :disabled="!pipelines.length || sending"
+              @update:model-value="selectPriority"
+            />
             <div class="flex-1" />
             <button
               type="submit"
@@ -763,6 +771,7 @@ onBeforeUnmount(() => {
       :draft-restored="draftRestored"
       :run-title="launchTitle"
       :first-message="launchFirstMessage"
+      :initial-priority="launchPriority"
       @close="closeLaunch()"
       @stayed="closeLaunch()"
       @started="onLaunchStarted($event)"
