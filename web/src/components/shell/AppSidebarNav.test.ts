@@ -129,25 +129,28 @@ describe('AppSidebarNav', () => {
     vi.useRealTimers()
   })
 
-  it('shows /gates badge from pending gates and hides /notifications badge when unread is 0', async () => {
-    notifMocks.unreadCount.value = 0
+  it('shows the gates badge without exposing notifications in workspace chrome', async () => {
+    notifMocks.unreadCount.value = 46
     const wrapper = mountNav()
     await flushPromises()
     expect(wrapper.find('[data-testid="nav-gates-badge"]').text()).toBe('2')
+    expect(wrapper.find('[data-to="/notifications"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="nav-notifications-badge"]').exists()).toBe(false)
     wrapper.unmount()
     vi.useRealTimers()
   })
 
-  it('shows /notifications unread badge from the same unreadCount as topbar', async () => {
+  it('shows the notification badge from the shared unreadCount in settings chrome', async () => {
+    routeState.path = '/notifications'
     notifMocks.unreadCount.value = 46
     const wrapper = mountNav()
     await flushPromises()
     const badge = wrapper.find('[data-testid="nav-notifications-badge"]')
     expect(badge.exists()).toBe(true)
     expect(badge.text()).toBe('46')
-    // Gates badge remains independent.
-    expect(wrapper.find('[data-testid="nav-gates-badge"]').text()).toBe('2')
+    expect(wrapper.find('[data-to="/notifications"]').classes()).toContain('active')
+    expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-gates-badge"]').exists()).toBe(false)
     wrapper.unmount()
     vi.useRealTimers()
   })
@@ -158,7 +161,8 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('快捷流水线')
     // Primary workspace nav still present (plan g1.1)
-    expect(wrapper.find('[data-to="/notifications"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/runs"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/notifications"]').exists()).toBe(false)
     expect(wrapper.find('[data-to="/settings"]').exists()).toBe(true)
     expect(wrapper.find('[data-to="/dashboard"]').exists()).toBe(true)
     expect(wrapper.find('[data-to="/gates"]').exists()).toBe(true)
@@ -273,7 +277,8 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-testid="nav-back-home"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-back-home"]').attributes('data-to')).toBe('/dashboard')
     expect(wrapper.find('[data-to="/projects"]').exists()).toBe(true)
-    expect(wrapper.find('[data-to="/runs"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/notifications"]').exists()).toBe(true)
+    expect(wrapper.find('[data-to="/runs"]').exists()).toBe(false)
     expect(wrapper.find('[data-to="/stats"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-settings-integrations"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
@@ -311,6 +316,17 @@ describe('AppSidebarNav', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(false)
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('uses workspace chrome and highlights runs for the run list', async () => {
+    routeState.path = '/runs'
+    const wrapper = mountNav()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(false)
+    expect(wrapper.find('[data-to="/runs"]').classes()).toContain('active')
     wrapper.unmount()
     vi.useRealTimers()
   })
