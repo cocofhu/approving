@@ -223,7 +223,9 @@ test.describe('ProjectDetailView 流水线操作列', () => {
     await expect(menu).not.toContainText('⚡')
 
     await page.getByTestId('new-workflow-scratch').click()
-    await expect(page).toHaveURL(/\/workflows\/new\/edit\?projectId=proj-1/)
+    // This fixture uses Vue Router memory history, so assert the matched route
+    // component instead of the unchanged browser URL.
+    await expect(page.getByTestId('new-edit-page')).toBeVisible()
   })
 
   test('默认基线弹窗复用多仓编辑器，空 URL 禁止创建', async ({ page }) => {
