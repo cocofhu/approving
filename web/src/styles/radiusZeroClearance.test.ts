@@ -97,4 +97,80 @@ describe('radius zero clearance', () => {
     expect(src).toMatch(/\.home-pipeline-select__panel\s*\{[^}]*border-radius:\s*12px/s)
     expect(src).toMatch(/\.home-pipeline-select__search\s*\{[^}]*border-radius:\s*8px/s)
   })
+
+  // plan g1.1 / g1.2 / g3.1 — screenshot: 运行产出「放大查看」+ list radius clip
+  it('OutputResultCards enlarge button is rounded and list clips corners', () => {
+    const src = read('components/run/OutputResultCards.vue')
+    const enlarge = src.match(/<button[\s\S]*?data-testid="output-result-enlarge"[\s\S]*?>/)?.[0]
+    expect(enlarge).toBeTruthy()
+    expect(enlarge!).toMatch(/\brounded-(?:md|lg)\b/)
+    const list = src.match(/<div[\s\S]*?data-testid="output-result-list"[\s\S]*?>/)?.[0]
+    expect(list).toBeTruthy()
+    expect(list!).toMatch(/\brounded-lg\b/)
+    expect(list!).toMatch(/\boverflow-hidden\b/)
+  })
+
+  // plan g2.1 / g3.1 — screenshot: mobile nav drawer 16px floating card
+  it('AppShell mobile-nav-drawer is app-sidebar-card with inset (not flush inset-y-0)', () => {
+    const src = read('components/shell/AppShell.vue')
+    const aside = src.match(/<aside[\s\S]*?data-testid="mobile-nav-drawer"[\s\S]*?>/)?.[0]
+    expect(aside).toBeTruthy()
+    expect(aside!).toMatch(/\bapp-sidebar-card\b/)
+    expect(aside!).not.toMatch(/\binset-y-0\b/)
+    expect(aside!).toMatch(/\bleft-3\.5\b/)
+    const close = src.match(/<button[\s\S]*?data-testid="mobile-nav-close"[\s\S]*?>/)?.[0]
+    expect(close).toBeTruthy()
+    expect(close!).toMatch(/\brounded-md\b/)
+  })
+
+  it('StatusMetrics compact strip uses control 8px rounded-md', () => {
+    const src = read('components/shell/StatusMetrics.vue')
+    const compact = src.match(/<button[\s\S]*?data-testid="status-metrics-compact"[\s\S]*?>/)?.[0]
+    expect(compact).toBeTruthy()
+    expect(compact!).toMatch(/\brounded-md\b/)
+  })
+
+  it('AppDrawer sheet follows shell 16px via app-sidebar-card', () => {
+    const src = read('components/ui/AppDrawer.vue')
+    expect(src).toMatch(/\bapp-sidebar-card\b/)
+  })
+
+  it('ProjectAuditPanel scoped boxed controls use role radii (plan g3.2)', () => {
+    const src = read('components/project/ProjectAuditPanel.vue')
+    expect(src).toMatch(/\.btn\s*\{[^}]*border-radius:\s*8px/s)
+    expect(src).toMatch(/\.search\s*\{[^}]*border-radius:\s*8px/s)
+    expect(src).toMatch(/\.seg\s*\{[^}]*border-radius:\s*8px/s)
+    expect(src).toMatch(/\.event-card\s*\{[^}]*border-radius:\s*12px/s)
+  })
+
+  it('RequirementDraftsPanel .seg track is control 8px (plan g3.2)', () => {
+    const src = read('components/project/RequirementDraftsPanel.vue')
+    expect(src).toMatch(/\.seg\s*\{[^}]*border-radius:\s*8px/s)
+  })
+
+  it('LangSelect ghost trigger uses control rounded-md (plan g3.2)', () => {
+    const src = read('components/ui/LangSelect.vue')
+    expect(src).toMatch(/variant === 'ghost'[\s\S]*?\brounded-md\b/)
+  })
+
+  it('同源 bg-accent solid keys carry rounded (plan g1.3)', () => {
+    const upstream = read('components/run/UpstreamRequirementContext.vue')
+    const enlarge = upstream.match(/<button[\s\S]*?data-testid="upstream-enlarge"[\s\S]*?>/g)
+    expect(enlarge?.length).toBeGreaterThanOrEqual(1)
+    for (const btn of enlarge!) {
+      if (btn.includes('bg-accent')) expect(btn).toMatch(/\brounded-md\b/)
+    }
+    const share = read('components/run/GateShareLinkPanel.vue')
+    for (const id of ['gate-share-create', 'gate-share-copy', 'gate-share-confirm-ok']) {
+      const btn = share.match(new RegExp(`<button[\\s\\S]*?data-testid="${id}"[\\s\\S]*?>`))?.[0]
+      expect(btn).toBeTruthy()
+      expect(btn!).toMatch(/\brounded-md\b/)
+    }
+    const pub = read('views/PublicGateApprovalView.vue')
+    for (const id of ['public-gate-upstream-enlarge', 'public-gate-upstream-retry']) {
+      const btn = pub.match(new RegExp(`<button[\\s\\S]*?data-testid="${id}"[\\s\\S]*?>`))?.[0]
+      expect(btn).toBeTruthy()
+      expect(btn!).toMatch(/\brounded-md\b/)
+    }
+  })
 })

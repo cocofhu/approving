@@ -11,8 +11,8 @@ const emit = defineEmits<{ (e: 'close'): void }>()
       <div v-if="open" class="fixed inset-0 z-40">
         <div class="absolute inset-0 bg-black/50" @click="emit('close')" />
         <div
-          class="absolute right-0 top-0 flex h-full flex-col border-l border-line bg-surface shadow-drawer"
-          :style="{ width: (width || 420) + 'px', maxWidth: '100vw' }"
+          class="app-sidebar-card absolute bottom-3.5 right-3.5 top-3.5 flex flex-col bg-surface"
+          :style="{ width: (width || 420) + 'px', maxWidth: 'calc(100vw - 28px)' }"
         >
           <div class="flex h-14 shrink-0 items-center gap-2 border-b border-line px-4">
             <div class="flex-1 text-sm font-semibold text-txt">{{ title }}</div>

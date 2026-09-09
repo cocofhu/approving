@@ -206,7 +206,12 @@ describe('AppShell (no topbar + floating ball)', () => {
       'utf8',
     )
     expect(src).toMatch(/bg-black\/50 md:hidden/)
-    expect(src).toMatch(/shadow-drawer md:hidden/)
+    expect(src).toMatch(/app-sidebar-card[\s\S]*?md:hidden|md:hidden[\s\S]*?data-testid="mobile-nav-drawer"/)
+    const aside = src.match(/<aside[\s\S]*?data-testid="mobile-nav-drawer"[\s\S]*?>/)?.[0]
+    expect(aside).toBeTruthy()
+    expect(aside!).toMatch(/\bapp-sidebar-card\b/)
+    expect(aside!).toMatch(/\bmd:hidden\b/)
+    expect(aside!).not.toMatch(/\binset-y-0\b/)
     expect(src).not.toMatch(/<AppTopbar/)
   })
 

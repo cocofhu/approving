@@ -186,13 +186,13 @@ onUnmounted(() => stopShutdownPolling())
       <Transition name="drawer-slide">
         <aside
           v-if="drawerOpen"
-          class="fixed inset-y-0 left-0 z-50 flex w-[min(280px,85vw)] flex-col border-r border-line bg-surface shadow-drawer md:hidden"
+          class="app-sidebar-card fixed bottom-3.5 left-3.5 top-3.5 z-50 flex w-[min(280px,calc(85vw-14px))] flex-col bg-surface md:hidden"
           data-testid="mobile-nav-drawer"
         >
           <div class="safe-area-top flex h-14 items-center justify-between gap-2 px-4">
             <BrandLogo />
             <button
-              class="flex h-11 w-11 items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
+              class="flex h-11 w-11 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
               :aria-label="t('shell.aria.closeNav')"
               data-testid="mobile-nav-close"
               @click="closeDrawer"
