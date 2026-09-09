@@ -65,6 +65,7 @@ export function useHomeApproveChat() {
   const selectedId = ref('')
   const draft = ref('')
   const sending = ref(false)
+  const hidingPipelineId = ref<string | null>(null)
   const pendingText = ref('')
   const pendingImages = ref<ClarifyImage[]>([])
 
@@ -236,6 +237,35 @@ export function useHomeApproveChat() {
     writeLastPipelineId(id)
   }
 
+  async function hidePipelineFromHome(wf: Workflow) {
+    if (hidingPipelineId.value) return
+    const previousWorkflows = workflows.value
+    const previousSelectedId = selectedId.value
+    hidingPipelineId.value = wf.id
+    workflows.value = workflows.value.map((item) =>
+      item.id === wf.id ? { ...item, showOnHome: false } : item,
+    )
+    const nextId = pipelines.value[0]?.id || ''
+    selectedId.value = nextId
+    preferredDraftPipelineId = nextId
+    writeLastPipelineId(nextId)
+    try {
+      const saved = await api.patchWorkflowHomeVisibility(wf.id, false)
+      workflows.value = workflows.value.map((item) =>
+        item.id === wf.id ? { ...item, ...saved, showOnHome: false } : item,
+      )
+      toast.success(t('pages.projectDetail.homeVisibility.updated'))
+    } catch (e: any) {
+      workflows.value = previousWorkflows
+      selectedId.value = previousSelectedId
+      preferredDraftPipelineId = previousSelectedId
+      writeLastPipelineId(previousSelectedId)
+      toast.error(String(e?.message || e) || t('pages.projectDetail.homeVisibility.updateFailed'))
+    } finally {
+      hidingPipelineId.value = null
+    }
+  }
+
   async function seedLaunch(wf: Workflow) {
     const seeded = await seedAskLaunchFields(wf)
     launchTarget.value = wf
@@ -360,6 +390,7 @@ export function useHomeApproveChat() {
     selectedId,
     draft,
     sending,
+    hidingPipelineId,
     canSend,
     loading,
     loadError,
@@ -379,6 +410,7 @@ export function useHomeApproveChat() {
     removeAttachment: attach.removeAttachment,
     load,
     selectPipeline,
+    hidePipelineFromHome,
     send,
     closeLaunch,
     onLaunchStarted,

@@ -12,6 +12,7 @@ import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useHomeApproveChat } from '@/lib/run/useHomeApproveChat'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
 import { imgSrc } from '@/lib/shared/compositeText'
+import type { Workflow } from '@/lib/shared/types'
 
 const { preview: imagePreview, openChatImagePreview, closeChatImagePreview } = useChatImagePreview()
 
@@ -26,6 +27,7 @@ const {
   selectedId,
   draft,
   sending,
+  hidingPipelineId,
   canSend,
   loading,
   loadError,
@@ -45,6 +47,7 @@ const {
   removeAttachment,
   load,
   selectPipeline,
+  hidePipelineFromHome,
   send,
   closeLaunch,
   onLaunchStarted,
@@ -70,6 +73,19 @@ const phVisible = ref('')
 const phCursor = ref(false)
 let phTimer: ReturnType<typeof setTimeout> | null = null
 let phHoldTimer: ReturnType<typeof setTimeout> | null = null
+const pipelineMenuOpen = ref(false)
+const pipelineMenuX = ref(0)
+const pipelineMenuY = ref(0)
+const pipelineMenuTarget = ref<Workflow | null>(null)
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+let longPressStart: { x: number; y: number } | null = null
+let suppressNextCardClick = false
+
+const PIPELINE_MENU_WIDTH = 168
+const PIPELINE_MENU_HEIGHT = 70
+const PIPELINE_MENU_MARGIN = 8
+const LONG_PRESS_MS = 500
+const LONG_PRESS_MOVE_PX = 10
 
 const placeholderLines = computed(() => {
   const raw = tm('pages.dashboard.placeholders') as unknown
@@ -222,6 +238,97 @@ function goProjects() {
   void router.push('/projects')
 }
 
+function closePipelineMenu() {
+  pipelineMenuOpen.value = false
+  pipelineMenuTarget.value = null
+}
+
+function positionPipelineMenu(x: number, y: number) {
+  const maxX = Math.max(PIPELINE_MENU_MARGIN, window.innerWidth - PIPELINE_MENU_WIDTH - PIPELINE_MENU_MARGIN)
+  const maxY = Math.max(PIPELINE_MENU_MARGIN, window.innerHeight - PIPELINE_MENU_HEIGHT - PIPELINE_MENU_MARGIN)
+  pipelineMenuX.value = Math.min(Math.max(PIPELINE_MENU_MARGIN, x), maxX)
+  pipelineMenuY.value = Math.min(Math.max(PIPELINE_MENU_MARGIN, y), maxY)
+}
+
+function openPipelineMenu(pipeline: Workflow, x: number, y: number) {
+  pipelineMenuTarget.value = pipeline
+  positionPipelineMenu(x, y)
+  pipelineMenuOpen.value = true
+}
+
+function onPipelineContextMenu(e: MouseEvent, pipeline: Workflow) {
+  e.preventDefault()
+  e.stopPropagation()
+  clearLongPress()
+  openPipelineMenu(pipeline, e.clientX, e.clientY)
+}
+
+function onPipelineMore(e: MouseEvent, pipeline: Workflow) {
+  e.stopPropagation()
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  openPipelineMenu(pipeline, rect.right, rect.bottom + 4)
+}
+
+function clearLongPress() {
+  if (longPressTimer != null) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+  longPressStart = null
+}
+
+function onPipelinePointerDown(e: PointerEvent, pipeline: Workflow) {
+  if (e.pointerType !== 'touch') return
+  clearLongPress()
+  longPressStart = { x: e.clientX, y: e.clientY }
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null
+    suppressNextCardClick = true
+    openPipelineMenu(pipeline, e.clientX, e.clientY)
+  }, LONG_PRESS_MS)
+}
+
+function onPipelinePointerMove(e: PointerEvent) {
+  if (!longPressStart) return
+  if (
+    Math.hypot(e.clientX - longPressStart.x, e.clientY - longPressStart.y)
+    > LONG_PRESS_MOVE_PX
+  ) {
+    clearLongPress()
+  }
+}
+
+function onPipelineCardClick(id: string) {
+  clearLongPress()
+  if (suppressNextCardClick) {
+    suppressNextCardClick = false
+    return
+  }
+  selectPipeline(id)
+}
+
+async function hideMenuPipeline() {
+  const target = pipelineMenuTarget.value
+  if (!target) return
+  closePipelineMenu()
+  await hidePipelineFromHome(target)
+}
+
+function editMenuPipeline() {
+  const target = pipelineMenuTarget.value
+  if (!target) return
+  closePipelineMenu()
+  void router.push(`/workflows/${target.id}/edit`)
+}
+
+function onWindowPointerDown() {
+  if (pipelineMenuOpen.value) closePipelineMenu()
+}
+
+function onWindowKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') closePipelineMenu()
+}
+
 function onComposerSubmit(e: Event) {
   e.preventDefault()
   void send()
@@ -275,6 +382,7 @@ function scrollPipelineByDir(dir: number) {
 }
 
 function onPipelineWheel(e: WheelEvent) {
+  closePipelineMenu()
   const rail = pipelineCardsEl.value
   if (!rail) return
   if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && !e.shiftKey) return
@@ -319,14 +427,21 @@ onMounted(() => {
     bindPipelineStripObserver()
   })
   window.addEventListener('resize', syncPipelineNav)
+  window.addEventListener('pointerdown', onWindowPointerDown)
+  window.addEventListener('keydown', onWindowKeydown)
+  window.addEventListener('scroll', closePipelineMenu, true)
 })
 
 onBeforeUnmount(() => {
   clearBrandTimers()
   clearPhTimers()
+  clearLongPress()
   pipelineStripObserver?.disconnect()
   pipelineStripObserver = null
   window.removeEventListener('resize', syncPipelineNav)
+  window.removeEventListener('pointerdown', onWindowPointerDown)
+  window.removeEventListener('keydown', onWindowKeydown)
+  window.removeEventListener('scroll', closePipelineMenu, true)
 })
 </script>
 
@@ -543,16 +658,33 @@ onBeforeUnmount(() => {
           @scroll.passive="syncPipelineNav"
           @wheel="onPipelineWheel"
         >
-          <button
+          <div
             v-for="p in pipelines"
             :key="p.id"
-            type="button"
+            tabindex="0"
             role="listitem"
             class="home-shell__card w-48 shrink-0 overflow-hidden rounded-lg border border-line p-0 text-left"
             :class="p.id === selected?.id ? 'home-shell__card--selected' : 'hover:border-line-strong'"
             :data-testid="`home-pipeline-card-${p.id}`"
-            @click="selectPipeline(p.id)"
+            @click="onPipelineCardClick(p.id)"
+            @keydown.enter.space.prevent="selectPipeline(p.id)"
+            @contextmenu="onPipelineContextMenu($event, p)"
+            @pointerdown="onPipelinePointerDown($event, p)"
+            @pointermove="onPipelinePointerMove"
+            @pointerup="clearLongPress"
+            @pointercancel="clearLongPress"
+            @pointerleave="clearLongPress"
           >
+            <button
+              type="button"
+              class="home-pipeline-more absolute right-2 top-2 z-[1] flex h-7 w-7 items-center justify-center rounded-lg text-txt2"
+              :aria-label="t('pages.dashboard.pipelineMenu.more')"
+              :title="t('pages.dashboard.pipelineMenu.more')"
+              :data-testid="`home-pipeline-more-${p.id}`"
+              @click="onPipelineMore($event, p)"
+            >
+              <Icon name="more" :size="16" />
+            </button>
             <div class="home-shell__card-top flex h-20 items-center justify-center">
               <span class="flex items-center gap-1.5">
                 <span class="h-2 w-2 bg-txt3" />
@@ -568,7 +700,7 @@ onBeforeUnmount(() => {
                 {{ p.description || t('pages.dashboard.cardFallback') }}
               </div>
             </div>
-          </button>
+          </div>
         </div>
 
         <button
@@ -584,6 +716,40 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="pipelineMenuOpen && pipelineMenuTarget"
+        class="home-pipeline-menu fixed z-[9999] min-w-[168px] rounded-lg border border-line bg-elevated py-1 shadow-card"
+        role="menu"
+        data-testid="home-pipeline-menu"
+        :style="{ left: pipelineMenuX + 'px', top: pipelineMenuY + 'px' }"
+        @pointerdown.stop
+        @click.stop
+      >
+        <button
+          type="button"
+          class="home-pipeline-menu__item"
+          role="menuitem"
+          data-testid="home-pipeline-menu-hide"
+          :disabled="hidingPipelineId === pipelineMenuTarget.id"
+          @click="hideMenuPipeline"
+        >
+          <Icon name="eye-off" :size="14" aria-hidden="true" />
+          <span>{{ t('pages.dashboard.pipelineMenu.hide') }}</span>
+        </button>
+        <button
+          type="button"
+          class="home-pipeline-menu__item"
+          role="menuitem"
+          data-testid="home-pipeline-menu-edit"
+          @click="editMenuPipeline"
+        >
+          <Icon name="edit" :size="14" aria-hidden="true" />
+          <span>{{ t('pages.dashboard.pipelineMenu.edit') }}</span>
+        </button>
+      </div>
+    </Teleport>
 
     <RunLaunchModal
       :open="launchOpen"
@@ -738,9 +904,13 @@ onBeforeUnmount(() => {
 
 /* Card role 12px; selected = accent inset border */
 .home-shell__card {
+  position: relative;
   background: rgb(var(--c-surface));
   border-radius: 12px;
   box-shadow: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 :global(html.light) .home-shell__card {
@@ -755,6 +925,43 @@ onBeforeUnmount(() => {
 .home-shell__card-top {
   background: rgb(var(--c-elevated));
   border-bottom: 1px solid rgb(var(--c-line) / 0.55);
+}
+
+.home-pipeline-more {
+  border: 0;
+  background: color-mix(in srgb, rgb(var(--c-surface)) 78%, transparent);
+}
+
+.home-pipeline-more:hover,
+.home-pipeline-more:focus-visible {
+  color: rgb(var(--c-txt));
+  background: rgb(var(--c-overlay));
+  outline: none;
+}
+
+.home-pipeline-menu__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 7px 14px;
+  color: rgb(var(--c-txt2));
+  font-size: 12px;
+  text-align: left;
+}
+
+.home-pipeline-menu__item:hover,
+.home-pipeline-menu__item:focus-visible {
+  color: rgb(var(--c-txt));
+  background: rgb(var(--c-overlay));
+  outline: none;
+}
+
+.home-pipeline-menu__item svg {
+  flex-shrink: 0;
+  color: rgb(var(--c-txt3));
 }
 
 :global(html.light) .home-shell__card-top {

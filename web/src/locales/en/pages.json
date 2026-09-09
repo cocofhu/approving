@@ -25,7 +25,12 @@
       "cardFallback": "Approve pre-dev clarification",
       "scrollLeft": "Scroll left",
       "scrollRight": "Scroll right",
-      "draftRestored": "Draft restored"
+      "draftRestored": "Draft restored",
+      "pipelineMenu": {
+        "more": "More actions",
+        "hide": "Hide",
+        "edit": "Edit"
+      }
     },
     "tokenAnalytics": {
       "title": "Token usage",

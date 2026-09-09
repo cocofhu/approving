@@ -23,6 +23,13 @@ describe('Icon', () => {
     wrapper.unmount()
   })
 
+  it('renders the crossed-out eye used by hide actions', () => {
+    const wrapper = mount(Icon, { props: { name: 'eye-off', size: 14 } })
+    expect(wrapper.findAll('path')).toHaveLength(4)
+    expect(wrapper.html()).toContain('M1 1l22 22')
+    wrapper.unmount()
+  })
+
   it('renders panel-left glyph used to hide desktop nav (g2.1 / g5.1)', () => {
     const wrapper = mount(Icon, { props: { name: 'panel-left', size: 18 } })
     expect(wrapper.find('svg').exists()).toBe(true)
