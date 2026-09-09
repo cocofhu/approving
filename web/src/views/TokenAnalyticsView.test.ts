@@ -106,7 +106,7 @@ describe('TokenAnalyticsView', () => {
     wrapper.unmount()
   })
 
-  it('shows default input/output rows without cache labels or slash pairs (g2.1)', async () => {
+  it('shows input-side total and output whose exact sum matches total (g1.1/g1.2/g2.1)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     const merge = wrapper.find('[data-testid="token-analytics-kpi-merge"]')
@@ -119,11 +119,21 @@ describe('TokenAnalyticsView', () => {
     expect(faceText).not.toContain('缓存读')
     expect(faceText).not.toContain('缓存写')
     expect(faceText).not.toMatch(/\d[\d,.]*[KMB]?\s*\/\s*\d/)
+    const input = wrapper.find('[data-testid="token-analytics-kpi-input"]')
+    const output = wrapper.find('[data-testid="token-analytics-kpi-output"]')
+    const total = wrapper.find('[data-testid="token-analytics-kpi-total"]')
+    expect(input.text()).toBe('3.5K')
+    expect(output.text()).toBe('1.5K')
+    expect(input.attributes('data-token-count')).toBe('3500')
+    expect(output.attributes('data-token-count')).toBe('1500')
+    expect(
+      Number(input.attributes('data-token-count')) + Number(output.attributes('data-token-count')),
+    ).toBe(Number(total.attributes('data-token-count')))
     expect(wrapper.find('[data-testid="token-analytics-kpi-detail"]').classes()).toContain('hidden')
     wrapper.unmount()
   })
 
-  it('shows four-part KPI detail on hover and focus (g2.1)', async () => {
+  it('keeps four-part exact KPI detail on hover and focus (g1.3/g2.1)', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
     expect(wrapper.find('[data-testid="token-analytics-kpi-detail"]').exists()).toBe(true)
