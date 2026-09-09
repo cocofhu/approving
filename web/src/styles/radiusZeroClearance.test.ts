@@ -98,16 +98,57 @@ describe('radius zero clearance', () => {
     expect(src).toMatch(/\.home-pipeline-select__search\s*\{[^}]*border-radius:\s*8px/s)
   })
 
-  // plan g1.1 / g1.2 / g3.1 — screenshot: 运行产出「放大查看」+ list radius clip
-  it('OutputResultCards enlarge button is rounded and list clips corners', () => {
+  function appButtonOpenTag(src: string, testid: string): string | undefined {
+    return src.match(new RegExp(`<AppButton\\b[^>]*data-testid="${testid}"[^>]*>`))?.[0]
+  }
+
+  function handwrittenButtonOpenTag(src: string, testid: string): string | undefined {
+    return src.match(new RegExp(`<button\\b[^>]*data-testid="${testid}"[^>]*>`))?.[0]
+  }
+
+  // plan g1.1 / g1.2 / g3.1 — AppButton outline sm expand; list still clips corners
+  it('OutputResultCards enlarge is AppButton outline sm expand and list clips corners', () => {
     const src = read('components/run/OutputResultCards.vue')
-    const enlarge = src.match(/<button[\s\S]*?data-testid="output-result-enlarge"[\s\S]*?>/)?.[0]
+    const enlarge = appButtonOpenTag(src, 'output-result-enlarge')
     expect(enlarge).toBeTruthy()
-    expect(enlarge!).toMatch(/\brounded-(?:md|lg)\b/)
+    expect(enlarge!).toMatch(/variant="outline"/)
+    expect(enlarge!).toMatch(/size="sm"/)
+    expect(enlarge!).toMatch(/icon="expand"/)
+    expect(handwrittenButtonOpenTag(src, 'output-result-enlarge')).toBeUndefined()
+    expect(enlarge!).not.toMatch(/\bbg-accent\b/)
+    expect(enlarge!).not.toMatch(/\brounded-lg\b/)
     const list = src.match(/<div[\s\S]*?data-testid="output-result-list"[\s\S]*?>/)?.[0]
     expect(list).toBeTruthy()
     expect(list!).toMatch(/\brounded-lg\b/)
     expect(list!).toMatch(/\boverflow-hidden\b/)
+  })
+
+  // plan g2.1 / g2.2 / g3.1 — RunOutputPptModal footer + empty exits are AppButton
+  it('RunOutputPptModal mark-read / close / empty exits are AppButton with required variants', () => {
+    const src = read('components/shell/RunOutputPptModal.vue')
+    const mark = appButtonOpenTag(src, 'run-output-mark-read')
+    expect(mark).toBeTruthy()
+    expect(mark!).toMatch(/variant="primary"/)
+    expect(mark!).toMatch(/icon="check"/)
+    expect(handwrittenButtonOpenTag(src, 'run-output-mark-read')).toBeUndefined()
+    expect(mark!).not.toMatch(/\brounded-lg\b/)
+    expect(mark!).not.toMatch(/hover:brightness-110/)
+
+    const close = appButtonOpenTag(src, 'run-output-close')
+    expect(close).toBeTruthy()
+    expect(close!).toMatch(/variant="ghost"/)
+
+    const openRun = appButtonOpenTag(src, 'run-output-empty-open-run')
+    expect(openRun).toBeTruthy()
+    expect(openRun!).toMatch(/variant="primary"/)
+    expect(handwrittenButtonOpenTag(src, 'run-output-empty-open-run')).toBeUndefined()
+    expect(openRun!).not.toMatch(/\brounded-lg\b/)
+    expect(openRun!).not.toMatch(/hover:brightness-110/)
+
+    const artifacts = appButtonOpenTag(src, 'run-output-empty-open-artifacts')
+    expect(artifacts).toBeTruthy()
+    expect(artifacts!).toMatch(/variant="outline"/)
+    expect(handwrittenButtonOpenTag(src, 'run-output-empty-open-artifacts')).toBeUndefined()
   })
 
   // plan g2.1 / g3.1 — screenshot: mobile nav drawer 16px floating card

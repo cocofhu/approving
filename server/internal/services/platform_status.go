@@ -11,10 +11,9 @@ import (
 const (
 	platformStatusTTL     = 12 * time.Second
 	platformStatusTimeout = 15 * time.Second
-	fiveMinute            = 5 * time.Minute
 )
 
-// PlatformStatusQuery controls timezone for calendar-aligned 5m buckets.
+// PlatformStatusQuery controls timezone for the local-calendar "today" window.
 type PlatformStatusQuery struct {
 	Timezone         string
 	UTCOffsetMinutes *int
@@ -24,17 +23,12 @@ type PlatformStatusQuery struct {
 // PlatformStatusMetrics is the AppTopbar StatusMetrics payload.
 // Token fields use pointers: JSON null = unavailable / never reported; 0 is a real zero.
 type PlatformStatusMetrics struct {
-	CumulativeTokens          *int64     `json:"cumulativeTokens"`
-	Current5mBucketTokens     *int64     `json:"current5mBucketTokens"`
-	TodayMaxCompleted5mTokens *int64     `json:"todayMaxCompleted5mTokens"`
-	RunningCount              int64      `json:"runningCount"`
-	QueuedCount               int64      `json:"queuedCount"`
-	CurrentBucketStart        *time.Time `json:"currentBucketStart,omitempty"`
-	CurrentBucketEnd          *time.Time `json:"currentBucketEnd,omitempty"`
-	PeakBucketStart           *time.Time `json:"peakBucketStart,omitempty"`
-	PeakBucketEnd             *time.Time `json:"peakBucketEnd,omitempty"`
-	AsOf                      time.Time  `json:"asOf"`
-	Timezone                  string     `json:"timezone"`
+	CumulativeTokens *int64    `json:"cumulativeTokens"`
+	TodayTokens      *int64    `json:"todayTokens"`
+	RunningCount     int64     `json:"runningCount"`
+	QueuedCount      int64     `json:"queuedCount"`
+	AsOf             time.Time `json:"asOf"`
+	Timezone         string    `json:"timezone"`
 }
 
 type platformStatusCacheEntry struct {
@@ -52,9 +46,9 @@ type platformUsagePoint struct {
 	total int64
 }
 
-// PlatformStatus returns running/queued counts, cumulative tokens, and calendar
-// 5m current-bucket + today peak. 5m aggregation is process-cached (TTL≈12s)
-// with singleflight so topbar polling does not re-scan every request.
+// PlatformStatus returns running/queued counts, cumulative tokens, and today's
+// token sum (client timezone midnight–asOf). Today aggregation is process-cached
+// (TTL≈12s) with singleflight so topbar polling does not re-scan every request.
 func (s *DashboardService) PlatformStatus(ctx context.Context, q PlatformStatusQuery) (PlatformStatusMetrics, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -69,49 +63,36 @@ func (s *DashboardService) PlatformStatus(ctx context.Context, q PlatformStatusQ
 		now = time.Now().UTC()
 	}
 
-	// Cheap counts always fresh; token/5m path may hit cache.
+	// Cheap counts always fresh; today-token path may hit cache.
 	running, queued := s.countRunStatuses()
 	var cumulative *int64
 	if s.projects != nil {
 		cumulative = s.projects.PlatformTokenBreakdown().Total
 	}
 
-	five, err := s.cachedFiveMinuteMetrics(ctx, tzLabel, loc, now)
+	today, err := s.cachedTodayTokens(ctx, tzLabel, loc, now)
 	if err != nil {
 		return PlatformStatusMetrics{}, err
 	}
 
 	out := PlatformStatusMetrics{
-		CumulativeTokens:          cumulative,
-		RunningCount:              running,
-		QueuedCount:               queued,
-		AsOf:                      now,
-		Timezone:                  tzLabel,
-		CurrentBucketStart:        five.currentStart,
-		CurrentBucketEnd:          five.currentEnd,
-		PeakBucketStart:           five.peakStart,
-		PeakBucketEnd:             five.peakEnd,
-		TodayMaxCompleted5mTokens: five.peakTokens,
+		CumulativeTokens: cumulative,
+		RunningCount:     running,
+		QueuedCount:      queued,
+		AsOf:             now,
+		Timezone:         tzLabel,
 	}
 	if cumulative == nil {
-		// Never reported → rate/peak stay null (UI "—"), not fake zeros.
-		out.Current5mBucketTokens = nil
-		out.TodayMaxCompleted5mTokens = nil
-		out.PeakBucketStart = nil
-		out.PeakBucketEnd = nil
+		// Never reported → today stays null (UI "—"), not a fake zero.
+		out.TodayTokens = nil
 	} else {
-		out.Current5mBucketTokens = five.currentTokens
+		out.TodayTokens = today
 	}
 	return out, nil
 }
 
-type fiveMinuteBundle struct {
-	currentTokens *int64
-	peakTokens    *int64
-	currentStart  *time.Time
-	currentEnd    *time.Time
-	peakStart     *time.Time
-	peakEnd       *time.Time
+type todayTokenBundle struct {
+	todayTokens *int64
 }
 
 func (s *DashboardService) countRunStatuses() (running, queued int64) {
@@ -123,7 +104,7 @@ func (s *DashboardService) countRunStatuses() (running, queued int64) {
 	return count("running"), count("queued")
 }
 
-func (s *DashboardService) cachedFiveMinuteMetrics(ctx context.Context, cacheKey string, loc *time.Location, now time.Time) (fiveMinuteBundle, error) {
+func (s *DashboardService) cachedTodayTokens(ctx context.Context, cacheKey string, loc *time.Location, now time.Time) (*int64, error) {
 	s.statusMu.Lock()
 	if s.statusCache == nil {
 		s.statusCache = map[string]platformStatusCacheEntry{}
@@ -131,7 +112,7 @@ func (s *DashboardService) cachedFiveMinuteMetrics(ctx context.Context, cacheKey
 	if ent, ok := s.statusCache[cacheKey]; ok && now.Before(ent.expires) {
 		m := ent.metrics
 		s.statusMu.Unlock()
-		return fiveMinuteBundleFromMetrics(m), nil
+		return m.TodayTokens, nil
 	}
 	if s.statusInflight == nil {
 		s.statusInflight = map[string]*platformStatusCall{}
@@ -139,23 +120,18 @@ func (s *DashboardService) cachedFiveMinuteMetrics(ctx context.Context, cacheKey
 	if call, ok := s.statusInflight[cacheKey]; ok {
 		s.statusMu.Unlock()
 		call.wg.Wait()
-		return fiveMinuteBundleFromMetrics(call.val), nil
+		return call.val.TodayTokens, nil
 	}
 	call := &platformStatusCall{}
 	call.wg.Add(1)
 	s.statusInflight[cacheKey] = call
 	s.statusMu.Unlock()
 
-	bundle, err := s.computeFiveMinuteMetrics(ctx, loc, now)
+	bundle, err := s.computeTodayTokens(ctx, loc, now)
 	metrics := PlatformStatusMetrics{
-		Current5mBucketTokens:     bundle.currentTokens,
-		TodayMaxCompleted5mTokens: bundle.peakTokens,
-		CurrentBucketStart:        bundle.currentStart,
-		CurrentBucketEnd:          bundle.currentEnd,
-		PeakBucketStart:           bundle.peakStart,
-		PeakBucketEnd:             bundle.peakEnd,
-		AsOf:                      now,
-		Timezone:                  cacheKey,
+		TodayTokens: bundle.todayTokens,
+		AsOf:        now,
+		Timezone:    cacheKey,
 	}
 
 	s.statusMu.Lock()
@@ -171,83 +147,33 @@ func (s *DashboardService) cachedFiveMinuteMetrics(ctx context.Context, cacheKey
 	s.statusMu.Unlock()
 
 	if err != nil {
-		return fiveMinuteBundle{}, err
+		return nil, err
 	}
-	return bundle, nil
+	return bundle.todayTokens, nil
 }
 
-func fiveMinuteBundleFromMetrics(m PlatformStatusMetrics) fiveMinuteBundle {
-	return fiveMinuteBundle{
-		currentTokens: m.Current5mBucketTokens,
-		peakTokens:    m.TodayMaxCompleted5mTokens,
-		currentStart:  m.CurrentBucketStart,
-		currentEnd:    m.CurrentBucketEnd,
-		peakStart:     m.PeakBucketStart,
-		peakEnd:       m.PeakBucketEnd,
-	}
-}
-
-func (s *DashboardService) computeFiveMinuteMetrics(ctx context.Context, loc *time.Location, now time.Time) (fiveMinuteBundle, error) {
+func (s *DashboardService) computeTodayTokens(ctx context.Context, loc *time.Location, now time.Time) (todayTokenBundle, error) {
 	ctx, cancel := context.WithTimeout(ctx, platformStatusTimeout)
 	defer cancel()
 
 	nowLocal := now.In(loc)
 	dayStart := truncateLocalDay(nowLocal)
-	currentStart := truncateFiveMinutes(nowLocal)
-	currentEnd := currentStart.Add(fiveMinute)
 
-	// Scan from local midnight (UTC instant) so "today" peak is complete.
+	// Scan from before local midnight (UTC instant) so timezone edges are complete.
 	points, err := s.loadPlatformUsageSince(ctx, dayStart.UTC().Add(-14*time.Hour))
 	if err != nil {
-		return fiveMinuteBundle{}, err
+		return todayTokenBundle{}, err
 	}
 
-	buckets := map[int64]int64{} // bucket start unix → sum
-	var hasAny bool
+	var sum int64
 	for _, p := range points {
 		local := p.ts.In(loc)
-		if local.Before(dayStart) {
+		if local.Before(dayStart) || local.After(nowLocal) {
 			continue
 		}
-		hasAny = true
-		bStart := truncateFiveMinutes(local)
-		buckets[bStart.Unix()] += p.total
+		sum += p.total
 	}
-
-	cur := buckets[currentStart.Unix()]
-	curPtr := &cur
-
-	var peak *int64
-	var peakStart, peakEnd *time.Time
-	for unix, sum := range buckets {
-		bStart := time.Unix(unix, 0).In(loc)
-		bEnd := bStart.Add(fiveMinute)
-		// Peak = max of completed buckets only (exclude current incomplete).
-		if !bEnd.After(currentStart) && (peak == nil || sum > *peak) {
-			v := sum
-			peak = &v
-			ps, pe := bStart, bEnd
-			peakStart = &ps
-			peakEnd = &pe
-		}
-	}
-	_ = hasAny
-
-	cs, ce := currentStart, currentEnd
-	return fiveMinuteBundle{
-		currentTokens: curPtr,
-		peakTokens:    peak,
-		currentStart:  &cs,
-		currentEnd:    &ce,
-		peakStart:     peakStart,
-		peakEnd:       peakEnd,
-	}, nil
-}
-
-func truncateFiveMinutes(t time.Time) time.Time {
-	t = t.In(t.Location())
-	m := t.Minute() - (t.Minute() % 5)
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), m, 0, 0, t.Location())
+	return todayTokenBundle{todayTokens: &sum}, nil
 }
 
 func (s *DashboardService) loadPlatformUsageSince(ctx context.Context, since time.Time) ([]platformUsagePoint, error) {
@@ -356,7 +282,7 @@ func (s *DashboardService) loadPlatformPMUsageSince(ctx context.Context, since t
 	return out, nil
 }
 
-// ClearPlatformStatusCacheForTest resets the 5m cache (tests only).
+// ClearPlatformStatusCacheForTest resets the today-token cache (tests only).
 func (s *DashboardService) ClearPlatformStatusCacheForTest() {
 	s.statusMu.Lock()
 	defer s.statusMu.Unlock()

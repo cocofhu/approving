@@ -479,8 +479,14 @@ export type StageCardThumb =
   | { kind: 'html'; html: string }
 
 const FRIENDLY_NAME_KEYS: Record<string, string> = {
-  'research.json': 'pages.reactArtifactStage.friendlyResearch',
-  'clarified_requirement.json': 'pages.reactArtifactStage.friendlyClarified',
+  'plan.json': 'common.gateBodyLabels.plan',
+  'clarified_requirement.json': 'common.gateBodyLabels.clarifiedRequirement',
+  'research.json': 'common.gateBodyLabels.research',
+  'proposals.json': 'common.gateBodyLabels.proposals',
+  'proposal.json': 'common.gateBodyLabels.proposal',
+  'test_result.json': 'common.gateBodyLabels.testResult',
+  'review.json': 'common.gateBodyLabels.review',
+  'implementation_result.json': 'common.gateBodyLabels.implementationResult',
 }
 
 /** page.html and same-content visual_{node}.page.html share one friendly label. */
@@ -491,12 +497,12 @@ export function isVisualPreviewArtifactName(name: string | null | undefined): bo
   return parseVisualNodePageName(base) != null
 }
 
-/** i18n key for the three named friendly display names; null → keep technical file name. */
+/** i18n key for reserved product display names; null → keep technical file name. */
 export function artifactFriendlyNameKey(name: string | null | undefined): string | null {
   const base = gridArtifactBaseName(String(name || '').trim())
   if (!base) return null
   if (FRIENDLY_NAME_KEYS[base]) return FRIENDLY_NAME_KEYS[base]
-  if (isVisualPreviewArtifactName(base)) return 'pages.reactArtifactStage.friendlyVisual'
+  if (isVisualPreviewArtifactName(base)) return 'common.gateBodyLabels.pagePreview'
   return null
 }
 

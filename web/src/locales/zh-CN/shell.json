@@ -60,8 +60,7 @@
     "statusMetrics": {
       "aria": "平台状态指标",
       "tokens": "累计 Token",
-      "rate": "当前 5 分钟速率",
-      "peak": "今日 5 分钟峰值",
+      "today": "今日 Token",
       "running": "执行中",
       "queued": "排队",
       "compactAria": "平台状态摘要"

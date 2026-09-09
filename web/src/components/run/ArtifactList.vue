@@ -4,6 +4,10 @@ import { useI18n } from 'vue-i18n'
 import Icon from '../ui/Icon.vue'
 import { fmtTime } from '@/lib/shared/format'
 import { runSectionTitle } from '@/lib/run/artifactGroups'
+import {
+  artifactFriendlyNameKey,
+  artifactTechnicalDisplayName,
+} from '@/lib/run/reactArtifactPreview'
 import { isFeedbackArtifactName } from './StructuredArtifactView.vue'
 import type { Artifact } from '@/lib/shared/types'
 import type { RunSection } from '@/lib/run/artifactGroups'
@@ -71,12 +75,22 @@ function effectiveSearch(): string {
   return props.serverSearch ? props.search.trim() : artFilter.value.trim()
 }
 
+function artifactFriendlyName(a: Artifact): string {
+  const key = artifactFriendlyNameKey(a.name)
+  return key ? t(key) : ''
+}
+
+function artifactDisplayName(a: Artifact): string {
+  return artifactFriendlyName(a) || artifactTechnicalDisplayName(a.name)
+}
+
 function matchArt(a: Artifact, label: string): boolean {
   if (props.serverSearch) return true
   const q = artFilter.value.trim().toLowerCase()
   if (!q) return true
   return (
     a.name.toLowerCase().includes(q) ||
+    artifactFriendlyName(a).toLowerCase().includes(q) ||
     a.nodeId.toLowerCase().includes(q) ||
     label.toLowerCase().includes(q)
   )
@@ -286,8 +300,10 @@ watch(
                 <Icon :name="kindIcon[a.kind] || 'doc'" :size="16" />
               </div>
               <div class="min-w-0 flex-1">
-                <div class="truncate text-[13px] font-medium text-txt">{{ a.name }}</div>
-                <div class="truncate text-[10px] text-txt3">{{ a.nodeId }} · {{ fmtTime(a.createdAt) }}</div>
+                <div class="truncate text-[13px] font-medium text-txt" :title="a.name">{{ artifactDisplayName(a) }}</div>
+                <div class="truncate text-[10px] text-txt3">
+                  <span v-if="artifactFriendlyName(a)">{{ artifactTechnicalDisplayName(a.name) }} · </span>{{ a.nodeId }} · {{ fmtTime(a.createdAt) }}
+                </div>
               </div>
               <Icon name="chevron-right" :size="14" class="text-txt3" />
             </button>
@@ -307,8 +323,9 @@ watch(
             <Icon :name="kindIcon[a.kind] || 'doc'" :size="16" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="truncate text-[13px] font-medium text-txt">{{ a.name }}</div>
+            <div class="truncate text-[13px] font-medium text-txt" :title="a.name">{{ artifactDisplayName(a) }}</div>
             <div class="truncate text-[10px] text-txt3">
+              <span v-if="artifactFriendlyName(a)">{{ artifactTechnicalDisplayName(a.name) }} · </span>
               <span v-if="scope === 'platform' && a.workflowName" class="text-accent-2">{{ a.workflowName }}</span>
               <span v-if="scope === 'platform' && a.workflowName"> · </span>{{ a.nodeId }} · {{ fmtTime(a.createdAt) }}
             </div>
