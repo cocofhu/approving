@@ -1,12 +1,12 @@
 {
   "nav": {
-    "dashboard": "Home",
+    "dashboard": "Start",
     "stats": "Statistics",
     "board": "Board",
     "projects": "Projects",
     "workflows": "Workflows",
     "runs": "Runs",
-    "gates": "Pending gates",
+    "gates": "Needs attention",
     "artifacts": "Artifacts",
     "notifications": "Notifications",
     "quickPipelines": "Quick pipelines",

@@ -1288,7 +1288,7 @@
       }
     },
     "gatesInbox": {
-      "title": "Pending gates",
+      "title": "Needs attention",
       "subtitleHtml": "<strong class=\"font-medium text-warn\">Human gates</strong> + <em class=\"not-italic text-n-clarify\">Clarify</em> inbox · workflows paused for human action",
       "statusPending": "Updates available · refresh",
       "statusEditing": "Editing · syncing in background",
