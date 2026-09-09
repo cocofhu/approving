@@ -113,13 +113,13 @@ function turnBody(text: string | undefined): string {
     <section
       v-if="agentSummary"
       data-testid="feedback-agent-summary"
-      class="border border-line border-l-2 border-l-info bg-info/10 px-3 py-2.5"
+      class="rounded-lg border border-line border-l-2 border-l-info bg-info/10 px-3 py-2.5"
     >
       <div class="mb-1.5 flex flex-wrap items-center gap-2">
         <div class="text-[10px] font-semibold uppercase tracking-wider text-txt3">
           {{ t('pages.product.feedback.agentSummary') }}
         </div>
-        <span class="border border-info/40 bg-info/10 px-1.5 py-0.5 text-[10px] text-info">
+        <span class="rounded-md border border-info/40 bg-info/10 px-1.5 py-0.5 text-[10px] text-info">
           {{ t('pages.product.feedback.agentSummaryTag') }}
         </span>
       </div>

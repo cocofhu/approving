@@ -245,6 +245,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   justify-content: space-between;
   gap: 8px;
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
   background: rgb(var(--c-base));
   color: rgb(var(--c-txt));
   padding: 0 10px;
@@ -286,6 +287,8 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   top: calc(100% + 6px);
   width: min(320px, 78vw);
   border: 1px solid rgb(var(--c-line-strong));
+  border-radius: 12px;
+  overflow: hidden;
   background: rgb(var(--c-elevated));
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   z-index: 20;
@@ -300,6 +303,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   width: 100%;
   height: 32px;
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
   background: rgb(var(--c-surface));
   color: rgb(var(--c-txt));
   padding: 0 10px;
@@ -325,6 +329,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
   width: 100%;
   text-align: left;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: rgb(var(--c-txt));
   padding: 8px 10px;

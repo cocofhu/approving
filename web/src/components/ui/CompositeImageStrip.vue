@@ -245,7 +245,7 @@ function onError(key: string, src: string) {
       <!-- Permanent failure: empty src, known-missing, or @error; no retry, no HTTP/path details -->
       <div
         v-if="item.status === 'failed'"
-        class="flex flex-col items-center justify-center gap-1 border border-err/35 bg-err/[0.06] px-2 py-2 text-center"
+        class="rounded-lg flex flex-col items-center justify-center gap-1 border border-err/35 bg-err/[0.06] px-2 py-2 text-center"
         :class="cardClass"
         data-image-failed="1"
         data-testid="composite-image-failed"
@@ -263,7 +263,7 @@ function onError(key: string, src: string) {
       <!-- Has src: loading overlay until load/complete/timeout; showImg gates orphan auto GET. -->
       <div
         v-else
-        class="relative overflow-hidden border border-line"
+        class="rounded-lg relative overflow-hidden border border-line"
         :class="item.status === 'loading' ? cardClass : sizeClass"
         :data-testid="item.status === 'loading' ? 'composite-image-loading' : 'composite-image-ok'"
         :role="item.status === 'loading' ? 'status' : undefined"

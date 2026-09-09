@@ -32,7 +32,7 @@ const pad = computed(() => (props.size === 'sm' ? 'px-2 py-0.5 text-[11px]' : 'p
 
 <template>
   <span
-    class="inline-flex items-center gap-1.5 whitespace-nowrap border font-semibold tracking-wide"
+    class="rounded-lg inline-flex items-center gap-1.5 whitespace-nowrap border font-semibold tracking-wide"
     :class="[cls, pad]"
     :title="hideTitle ? undefined : t('common.priority.label')"
   >

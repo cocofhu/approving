@@ -110,7 +110,7 @@ const {
       >
         <button
           type="button"
-          class="inline-flex items-center gap-0.5 border border-line bg-elevated px-1.5 py-px text-[10px] text-txt2 hover:border-line-strong hover:text-txt"
+          class="rounded-md inline-flex items-center gap-0.5 border border-line bg-elevated px-1.5 py-px text-[10px] text-txt2 hover:border-line-strong hover:text-txt"
           :class="{ 'border-accent/60 text-txt': versionMenuOpen }"
           :aria-expanded="versionMenuOpen ? 'true' : 'false'"
           aria-haspopup="listbox"
@@ -123,7 +123,7 @@ const {
         <div
           v-if="versionMenuOpen"
           role="listbox"
-          class="absolute right-0 top-full z-20 mt-1 min-w-[7.5rem] border border-line bg-surface py-0.5"
+          class="rounded-lg absolute right-0 top-full z-20 mt-1 min-w-[7.5rem] border border-line bg-surface py-0.5"
           data-testid="artifact-preview-version-menu"
         >
           <button
@@ -150,12 +150,12 @@ const {
       </div>
       <span
         v-if="viewingHistorical"
-        class="shrink-0 border border-line px-1 py-px text-[10px] text-txt3"
+        class="rounded-md shrink-0 border border-line px-1 py-px text-[10px] text-txt3"
         data-testid="artifact-preview-historical-readonly"
       >{{ t('pages.reactArtifactStage.readonlyBadge') }}</span>
       <div
         v-if="isStructuredPreview"
-        class="inline-flex shrink-0 border border-line"
+        class="rounded-md overflow-hidden inline-flex shrink-0 border border-line"
         data-testid="artifact-preview-mode-toggle"
         role="group"
         :aria-label="t('pages.artifactPreview.modeToggleAria')"
@@ -267,7 +267,7 @@ const {
         </div>
         <div
           v-else
-          class="flex h-full min-h-[320px] w-full items-center justify-center border border-line bg-base p-3"
+          class="rounded-lg flex h-full min-h-[320px] w-full items-center justify-center border border-line bg-base p-3"
           data-testid="artifact-preview-image-wrap"
         >
           <img
@@ -296,7 +296,7 @@ const {
           {{ t('pages.artifactPreview.loadFailed') }}
           <button
             type="button"
-            class="inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+            class="rounded-lg inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
             @click="displayArtifact && loadContent(displayArtifact, { force: true })"
           >
             {{ t('pages.artifactPreview.retry') }}

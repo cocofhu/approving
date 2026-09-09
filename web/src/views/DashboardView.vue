@@ -355,7 +355,7 @@ onBeforeUnmount(() => {
       <div class="mt-[30px] w-full">
         <p
           v-if="attachNotice"
-          class="mb-2 border border-err/40 bg-err/10 px-3 py-1.5 text-[12px] text-err"
+          class="mb-2 rounded border border-err/40 bg-err/10 px-3 py-1.5 text-[12px] text-err"
           data-testid="home-attach-notice"
           role="alert"
         >
@@ -371,7 +371,7 @@ onBeforeUnmount(() => {
               v-if="isImageAttachment(im)"
               mode="previewable"
               size="sm"
-              thumb-class="rounded-none"
+              thumb-class="rounded"
               :src="imgSrc(im)"
               :label="attachmentDisplayName(im, ii)"
               :alt="attachmentDisplayName(im, ii)"
@@ -380,7 +380,7 @@ onBeforeUnmount(() => {
             />
             <div
               v-else
-              class="flex h-9 max-w-[160px] items-center gap-1.5 border border-line bg-elevated px-2.5"
+              class="flex h-9 max-w-[160px] items-center gap-1.5 rounded border border-line bg-elevated px-2.5"
               :title="attachmentDisplayName(im, ii)"
               data-testid="home-pending-file-chip"
             >
@@ -391,7 +391,7 @@ onBeforeUnmount(() => {
             </div>
             <button
               type="button"
-              class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-none bg-err text-white"
+              class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded bg-err text-white"
               data-testid="home-attach-remove"
               @click.stop="removeAttachment(ii)"
             >
@@ -400,7 +400,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <form
-          class="home-composer flex w-full flex-col border"
+          class="home-composer flex w-full flex-col overflow-hidden border"
           data-testid="home-composer"
           @submit="onComposerSubmit"
         >
@@ -480,13 +480,13 @@ onBeforeUnmount(() => {
 
       <div
         v-if="loadError"
-        class="mt-6 flex w-full flex-wrap items-center justify-between gap-2 border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
+        class="mt-6 flex w-full flex-wrap items-center justify-between gap-2 rounded border border-err/40 bg-err/10 px-3 py-2 text-[13px] text-err"
         data-testid="dashboard-load-error"
       >
         <span>{{ t('pages.board.loadFailed') }}</span>
         <button
           type="button"
-          class="border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
+          class="rounded-md border border-err/40 px-2.5 py-1 text-xs text-err hover:bg-err/10"
           data-testid="dashboard-retry"
           @click="load()"
         >
@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
         <p class="text-sm text-txt3">{{ t('pages.dashboard.noPipelines') }}</p>
         <button
           type="button"
-          class="mt-3 border border-line px-3 py-1.5 text-[13px] text-txt2 hover:bg-elevated"
+          class="mt-3 rounded-md border border-line px-3 py-1.5 text-[13px] text-txt2 hover:bg-elevated"
           data-testid="home-go-projects"
           @click="goProjects"
         >
@@ -548,7 +548,7 @@ onBeforeUnmount(() => {
             :key="p.id"
             type="button"
             role="listitem"
-            class="home-shell__card w-48 shrink-0 overflow-hidden border border-line p-0 text-left"
+            class="home-shell__card w-48 shrink-0 overflow-hidden rounded-lg border border-line p-0 text-left"
             :class="p.id === selected?.id ? 'home-shell__card--selected' : 'hover:border-line-strong'"
             :data-testid="`home-pipeline-card-${p.id}`"
             @click="selectPipeline(p.id)"
@@ -670,10 +670,12 @@ onBeforeUnmount(() => {
   }
 }
 
-/* g1.2 — right-angle composer (input + toolbar) */
+/* plan g1.1 — shell/hero composer 16px; overflow+bg+radius same layer */
 .home-composer {
   border-color: rgb(var(--c-line));
   background: rgb(var(--c-surface));
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 :global(html.light) .home-composer {
@@ -713,6 +715,7 @@ onBeforeUnmount(() => {
 .home-composer__plus {
   border-color: rgb(var(--c-line));
   background: transparent;
+  border-radius: 8px;
   transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
 }
 
@@ -725,6 +728,7 @@ onBeforeUnmount(() => {
 .home-composer__send {
   background: rgb(var(--c-txt));
   color: rgb(var(--c-base));
+  border-radius: 8px;
 }
 
 :global(html.light) .home-composer__send {
@@ -797,6 +801,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   border: 1px solid rgb(var(--c-line));
+  border-radius: 8px;
   background: color-mix(in srgb, rgb(var(--c-surface)) 92%, transparent);
   backdrop-filter: blur(6px);
   color: rgb(var(--c-txt2));

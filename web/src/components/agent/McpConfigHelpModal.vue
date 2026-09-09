@@ -57,7 +57,7 @@ function onChip(id: McpHelpSection) {
         v-for="id in SECTIONS"
         :key="id"
         type="button"
-        class="border px-2 py-1 text-[11px]"
+        class="rounded-md border px-2 py-1 text-[11px]"
         :class="activeSection === id ? 'border-accent bg-accent-dim text-txt' : 'border-line bg-base text-txt2'"
         :data-help-chip="id"
         :data-test="`mcp-help-chip-${id}`"
@@ -67,14 +67,14 @@ function onChip(id: McpHelpSection) {
       </button>
     </div>
 
-    <p class="mb-3 border border-line bg-base px-3 py-2.5 text-[12px] leading-[1.7] text-txt2" data-test="mcp-help-hint">
+    <p class="rounded-md mb-3 border border-line bg-base px-3 py-2.5 text-[12px] leading-[1.7] text-txt2" data-test="mcp-help-hint">
       {{ t('pages.agentStudio.mcp.hint', { configRoot: configRoot || '' }) }}
     </p>
 
     <section v-if="activeSection === 'run'" data-test="mcp-help-run" class="scroll-mt-2">
       <h3 class="mb-2 mt-0 flex items-center gap-1.5 text-[13px] font-semibold text-txt">
         {{ t('pages.agentStudio.mcp.runVarsTitle') }}
-        <span class="border border-info/35 px-1.5 py-px text-[10px] font-medium text-info">{{ t('pages.agentStudio.mcp.runScopeTag') }}</span>
+        <span class="rounded-md border border-info/35 px-1.5 py-px text-[10px] font-medium text-info">{{ t('pages.agentStudio.mcp.runScopeTag') }}</span>
       </h3>
       <div class="grid gap-2 font-mono text-[12px] text-txt3">
         <div><code class="text-accent-2">${APPROVING_ARTIFACT_URL}</code> — {{ t('pages.agentStudio.mcp.artifactUrl') }}</div>
@@ -87,7 +87,7 @@ function onChip(id: McpHelpSection) {
     <section v-else data-test="mcp-help-agent" class="scroll-mt-2">
       <h3 class="mb-2 mt-0 flex items-center gap-1.5 text-[13px] font-semibold text-txt">
         {{ t('pages.agentStudio.mcp.agentVarsTitle') }}
-        <span class="border border-ok/35 px-1.5 py-px text-[10px] font-medium text-ok">{{ t('pages.agentStudio.mcp.agentScopeTag') }}</span>
+        <span class="rounded-md border border-ok/35 px-1.5 py-px text-[10px] font-medium text-ok">{{ t('pages.agentStudio.mcp.agentScopeTag') }}</span>
       </h3>
       <div class="grid gap-2 font-mono text-[12px] text-txt3">
         <div><code class="text-accent-2">${APPROVING_MEMORY_URL}</code> / <code class="text-accent-2">${APPROVING_MEMORY_TOKEN}</code> — {{ t('pages.agentStudio.mcp.memoryVars') }}</div>

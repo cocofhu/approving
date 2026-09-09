@@ -299,13 +299,13 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
     <div v-if="open" class="wiz-root fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/70" @click="close" />
       <div
-        class="wiz-modal relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
+        class="rounded-xl wiz-modal relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
         style="width: min(980px, 100%); height: min(700px, 94vh); border-radius: 16px"
         role="dialog"
         aria-modal="true"
       >
         <div class="wiz-head relative flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-5">
-          <div class="hero-mark grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
+          <div class="rounded-md hero-mark grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
             <Icon name="user" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
@@ -373,7 +373,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       <input
                         id="team-wiz-project"
                         v-model="draft.projectName"
-                        class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                         @input="onProjectInput"
                       />
                     </label>
@@ -384,7 +384,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       </span>
                       <input
                         v-model="draft.prefix"
-                        class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                         @input="draft.prefixTouched = true; syncDerivedNames(draft)"
                       />
                     </label>
@@ -394,7 +394,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       <span class="mb-1.5 block text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.teamWizard.team.rootGroup') }}</span>
                       <input
                         v-model="draft.rootGroupName"
-                        class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                         @input="draft.rootTouched = true"
                       />
                     </label>
@@ -402,7 +402,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       <span class="mb-1.5 block text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.teamWizard.team.pipelineGroup') }}</span>
                       <input
                         v-model="draft.pipelineGroupName"
-                        class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                         @input="draft.pipelineTouched = true"
                       />
                       <p class="mt-1 text-[11px] text-txt3">{{ t('pages.agentStudio.teamWizard.team.pipelineHint') }}</p>
@@ -415,7 +415,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     </span>
                     <input
                       v-model="draft.pmName"
-                      class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                      class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                       @input="draft.pmTouched = true"
                     />
                   </label>
@@ -427,12 +427,12 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     <textarea
                       v-model="draft.background"
                       rows="6"
-                      class="w-full resize-y border border-line bg-base px-3 py-2 text-[13px] leading-6 text-txt outline-none focus:border-accent"
+                      class="rounded-md w-full resize-y border border-line bg-base px-3 py-2 text-[13px] leading-6 text-txt outline-none focus:border-accent"
                       :placeholder="t('pages.agentStudio.teamWizard.team.backgroundPlaceholder')"
                     />
                     <p class="mt-1.5 text-[11px] text-txt3">{{ t('pages.agentStudio.teamWizard.team.backgroundHint') }}</p>
                   </label>
-                  <div class="mt-4 border border-accent/35 bg-accent-dim/40 px-3 py-2.5 text-[12px] text-accent-2">
+                  <div class="rounded-lg mt-4 border border-accent/35 bg-accent-dim/40 px-3 py-2.5 text-[12px] text-accent-2">
                     {{ previewLine }}
                   </div>
                   <p v-if="fieldError" class="mt-3 text-[12px] text-err">{{ fieldError }}</p>
@@ -445,7 +445,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       v-for="b in ACP_BACKENDS"
                       :key="b.id"
                       type="button"
-                      class="border px-3 py-3.5 text-center transition"
+                      class="rounded-lg border px-3 py-3.5 text-center transition"
                       :class="draft.acpBackend === b.id ? 'border-accent bg-accent-dim' : 'border-line bg-base hover:border-line-strong'"
                       @click="selectAcp(b.id)"
                     >
@@ -460,7 +460,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                         v-for="option in regionPolicy.options"
                         :key="option.id"
                         type="button"
-                        class="border px-3 py-3 text-left transition"
+                        class="rounded-lg border px-3 py-3 text-left transition"
                         :class="currentRegion === option.id ? 'border-accent bg-accent-dim' : 'border-line bg-base'"
                         @click="selectRegion(option.id)"
                       >
@@ -493,7 +493,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     <span class="mb-1.5 block text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.teamWizard.git.url') }}</span>
                     <input
                       v-model="draft.gitUrl"
-                      class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                      class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                       placeholder="https://github.com/org/repo.git"
                     />
                   </label>
@@ -512,7 +512,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                   <div
                     v-for="(m, i) in draft.mcp"
                     :key="i"
-                    class="mb-3 border border-line bg-elevated p-3"
+                    class="rounded-lg mb-3 border border-line bg-elevated p-3"
                   >
                     <div class="mb-2 flex items-center justify-between gap-2">
                       <span class="text-[12px] font-semibold text-txt">MCP #{{ i + 1 }}</span>
@@ -523,12 +523,12 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     <div class="mb-2 grid gap-2 md:grid-cols-2">
                       <input
                         v-model="m.name"
-                        class="border border-line bg-base px-2 py-1.5 text-[12px] text-txt outline-none focus:border-accent"
+                        class="rounded-md border border-line bg-base px-2 py-1.5 text-[12px] text-txt outline-none focus:border-accent"
                         :placeholder="t('pages.agentStudio.teamWizard.mcp.namePh')"
                       />
                       <select
                         v-model="m.transport"
-                        class="border border-line bg-base px-2 py-1.5 text-[12px] text-txt"
+                        class="rounded-md border border-line bg-base px-2 py-1.5 text-[12px] text-txt"
                       >
                         <option value="url">HTTP (url)</option>
                         <option value="command">stdio</option>
@@ -537,7 +537,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     <template v-if="m.transport === 'url'">
                       <input
                         v-model="m.url"
-                        class="mb-2 w-full border border-line bg-base px-2 py-1.5 font-mono text-[11px] text-txt outline-none focus:border-accent"
+                        class="rounded-md mb-2 w-full border border-line bg-base px-2 py-1.5 font-mono text-[11px] text-txt outline-none focus:border-accent"
                         placeholder="${APPROVING_ARTIFACT_URL}"
                       />
                       <div class="mb-1 flex items-center justify-between text-[11px] text-txt2">
@@ -547,14 +547,14 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                         </button>
                       </div>
                       <div v-for="(h, hi) in m.headers" :key="hi" class="mb-1 grid grid-cols-[1fr_1.4fr_auto] gap-1">
-                        <input v-model="h.k" class="border border-line bg-base px-2 py-1 text-[11px]" placeholder="Header" />
-                        <input v-model="h.v" class="border border-line bg-base px-2 py-1 font-mono text-[11px]" placeholder="Value" />
+                        <input v-model="h.k" class="rounded-md border border-line bg-base px-2 py-1 text-[11px]" placeholder="Header" />
+                        <input v-model="h.v" class="rounded-md border border-line bg-base px-2 py-1 font-mono text-[11px]" placeholder="Value" />
                         <button type="button" class="px-2 text-[11px] text-txt3" @click="m.headers.splice(hi, 1)">×</button>
                       </div>
                     </template>
                     <template v-else>
-                      <input v-model="m.command" class="mb-2 w-full border border-line bg-base px-2 py-1.5 text-[12px]" placeholder="command" />
-                      <textarea v-model="m.args" rows="2" class="w-full border border-line bg-base px-2 py-1.5 font-mono text-[11px]" placeholder="args (one per line)" />
+                      <input v-model="m.command" class="rounded-md mb-2 w-full border border-line bg-base px-2 py-1.5 text-[12px]" placeholder="command" />
+                      <textarea v-model="m.args" rows="2" class="rounded-md w-full border border-line bg-base px-2 py-1.5 font-mono text-[11px]" placeholder="args (one per line)" />
                     </template>
                   </div>
                   <div class="flex flex-wrap gap-2">
@@ -573,8 +573,8 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     :key="i"
                     class="mb-2 grid grid-cols-[1fr_1.4fr_auto] gap-2"
                   >
-                    <input v-model="row.k" class="border border-line bg-base px-2 py-1.5 font-mono text-[12px]" placeholder="KEY" />
-                    <input v-model="row.v" class="border border-line bg-base px-2 py-1.5 font-mono text-[12px]" placeholder="value" />
+                    <input v-model="row.k" class="rounded-md border border-line bg-base px-2 py-1.5 font-mono text-[12px]" placeholder="KEY" />
+                    <input v-model="row.v" class="rounded-md border border-line bg-base px-2 py-1.5 font-mono text-[12px]" placeholder="value" />
                     <button type="button" class="text-[11px] text-txt3" @click="draft.env.splice(i, 1)">{{ t('pages.agentStudio.dialogs.delete') }}</button>
                   </div>
                   <AppButton size="sm" variant="outline" icon="plus" @click="draft.env.push({ k: '', v: '' })">
@@ -584,7 +584,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
 
                 <template v-else-if="currentStep.id === 'review'">
                   <p class="sec-meta">{{ t('pages.agentStudio.teamWizard.review.meta') }}</p>
-                  <div class="border border-line bg-elevated px-4 py-3 text-[13px] leading-7 text-txt2">
+                  <div class="rounded-lg border border-line bg-elevated px-4 py-3 text-[13px] leading-7 text-txt2">
                     <div>{{ t('pages.agentStudio.teamWizard.review.project') }}：<strong class="text-txt">{{ draft.projectName }}</strong></div>
                     <div>{{ t('pages.agentStudio.teamWizard.review.root') }}：<strong class="text-txt">{{ draft.rootGroupName }}</strong></div>
                     <div>{{ t('pages.agentStudio.teamWizard.review.pipeline') }}：<strong class="text-txt">{{ draft.pipelineGroupName }}</strong></div>
@@ -598,7 +598,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       {{ t('pages.agentStudio.teamWizard.review.roster') }}
                     </div>
                   </div>
-                  <div class="mt-3 border border-line bg-base px-3 py-2">
+                  <div class="rounded-lg mt-3 border border-line bg-base px-3 py-2">
                     <button type="button" class="mb-1 text-[12px] text-accent-2" @click="bgExpanded = !bgExpanded">
                       {{ t('pages.agentStudio.teamWizard.review.background') }}
                     </button>
@@ -609,7 +609,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                   </div>
                   <p
                     v-if="!hasArtifact"
-                    class="mt-3 border border-warn/35 bg-warn/10 px-3 py-2 text-[12px] text-txt2"
+                    class="rounded-lg mt-3 border border-warn/35 bg-warn/10 px-3 py-2 text-[12px] text-txt2"
                   >
                     {{ t('pages.agentStudio.teamWizard.review.noArtifactWarn') }}
                   </p>

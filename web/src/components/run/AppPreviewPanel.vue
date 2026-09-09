@@ -164,7 +164,7 @@ function selectPreview(key: string) {
       <p>{{ loadError }}</p>
       <button
         type="button"
-        class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+        class="rounded-lg mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
         @click="retryLoadPorts"
       >
         {{ t('common.chatImage.retry') }}

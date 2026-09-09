@@ -703,7 +703,7 @@ watch(needsMessageListener, (enabled, wasEnabled) => {
         />
         <div
           v-else
-          class="w-[390px] shrink-0 overflow-hidden border border-line bg-white shadow-lg"
+          class="w-[390px] shrink-0 overflow-hidden rounded-lg border border-line bg-white shadow-lg"
           :class="fitContent && !fillParent ? '' : 'h-full'"
           :style="fitContent && !fillParent ? { height: contentHeight + 'px' } : undefined"
         >

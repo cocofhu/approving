@@ -269,7 +269,7 @@ onMounted(loadAll)
       v-else-if="loadDenied"
       role="status"
       data-testid="platform-rules-denied"
-      class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+      class="rounded-lg border border-warn/40 bg-warn/10 px-5 py-10 text-center"
     >
       <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
       <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
@@ -292,7 +292,7 @@ onMounted(loadAll)
       v-else-if="loadFailed"
       role="status"
       data-testid="platform-rules-failed"
-      class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+      class="rounded-lg border border-err/40 bg-err/10 px-5 py-10 text-center"
     >
       <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
       <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
@@ -382,8 +382,8 @@ onMounted(loadAll)
             </span>
           </div>
           <p class="mt-3 text-[12px] leading-relaxed text-txt3">{{ t('pages.platformRules.mobileReadonlyHint') }}</p>
-          <div v-if="error" class="mt-3 border border-err/30 bg-err/10 px-3 py-2 text-sm text-err">{{ error }}</div>
-          <div v-else-if="mobileSummary" class="mt-4 border border-line bg-base px-3 py-2">
+          <div v-if="error" class="rounded-lg mt-3 border border-err/30 bg-err/10 px-3 py-2 text-sm text-err">{{ error }}</div>
+          <div v-else-if="mobileSummary" class="rounded-lg mt-4 border border-line bg-base px-3 py-2">
             <div class="mb-1 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.platformRules.summaryTitle') }}</div>
             <pre class="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-txt2">{{ mobileSummary }}</pre>
           </div>
@@ -413,21 +413,21 @@ onMounted(loadAll)
           <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.platformRules.priorityTitle') }}</h4>
           <ol class="mt-3 space-y-3 text-[12px]">
             <li class="flex gap-2">
-              <span class="flex h-5 w-5 shrink-0 items-center justify-center border border-line text-[10px] text-txt3">1</span>
+              <span class="rounded-full flex h-5 w-5 shrink-0 items-center justify-center border border-line text-[10px] text-txt3">1</span>
               <div>
                 <div class="font-medium text-txt">{{ t('pages.platformRules.priorityAgent') }}</div>
                 <div class="font-mono text-[10px] text-txt3">profiles/&lt;agent&gt;/platform-rules/</div>
               </div>
             </li>
             <li class="flex gap-2">
-              <span class="flex h-5 w-5 shrink-0 items-center justify-center border border-accent/40 bg-accent-dim text-[10px] text-accent-2">2</span>
+              <span class="rounded-full flex h-5 w-5 shrink-0 items-center justify-center border border-accent/40 bg-accent-dim text-[10px] text-accent-2">2</span>
               <div>
                 <div class="font-medium text-accent-2">{{ t('pages.platformRules.priorityGlobal') }}</div>
                 <div class="font-mono text-[10px] text-txt3">data/platform-rules/</div>
               </div>
             </li>
             <li class="flex gap-2">
-              <span class="flex h-5 w-5 shrink-0 items-center justify-center border border-line text-[10px] text-txt3">3</span>
+              <span class="rounded-full flex h-5 w-5 shrink-0 items-center justify-center border border-line text-[10px] text-txt3">3</span>
               <div>
                 <div class="font-medium text-txt">{{ t('pages.platformRules.priorityEmbed') }}</div>
                 <div class="font-mono text-[10px] text-txt3">go:embed skills_embed/</div>
@@ -438,9 +438,9 @@ onMounted(loadAll)
         <div class="border-b border-line px-3 py-3">
           <h4 class="text-[11px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.platformRules.injectTitle') }}</h4>
           <div class="mt-2 space-y-2 text-[11px] text-txt2">
-            <div class="border border-line bg-base px-2 py-1.5">1. {{ t('pages.platformRules.injectAgentDir') }}</div>
+            <div class="rounded-lg border border-line bg-base px-2 py-1.5">1. {{ t('pages.platformRules.injectAgentDir') }}</div>
             <div class="text-center text-txt3">↓</div>
-            <div class="border border-accent/30 bg-accent-dim px-2 py-1.5 text-txt">2. {{ t('pages.platformRules.injectPlatformRules') }}</div>
+            <div class="rounded-lg border border-accent/30 bg-accent-dim px-2 py-1.5 text-txt">2. {{ t('pages.platformRules.injectPlatformRules') }}</div>
           </div>
         </div>
         <div class="px-3 py-3">

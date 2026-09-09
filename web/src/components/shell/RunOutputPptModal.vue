@@ -142,7 +142,7 @@ function openArtifacts() {
     </div>
     <div
       v-else-if="loadError"
-      class="border border-err/35 bg-err/8 px-3 py-3 text-sm text-err"
+      class="rounded-lg border border-err/35 bg-err/8 px-3 py-3 text-sm text-err"
       data-testid="run-output-load-error"
       role="alert"
     >
@@ -150,7 +150,7 @@ function openArtifacts() {
     </div>
     <div
       v-else-if="!hasCards"
-      class="flex min-h-[360px] flex-col items-center justify-center border border-line bg-base px-4 py-10 text-center"
+      class="rounded-lg flex min-h-[360px] flex-col items-center justify-center border border-line bg-base px-4 py-10 text-center"
       data-testid="run-output-empty"
     >
       <strong class="mb-1.5 block text-[13px] text-txt">{{
@@ -161,7 +161,7 @@ function openArtifacts() {
       <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
         <button
           type="button"
-          class="border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
+          class="rounded-lg border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
           data-testid="run-output-empty-open-run"
           @click="openRunDetail"
         >
@@ -169,7 +169,7 @@ function openArtifacts() {
         </button>
         <button
           type="button"
-          class="border border-line bg-transparent px-3 py-2 text-[13px] text-txt2 hover:border-line-strong hover:text-txt"
+          class="rounded-md border border-line bg-transparent px-3 py-2 text-[13px] text-txt2 hover:border-line-strong hover:text-txt"
           data-testid="run-output-empty-open-artifacts"
           @click="openArtifacts"
         >
@@ -179,7 +179,7 @@ function openArtifacts() {
     </div>
     <div
       v-else
-      class="flex h-[min(62vh,560px)] min-h-[420px] flex-col overflow-hidden border border-line"
+      class="rounded-lg flex h-[min(62vh,560px)] min-h-[420px] flex-col overflow-hidden border border-line"
       data-testid="run-output-result-cards"
     >
       <div
@@ -188,13 +188,13 @@ function openArtifacts() {
       >
         <span>{{ t('shell.runNotifications.focusOutputPrefix') }}</span>
         <strong class="text-txt">{{ focusNodeLabel || focusNodeId || '—' }}</strong>
-        <span class="border border-ok/35 bg-ok/8 px-2 py-0.5 text-[11px] text-ok">{{
+        <span class="rounded-md border border-ok/35 bg-ok/8 px-2 py-0.5 text-[11px] text-ok">{{
           t('shell.runNotifications.focusOutputType')
         }}</span>
-        <span class="border border-line bg-base px-2 py-0.5 text-[11px] text-txt2">{{
+        <span class="rounded-md border border-line bg-base px-2 py-0.5 text-[11px] text-txt2">{{
           t('shell.runNotifications.focusOutputSource')
         }}</span>
-        <span class="border border-line bg-base px-2 py-0.5 text-[11px] text-txt2">{{
+        <span class="rounded-md border border-line bg-base px-2 py-0.5 text-[11px] text-txt2">{{
           t('shell.runNotifications.focusOutputAligned')
         }}</span>
       </div>
@@ -206,7 +206,7 @@ function openArtifacts() {
     <template #footer>
       <button
         type="button"
-        class="border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
+        class="rounded-lg border border-transparent bg-accent px-3 py-2 text-[13px] text-white hover:brightness-110"
         data-testid="run-output-mark-read"
         @click="markRead"
       >

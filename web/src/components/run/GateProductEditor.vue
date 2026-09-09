@@ -459,13 +459,13 @@ defineExpose({
         {{ p.name }}
         <span
           v-if="p.readonly || isReadonlyArtifactKind(p.kind)"
-          class="ml-1.5 border border-line-strong bg-overlay px-1 py-px text-[10px] text-txt3"
+          class="rounded-md ml-1.5 border border-line-strong bg-overlay px-1 py-px text-[10px] text-txt3"
           data-testid="gate-readonly-badge"
           >{{ t('pages.gateApproval.readonlyBadge') }}</span
         >
         <span
           v-else
-          class="ml-1.5 border border-accent/35 bg-accent-dim px-1 py-px text-[10px] text-accent-2"
+          class="rounded-md ml-1.5 border border-accent/35 bg-accent-dim px-1 py-px text-[10px] text-accent-2"
           >{{ t('pages.gateApproval.primaryBadge') }}</span
         >
       </button>
@@ -473,7 +473,7 @@ defineExpose({
 
     <div
       v-if="externalChange"
-      class="mx-3 mt-3 flex items-start gap-2 border border-warn/35 bg-warn/10 px-3 py-2 text-xs text-warn"
+      class="rounded-md mx-3 mt-3 flex items-start gap-2 border border-warn/35 bg-warn/10 px-3 py-2 text-xs text-warn"
       data-testid="gate-external-change"
       role="status"
     >
@@ -483,7 +483,7 @@ defineExpose({
       </div>
       <button
         type="button"
-        class="shrink-0 border border-line-strong bg-elevated px-2.5 py-1 text-[11px] text-txt hover:bg-overlay"
+        class="rounded-md shrink-0 border border-line-strong bg-elevated px-2.5 py-1 text-[11px] text-txt hover:bg-overlay"
         @click="onRefreshExternal"
       >
         {{ t('pages.gateApproval.externalChangeRefresh') }}
@@ -491,7 +491,7 @@ defineExpose({
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-      <div class="inline-flex border border-line bg-elevated" role="group">
+      <div class="rounded-lg inline-flex border border-line bg-elevated" role="group">
         <button
           type="button"
           class="px-3 py-1 text-xs"
@@ -538,20 +538,20 @@ defineExpose({
 
     <div
       v-if="saveError"
-      class="mx-3 mb-2 border border-err/30 bg-err/10 px-3 py-2 text-xs text-err"
+      class="rounded-md mx-3 mb-2 border border-err/30 bg-err/10 px-3 py-2 text-xs text-err"
       data-testid="gate-save-error"
     >
       {{ saveError }}
     </div>
     <div
       v-if="saveOk"
-      class="mx-3 mb-2 border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok"
+      class="rounded-md mx-3 mb-2 border border-ok/30 bg-ok/10 px-3 py-2 text-xs text-ok"
     >
       {{ t('pages.gateApproval.saveOk', { name: activeProduct?.name }) }}
     </div>
 
     <div
-      class="mx-3 mb-3 flex flex-col border border-line bg-surface"
+      class="rounded-lg mx-3 mb-3 flex flex-col border border-line bg-surface"
       :class="fillParent ? 'min-h-0 flex-1' : 'min-h-[240px]'"
     >
       <div
@@ -590,7 +590,7 @@ defineExpose({
         </span>
         <div
           v-if="mode === 'edit' && canEditActive && activeProduct && isStructuredArtifactName(activeProduct.name)"
-          class="inline-flex border border-line"
+          class="rounded-lg inline-flex border border-line"
         >
           <button
             type="button"
@@ -624,7 +624,7 @@ defineExpose({
           v-else-if="imageSrc"
           :src="imageSrc"
           :alt="activeProduct?.name || ''"
-          class="max-h-[320px] max-w-full border border-line object-contain"
+          class="rounded-lg max-h-[320px] max-w-full border border-line object-contain"
         />
         <div v-else class="text-center text-txt3">
           <div class="font-medium text-txt">{{ activeProduct?.name }}</div>
@@ -669,7 +669,7 @@ defineExpose({
         >
           <div
             v-if="isProposalsProduct"
-            class="border border-warn/35 bg-warn/10 px-3.5 py-3"
+            class="rounded-lg border border-warn/35 bg-warn/10 px-3.5 py-3"
             data-testid="gate-proposals-form-unsupported"
             role="status"
           >
@@ -693,7 +693,7 @@ defineExpose({
             <input
               v-model="formTitle"
               type="text"
-              class="w-full border border-line bg-base px-2.5 py-2 text-sm outline-none focus:border-accent-2 disabled:cursor-not-allowed disabled:opacity-55"
+              class="rounded-md w-full border border-line bg-base px-2.5 py-2 text-sm outline-none focus:border-accent-2 disabled:cursor-not-allowed disabled:opacity-55"
               data-testid="gate-form-title"
               :disabled="isProposalsProduct"
               @input="applyFormToDraft"
@@ -704,7 +704,7 @@ defineExpose({
             <textarea
               v-model="formSummary"
               rows="4"
-              class="w-full border border-line bg-base px-2.5 py-2 text-sm outline-none focus:border-accent-2 disabled:cursor-not-allowed disabled:opacity-55"
+              class="rounded-md w-full border border-line bg-base px-2.5 py-2 text-sm outline-none focus:border-accent-2 disabled:cursor-not-allowed disabled:opacity-55"
               data-testid="gate-form-summary"
               :disabled="isProposalsProduct"
               @input="applyFormToDraft"
@@ -810,7 +810,7 @@ defineExpose({
 
     <div
       v-if="excludedNames?.length"
-      class="mx-3 mb-3 border border-dashed border-line-strong bg-elevated px-3 py-2.5 text-[11px] text-txt3"
+      class="rounded-lg mx-3 mb-3 border border-dashed border-line-strong bg-elevated px-3 py-2.5 text-[11px] text-txt3"
       data-testid="gate-excluded-produces"
     >
       <b class="font-medium text-txt2">{{ t('pages.gateApproval.excludedTitle') }}</b>

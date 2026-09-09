@@ -204,7 +204,7 @@ defineExpose({
     >
       <span
         v-if="isDraining()"
-        class="inline-flex items-center gap-1.5 border border-warn/45 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn"
+        class="rounded-md inline-flex items-center gap-1.5 border border-warn/45 bg-warn/10 px-2.5 py-1 text-xs font-medium text-warn"
         :title="t('shell.shutdown.drainingTitle')"
       >
         <span class="inline-flex h-1.5 w-1.5 animate-pulse rounded-full bg-warn" />
@@ -259,7 +259,7 @@ defineExpose({
     <Teleport to="body">
       <div
         v-if="panelOpen"
-        class="z-[60] flex max-h-[min(420px,70vh)] flex-col border border-line-strong bg-elevated shadow-card"
+        class="rounded-lg z-[60] flex max-h-[min(420px,70vh)] flex-col border border-line-strong bg-elevated shadow-card"
         role="menu"
         :aria-label="t('shell.runNotifications.title')"
         data-testid="run-notifications-panel"
@@ -275,7 +275,7 @@ defineExpose({
             <button
               v-if="unreadCount > 0"
               type="button"
-              class="border border-line bg-transparent px-2 py-0.5 text-[11px] text-txt2 hover:border-accent hover:text-accent"
+              class="rounded-md border border-line bg-transparent px-2 py-0.5 text-[11px] text-txt2 hover:border-accent hover:text-accent"
               data-testid="run-notifications-mark-all"
               @click="onMarkAllRead"
             >
@@ -314,7 +314,7 @@ defineExpose({
             />
             <div class="mb-1 flex items-center gap-2">
               <span
-                class="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
+                class="rounded-md shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
                 :class="
                   item.status === 'failed'
                     ? 'border-err/45 text-err'
@@ -352,7 +352,7 @@ defineExpose({
           </div>
           <button
             type="button"
-            class="w-full border border-line bg-transparent px-3 py-2 text-[13px] text-accent-2 hover:border-accent hover:bg-accent-dim hover:text-accent"
+            class="rounded-md w-full border border-line bg-transparent px-3 py-2 text-[13px] text-accent-2 hover:border-accent hover:bg-accent-dim hover:text-accent"
             data-testid="run-notifications-view-all"
             @click="viewAll"
           >

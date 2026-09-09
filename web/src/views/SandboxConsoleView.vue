@@ -304,12 +304,12 @@ onBeforeUnmount(() => {
       <span class="truncate text-[13px] font-medium text-txt">{{ sandboxTitle }}</span>
     </div>
     <div class="flex flex-1 flex-col items-center px-5 py-8 text-center">
-      <div class="mb-3 flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">⌁</div>
+      <div class="rounded-lg mb-3 flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">⌁</div>
       <h3 class="text-[14px] font-semibold text-txt">{{ t('pages.sandboxConsole.mobile.title') }}</h3>
       <p class="mt-2 max-w-[32ch] text-[12.5px] leading-relaxed text-txt2">{{ t('pages.sandboxConsole.mobile.desc') }}</p>
       <button
         type="button"
-        class="mt-4 min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
+        class="rounded-md mt-4 min-h-11 border border-line bg-transparent px-4 text-[13px] text-txt2 hover:border-accent hover:text-txt"
         data-testid="sandbox-console-peek"
         @click="showSessionPeek = !showSessionPeek"
       >
@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
     </div>
     <div
       v-if="showSessionPeek"
-      class="mx-4 mb-6 border border-line bg-surface p-3 text-left"
+      class="rounded-lg mx-4 mb-6 border border-line bg-surface p-3 text-left"
       data-testid="sandbox-console-summary"
     >
       <div class="mb-2 text-[11px] uppercase tracking-wider text-txt3">{{ t('pages.sandboxConsole.mobile.summaryLabel') }}</div>
@@ -476,7 +476,7 @@ onBeforeUnmount(() => {
             <p>{{ logError }}</p>
             <button
               type="button"
-              class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+              class="rounded-lg mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
               @click="fetchLog"
             >
               {{ t('common.chatImage.retry') }}

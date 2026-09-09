@@ -155,7 +155,7 @@ onUnmounted(() => stopShutdownPolling())
           v-if="offline"
           class="absolute inset-0 z-40 flex items-center justify-center bg-base/75 backdrop-blur-sm"
         >
-          <div class="border border-line bg-surface px-8 py-6 text-center shadow-card">
+          <div class="rounded-lg border border-line bg-surface px-8 py-6 text-center shadow-card">
             <Icon name="alert" :size="28" class="mx-auto mb-3 text-txt3" />
             <h4 class="text-base font-semibold">{{ t('common.shutdown.offlineTitle') }}</h4>
             <p class="mt-2 text-sm text-txt3">{{ t('common.shutdown.offlineDesc') }}</p>
@@ -168,7 +168,7 @@ onUnmounted(() => stopShutdownPolling())
 
     <div
       v-if="drainToast.visible"
-      class="pointer-events-none fixed bottom-6 right-6 z-50 max-w-sm border border-err/40 bg-elevated px-4 py-3 text-sm text-txt2 shadow-card"
+      class="rounded-lg pointer-events-none fixed bottom-6 right-6 z-50 max-w-sm border border-err/40 bg-elevated px-4 py-3 text-sm text-txt2 shadow-card"
     >
       <strong class="mb-1 block font-semibold text-err">{{ t('common.shutdown.actionUnavailable') }}</strong>
       {{ drainToast.text }}

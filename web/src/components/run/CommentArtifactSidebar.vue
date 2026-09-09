@@ -33,7 +33,7 @@ function switchTab(name: 'comments' | 'artifact') {
 
 <template>
   <div
-    class="flex min-h-0 flex-1 flex-col overflow-hidden border border-line bg-surface"
+    class="rounded-lg flex min-h-0 flex-1 flex-col overflow-hidden border border-line bg-surface"
     data-testid="comment-artifact-sidebar"
   >
     <div class="flex shrink-0 border-b border-line">
@@ -67,7 +67,7 @@ function switchTab(name: 'comments' | 'artifact') {
 
     <div
       v-if="artifactCommitted"
-      class="mx-3 mt-2 shrink-0 border border-warn/35 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
+      class="rounded-lg mx-3 mt-2 shrink-0 border border-warn/35 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
       data-testid="comment-artifact-committed-banner"
     >
       {{ t('pages.gateApproval.commentPins.committedBanner') }}
@@ -80,7 +80,7 @@ function switchTab(name: 'comments' | 'artifact') {
     >
       <div
         v-if="!sortedPins.length"
-        class="border border-dashed border-line px-3 py-7 text-center text-[13px] text-txt3"
+        class="rounded-lg border border-dashed border-line px-3 py-7 text-center text-[13px] text-txt3"
         data-testid="comment-pins-empty"
       >
         {{ t('pages.gateApproval.commentPins.empty') }}
@@ -89,14 +89,14 @@ function switchTab(name: 'comments' | 'artifact') {
         <div
           v-for="pin in sortedPins"
           :key="pin.id"
-          class="cursor-pointer border border-line bg-elevated p-2.5"
+          class="rounded-lg cursor-pointer border border-line bg-elevated p-2.5"
           :class="pin.id === selectedId ? 'border-accent bg-accent-dim' : 'hover:border-line-strong'"
           :data-testid="'comment-pin-item-' + pin.seq"
           @click="emit('select', pin.id)"
         >
           <div class="mb-1.5 flex items-center justify-between gap-2">
             <span class="font-mono text-xs text-accent">#{{ pin.seq }}</span>
-            <span class="border border-line px-1.5 text-[11px] text-txt2">
+            <span class="rounded-md border border-line px-1.5 text-[11px] text-txt2">
               {{ t('pages.gateApproval.commentPins.badgeLabel') }}
             </span>
           </div>
@@ -115,14 +115,14 @@ function switchTab(name: 'comments' | 'artifact') {
           <div class="mt-2 flex gap-1.5">
             <button
               type="button"
-              class="border border-line px-2 py-1 text-[11px] text-txt2 hover:text-txt"
+              class="rounded-md border border-line px-2 py-1 text-[11px] text-txt2 hover:text-txt"
               @click.stop="emit('edit', pin.id)"
             >
               {{ t('pages.gateApproval.commentPins.edit') }}
             </button>
             <button
               type="button"
-              class="border border-err/35 px-2 py-1 text-[11px] text-err hover:bg-err/10"
+              class="rounded-md border border-err/35 px-2 py-1 text-[11px] text-err hover:bg-err/10"
               data-testid="comment-pin-delete"
               @click.stop="emit('delete', pin.id)"
             >
@@ -146,7 +146,7 @@ function switchTab(name: 'comments' | 'artifact') {
         }}
       </div>
       <pre
-        class="max-h-[260px] overflow-auto border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2 whitespace-pre-wrap"
+        class="rounded-lg max-h-[260px] overflow-auto border border-line bg-base p-2.5 font-mono text-[11px] leading-relaxed text-txt2 whitespace-pre-wrap"
         data-testid="comment-artifact-preview"
       >{{ previewText }}</pre>
       <button

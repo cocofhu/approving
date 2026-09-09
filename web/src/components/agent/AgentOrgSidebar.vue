@@ -355,7 +355,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
             class="ml-1 flex w-auto min-w-[18px] shrink-0 items-center justify-end"
           >
             <span
-              class="inline-flex h-4 min-w-[18px] items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3"
+              class="rounded-md inline-flex h-4 min-w-[18px] items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3"
             >{{ row.count }}</span>
           </span>
         </template>
@@ -388,7 +388,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
             class="ml-1 flex w-auto min-w-[18px] shrink-0 items-center justify-end"
           >
             <span
-              class="inline-flex h-4 min-w-[18px] items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3"
+              class="rounded-md inline-flex h-4 min-w-[18px] items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3"
             >{{ row.count }}</span>
           </span>
         </template>
@@ -415,7 +415,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
                   <span class="truncate text-txt">{{ row.name }}</span>
                   <span
                     v-if="row.multi"
-                    class="shrink-0 border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-2"
+                    class="rounded-md shrink-0 border border-accent-2/35 bg-accent/15 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-2"
                   >{{ t('pages.agentStudio.org.multiGroup') }}</span>
                 </span>
               </span>
@@ -435,7 +435,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
       />
       <div
         v-if="ctx?.open"
-        class="fixed z-[9999] min-w-[180px] border border-line bg-elevated py-1 shadow-card"
+        class="rounded-lg fixed z-[9999] min-w-[180px] border border-line bg-elevated py-1 shadow-card"
         data-org-ctx-menu
         :data-org-ctx-kind="ctx.kind"
         :style="{ left: ctx.x + 'px', top: ctx.y + 'px' }"
@@ -488,7 +488,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
             {{ t('pages.agentStudio.org.assignProject') }}
             <span
               data-org-ctx-new
-              class="ml-auto border border-ok/40 px-1 text-[9px] font-bold uppercase tracking-wide text-ok"
+              class="rounded-md ml-auto border border-ok/40 px-1 text-[9px] font-bold uppercase tracking-wide text-ok"
             >{{ t('pages.agentStudio.org.assignNewBadge') }}</span>
           </button>
           <div data-org-ctx-sep class="my-1 h-px bg-line" />

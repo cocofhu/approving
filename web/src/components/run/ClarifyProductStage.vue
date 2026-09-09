@@ -77,7 +77,7 @@ const emit = defineEmits<{
       <button
         v-if="stageKind === 'loadFailed'"
         type="button"
-        class="mt-3.5 inline-flex items-center gap-1.5 border border-accent-2/40 bg-accent-dim px-3 py-1.5 text-[12px] text-accent-2 hover:border-accent-2/70"
+        class="rounded-lg mt-3.5 inline-flex items-center gap-1.5 border border-accent-2/40 bg-accent-dim px-3 py-1.5 text-[12px] text-accent-2 hover:border-accent-2/70"
         data-testid="clarify-product-retry"
         :disabled="loading"
         @click="emit('retry')"

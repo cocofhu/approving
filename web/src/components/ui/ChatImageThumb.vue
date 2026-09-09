@@ -159,13 +159,13 @@ function onPreviewClick() {
 <template>
   <div
     v-if="loadFailed"
-    class="flex flex-col gap-1.5 border border-err/40 bg-err/[0.08] p-2"
+    class="flex flex-col gap-1.5 rounded-md border border-err/40 bg-err/[0.08] p-2"
     :class="[failCardClass, thumbClass]"
     :data-testid="testId"
     data-image-failed="1"
   >
     <div
-      class="flex h-7 w-7 items-center justify-center border border-err/35 text-red-300"
+      class="flex h-7 w-7 items-center justify-center rounded border border-err/35 text-red-300"
       aria-hidden="true"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
@@ -181,7 +181,7 @@ function onPreviewClick() {
     >{{ label }}</div>
     <button
       type="button"
-      class="bg-accent px-2.5 py-1 text-left text-[12px] text-white hover:brightness-110"
+      class="rounded-md bg-accent px-2.5 py-1 text-left text-[12px] text-white hover:brightness-110"
       :data-testid="retryTestId"
       @click.stop="retryLoad"
     >
@@ -191,7 +191,7 @@ function onPreviewClick() {
   <button
     v-else-if="mode === 'previewable'"
     type="button"
-    class="group relative cursor-pointer overflow-hidden border border-line transition hover:border-accent focus-visible:border-accent focus-visible:outline-none"
+    class="group relative cursor-pointer overflow-hidden rounded-md border border-line transition hover:border-accent focus-visible:border-accent focus-visible:outline-none"
     :class="[sizeClass, thumbClass]"
     :data-testid="testId"
     :aria-label="t('common.chatImage.previewAria', { label })"
@@ -212,7 +212,7 @@ function onPreviewClick() {
   </button>
   <div
     v-else
-    class="relative overflow-hidden border border-line"
+    class="relative overflow-hidden rounded-md border border-line"
     :class="[sizeClass, thumbClass]"
     :data-testid="testId"
   >

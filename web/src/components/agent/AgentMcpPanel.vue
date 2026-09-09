@@ -140,7 +140,7 @@ watch(
     </div>
 
     <div v-else class="scroll-area flex-1 space-y-3 overflow-y-auto p-4">
-      <div class="flex flex-wrap items-center gap-1.5 border border-line bg-elevated p-2.5" data-test="mcp-ops-bar">
+      <div class="rounded-lg flex flex-wrap items-center gap-1.5 border border-line bg-elevated p-2.5" data-test="mcp-ops-bar">
         <span class="mr-1 text-[11px] text-txt3">{{ t('pages.agentStudio.mcp.quickAddLabel') }}</span>
         <button
           v-if="!hasArtifactStore"
@@ -245,12 +245,12 @@ watch(
 
         <div
           v-if="isPlatformPresetName(m.name)"
-          class="mt-2.5 border border-dashed border-ok/35 bg-ok/5 p-2 text-[10.5px] leading-5 text-txt2"
+          class="rounded-lg mt-2.5 border border-dashed border-ok/35 bg-ok/5 p-2 text-[10.5px] leading-5 text-txt2"
           data-test="mcp-scope-note"
         >
           {{ t(`pages.agentStudio.mcp.scopeNote.${platformPresetKind(m.name)}`) }}
         </div>
-        <div v-else-if="isLegacyPmLeaderName(m.name)" class="mt-2.5 flex items-start gap-2 border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn">
+        <div v-else-if="isLegacyPmLeaderName(m.name)" class="rounded-lg mt-2.5 flex items-start gap-2 border border-dashed border-warn/40 bg-warn/10 p-2 text-[10.5px] leading-5 text-warn">
           <Icon name="alert" :size="14" class="mt-0.5 shrink-0 text-warn" />
           <div>{{ t('pages.agentStudio.mcp.legacyPmEntryBadge') }}</div>
         </div>

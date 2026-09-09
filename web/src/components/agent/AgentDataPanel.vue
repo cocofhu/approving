@@ -326,7 +326,7 @@ const showSkeleton = computed(
         v-if="loadDenied"
         role="status"
         data-testid="agent-data-denied"
-        class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+        class="rounded-lg border border-warn/40 bg-warn/10 px-5 py-10 text-center"
       >
         <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
         <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
@@ -339,7 +339,7 @@ const showSkeleton = computed(
         v-else-if="loadFailed"
         role="status"
         data-testid="agent-data-failed"
-        class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+        class="rounded-lg border border-err/40 bg-err/10 px-5 py-10 text-center"
       >
         <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
         <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
@@ -479,7 +479,7 @@ const showSkeleton = computed(
         </p>
         <div
           v-if="showSkeleton"
-          class="overflow-x-auto border border-line"
+          class="rounded-lg overflow-x-auto border border-line"
           data-testid="agent-data-jobs-skeleton"
           aria-hidden="true"
         >

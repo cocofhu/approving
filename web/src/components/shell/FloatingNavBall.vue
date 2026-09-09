@@ -113,7 +113,7 @@ onBeforeUnmount(() => {
   >
     <button
       type="button"
-      class="flex h-12 w-12 items-center justify-center border border-line bg-surface text-txt shadow-card transition hover:-translate-y-px hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+      class="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-surface text-txt shadow-card transition hover:-translate-y-px hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
       data-testid="floating-nav-ball"
       :aria-label="isMobile ? t('shell.aria.openNav') : t('shell.aria.showNav')"
       :title="isMobile ? t('shell.aria.openNav') : t('shell.aria.showNav')"

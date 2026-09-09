@@ -659,7 +659,7 @@ onUnmounted(() => {
   <div class="audit-panel" data-testid="project-audit-panel">
     <div
       v-if="denied || forceDenied"
-      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line bg-surface px-6 py-16 text-center"
+      class="rounded-lg flex min-h-0 flex-1 flex-col items-center justify-center gap-2 border border-dashed border-line bg-surface px-6 py-16 text-center"
       data-testid="project-audit-denied"
     >
       <div class="text-sm font-semibold text-txt">{{ t('pages.projectDetail.audit.deniedTitle') }}</div>

@@ -171,14 +171,14 @@ defineExpose({
       </div>
       <div class="flex flex-wrap items-center gap-2">
         <span
-          class="border border-accent/45 bg-accent-dim px-2.5 py-1 text-xs text-accent-2"
+          class="rounded-md border border-accent/45 bg-accent-dim px-2.5 py-1 text-xs text-accent-2"
           data-testid="notifications-unread-count"
         >
           {{ t('shell.runNotifications.unreadCount', { n: unreadCount }) }}
         </span>
         <button
           type="button"
-          class="min-h-11 border border-line bg-transparent px-3 text-[12px] text-txt2 hover:border-accent hover:text-accent disabled:opacity-40"
+          class="rounded-md min-h-11 border border-line bg-transparent px-3 text-[12px] text-txt2 hover:border-accent hover:text-accent disabled:opacity-40"
           data-testid="notifications-mark-all"
           :disabled="unreadCount === 0"
           @click="markAllRead()"
@@ -248,7 +248,7 @@ defineExpose({
               aria-hidden="true"
             />
             <span
-              class="shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
+              class="rounded-md shrink-0 border px-1.5 py-0.5 text-[10px] font-semibold"
               :class="
                 item.status === 'failed' ? 'border-err/45 text-err' : 'border-ok/40 text-ok'
               "

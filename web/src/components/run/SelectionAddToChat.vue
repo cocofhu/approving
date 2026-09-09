@@ -42,7 +42,7 @@ function onAdd() {
       v-show="enabled && visible"
       data-selection-add-to-chat
       data-testid="selection-add-to-chat"
-      class="fixed z-50 inline-flex items-center border border-accent-2/55 bg-elevated shadow-lg"
+      class="rounded-lg fixed z-50 inline-flex items-center border border-accent-2/55 bg-elevated shadow-lg"
       :style="style"
       role="toolbar"
       aria-label="选区操作"

@@ -158,14 +158,14 @@ onBeforeUnmount(() => {
     <div v-if="failed" class="space-y-2" data-testid="plan-diagram-fallback">
       <div class="text-[11px] text-txt2" data-testid="plan-diagram-fallback-hint">{{ t('pages.plan.diagramFallback') }}</div>
       <pre
-        class="overflow-x-auto border border-line bg-base p-2 font-mono text-[11px] leading-relaxed text-txt2 whitespace-pre-wrap"
+        class="rounded-lg overflow-x-auto border border-line bg-base p-2 font-mono text-[11px] leading-relaxed text-txt2 whitespace-pre-wrap"
         data-testid="plan-diagram-fallback-source"
       >{{ source }}</pre>
       <img
         v-if="fallbackUrl"
         :src="fallbackUrl"
         :alt="caption || 'diagram fallback'"
-        class="max-h-64 max-w-full border border-line object-contain"
+        class="rounded-lg max-h-64 max-w-full border border-line object-contain"
         data-testid="plan-diagram-fallback-img"
       />
     </div>

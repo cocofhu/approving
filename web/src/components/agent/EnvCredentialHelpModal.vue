@@ -96,7 +96,7 @@ function onChip(id: EnvCredentialHelpSection) {
         v-for="id in SECTIONS"
         :key="id"
         type="button"
-        class="border px-2 py-1 text-[11px]"
+        class="rounded-md border px-2 py-1 text-[11px]"
         :class="activeSection === id ? 'border-accent bg-accent-dim text-txt' : 'border-line bg-base text-txt2'"
         :data-help-chip="id"
         @click="onChip(id)"
@@ -124,7 +124,7 @@ function onChip(id: EnvCredentialHelpSection) {
       <p class="mb-2 mt-0 text-[13px] leading-[1.7] text-txt2">
         {{ t('pages.agentStudio.git.boundary') }}
       </p>
-      <div class="border border-line bg-base px-3 py-2.5 text-[12px] text-txt2">
+      <div class="rounded-md border border-line bg-base px-3 py-2.5 text-[12px] text-txt2">
         <b class="font-semibold text-txt">{{ t('pages.agentStudio.git.runtimeResolve') }}</b>
         — {{ t('pages.agentStudio.git.runtimeResolveHint') }}
       </div>

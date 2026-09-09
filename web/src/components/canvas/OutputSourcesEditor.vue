@@ -81,11 +81,11 @@ function onDrop(target: string) {
   <div>
     <div
       v-if="showMigration"
-      class="mb-3 border border-info/35 bg-info/10 px-3 py-2.5 text-[11px] leading-relaxed text-txt2"
+      class="rounded-lg mb-3 border border-info/35 bg-info/10 px-3 py-2.5 text-[11px] leading-relaxed text-txt2"
       v-html="t('pages.workflowEditor.inspector.outputSources.migrationBanner')"
     />
 
-    <div class="border border-line bg-base">
+    <div class="rounded-lg border border-line bg-base">
       <template v-if="selected.length">
         <div
           v-for="(template, i) in selected"
@@ -124,7 +124,7 @@ function onDrop(target: string) {
       <div
         v-if="!availableOptions.length"
         data-testid="output-sources-empty-available"
-        class="border border-dashed border-line px-3 py-4 text-[12px] leading-relaxed text-txt3"
+        class="rounded-lg border border-dashed border-line px-3 py-4 text-[12px] leading-relaxed text-txt3"
       >
         {{ t('pages.workflowEditor.inspector.outputSources.emptyAvailable') }}
       </div>
@@ -132,7 +132,7 @@ function onDrop(target: string) {
         v-for="opt in availableOptions"
         :key="opt.value"
         type="button"
-        class="mb-1 flex w-full items-center gap-2 border border-line bg-base px-2.5 py-1.5 text-left text-[12px] transition"
+        class="rounded-md mb-1 flex w-full items-center gap-2 border border-line bg-base px-2.5 py-1.5 text-left text-[12px] transition"
         :class="selectedSet.has(opt.value) ? 'cursor-not-allowed opacity-50' : 'hover:border-line-strong hover:bg-elevated'"
         :disabled="selectedSet.has(opt.value)"
         @click="add(opt.value)"

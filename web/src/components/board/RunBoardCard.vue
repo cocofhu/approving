@@ -30,7 +30,7 @@ const nodeLine = computed(() => {
 <template>
   <button
     type="button"
-    class="run-board-card w-full border border-line bg-surface p-3 text-left transition hover:border-line-strong hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-2"
+    class="run-board-card w-full rounded-lg border border-line bg-surface p-3 text-left transition hover:border-line-strong hover:bg-elevated focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-2"
     @click="emit('select', run)"
   >
     <div class="mb-2 flex items-start justify-between gap-2">

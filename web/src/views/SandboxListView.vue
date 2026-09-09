@@ -509,7 +509,7 @@ onBeforeUnmount(() => {
             </template>
             <tr v-else-if="loadDenied">
               <td colspan="8" class="px-4 py-10 text-center">
-                <div role="status" data-testid="sandbox-list-denied" class="border border-warn/40 bg-warn/10 px-5 py-8">
+                <div role="status" data-testid="sandbox-list-denied" class="rounded-lg border border-warn/40 bg-warn/10 px-5 py-8">
                   <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
                   <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
                   <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.permissionDeniedDesc') }}</p>
@@ -521,7 +521,7 @@ onBeforeUnmount(() => {
             </tr>
             <tr v-else-if="initialLoadFailed">
               <td colspan="8" class="px-4 py-10 text-center">
-                <div role="status" data-testid="sandbox-list-failed" class="border border-err/40 bg-err/10 px-5 py-8">
+                <div role="status" data-testid="sandbox-list-failed" class="rounded-lg border border-err/40 bg-err/10 px-5 py-8">
                   <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
                   <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
                   <AppButton class="mt-4" variant="outline" data-testid="sandbox-list-retry" @click="load({ showLoading: true })">
@@ -617,7 +617,7 @@ onBeforeUnmount(() => {
       <div v-else-if="detailView" class="space-y-5">
         <section>
           <h3 class="mb-2.5 text-[12px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.sandboxes.detail.sectionMeta') }}</h3>
-          <div class="border border-line bg-base">
+          <div class="rounded-lg border border-line bg-base">
             <div
               v-for="row in detailMetaRows"
               :key="row.key"
@@ -635,7 +635,7 @@ onBeforeUnmount(() => {
         <section>
           <h3 class="mb-1 text-[12px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.sandboxes.detail.sectionProxy') }}</h3>
           <p class="mb-2.5 text-[11px] leading-snug text-txt3">{{ t('pages.sandboxes.detail.sectionProxyHint') }}</p>
-          <div class="border border-line bg-base">
+          <div class="rounded-lg border border-line bg-base">
             <div
               v-for="row in detailProxyRows"
               :key="row.key"
@@ -646,7 +646,7 @@ onBeforeUnmount(() => {
               <span class="flex shrink-0 items-center gap-1.5 self-center">
                 <button
                   type="button"
-                  class="border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
+                  class="rounded-md border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
                   :class="{ 'border-ok/40 text-ok': copiedKey === 'proxy-' + row.key }"
                   @click="copyText('proxy-' + row.key, row.value)"
                 >{{ copiedKey === 'proxy-' + row.key ? t('pages.sandboxes.detail.copied') : t('pages.sandboxes.detail.copy') }}</button>
@@ -654,7 +654,7 @@ onBeforeUnmount(() => {
                   v-if="row.preview"
                   type="button"
                   data-testid="sandbox-vnc-open-preview"
-                  class="border border-accent bg-accent px-2 py-0.5 text-[11px] text-white hover:brightness-110"
+                  class="rounded-md border border-accent bg-accent px-2 py-0.5 text-[11px] text-white hover:brightness-110"
                   @click="openSandboxVncPreview(detailView.id)"
                 >{{ t('pages.sandboxes.detail.proxy.openPreview') }}</button>
               </span>
@@ -666,14 +666,14 @@ onBeforeUnmount(() => {
           <h3 class="mb-1 text-[12px] font-semibold uppercase tracking-wider text-txt3">{{ t('pages.sandboxes.detail.sectionEndpoints') }}</h3>
           <div
             data-testid="sandbox-endpoints-notice"
-            class="mb-2.5 border border-[rgb(var(--c-info)/0.45)] bg-[rgb(var(--c-info)/0.14)] px-3 py-2 text-[12px] leading-snug text-txt"
+            class="rounded-lg mb-2.5 border border-[rgb(var(--c-info)/0.45)] bg-[rgb(var(--c-info)/0.14)] px-3 py-2 text-[12px] leading-snug text-txt"
           >{{ t('pages.sandboxes.detail.endpointsNotice') }}</div>
           <p class="mb-2.5 text-[11px] leading-snug text-txt3">{{ t('pages.sandboxes.detail.sectionEndpointsHint') }}</p>
           <div
             v-if="!detailEndpointRows.length"
-            class="border border-dashed border-line-strong bg-base px-3 py-4 text-center text-[12px] text-txt3"
+            class="rounded-lg border border-dashed border-line-strong bg-base px-3 py-4 text-center text-[12px] text-txt3"
           >{{ t('pages.sandboxes.detail.endpointsEmpty') }}</div>
-          <div v-else class="border border-line bg-base">
+          <div v-else class="rounded-lg border border-line bg-base">
             <div
               v-for="row in detailEndpointRows"
               :key="row.key"
@@ -683,7 +683,7 @@ onBeforeUnmount(() => {
               <div class="min-w-0 break-all font-mono leading-snug text-txt">{{ row.value }}</div>
               <button
                 type="button"
-                class="shrink-0 self-center border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
+                class="rounded-md shrink-0 self-center border border-line px-2 py-0.5 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
                 :class="{ 'border-ok/40 text-ok': copiedKey === 'ep-' + row.key }"
                 @click="copyText('ep-' + row.key, row.value)"
               >{{ copiedKey === 'ep-' + row.key ? t('pages.sandboxes.detail.copied') : t('pages.sandboxes.detail.copy') }}</button>

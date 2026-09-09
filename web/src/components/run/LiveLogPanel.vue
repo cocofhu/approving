@@ -363,7 +363,7 @@ watch(
           v-if="snapshotTipOpen"
           :id="snapshotTipId"
           role="tooltip"
-          class="absolute left-0 top-[calc(100%+6px)] z-20 min-w-[220px] max-w-[280px] border border-line-strong bg-overlay px-2.5 py-2 text-left text-[11px] font-normal leading-snug text-txt2 shadow-lg normal-case"
+          class="rounded-xl absolute left-0 top-[calc(100%+6px)] z-20 min-w-[220px] max-w-[280px] border border-line-strong bg-overlay px-2.5 py-2 text-left text-[11px] font-normal leading-snug text-txt2 shadow-lg normal-case"
         >
           {{ t('pages.liveLog.snapshotTip') }}
         </span>
@@ -401,7 +401,7 @@ watch(
       <div
         v-else-if="showRehydrateError"
         data-testid="rehydrate-error"
-        class="mx-4 mt-8 border border-err/40 bg-err/[0.06] px-3.5 py-3.5 font-sans"
+        class="rounded-lg mx-4 mt-8 border border-err/40 bg-err/[0.06] px-3.5 py-3.5 font-sans"
       >
         <div class="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-err">
           <Icon name="alert" :size="14" />
@@ -413,7 +413,7 @@ watch(
         <button
           type="button"
           data-testid="retry-rehydrate"
-          class="inline-flex items-center gap-1 border border-transparent bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
+          class="rounded-lg inline-flex items-center gap-1 border border-transparent bg-accent px-3 py-1.5 text-[12px] font-medium text-white hover:bg-accent-2"
           @click="emit('retry-rehydrate')"
         >
           {{ t('pages.liveLog.rehydrate.retry') }}
@@ -424,7 +424,7 @@ watch(
       <div
         v-if="showRehydrateWarn"
         data-testid="rehydrate-warn"
-        class="border border-warn/40 bg-warn/[0.06] px-3.5 py-3 font-sans"
+        class="rounded-lg border border-warn/40 bg-warn/[0.06] px-3.5 py-3 font-sans"
       >
         <div class="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-warn">
           <Icon name="alert" :size="14" />
@@ -435,7 +435,7 @@ watch(
         </p>
         <p
           data-testid="rehydrate-snapshot-hint"
-          class="m-0 border border-info/30 bg-info/[0.07] px-2.5 py-2 text-[11px] leading-snug text-txt2"
+          class="rounded-md m-0 border border-info/30 bg-info/[0.07] px-2.5 py-2 text-[11px] leading-snug text-txt2"
         >
           <strong class="font-semibold text-info">{{ t('pages.liveLog.rehydrate.snapshotHintLabel') }}</strong>
           {{ t('pages.liveLog.rehydrate.snapshotHint') }}
@@ -489,7 +489,7 @@ watch(
         >
           <div class="flex flex-col items-center">
             <div
-              class="z-[1] flex h-[22px] w-[22px] shrink-0 items-center justify-center border"
+              class="rounded-lg z-[1] flex h-[22px] w-[22px] shrink-0 items-center justify-center border"
               :class="stageClass(stage.state)"
             >
               <Icon
@@ -507,7 +507,7 @@ watch(
           <div class="pb-4 pt-0.5">
             <div class="flex flex-wrap items-center gap-2 text-[12px] font-medium" :class="stageTitleClass(stage.state)">
               <span>{{ t(stageTitleKey[stage.id]) }}</span>
-              <span class="border px-1.5 py-px text-[10px] uppercase tracking-wide" :class="badgeClass(stage.state)">
+              <span class="rounded-md border px-1.5 py-px text-[10px] uppercase tracking-wide" :class="badgeClass(stage.state)">
                 {{ t(stateBadgeKey[stage.state]) }}
               </span>
             </div>
@@ -517,7 +517,7 @@ watch(
         <div
           v-if="stageTimedOut && activeStageId"
           data-testid="boot-timeout-banner"
-          class="mt-1 border border-err/40 bg-err/[0.06] px-3 py-2.5"
+          class="rounded-lg mt-1 border border-err/40 bg-err/[0.06] px-3 py-2.5"
         >
           <div class="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-err">
             <Icon name="alert" :size="14" />
@@ -529,7 +529,7 @@ watch(
           <button
             type="button"
             data-testid="go-sandbox-log"
-            class="mt-2 inline-flex items-center gap-1 border border-accent/45 bg-accent-dim px-2.5 py-1 text-[11px] text-accent-2 hover:text-txt"
+            class="rounded-md mt-2 inline-flex items-center gap-1 border border-accent/45 bg-accent-dim px-2.5 py-1 text-[11px] text-accent-2 hover:text-txt"
             @click="emit('go-sandbox-log')"
           >
             {{ t('pages.liveLog.boot.timeout.goSandbox') }}

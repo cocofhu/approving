@@ -56,7 +56,7 @@ function onActivateHeader() {
 
 <template>
   <div
-    class="flex min-h-[200px] flex-col border border-line bg-base"
+    class="flex min-h-[200px] flex-col overflow-hidden rounded-lg border border-line bg-base"
     :class="[accentClass[accent] || accentClass.extra, fill ? 'h-full' : '']"
     data-testid="run-board-column"
   >
@@ -76,7 +76,7 @@ function onActivateHeader() {
       <span class="text-[13px] font-semibold text-txt">{{ title }}</span>
       <span v-if="hint" class="text-[11px] text-txt3">{{ hint }}</span>
       <span
-        class="ml-auto inline-flex h-5 min-w-[22px] items-center justify-center border border-line bg-elevated px-1.5 text-[11px] font-semibold text-txt2"
+        class="ml-auto inline-flex h-5 min-w-[22px] items-center justify-center rounded border border-line bg-elevated px-1.5 text-[11px] font-semibold text-txt2"
         data-testid="run-board-column-count"
       >
         {{ badgeLabel() }}
@@ -89,7 +89,7 @@ function onActivateHeader() {
     >
       <template v-if="loading && !items.length">
         <div
-          class="border border-dashed border-line px-3 py-7 text-center text-xs text-txt3"
+          class="rounded-lg border border-dashed border-line px-3 py-7 text-center text-xs text-txt3"
           data-testid="run-board-column-loading"
         >
           {{ loadingText || '…' }}
@@ -100,7 +100,7 @@ function onActivateHeader() {
       </template>
       <div
         v-else
-        class="border border-dashed border-line px-3 py-7 text-center text-xs text-txt3"
+        class="rounded-lg border border-dashed border-line px-3 py-7 text-center text-xs text-txt3"
         data-testid="run-board-column-empty"
       >
         {{ emptyText }}

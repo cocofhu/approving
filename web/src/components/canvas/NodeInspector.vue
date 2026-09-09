@@ -471,7 +471,7 @@ function setSwitch(key: string, on: boolean) {
           </select>
           <div
             v-if="f.key === 'agent_profile' && agentProfileStale"
-            class="mt-2 border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] leading-5 text-warn"
+            class="rounded-lg mt-2 border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] leading-5 text-warn"
             data-testid="skill-profile-stale-banner"
           >
             <strong class="font-semibold">{{ t('pages.workflowEditor.inspector.staleBannerTitle') }}</strong>

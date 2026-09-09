@@ -217,7 +217,7 @@ onMounted(loadKeys)
           <h3 class="mb-3 text-base font-semibold text-txt">{{ t('pages.workflowApi.inputsTitle') }}</h3>
           <p class="mb-4 text-[13px] text-txt2">{{ t('pages.workflowApi.inputsDesc') }}</p>
           <div v-if="!askFields.length" class="rounded-md border border-line bg-surface px-4 py-6 text-center text-[13px] text-txt3">{{ t('pages.workflowApi.noAskVars') }}</div>
-          <table v-else class="w-full border border-line text-[13px]">
+          <table v-else class="rounded-lg w-full border border-line text-[13px]">
             <thead class="bg-elevated text-[11px] uppercase tracking-wider text-txt3">
               <tr>
                 <th class="px-4 py-2 text-left font-medium">name</th>

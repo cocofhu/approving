@@ -236,7 +236,7 @@ const {
         v-else-if="loadDenied"
         role="status"
         data-testid="project-detail-denied"
-        class="border border-warn/40 bg-warn/10 px-5 py-10 text-center"
+        class="rounded-lg border border-warn/40 bg-warn/10 px-5 py-10 text-center"
       >
         <Icon name="lock" :size="22" class="mx-auto mb-3 text-warn" />
         <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.permissionDeniedTitle') }}</h3>
@@ -249,7 +249,7 @@ const {
         v-else-if="loadFailed"
         role="status"
         data-testid="project-detail-failed"
-        class="border border-err/40 bg-err/10 px-5 py-10 text-center"
+        class="rounded-lg border border-err/40 bg-err/10 px-5 py-10 text-center"
       >
         <h3 class="text-sm font-semibold text-txt">{{ t('common.asyncState.loadFailedTitle') }}</h3>
         <p class="mt-1 text-xs text-txt2">{{ t('common.asyncState.loadFailedDesc') }}</p>
@@ -285,7 +285,7 @@ const {
       <div
         v-if="showPmMemoryMigration"
         data-testid="pm-memory-migration-banner"
-        class="mb-3 flex flex-col gap-2 border border-warn/35 bg-warn/10 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+        class="rounded-lg mb-3 flex flex-col gap-2 border border-warn/35 bg-warn/10 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
       >
         <div class="min-w-0">
           <div class="text-[12px] font-medium text-txt">{{ t('pages.projectDetail.pm.memoryMigratedTitle') }}</div>
@@ -316,7 +316,7 @@ const {
           <div
             v-for="n in 4"
             :key="'wf-skel-m-' + n"
-            class="flex flex-col gap-3 border border-line bg-surface p-3"
+            class="rounded-lg flex flex-col gap-3 border border-line bg-surface p-3"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1 space-y-2">
@@ -328,7 +328,7 @@ const {
             <div class="h-8 w-full bg-elevated animate-pulse" />
           </div>
         </div>
-        <div v-else-if="tab === 'workflows'" class="overflow-hidden border border-line">
+        <div v-else-if="tab === 'workflows'" class="rounded-lg overflow-hidden border border-line">
           <div class="grid grid-cols-5 gap-3 border-b border-line bg-elevated px-3 py-2">
             <div v-for="n in 5" :key="'wf-th-' + n" class="h-2.5 bg-elevated animate-pulse" />
           </div>
@@ -340,7 +340,7 @@ const {
             <div class="h-3 w-1/2 bg-elevated animate-pulse" />
           </div>
         </div>
-        <div v-else class="space-y-3 border border-line bg-surface p-4">
+        <div v-else class="rounded-lg space-y-3 border border-line bg-surface p-4">
           <div class="h-4 w-40 bg-elevated animate-pulse" />
           <div class="h-24 w-full bg-elevated animate-pulse" />
           <div class="h-10 w-full bg-elevated animate-pulse" />
@@ -514,7 +514,7 @@ const {
                 data-testid="wf-notify-saving"
               >{{ t('common.buttons.saving') }}</span>
               <div class="max-w-full overflow-x-auto">
-                <div class="inline-flex w-max max-w-none border border-line text-[11px]">
+                <div class="rounded-lg inline-flex w-max max-w-none border border-line text-[11px]">
                   <button
                     type="button"
                     class="shrink-0 whitespace-nowrap px-2 py-1 transition"
@@ -883,7 +883,7 @@ const {
         <!-- Empty: same shell as sandbox tab -->
         <div
           v-if="!varRows.length"
-          class="flex min-h-[360px] flex-1 flex-col border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+          class="rounded-lg flex min-h-[360px] flex-1 flex-col border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
           data-testid="workflow-vars-empty-shell"
         >
           <div class="flex flex-1 flex-col items-center justify-center">
@@ -902,7 +902,7 @@ const {
         <!-- Data: head / scroll rows / foot stick to shell bottom -->
         <div
           v-else
-          class="flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
+          class="rounded-lg flex min-h-0 flex-1 flex-col overflow-hidden border border-b-0 border-line bg-surface shadow-[var(--shadow-card)]"
           data-testid="workflow-vars-data-panel"
         >
           <div
@@ -933,7 +933,7 @@ const {
                 <!-- Value control matrix by type -->
                 <div
                   v-if="row.type === 'bool'"
-                  class="flex min-w-0 overflow-hidden border border-line"
+                  class="rounded-lg flex min-w-0 overflow-hidden border border-line"
                 >
                   <button
                     type="button"
@@ -1056,7 +1056,7 @@ const {
       <!-- Project info (meta) tab: fill remaining main area (no page void under card) -->
       <div v-else-if="tab === 'meta'" class="flex min-h-0 flex-1 flex-col">
         <div
-          class="flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
+          class="rounded-lg flex flex-1 flex-col overflow-hidden border border-line bg-surface shadow-[var(--shadow-card)]"
         >
           <div class="shrink-0 border-b border-line bg-elevated/55 px-4 py-3.5">
             <h2 class="m-0 text-sm font-semibold text-txt">

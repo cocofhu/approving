@@ -228,7 +228,7 @@ function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagr
     <div v-if="hasDesign" class="mb-4 space-y-3" data-testid="plan-design">
       <div class="text-[11px] font-semibold uppercase tracking-wide text-txt3">{{ t('pages.plan.designTitle') }}</div>
 
-      <section v-if="doc.architecture" class="border border-line bg-base/40 p-3" data-testid="plan-sec-architecture">
+      <section v-if="doc.architecture" class="rounded-lg border border-line bg-base/40 p-3" data-testid="plan-sec-architecture">
         <div class="group flex items-center gap-2">
           <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.architecture') }}</div>
           <AnnotateBtn json-path="architecture" :label="t('pages.plan.sections.architecture')" />
@@ -275,7 +275,7 @@ function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagr
         />
       </section>
 
-      <section v-if="doc.data_design" class="border border-line bg-base/40 p-3" data-testid="plan-sec-data">
+      <section v-if="doc.data_design" class="rounded-lg border border-line bg-base/40 p-3" data-testid="plan-sec-data">
         <div class="group flex items-center gap-2">
           <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.dataDesign') }}</div>
           <AnnotateBtn json-path="data_design" :label="t('pages.plan.sections.dataDesign')" />
@@ -388,7 +388,7 @@ function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagr
         />
       </section>
 
-      <section v-if="doc.interfaces?.length" class="border border-line bg-base/40 p-3" data-testid="plan-sec-interfaces">
+      <section v-if="doc.interfaces?.length" class="rounded-lg border border-line bg-base/40 p-3" data-testid="plan-sec-interfaces">
         <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.interfaces') }}</div>
         <ul class="mt-2 space-y-1.5">
           <li v-for="(it, ii) in doc.interfaces" :key="it.name || ii" class="text-[12px] text-txt2">
@@ -405,7 +405,7 @@ function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagr
         </ul>
       </section>
 
-      <section v-if="doc.components?.length" class="border border-line bg-base/40 p-3" data-testid="plan-sec-components">
+      <section v-if="doc.components?.length" class="rounded-lg border border-line bg-base/40 p-3" data-testid="plan-sec-components">
         <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.components') }}</div>
         <ul class="mt-2 space-y-1.5">
           <li v-for="(c, ci) in doc.components" :key="c.name || ci" class="text-[12px] text-txt2">
@@ -422,7 +422,7 @@ function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagr
         </ul>
       </section>
 
-      <section v-if="doc.interaction" class="border border-line bg-base/40 p-3" data-testid="plan-sec-interaction">
+      <section v-if="doc.interaction" class="rounded-lg border border-line bg-base/40 p-3" data-testid="plan-sec-interaction">
         <div class="group flex items-center gap-2">
           <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.interaction') }}</div>
           <AnnotateBtn json-path="interaction" :label="t('pages.plan.sections.interaction')" />
@@ -468,7 +468,7 @@ function diagramJsonPath(section: string, list: PlanDiagram[], active: PlanDiagr
         />
       </section>
 
-      <section v-if="doc.test_design?.trim()" class="border border-line bg-base/40 p-3" data-testid="plan-sec-test">
+      <section v-if="doc.test_design?.trim()" class="rounded-lg border border-line bg-base/40 p-3" data-testid="plan-sec-test">
         <div class="group flex items-center gap-2">
           <div class="text-[13px] font-semibold text-txt">{{ t('pages.plan.sections.testDesign') }}</div>
           <AnnotateBtn json-path="test_design" :label="t('pages.plan.sections.testDesign')" />

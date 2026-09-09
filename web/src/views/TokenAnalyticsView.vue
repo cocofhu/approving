@@ -535,7 +535,7 @@ watch([windowSel], () => void load())
           <p class="mt-1 text-xs text-txt3">{{ t('pages.tokenAnalytics.subtitle') }}</p>
         </div>
         <div
-          class="flex gap-1 bg-elevated p-1"
+          class="flex gap-1 rounded bg-elevated p-1"
           role="group"
           :aria-label="t('pages.board.tokenStats.windowAria')"
           data-testid="token-analytics-window"
@@ -544,7 +544,7 @@ watch([windowSel], () => void load())
             v-for="w in WINDOWS"
             :key="w"
             type="button"
-            class="px-2.5 py-1.5 text-xs"
+            class="rounded px-2.5 py-1.5 text-xs"
             :class="windowSel === w ? 'bg-surface font-semibold text-txt shadow-sm' : 'text-txt3'"
             :data-testid="`token-analytics-window-${w}`"
             @click="windowSel = w"
@@ -579,15 +579,15 @@ watch([windowSel], () => void load())
         >
           {{ t('pages.tokenAnalytics.sourcePm') }}
         </button>
-        <select v-model="projectSel" class="border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
+        <select v-model="projectSel" class="rounded border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
           <option value="">{{ t('pages.tokenAnalytics.projectAll') }}</option>
           <option v-for="p in data?.filterOptions.projects || []" :key="p.key" :value="p.key">{{ p.name }}</option>
         </select>
-        <select v-model="modelSel" class="border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
+        <select v-model="modelSel" class="rounded border border-line bg-surface px-2 py-1.5 text-xs text-txt2" @change="load()">
           <option value="">{{ t('pages.tokenAnalytics.modelAll') }}</option>
           <option v-for="m in data?.filterOptions.models || []" :key="m.key" :value="m.key">{{ m.name }}</option>
         </select>
-        <button type="button" class="border border-line bg-surface px-2.5 py-1.5 text-xs text-txt2" @click="clearFilters">
+        <button type="button" class="rounded border border-line bg-surface px-2.5 py-1.5 text-xs text-txt2" @click="clearFilters">
           {{ t('pages.tokenAnalytics.clearFilters') }}
         </button>
       </div>
@@ -605,13 +605,13 @@ watch([windowSel], () => void load())
       </div>
       <template v-else-if="data">
         <section id="overview" class="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3" data-testid="token-analytics-kpis">
-          <div class="border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-total">
+          <div class="rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-total">
             <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiTotal') }}</div>
             <div class="mt-1 text-[22px] font-bold tabular-nums">{{ fmtCompactTokenCount(data.kpi.total) }}</div>
             <div class="mt-1 text-[11px]" :class="deltaClass">{{ deltaLabel }}</div>
           </div>
           <div
-            class="token-analytics-kpi-merge relative border border-line bg-surface p-3.5 outline-none"
+            class="token-analytics-kpi-merge relative rounded-lg border border-line bg-surface p-3.5 outline-none"
             tabindex="0"
             data-testid="token-analytics-kpi-merge"
           >
@@ -625,7 +625,7 @@ watch([windowSel], () => void load())
               <b class="text-base font-bold tabular-nums text-txt">{{ fmtCompactTokenCount(data.kpi.outputTokens) }}</b>
             </div>
             <div
-              class="token-analytics-kpi-tip absolute left-3.5 top-[calc(100%-8px)] z-10 hidden min-w-[200px] border border-line bg-elevated p-2.5 text-xs shadow-md"
+              class="token-analytics-kpi-tip absolute left-3.5 top-[calc(100%-8px)] z-10 hidden min-w-[200px] rounded-lg border border-line bg-elevated p-2.5 text-xs shadow-md"
               data-testid="token-analytics-kpi-detail"
             >
               <div class="flex justify-between gap-4 py-0.5">
@@ -646,7 +646,7 @@ watch([windowSel], () => void load())
               </div>
             </div>
           </div>
-          <div class="border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-scope">
+          <div class="rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-kpi-scope">
             <div class="text-[11px] text-txt3">{{ t('pages.tokenAnalytics.kpiScope') }}</div>
             <div class="mt-1 text-[22px] font-bold">{{ t('pages.tokenAnalytics.kpiProjects', { n: data.kpi.projectCount }) }}</div>
             <div class="mt-1 text-[11px] text-txt3">
@@ -656,7 +656,7 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="lines" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-lines">
+        <section id="lines" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-lines">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.lines') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.linesHint') }}</em>
@@ -678,7 +678,7 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="pies" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-pies">
+        <section id="pies" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-pies">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.pies') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.piesHint') }}</em>
@@ -702,7 +702,7 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="bars" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
+        <section id="bars" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.bars') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.barsHint') }}</em>
@@ -718,7 +718,7 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="area" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-area">
+        <section id="area" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-area">
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.area') }}
             <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.areaHint') }}</em>
@@ -740,14 +740,14 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="heat" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
+        <section id="heat" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-heat">
           <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.heat') }}</h2>
           <div class="token-analytics-plot mt-2 h-[240px] overflow-visible" data-testid="token-analytics-plot-heat">
             <VChart v-if="heatmapOption()" :option="heatmapOption()!" autoresize class="h-full w-full" />
           </div>
         </section>
 
-        <section id="nodeWf" class="mb-3 border border-line bg-surface p-3.5" data-testid="token-analytics-node-wf">
+        <section id="nodeWf" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-node-wf">
           <h2 class="m-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.charts.nodeWf') }}</h2>
           <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
@@ -762,7 +762,7 @@ watch([windowSel], () => void load())
         </section>
 
         <section id="tables" class="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-          <div class="flex max-h-[280px] min-h-0 flex-col border border-line bg-surface p-3.5">
+          <div class="rounded-lg flex max-h-[280px] min-h-0 flex-col border border-line bg-surface p-3.5">
             <h2 class="m-0 mb-2 shrink-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.projects') }}</h2>
             <div class="token-analytics-table-scroll min-h-0 flex-1 overflow-auto">
               <table class="w-full border-collapse text-xs">
@@ -791,7 +791,7 @@ watch([windowSel], () => void load())
               </table>
             </div>
           </div>
-          <div class="flex max-h-[280px] min-h-0 flex-col border border-line bg-surface p-3.5" data-testid="token-analytics-runs-table">
+          <div class="flex max-h-[280px] min-h-0 flex-col rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-runs-table">
             <h2 class="m-0 mb-2 shrink-0 text-sm font-semibold">{{ t('pages.tokenAnalytics.tables.runs') }}</h2>
             <div class="token-analytics-table-scroll min-h-0 flex-1 overflow-auto">
               <!-- plan coverage: g1.1 / g1.2 / g1.3 — header sashes, session col widths, truncate without misfire -->

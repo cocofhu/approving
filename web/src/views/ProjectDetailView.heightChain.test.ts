@@ -50,7 +50,7 @@ describe('ProjectDetailView pmLeader fill-height chain (g2.2 / g2.3)', () => {
   })
 
   it('PmLeaderChat uses flex-1 overflow-hidden with internal message scroller (g2.3)', () => {
-    expect(pmChatSrc).toMatch(/class="flex min-h-0 flex-1 overflow-hidden border border-line bg-base"/)
+    expect(pmChatSrc).toMatch(/class="rounded-lg flex min-h-0 flex-1 overflow-hidden border border-line bg-base"/)
     expect(pmChatSrc).toMatch(/class="scroll-area min-h-0 flex-1 space-y-3 overflow-y-auto p-4"/)
   })
 })

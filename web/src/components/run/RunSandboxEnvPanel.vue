@@ -21,7 +21,7 @@ const items = computed(() => props.entries || [])
       {{ t('pages.runDetail.sandboxEnv.empty') }}
     </div>
     <div v-else class="scroll-area min-h-0 flex-1 overflow-y-auto p-3">
-      <div class="overflow-hidden border border-line">
+      <div class="rounded-lg overflow-hidden border border-line">
         <div
           class="hidden gap-2 border-b border-line bg-elevated/55 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-txt3 sm:grid sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_72px]"
         >

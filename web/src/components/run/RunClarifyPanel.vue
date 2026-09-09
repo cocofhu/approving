@@ -110,7 +110,7 @@ defineExpose({
       </div>
       <StatusPill status="failed" />
     </div>
-    <div class="mb-3 border border-err/40 bg-err/5 p-3.5">
+    <div class="rounded-lg mb-3 border border-err/40 bg-err/5 p-3.5">
       <div class="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-err">
         <Icon name="alert" :size="14" />
         {{ t('pages.runDetail.clarifyFailed.errorTitle') }}

@@ -88,7 +88,7 @@ defineExpose({ reset: startClock, elapsedSec, stuck })
     <p class="text-[13px] font-semibold text-txt" data-testid="hard-load-stage">{{ stageLabel }}</p>
     <div
       v-if="stuck"
-      class="max-w-[360px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
+      class="rounded-lg max-w-[360px] border border-warn/40 bg-warn/10 px-2.5 py-2 text-[12px] text-warn"
       data-testid="hard-load-stuck"
     >
       {{ t('common.loading.stuck') }}
@@ -96,7 +96,7 @@ defineExpose({ reset: startClock, elapsedSec, stuck })
     <button
       v-if="stuck && showRetry"
       type="button"
-      class="mt-1 inline-flex min-h-11 min-w-[44px] items-center justify-center border border-line bg-surface px-3 text-[12px] font-medium text-txt hover:bg-elevated"
+      class="rounded-lg mt-1 inline-flex min-h-11 min-w-[44px] items-center justify-center border border-line bg-surface px-3 text-[12px] font-medium text-txt hover:bg-elevated"
       data-testid="hard-load-retry"
       @click="onRetry"
     >

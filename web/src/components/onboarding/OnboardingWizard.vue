@@ -202,13 +202,13 @@ async function submitBootstrap() {
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="onboarding-wizard">
       <div class="absolute inset-0 bg-black/70" data-testid="onboarding-backdrop" @click="suppressAndClose" />
       <div
-        class="relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
+        class="rounded-xl relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
         style="width: min(980px, 100%); height: min(640px, 92vh); border-radius: 16px"
         role="dialog"
         aria-modal="true"
       >
         <div class="relative flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-5">
-          <div class="grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
+          <div class="rounded-md grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
             <Icon name="sparkles" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
@@ -240,7 +240,7 @@ async function submitBootstrap() {
             <li>· {{ t('pages.onboarding.success.publishedLine') }}</li>
           </ul>
           <p
-            class="mt-4 border px-3 py-2 text-[12px]"
+            class="rounded-lg mt-4 border px-3 py-2 text-[12px]"
             :class="identityOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
             data-testid="onboarding-success-git-user"
           >
@@ -250,7 +250,7 @@ async function submitBootstrap() {
                 : t('pages.onboarding.success.gitUserSkip')
             }}
           </p>
-          <p class="mt-2 border border-ok/35 bg-ok/10 px-3 py-2 text-[12px] text-ok" data-testid="onboarding-success-preview">
+          <p class="rounded-lg mt-2 border border-ok/35 bg-ok/10 px-3 py-2 text-[12px] text-ok" data-testid="onboarding-success-preview">
             {{
               t('pages.onboarding.success.preview', {
                 vnc: draft.vncPreview
@@ -263,14 +263,14 @@ async function submitBootstrap() {
             }}
           </p>
           <p
-            class="mt-2 border px-3 py-2 text-[12px]"
+            class="rounded-lg mt-2 border px-3 py-2 text-[12px]"
             :class="gitOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
             data-testid="onboarding-success-git"
           >
             {{ gitOk ? t('pages.onboarding.success.gitOk') : t('pages.onboarding.success.gitSkip') }}
           </p>
           <p
-            class="mt-4 border px-3 py-2 text-[12px]"
+            class="rounded-lg mt-4 border px-3 py-2 text-[12px]"
             :class="repoOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
             data-testid="onboarding-success-repo"
           >
@@ -301,7 +301,7 @@ async function submitBootstrap() {
             >
               <div class="flex w-[18px] shrink-0 flex-col items-center">
                 <div
-                  class="mt-0.5 grid h-3.5 w-3.5 place-items-center border"
+                  class="mt-0.5 grid h-3.5 w-3.5 place-items-center rounded-full border"
                   :class="i < draft.step ? 'border-ok/55' : i === draft.step ? 'border-accent' : 'border-line-strong'"
                 >
                   <i
@@ -327,7 +327,7 @@ async function submitBootstrap() {
                       v-for="option in languageOptions"
                       :key="option.id"
                       type="button"
-                      class="border px-4 py-4 text-left transition"
+                      class="rounded-lg border px-4 py-4 text-left transition"
                       :class="
                         draft.language === option.id
                           ? 'border-accent bg-accent-dim'
@@ -352,18 +352,18 @@ async function submitBootstrap() {
                     <li>{{ t('pages.onboarding.overview.itemPreview') }}</li>
                   </ol>
                   <div class="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div class="border border-line bg-base px-3 py-3">
+                    <div class="rounded-lg border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.agents') }}</div>
                       <div class="mt-1 text-[18px] font-semibold text-txt">6</div>
                       <p class="mt-1 text-[12px] text-txt2">{{ t('pages.onboarding.overview.agentsList') }}</p>
                     </div>
-                    <div class="border border-line bg-base px-3 py-3">
+                    <div class="rounded-lg border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.workflow') }}</div>
                       <div class="mt-1 text-[18px] font-semibold text-txt">{{ t('pages.onboarding.workflowName') }}</div>
                       <p class="mt-1 text-[12px] text-txt2">{{ t('pages.onboarding.overview.workflowHint') }}</p>
                     </div>
                   </div>
-                  <p class="mt-4 border border-accent/35 bg-accent-dim px-3 py-2 text-[12px] text-accent-2">
+                  <p class="rounded-lg mt-4 border border-accent/35 bg-accent-dim px-3 py-2 text-[12px] text-accent-2">
                     {{ t('pages.onboarding.overview.banner') }}
                   </p>
                 </template>
@@ -375,7 +375,7 @@ async function submitBootstrap() {
                       v-for="b in ACP_BACKENDS"
                       :key="b.id"
                       type="button"
-                      class="border px-3 py-3.5 text-center transition"
+                      class="rounded-lg border px-3 py-3.5 text-center transition"
                       :class="
                         draft.acpBackend === b.id
                           ? 'border-accent bg-accent-dim'
@@ -394,7 +394,7 @@ async function submitBootstrap() {
                         v-for="option in regionPolicy.options"
                         :key="option.id"
                         type="button"
-                        class="border px-3 py-3 text-left"
+                        class="rounded-lg border px-3 py-3 text-left"
                         :class="
                           draft.region === option.id
                             ? 'border-accent bg-accent-dim'
@@ -411,7 +411,7 @@ async function submitBootstrap() {
 
                 <template v-else-if="currentStep.id === 'apiKey'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.apiKey.meta') }}</p>
-                  <div class="mt-3 border border-accent/35 bg-accent-dim px-3 py-2 text-[12px] text-accent-2">
+                  <div class="rounded-lg mt-3 border border-accent/35 bg-accent-dim px-3 py-2 text-[12px] text-accent-2">
                     <code>{{ primaryAuthKey }}</code>
                     <span v-if="primaryAuthAlt" class="ml-2 text-txt3">/ {{ primaryAuthAlt }}</span>
                   </div>
@@ -425,7 +425,7 @@ async function submitBootstrap() {
                       :href="link.url"
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
+                      class="rounded-md border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
                     >{{ t(link.labelKey) }}</a>
                   </div>
                   <label class="mt-4 block">
@@ -437,7 +437,7 @@ async function submitBootstrap() {
                       v-model="draft.apiKey"
                       type="password"
                       autocomplete="off"
-                      class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                      class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
                       data-testid="onboarding-api-key"
                       @input="keyError = false"
                     />
@@ -449,7 +449,7 @@ async function submitBootstrap() {
                 <template v-else-if="currentStep.id === 'git'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.git.meta') }}</p>
 
-                  <div class="mt-4 border border-line bg-base px-3 py-3">
+                  <div class="rounded-lg mt-4 border border-line bg-base px-3 py-3">
                     <div class="text-[11px] uppercase tracking-[0.06em] text-txt3">
                       {{ t('pages.onboarding.repo.section') }}
                     </div>
@@ -462,7 +462,7 @@ async function submitBootstrap() {
                         type="text"
                         autocomplete="off"
                         placeholder="https://github.com/org/repo.git"
-                        class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                        class="rounded-md w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
                         data-testid="onboarding-repo-url"
                       />
                     </label>
@@ -475,7 +475,7 @@ async function submitBootstrap() {
                         type="text"
                         autocomplete="off"
                         :placeholder="t('pages.onboarding.repo.branchPlaceholder')"
-                        class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                        class="rounded-md w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
                         data-testid="onboarding-repo-branch"
                       />
                     </label>
@@ -488,7 +488,7 @@ async function submitBootstrap() {
                     </p>
                   </div>
 
-                  <div class="mt-4 border border-line bg-base px-3 py-3">
+                  <div class="rounded-lg mt-4 border border-line bg-base px-3 py-3">
                     <div class="text-[11px] uppercase tracking-[0.06em] text-txt3">
                       {{ t('pages.onboarding.gitUser.section') }}
                     </div>
@@ -502,7 +502,7 @@ async function submitBootstrap() {
                           type="text"
                           autocomplete="off"
                           :placeholder="t('pages.onboarding.gitUser.namePlaceholder')"
-                          class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                          class="rounded-md w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
                           data-testid="onboarding-git-user-name"
                         />
                       </label>
@@ -515,7 +515,7 @@ async function submitBootstrap() {
                           type="email"
                           autocomplete="off"
                           :placeholder="t('pages.onboarding.gitUser.emailPlaceholder')"
-                          class="w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
+                          class="rounded-md w-full border border-line bg-surface px-3 py-2 font-mono text-[13px] text-txt outline-none focus:border-accent"
                           data-testid="onboarding-git-user-email"
                         />
                       </label>
@@ -523,14 +523,14 @@ async function submitBootstrap() {
                     <p class="mt-2 text-[11px] text-txt3">{{ t('pages.onboarding.gitUser.hint') }}</p>
                   </div>
 
-                  <div class="mt-4 border border-line bg-base px-3 py-3">
+                  <div class="rounded-lg mt-4 border border-line bg-base px-3 py-3">
                     <div class="text-[11px] uppercase tracking-[0.06em] text-txt3">
                       {{ t('pages.onboarding.preview.section') }}
                     </div>
                     <div class="mt-2.5 grid gap-2 sm:grid-cols-2">
                       <button
                         type="button"
-                        class="border px-3 py-3 text-left"
+                        class="rounded-lg border px-3 py-3 text-left"
                         :class="
                           draft.vncPreview
                             ? 'border-accent bg-accent-dim'
@@ -544,7 +544,7 @@ async function submitBootstrap() {
                       </button>
                       <button
                         type="button"
-                        class="border px-3 py-3 text-left"
+                        class="rounded-lg border px-3 py-3 text-left"
                         :class="
                           draft.browserMcp
                             ? 'border-accent bg-accent-dim'
@@ -567,7 +567,7 @@ async function submitBootstrap() {
                       v-for="g in ONBOARDING_GIT_TYPES"
                       :key="g.id"
                       type="button"
-                      class="border px-3 py-3 text-center"
+                      class="rounded-lg border px-3 py-3 text-center"
                       :class="
                         draft.gitCredentialType === g.id
                           ? 'border-accent bg-accent-dim'
@@ -585,7 +585,7 @@ async function submitBootstrap() {
                       v-model="draft.githubToken"
                       type="password"
                       autocomplete="off"
-                      class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
+                      class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
                       data-testid="onboarding-github-token"
                     />
                   </label>
@@ -596,7 +596,7 @@ async function submitBootstrap() {
                         v-model="draft.gitlabToken"
                         type="password"
                         autocomplete="off"
-                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
                         data-testid="onboarding-gitlab-token"
                       />
                     </label>
@@ -606,7 +606,7 @@ async function submitBootstrap() {
                         v-model="draft.gitlabUrl"
                         type="text"
                         placeholder="https://gitlab.example.com"
-                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[13px] text-txt"
                         data-testid="onboarding-gitlab-url"
                       />
                     </label>
@@ -617,7 +617,7 @@ async function submitBootstrap() {
                       <textarea
                         v-model="draft.gitSshPrivateKey"
                         rows="4"
-                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt"
                         data-testid="onboarding-ssh-key"
                       />
                     </label>
@@ -626,7 +626,7 @@ async function submitBootstrap() {
                       <textarea
                         v-model="draft.gitSshKnownHosts"
                         rows="2"
-                        class="w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt"
+                        class="rounded-md w-full border border-line bg-base px-3 py-2 font-mono text-[12px] text-txt"
                       />
                     </label>
                   </div>
@@ -636,21 +636,21 @@ async function submitBootstrap() {
                 <template v-else-if="currentStep.id === 'review'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.review.meta') }}</p>
                   <div class="mt-3 flex flex-wrap gap-2 text-[12px]">
-                    <span class="border border-ok/35 bg-ok/10 px-2 py-1 text-ok">
+                    <span class="rounded-lg border border-ok/35 bg-ok/10 px-2 py-1 text-ok">
                       Backend · {{ ACP_BACKENDS.find((b) => b.id === draft.acpBackend)?.label }}
                     </span>
                     <span
                       v-if="regionPolicy && draft.region"
-                      class="border border-ok/35 bg-ok/10 px-2 py-1 text-ok"
+                      class="rounded-lg border border-ok/35 bg-ok/10 px-2 py-1 text-ok"
                     >Region · {{ draft.region }}</span>
                     <span
-                      class="border px-2 py-1"
+                      class="rounded-lg border px-2 py-1"
                       :class="draft.apiKey.trim() ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
                     >
                       API Key · {{ draft.apiKey.trim() ? t('pages.onboarding.review.keyOn') : t('pages.onboarding.review.keyOff') }}
                     </span>
                     <span
-                      class="border px-2 py-1"
+                      class="rounded-lg border px-2 py-1"
                       :class="repoOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
                       data-testid="onboarding-review-repo"
                     >
@@ -658,7 +658,7 @@ async function submitBootstrap() {
                       {{ repoOk ? repoDirName : t('pages.onboarding.review.repoSkip') }}
                     </span>
                     <span
-                      class="border px-2 py-1"
+                      class="rounded-lg border px-2 py-1"
                       :class="identityOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-warn/35 bg-warn/10 text-warn'"
                       data-testid="onboarding-review-git-user"
                     >
@@ -666,25 +666,25 @@ async function submitBootstrap() {
                       {{ identityOk ? draft.gitUserName : t('pages.onboarding.review.gitUserOff') }}
                     </span>
                     <span
-                      class="border px-2 py-1"
+                      class="rounded-lg border px-2 py-1"
                       :class="draft.vncPreview ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
                     >
                       {{ t('pages.onboarding.preview.vncLabel') }} · {{ draft.vncPreview ? t('pages.onboarding.review.flagOn') : t('pages.onboarding.review.flagOff') }}
                     </span>
                     <span
-                      class="border px-2 py-1"
+                      class="rounded-lg border px-2 py-1"
                       :class="draft.browserMcp ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
                     >
                       {{ t('pages.onboarding.preview.browserLabel') }} · {{ draft.browserMcp ? t('pages.onboarding.review.flagOn') : t('pages.onboarding.review.flagOff') }}
                     </span>
                     <span
-                      class="border px-2 py-1"
+                      class="rounded-lg border px-2 py-1"
                       :class="gitOk ? 'border-ok/35 bg-ok/10 text-ok' : 'border-line text-txt2'"
                     >
                       Git · {{ gitOk ? draft.gitCredentialType : t('pages.onboarding.review.gitSkip') }}
                     </span>
-                    <span class="border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.agentsChip') }}</span>
-                    <span class="border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.wfChip') }}</span>
+                    <span class="rounded-lg border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.agentsChip') }}</span>
+                    <span class="rounded-lg border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.wfChip') }}</span>
                   </div>
                   <p v-if="!draft.apiKey.trim()" class="mt-3 text-[12px] text-warn">{{ t('pages.onboarding.review.needKey') }}</p>
                   <p class="mt-3 text-[12px] text-txt3">{{ t('pages.onboarding.review.featureHint') }}</p>

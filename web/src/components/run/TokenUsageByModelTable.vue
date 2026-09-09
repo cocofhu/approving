@@ -92,7 +92,7 @@ function barTitle(row: { inputTokens: number; outputTokens: number; cacheReadTok
   <div
     v-if="total != null"
     data-testid="run-token-by-model"
-    class="mt-3 overflow-x-clip border border-line bg-surface"
+    class="rounded-lg mt-3 overflow-x-clip border border-line bg-surface"
   >
     <div class="flex items-baseline justify-between gap-2 border-b border-line px-2.5 py-2">
       <h4 class="m-0 text-[13px] font-semibold text-txt">{{ t('pages.tokenByModel.modelTableTitle') }}</h4>
@@ -124,7 +124,7 @@ function barTitle(row: { inputTokens: number; outputTokens: number; cacheReadTok
           >{{ modelLabel(row.modelKey, row.unknown) }}</span>
           <UnknownModelBadge v-if="showUnknownVisual(row.modelKey, row.unknown)" />
           <span
-            class="inline-flex shrink-0 items-center border px-1.5 py-px text-[10.5px] leading-none"
+            class="rounded-lg inline-flex shrink-0 items-center border px-1.5 py-px text-[10.5px] leading-none"
             :class="
               row.unknown && !row.filled
                 ? 'border-warn/35 bg-warn/8 text-warn'
@@ -169,7 +169,7 @@ function barTitle(row: { inputTokens: number; outputTokens: number; cacheReadTok
 
         <!-- 英文全称四分量 auto-fit 网格（≤320px 自然降为 2/1 列） -->
         <div
-          class="grid gap-px border border-line bg-line"
+          class="rounded-lg grid gap-px border border-line bg-line"
           style="grid-template-columns: repeat(auto-fit, minmax(96px, 1fr))"
         >
           <div class="min-w-0 bg-base px-1.5 py-1">

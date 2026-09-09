@@ -69,7 +69,7 @@ const { t } = useI18n()
         <span>{{ sbxLog.error }}</span>
         <button
           type="button"
-          class="mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
+          class="rounded-lg mt-2 inline-flex min-h-11 items-center border border-line px-3 text-[12px] text-txt"
           @click="emit('refresh')"
         >
           {{ t('common.chatImage.retry') }}

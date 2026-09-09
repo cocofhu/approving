@@ -138,7 +138,7 @@ watch(
     </div>
     <div v-else class="scroll-area flex-1 space-y-2 overflow-y-auto p-4">
       <div
-        class="callout mb-3 border border-dashed border-accent/45 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-6 text-txt2"
+        class="rounded-lg callout mb-3 border border-dashed border-accent/45 bg-accent-dim/40 px-3 py-2.5 text-[12px] leading-6 text-txt2"
         data-test="env-custom-config-callout"
       >
         {{ t('pages.agentStudio.env.customConfigCallout', { path: settingsPath }) }}
@@ -192,7 +192,7 @@ watch(
           <button class="text-txt3 hover:text-err" @click="draft.env.splice(i, 1)"><Icon name="close" :size="14" /></button>
         </div>
       </template>
-      <div v-if="currentRegionPolicy" class="border border-accent/30 bg-accent-dim/40 p-3">
+      <div v-if="currentRegionPolicy" class="rounded-lg border border-accent/30 bg-accent-dim/40 p-3">
         <div class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.region.managedByAcp') }}</div>
         <div class="flex items-center gap-1.5">
           <input :value="currentRegionPolicy.regionEnvKey" readonly :aria-label="t('pages.agentStudio.region.managedKey')" class="w-1/3 rounded border border-line bg-elevated px-2 py-1.5 font-mono text-[12px] text-txt3" />

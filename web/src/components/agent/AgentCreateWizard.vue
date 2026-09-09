@@ -62,13 +62,13 @@ const {
     <div v-if="open" class="wiz-root fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/70" @click="close" />
       <div
-        class="wiz-modal relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
+        class="rounded-xl wiz-modal relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
         style="width: min(980px, 100%); height: min(700px, 94vh); border-radius: 16px"
         role="dialog"
         aria-modal="true"
       >
         <div class="wiz-head relative flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-5">
-          <div class="hero-mark grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
+          <div class="rounded-md hero-mark grid h-9 w-9 shrink-0 place-items-center border border-accent/55 text-accent-2">
             <Icon name="robot" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
@@ -132,7 +132,7 @@ const {
                     <input
                       id="wiz-name-input"
                       v-model="draft.name"
-                      class="w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                      class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
                       :placeholder="t('pages.agentStudio.dialogs.createPlaceholder')"
                       @input="nameError = ''"
                     />
@@ -145,7 +145,7 @@ const {
                     <textarea
                       v-model="draft.description"
                       rows="3"
-                      class="w-full resize-y border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 text-txt outline-none focus:border-accent"
+                      class="rounded-md w-full resize-y border border-line bg-base px-3 py-2 font-mono text-[12px] leading-6 text-txt outline-none focus:border-accent"
                       :placeholder="t('pages.agentStudio.wizard.basics.descPlaceholder')"
                     />
                     <p class="mt-1.5 text-[11px] text-txt3">
@@ -161,7 +161,7 @@ const {
                       v-for="b in ACP_BACKENDS"
                       :key="b.id"
                       type="button"
-                      class="border px-3 py-3.5 text-center transition"
+                      class="rounded-lg border px-3 py-3.5 text-center transition"
                       :class="
                         draft.acpBackend === b.id
                           ? 'border-accent bg-accent-dim'
@@ -189,7 +189,7 @@ const {
                         role="radio"
                         :aria-checked="currentRegion === option.id"
                         :aria-label="`${t(option.labelKey)} (${option.id})`"
-                        class="border px-3 py-3 text-left transition"
+                        class="rounded-lg border px-3 py-3 text-left transition"
                         :class="
                           currentRegion === option.id
                             ? 'border-accent bg-accent-dim'
@@ -251,7 +251,7 @@ const {
                     <span
                       v-for="item in reviewItems"
                       :key="item.key"
-                      class="inline-flex items-center gap-1 border px-2 py-1 text-[11px]"
+                      class="rounded-md inline-flex items-center gap-1 border px-2 py-1 text-[11px]"
                       :class="chipClass(item.kind)"
                     >
                       {{ t(item.labelKey) }}
@@ -260,7 +260,7 @@ const {
                   </div>
                   <div
                     v-if="showAuthReminder"
-                    class="mt-4 border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px] leading-5 text-txt2"
+                    class="rounded-lg mt-4 border border-warn/35 bg-warn/10 px-3 py-2.5 text-[12px] leading-5 text-txt2"
                     role="status"
                   >
                     {{ t('pages.agentStudio.wizard.review.authReminderDetail') }}
@@ -296,7 +296,7 @@ const {
         </div>
 
         <div v-if="creating" class="absolute inset-0 z-20 grid place-items-center bg-black/50">
-          <div class="border border-line bg-surface px-6 py-4 text-[13px] text-txt2">
+          <div class="rounded-lg border border-line bg-surface px-6 py-4 text-[13px] text-txt2">
             {{ t('pages.agentStudio.wizard.creating') }}…
           </div>
         </div>
@@ -313,7 +313,7 @@ const {
       <div v-if="showAcpConfirm" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-black/60" @click="cancelAcpSwitch" />
         <div
-          class="relative z-10 w-full max-w-[420px] border border-line bg-surface p-5 shadow-card"
+          class="rounded-xl relative z-10 w-full max-w-[420px] border border-line bg-surface p-5 shadow-card"
           style="border-radius: 16px"
         >
           <h3 class="m-0 text-[15px] font-semibold text-txt">
@@ -434,6 +434,7 @@ const {
   flex-shrink: 0;
   margin-top: 2px;
   border: 1.5px solid rgb(var(--c-line-strong));
+  border-radius: 9999px;
   background: transparent;
   display: grid;
   place-items: center;
