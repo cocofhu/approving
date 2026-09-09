@@ -24,6 +24,7 @@ import { useRoutePending } from '@/lib/shared/routePending'
 import { useWorkflowRunLaunch } from '@/lib/run/useWorkflowRunLaunch'
 import ServiceCommitBadge from './ServiceCommitBadge.vue'
 import { sidebarHidden } from '@/lib/shared/sidebarHidden'
+import { loadBrandSettings } from '@/lib/composables/useBrandSettings'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,6 +57,14 @@ const mainAriaBusy = computed(() => {
 })
 
 const drawerOpen = ref(false)
+
+watch(
+  () => auth.user.value,
+  (user) => {
+    if (user) void loadBrandSettings()
+  },
+  { immediate: true },
+)
 
 watch(
   () => route.path,
@@ -142,7 +151,7 @@ onUnmounted(() => stopShutdownPolling())
         </div>
         <div v-else class="scroll-area safe-area-bottom h-full min-h-0 overflow-y-auto">
           <div
-            class="flex h-full min-h-0 flex-col px-4 py-4 md:px-6 md:py-6"
+            class="flex h-full min-h-0 flex-col px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-3"
             :class="{ 'app-refresh-dim': dimContent }"
           >
             <slot />
@@ -190,7 +199,7 @@ onUnmounted(() => stopShutdownPolling())
           data-testid="mobile-nav-drawer"
         >
           <div class="safe-area-top flex h-14 items-center justify-between gap-2 px-4">
-            <BrandLogo />
+            <BrandLogo use-custom-brand />
             <button
               class="flex h-11 w-11 items-center justify-center rounded-md text-txt2 hover:bg-elevated hover:text-txt"
               :aria-label="t('shell.aria.closeNav')"

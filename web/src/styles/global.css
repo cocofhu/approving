@@ -30,6 +30,15 @@
   --flow-mask: rgba(10, 10, 11, 0.72);
   --grad-logo: linear-gradient(90deg, #7B61FF 0%, #818CF8 35%, #6366F1 55%, #7B61FF 75%, #A78BFA 100%);
   --grad-logo-size: 200% 100%;
+
+  /* JSON 代码板 — VS Code Dark（g1.1） */
+  --json-bg: #1e1e1e;
+  --json-fg: #d4d4d4;
+  --json-key: #9cdcfe;
+  --json-str: #ce9178;
+  --json-num: #b5cea8;
+  --json-kw: #569cd6;
+  --json-punc: #d4d4d4;
 }
 
 html.light {
@@ -55,6 +64,55 @@ html.light {
   --flow-dot: #d8dce3;
   --flow-mask: rgba(250, 250, 251, 0.72);
   --grad-logo: linear-gradient(90deg, #6D28D9 0%, #7B61FF 30%, #6366F1 55%, #4F46E5 75%, #7B61FF 100%);
+
+  /* JSON 代码板 — VS Code Light+（g1.1） */
+  --json-bg: #ffffff;
+  --json-fg: #393a34;
+  --json-key: #0451a5;
+  --json-str: #a31515;
+  --json-num: #098658;
+  --json-kw: #0000ff;
+  --json-punc: #393a34;
+}
+
+/* JSON 代码板与审计 payload 的 tok-*（g1.2）：选择器限制在容器内，避免波及其他 tok-* */
+.json-code-view {
+  background: var(--json-bg);
+  border: 1px solid rgb(var(--c-line));
+  color: var(--json-fg);
+}
+.json-code-view pre {
+  margin: 0;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+  tab-size: 2;
+  color: var(--json-fg);
+}
+.json-code-view .tok-key,
+.payload .tok-key {
+  color: var(--json-key);
+}
+.json-code-view .tok-str,
+.payload .tok-str {
+  color: var(--json-str);
+}
+.json-code-view .tok-num,
+.payload .tok-num {
+  color: var(--json-num);
+}
+.json-code-view .tok-bool,
+.json-code-view .tok-null,
+.payload .tok-bool,
+.payload .tok-null {
+  color: var(--json-kw);
+}
+.json-code-view .tok-punc,
+.json-code-view .tok-plain,
+.payload .tok-punc,
+.payload .tok-plain {
+  color: var(--json-punc);
 }
 
 html,
@@ -195,6 +253,23 @@ html.light .app-sidebar-card {
   }
   .chip {
     @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-line bg-elevated px-2 py-0.5 text-xs text-txt2;
+  }
+  /*
+   * List-header toolbar controls (g2.1 / g2.2).
+   * Size + radius only: desktop min-height matches filter trigger
+   * (text-sm + py-1.5 + 1px border ≈ 34px); mobile keeps 44px touch height.
+   * Colors, borders, and hover stay on each control.
+   */
+  .toolbar-control {
+    @apply min-h-[44px] rounded-md px-3 py-1.5 md:min-h-[34px];
+  }
+  /*
+   * A count badge inside a toolbar control must not grow it: .chip alone is
+   * 22px tall (text-xs + py-0.5 + border) and would push the 34px desktop
+   * trigger to 36px. Cap it to the text-sm line box (20px).
+   */
+  .toolbar-control .chip {
+    @apply h-5 shrink-0 py-0 leading-none;
   }
   .nav-item {
     @apply flex items-center gap-2.5 px-3 py-[9px] text-sm text-txt2 transition

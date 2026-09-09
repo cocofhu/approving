@@ -1505,9 +1505,8 @@ const showClarifyReviewShell = computed(
   () =>
     !!active.value &&
     active.value.type === 'clarify' &&
-    !activeStarting.value &&
     !startFailedActive.value &&
-    (!!activeClarify.value || !!activeHomeSeed.value),
+    (activeStarting.value || !!activeClarify.value || !!activeHomeSeed.value),
 )
 const clarifyComposerNodeId = computed(
   () => activeClarify.value?.nodeId || active.value?.nodeId || '',

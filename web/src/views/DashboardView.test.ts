@@ -9,6 +9,7 @@ import type { Workflow } from '@/lib/shared/types'
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   listWorkflows: vi.fn(),
+  patchWorkflowHomeVisibility: vi.fn(),
   startRun: vi.fn(),
   getRun: vi.fn(),
   reactReply: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock('@/lib/api/api', async () => {
     api: {
       ...actual.api,
       listWorkflows: mocks.listWorkflows,
+      patchWorkflowHomeVisibility: mocks.patchWorkflowHomeVisibility,
       startRun: mocks.startRun,
       getRun: mocks.getRun,
       reactReply: mocks.reactReply,
@@ -42,6 +44,7 @@ vi.mock('@/lib/composables/useToast', () => ({
 }))
 
 import { HOME_COMPOSER_DRAFT_KEY } from '@/lib/run/homeComposerDraft'
+import { setBrandSettings } from '@/lib/composables/useBrandSettings'
 import DashboardView from './DashboardView.vue'
 
 const HomePreviewAppModalStub = {
@@ -85,7 +88,6 @@ function mountDashboard() {
     global: {
       plugins: [i18n],
       stubs: {
-        Icon: true,
         RunLaunchModal: true,
         AppModal: HomePreviewAppModalStub,
         Teleport: false,
@@ -127,11 +129,13 @@ describe('DashboardView home composer', () => {
   beforeEach(() => {
     mocks.push.mockReset()
     mocks.listWorkflows.mockReset()
+    mocks.patchWorkflowHomeVisibility.mockReset()
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
     mocks.reactReply.mockReset()
     mocks.readStoredProjectId.mockReturnValue('proj-1')
     mocks.listWorkflows.mockResolvedValue([approveWf])
+    mocks.patchWorkflowHomeVisibility.mockResolvedValue({ ...approveWf, showOnHome: false })
     mocks.startRun.mockResolvedValue({ id: 'run-9', status: 'queued' })
     mocks.getRun.mockResolvedValue({
       id: 'run-9',
@@ -141,6 +145,7 @@ describe('DashboardView home composer', () => {
     })
     mocks.reactReply.mockResolvedValue({ status: 'ok' })
     stubReducedMotion(false)
+    setBrandSettings(null)
     localStorage.removeItem(HOME_COMPOSER_DRAFT_KEY)
     vi.useFakeTimers()
   })
@@ -209,6 +214,84 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
+  it('opens the icon menu on contextmenu and prevents the browser menu', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const card = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 48,
+      clientY: 72,
+    })
+    card.element.dispatchEvent(event)
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(true)
+    const menu = teleported('home-pipeline-menu')
+    expect(menu.text()).toContain('隐藏')
+    expect(menu.text()).toContain('编辑')
+    expect(teleported('home-pipeline-menu-hide').find('svg').exists()).toBe(true)
+    expect(teleported('home-pipeline-menu-edit').find('svg').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('opens the same menu from more without changing the selected pipeline and edits the target', async () => {
+    const second: Workflow = { ...approveWf, id: 'wf-lite', name: '快速澄清 Lite' }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="home-pipeline-more-wf-lite"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    expect(teleportedExists('home-pipeline-menu')).toBe(true)
+    await teleported('home-pipeline-menu-edit').trigger('click')
+    expect(mocks.push).toHaveBeenCalledWith('/workflows/wf-lite/edit')
+    expect(teleportedExists('home-pipeline-menu')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('opens on a 500ms touch hold and cancels when the finger moves', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const card = wrapper.get('[data-testid="home-pipeline-card-wf-ap"]')
+
+    await card.trigger('pointerdown', { pointerType: 'touch', clientX: 20, clientY: 20 })
+    await card.trigger('pointermove', { pointerType: 'touch', clientX: 40, clientY: 20 })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-menu')).toBe(false)
+
+    await card.trigger('pointerdown', { pointerType: 'touch', clientX: 20, clientY: 20 })
+    await vi.advanceTimersByTimeAsync(500)
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-menu')).toBe(true)
+    await card.trigger('click')
+    await flushPromises()
+    expect(card.classes()).toContain('home-shell__card--selected')
+    wrapper.unmount()
+  })
+
+  it('hides a pipeline through home-visibility and falls back to the next card', async () => {
+    const second: Workflow = { ...approveWf, id: 'wf-lite', name: '快速澄清 Lite' }
+    mocks.listWorkflows.mockResolvedValue([approveWf, second])
+    const wrapper = mountDashboard()
+    await flushPromises()
+
+    await wrapper.get('[data-testid="home-pipeline-card-wf-ap"]').trigger('contextmenu')
+    await teleported('home-pipeline-menu-hide').trigger('click')
+    await flushPromises()
+    expect(mocks.patchWorkflowHomeVisibility).toHaveBeenCalledWith('wf-ap', false)
+    expect(wrapper.find('[data-testid="home-pipeline-card-wf-ap"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-lite"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    wrapper.unmount()
+  })
+
   // plan g3 — one-shot typewriter then opacity-hide caret (keep layout box)
   it('types Approving once then settles without looping', async () => {
     const wrapper = mountDashboard()
@@ -236,6 +319,30 @@ describe('DashboardView home composer', () => {
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
     expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     wrapper.unmount()
+  })
+
+  it('uses the same configured product name for typewriter, static mode, and aria label', async () => {
+    setBrandSettings({ product_name: 'Acme Flow' })
+    stubReducedMotion(true)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Acme Flow')
+    expect(wrapper.get('[data-testid="home-brand"]').attributes('aria-label')).toBe('Acme Flow')
+    wrapper.unmount()
+  })
+
+  it('uses a configured home subtitle and falls back to the locale message when blank', async () => {
+    setBrandSettings({ home_subtitle: 'Clarify together' })
+    const custom = mountDashboard()
+    await flushPromises()
+    expect(custom.get('[data-testid="home-title"]').text()).toBe('Clarify together')
+    custom.unmount()
+
+    setBrandSettings({ home_subtitle: '　 ' })
+    const fallback = mountDashboard()
+    await flushPromises()
+    expect(fallback.get('[data-testid="home-title"]').text()).toBe('从一句话开始一次开发前澄清')
+    fallback.unmount()
   })
 
   // plan g1.2 — placeholder typewriter when idle/empty

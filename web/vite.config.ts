@@ -23,14 +23,14 @@ export default defineConfig(({ command }) => {
     test: {
       environment: 'node',
       include: ['src/**/*.test.ts'],
-      // Vitest 4: happy-dom omits window.confirm; stub so existing vi.spyOn(window, 'confirm') works.
-      setupFiles: ['./src/test/vitest-window-stubs.ts'],
+      // Vitest 4: happy-dom omits window.confirm/alert/prompt; stub so vi.spyOn(window, ...) works.
+      setupFiles: ['./src/test/vitest-window-stubs.ts', './vitest.setup.ts'],
       coverage: {
         provider: 'v8',
         reporter: ['text', 'text-summary', 'cobertura', 'json-summary'],
         reportsDirectory: './coverage',
         // Lines 硬门禁：不达标时 vitest 非零退出（ci-web 的 npm test -- --coverage）。
-        // 仅约束 lines；branches/functions 不设阈值。
+        // 仅约束 lines；branches/functions 不设阈值。本分支补充用例后保持 85%。
         thresholds: {
           lines: 85,
         },

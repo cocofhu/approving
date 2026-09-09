@@ -223,7 +223,7 @@ beforeEach(async () => {
 })
 
 describe('GatesInboxView starting approvals', () => {
-  it('renders the boot loader for a starting card instead of the chat', async () => {
+  it('renders a connecting ReviewShell for a starting card', async () => {
     mocks.listGates.mockResolvedValue(paged([startingItem()]))
     mocks.inboxContext.mockResolvedValue(startingContext)
     const wrapper = mountInbox()
@@ -232,9 +232,13 @@ describe('GatesInboxView starting approvals', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="inbox-item-card"]').attributes('data-starting')).toBe('true')
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="react-connecting-stage"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-connecting-pill"]').text()).toContain('连接中')
+    expect((wrapper.get('[data-testid="react-connecting-input"]').element as HTMLTextAreaElement).disabled).toBe(true)
     expect(wrapper.find('[data-testid="review-composer-stub"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="gate-share-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gate-share-row"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -247,7 +251,7 @@ describe('GatesInboxView starting approvals', () => {
     await flushPromises()
     await nextTick()
     await flushPromises()
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
 
     mocks.listGates.mockResolvedValue(paged([parkedItem()]))
     mocks.inboxContext.mockResolvedValue(parkedContext)
@@ -272,7 +276,7 @@ describe('GatesInboxView starting approvals', () => {
     await flushPromises()
     await nextTick()
     await flushPromises()
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
 
     mocks.listGates.mockResolvedValue(paged([]))
     mocks.getRun.mockResolvedValue({ id: 'run-boot', status: 'failed', error: 'sandbox setup failed' })
@@ -301,7 +305,7 @@ describe('GatesInboxView starting approvals', () => {
     await flushPromises()
     await nextTick()
     await flushPromises()
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
 
     // An approve sandbox-setup failure stops the run without marking it
     // terminal: the verdict lives on the node execution, not on run.status.
@@ -427,7 +431,7 @@ describe('GatesInboxView starting approvals', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="inbox-item-card"]').attributes('data-starting')).toBe('true')
-    expect(wrapper.find('[data-testid="inbox-boot-loader"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="react-connecting-sidebar"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -447,6 +451,21 @@ describe('GatesInboxView starting approvals', () => {
     await flushPromises()
 
     expect(wrapper.find('[data-testid="inbox-start-failed"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('status pill and refresh button share .toolbar-control sizing (g3.1 g3.2 g4.4)', async () => {
+    mocks.listGates.mockResolvedValue(paged([]))
+    const wrapper = mountInbox()
+    await flushPromises()
+    const pill = wrapper.get('[data-testid="gates-inbox-status-pill"]')
+    const refresh = wrapper.get('[data-testid="gates-inbox-refresh"]')
+    expect(pill.classes()).toContain('toolbar-control')
+    expect(refresh.classes()).toContain('toolbar-control')
+    expect(pill.classes().join(' ')).not.toMatch(/\brounded\b(?!-md)/)
+    expect(refresh.classes().join(' ')).not.toContain('px-2.5')
+    expect(refresh.classes().join(' ')).not.toContain('py-1.5')
+    expect(pill.classes().join(' ')).toContain('text-[11px]')
     wrapper.unmount()
   })
 })

@@ -42,6 +42,7 @@ import SettingsView from './SettingsView.vue'
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'SettingsView.vue'), 'utf8')
 
 const SETTINGS = {
+  brand: { product_name: 'Acme Flow', home_subtitle: 'Clarify together' },
   items: [
     { key: 'max_concurrent_runs', value: 4, min: 1, source: 'ui', locked: false },
     { key: 'run_sandbox_ttl_minutes', value: 30, min: 1, source: 'ui', locked: false },
@@ -67,9 +68,8 @@ function mountSettings() {
       stubs: {
         Icon: true,
         AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
-        IntegrationsModal: {
-          props: ['open'],
-          template: '<div data-testid="integrations-modal-stub" :data-open="open" />',
+        IntegrationsPanel: {
+          template: '<div data-testid="integrations-panel-stub" />',
         },
       },
     },
@@ -85,6 +85,33 @@ describe('SettingsView loading source lock', () => {
     expect(src).toMatch(/opacity-\[0\.55\]/)
     expect(src).toMatch(/flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between/)
     expect(src).toMatch(/min-h-11 w-full md:min-h-0 md:w-auto/)
+  })
+})
+
+describe('SettingsView brand copy', () => {
+  it('hydrates and saves both brand fields with scheduling values', async () => {
+    apiMocks.getSettings.mockResolvedValue(SETTINGS)
+    apiMocks.listSandboxes.mockResolvedValue([])
+    apiMocks.dashboard.mockResolvedValue({ running: 0 })
+    apiMocks.updateSettings.mockResolvedValue({
+      ...SETTINGS,
+      brand: { product_name: 'New Name', home_subtitle: 'New subtitle' },
+    })
+    const w = mountSettings()
+    await flushPromises()
+    expect(w.get('[data-testid="brand-product-name"]').element).toHaveProperty('value', 'Acme Flow')
+    expect(w.get('[data-testid="brand-home-subtitle"]').element).toHaveProperty('value', 'Clarify together')
+    await w.get('[data-testid="brand-product-name"]').setValue('New Name')
+    await w.get('[data-testid="brand-home-subtitle"]').setValue('New subtitle')
+    const saveButton = w.findAll('button').find((button) => button.text().includes('保存'))
+    await saveButton!.trigger('click')
+    await flushPromises()
+    expect(apiMocks.updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      brand_product_name: 'New Name',
+      brand_home_subtitle: 'New subtitle',
+      max_concurrent_runs: 4,
+    }))
+    w.unmount()
   })
 })
 
@@ -191,7 +218,9 @@ describe('SettingsView integrations entry card (plan g2.1 / g2.2 / g2.4)', () =>
   it('source keeps integrations card outside settings load branches', () => {
     expect(src).toMatch(/data-testid="settings-integrations-card"/)
     expect(src).toMatch(/data-testid="settings-integrations-open"/)
-    expect(src).toMatch(/IntegrationsModal/)
+    expect(src).toMatch(/IntegrationsPanel/)
+    expect(src).not.toMatch(/IntegrationsModal/)
+    expect(src).not.toMatch(/router\.replace/)
     expect(src).toMatch(/query\.integrations/)
   })
 
@@ -206,20 +235,22 @@ describe('SettingsView integrations entry card (plan g2.1 / g2.2 / g2.4)', () =>
     w.unmount()
   })
 
-  it('keeps integrations card on 403 and opens modal stub', async () => {
+  it('keeps integrations card on 403 and navigates to the inline panel', async () => {
     apiMocks.getSettings.mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 }))
     const w = mountSettings()
     await flushPromises()
     expect(w.find('[data-testid="settings-denied"]').exists()).toBe(true)
     expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(true)
-    expect(w.find('[data-testid="integrations-modal-stub"]').attributes('data-open')).toBe('false')
+    expect(w.find('[data-testid="integrations-panel-stub"]').exists()).toBe(false)
     await w.find('[data-testid="settings-integrations-open"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-testid="integrations-modal-stub"]').attributes('data-open')).toBe('true')
+    expect(w.find('[data-testid="integrations-panel-stub"]').exists()).toBe(true)
+    expect((w.vm as any).$router.currentRoute.value.query.integrations).toBe('1')
+    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(false)
     w.unmount()
   })
 
-  it('auto-opens integrations modal from ?integrations=1 then clears query', async () => {
+  it('renders integrations inline from ?integrations=1 and keeps query', async () => {
     apiMocks.getSettings.mockResolvedValue(SETTINGS)
     const i18n = createI18n({
       legacy: false,
@@ -237,16 +268,17 @@ describe('SettingsView integrations entry card (plan g2.1 / g2.2 / g2.4)', () =>
         stubs: {
           Icon: true,
           AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
-          IntegrationsModal: {
-            props: ['open'],
-            template: '<div data-testid="integrations-modal-stub" :data-open="open" />',
+          IntegrationsPanel: {
+            template: '<div data-testid="integrations-panel-stub" />',
           },
         },
       },
     })
     await flushPromises()
-    expect(w.find('[data-testid="integrations-modal-stub"]').attributes('data-open')).toBe('true')
-    expect(router.currentRoute.value.query.integrations).toBeUndefined()
+    expect(w.find('[data-testid="integrations-panel-stub"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(false)
+    expect(w.find('[data-testid="settings-form-skeleton"]').exists()).toBe(false)
+    expect(router.currentRoute.value.query.integrations).toBe('1')
     w.unmount()
   })
 })

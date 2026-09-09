@@ -1,12 +1,12 @@
 {
   "nav": {
-    "dashboard": "首页",
+    "dashboard": "开始",
     "stats": "统计",
     "board": "看板",
     "projects": "项目",
     "workflows": "工作流",
     "runs": "运行",
-    "gates": "待审批",
+    "gates": "需要关注",
     "artifacts": "产物",
     "notifications": "通知",
     "quickPipelines": "快捷流水线",

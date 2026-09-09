@@ -205,7 +205,7 @@ describe('InboxPendingCard share entry', () => {
     expect(w.emitted('open-share')).toBeFalsy()
   })
 
-  it('marks a booting sandbox with the starting badge, AppSpinner (not chat), and no share row (plan g2.1)', () => {
+  it('marks a booting sandbox and keeps its share row disabled (plan g1.2)', async () => {
     const w = mount(InboxPendingCard, {
       props: {
         item: clarify({
@@ -220,7 +220,12 @@ describe('InboxPendingCard share entry', () => {
     expect(card.attributes('data-starting')).toBe('true')
     expect(card.text()).toContain('启动中')
     expect(card.text()).not.toContain('待澄清')
-    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(false)
+    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(true)
+    expect(w.get('[data-testid="gate-share-status"]').text()).toContain('尚未创建')
+    expect((w.get('[data-testid="gate-share-copy-btn"]').element as HTMLButtonElement).disabled).toBe(true)
+    await w.get('[data-testid="gate-share-copy-btn"]').trigger('click')
+    await w.get('[data-testid="gate-share-hit-wrap"]').trigger('click')
+    expect(w.emitted('open-share')).toBeFalsy()
     const spinner = w.findComponent({ name: 'AppSpinner' })
     expect(spinner.exists()).toBe(true)
     expect(spinner.props('size')).toBe(18)
@@ -293,7 +298,7 @@ describe('InboxPendingCard share entry', () => {
     expect(w.get('[data-testid="inbox-item-card"]').text()).not.toContain('Needs clarify')
   })
 
-  it('keeps starting above replying and still hides the share row', () => {
+  it('keeps starting above replying and still shows the disabled share row', () => {
     const w = mount(InboxPendingCard, {
       props: {
         item: clarify({
@@ -306,7 +311,8 @@ describe('InboxPendingCard share entry', () => {
     })
     expect(w.get('[data-testid="inbox-item-card"]').text()).toContain('启动中')
     expect(w.get('[data-testid="inbox-item-card"]').text()).not.toContain('正在回复中')
-    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(false)
+    expect(w.find('[data-testid="gate-share-row"]').exists()).toBe(true)
+    expect((w.get('[data-testid="gate-share-copy-btn"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('shows remaining time for active links', () => {

@@ -25,7 +25,12 @@
       "cardFallback": "Approve pre-dev clarification",
       "scrollLeft": "Scroll left",
       "scrollRight": "Scroll right",
-      "draftRestored": "Draft restored"
+      "draftRestored": "Draft restored",
+      "pipelineMenu": {
+        "more": "More actions",
+        "hide": "Hide",
+        "edit": "Edit"
+      }
     },
     "tokenAnalytics": {
       "title": "Token usage",
@@ -354,6 +359,17 @@
       "tokenTipWorkflow": "Workflow",
       "tokenTipPm": "Project Management",
       "tokenTipAria": "Token usage, hover for details",
+      "newWorkflow": {
+        "scratch": "From scratch",
+        "scratchDesc": "Start with an empty canvas and add nodes",
+        "baseline": "Default baseline workflow",
+        "baselineDesc": "Use the built-in pipeline and add repositories",
+        "modalTitle": "Create from default baseline",
+        "modalHint": "Uses the same repository list as Run launch. Add one or more repositories; each is cloned into the workspace.",
+        "create": "Create",
+        "creating": "Creating…",
+        "created": "Created workflow \"{name}\""
+      },
       "tabBoard": "Board",
       "tabWorkflows": "Pipelines",
       "tabRequirementDrafts": "Requirement drafts",
@@ -1283,7 +1299,7 @@
       }
     },
     "gatesInbox": {
-      "title": "Pending gates",
+      "title": "Needs attention",
       "subtitleHtml": "<strong class=\"font-medium text-warn\">Human gates</strong> + <em class=\"not-italic text-n-clarify\">Clarify</em> inbox · workflows paused for human action",
       "statusPending": "Updates available · refresh",
       "statusEditing": "Editing · syncing in background",
@@ -1519,6 +1535,17 @@
       "usageRefreshFailed": "Usage refresh failed",
       "minTestSandboxes": "Max test sandboxes must be at least 1",
       "priorityNote": "Priority: env (locked) > UI override > config file > default. Takes effect immediately.",
+      "brand": {
+        "title": "Brand copy",
+        "desc": "Set instance-wide copy used by the sidebar and Home for all signed-in users. Leave blank for built-in defaults.",
+        "readOnly": "Only administrators can change brand copy.",
+        "productName": "Product name",
+        "productNamePlaceholder": "Approving",
+        "productNameHint": "Shared by the sidebar and Home typewriter, up to 40 characters. Blank uses Approving.",
+        "homeSubtitle": "Home subtitle",
+        "homeSubtitlePlaceholder": "Start a pre-dev clarification in one sentence",
+        "homeSubtitleHint": "Up to 80 characters. Blank uses the current locale default."
+      },
       "groups": {
         "concurrency": {
           "title": "Scheduling concurrency",
@@ -2677,6 +2704,10 @@
       "turnCompleted": "Done",
       "done": "Interaction complete — continuing",
       "closed": "Run ended — interaction closed",
+      "connecting": "Connecting…",
+      "connectingHint": "Connecting. You can start chatting shortly.",
+      "connectingInputPlaceholder": "Connecting — input is temporarily unavailable",
+      "connectingStageHint": "Artifacts will appear when the session is ready",
       "addImage": "Add attachment",
       "inputPlaceholder": "Add details…",
       "approveInputPlaceholder": "Describe the goal first…",
@@ -2974,20 +3005,20 @@
       "pending": "Node not started yet; waiting to enter clarify…",
       "pendingHint": "Clarify starts automatically after upstream nodes complete.",
       "stepSandbox": {
-        "title": "Preparing clarify sandbox…",
-        "hint": "First-time container creation may take a moment."
+        "title": "Preparing the workspace…",
+        "hint": "First-time setup may take a moment."
       },
       "stepRuntime": {
-        "title": "Starting agent runtime…",
-        "hint": "Booting ACP bridge service and dependencies in the container."
+        "title": "Starting the Agent…",
+        "hint": "Setting up the environment. This may take a moment."
       },
       "stepAcp": {
-        "title": "Establishing ACP connection…",
-        "hint": "Handshaking with the agent…"
+        "title": "Connecting to the Agent…",
+        "hint": "Almost ready."
       },
       "stepQuestions": {
-        "title": "Agent is drafting first questions…",
-        "hint": "Organizing key questions to clarify with you."
+        "title": "Preparing the first questions…",
+        "hint": "Gathering what we need to confirm with you."
       }
     },
     "nodeOutput": {
@@ -3061,7 +3092,7 @@
       "nodeNoOutput": "This node produced no output yet"
     },
     "liveLog": {
-      "title": "ACP live log",
+      "title": "Execution log",
       "snapshot": "Snapshot",
       "snapshotTip": "Read-only event copy after the node ended. While running, the live stream is shown and this label does not appear.",
       "builtinMcp": "Built-in MCP calls · {n}",
@@ -3072,7 +3103,7 @@
       "rehydrate": {
         "loading": "Restoring execution log…",
         "errorTitle": "Log recovery failed",
-        "errorBody": "Could not restore this node's ACP execution timeline (event source temporarily unreachable or read failed). This is different from “waiting for the first event” — please retry.",
+        "errorBody": "Could not restore this node's execution log timeline (event source temporarily unreachable or read failed). This is different from “waiting for the first event” — please retry.",
         "retry": "Retry recovery",
         "warnTitle": "Historical log read error",
         "warnBody": "REST rehydrate failed or timed out. Live / cached events below remain valid — the node did not stop because of this.",
@@ -3080,15 +3111,14 @@
         "snapshotHint": "You are viewing a snapshot of content that has already arrived. Leave and re-enter later to continue from this snapshot without a full reload."
       },
       "boot": {
-        "intro": "Starting sandbox / waiting for the first Agent event…",
         "stages": {
           "creating": {
             "title": "Creating sandbox",
             "desc": "Gateway & container provisioning"
           },
           "acpReady": {
-            "title": "ACP ready",
-            "desc": "Waiting for Agent channel readiness"
+            "title": "Connecting to the Agent",
+            "desc": "Waiting until the Agent is ready"
           },
           "firstEvent": {
             "title": "Waiting for first event",
@@ -3486,20 +3516,20 @@
       },
       "repoPlaceholder": "Optional: git clone URL (empty = blank workspace)",
       "stepSandbox": {
-        "title": "Preparing sandbox…",
-        "hint": "First-time container creation may take a moment."
+        "title": "Preparing the workspace…",
+        "hint": "First-time setup may take a moment."
       },
       "stepRuntime": {
-        "title": "Starting agent runtime…",
-        "hint": "Booting ACP bridge service and dependencies in the container."
+        "title": "Starting the Agent…",
+        "hint": "Setting up the environment. This may take a moment."
       },
       "stepAcp": {
-        "title": "Establishing ACP connection…",
-        "hint": "Handshaking with the agent…"
+        "title": "Connecting to the Agent…",
+        "hint": "Almost ready."
       },
       "stepReady": {
         "title": "Almost ready…",
-        "hint": "Finishing initialization."
+        "hint": "Finishing setup."
       },
       "sandboxStartFailed": "Sandbox failed to start",
       "sandboxTimeout": "Sandbox start timed out",
