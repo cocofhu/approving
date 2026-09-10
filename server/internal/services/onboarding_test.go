@@ -408,6 +408,50 @@ func assertDefaultWorkflowGraph(t *testing.T, g models.Graph) {
 	}
 }
 
+func TestCreateFromBaselineDefaultsShowOnHome(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	wf, err := svc.CreateFromBaseline(services.CreateBaselineWorkflowRequest{
+		ProjectID: projectID,
+		Name:      "首页可见流水线",
+		Repos:     []services.BaselineRepo{{URL: "https://github.com/acme/app.git"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateFromBaseline: %v", err)
+	}
+	if wf.Status != "published" || !wf.ShowOnHome {
+		t.Fatalf("returned status=%s showOnHome=%v (plan g1.1)", wf.Status, wf.ShowOnHome)
+	}
+	stored, ok := svc.WF.Get(wf.ID)
+	if !ok {
+		t.Fatal("workflow not persisted")
+	}
+	if stored.Status != "published" || !stored.ShowOnHome {
+		t.Fatalf("persisted status=%s showOnHome=%v (plan g1.1)", stored.Status, stored.ShowOnHome)
+	}
+
+	if _, err := svc.CreateFromBaseline(services.CreateBaselineWorkflowRequest{
+		ProjectID: projectID,
+		Name:      "首页可见流水线",
+		Repos:     []services.BaselineRepo{{URL: "https://github.com/acme/app.git"}},
+	}); !errors.Is(err, services.ErrWorkflowNameExists) {
+		t.Fatalf("duplicate name: %v", err)
+	}
+	if n := len(svc.WF.List(projectID)); n != 1 {
+		t.Fatalf("duplicate must not insert, got %d workflows", n)
+	}
+
+	if _, err := svc.CreateFromBaseline(services.CreateBaselineWorkflowRequest{
+		ProjectID: projectID,
+		Name:      "无仓库",
+		Repos:     []services.BaselineRepo{{URL: "  "}},
+	}); !errors.Is(err, services.ErrBaselineReposRequired) {
+		t.Fatalf("empty repos: %v", err)
+	}
+	if n := len(svc.WF.List(projectID)); n != 1 {
+		t.Fatalf("empty repos must not insert, got %d workflows", n)
+	}
+}
+
 func newOnboardingHarness(t *testing.T) (*services.OnboardingService, string) {
 	t.Helper()
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "onboarding.db"))

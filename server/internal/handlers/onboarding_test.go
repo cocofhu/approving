@@ -122,6 +122,36 @@ func TestCreateWorkflowFromBaselineAPI(t *testing.T) {
 	if created["id"] == "" {
 		t.Fatal("missing new workflow id")
 	}
+	if created["showOnHome"] != true {
+		t.Fatalf("from-baseline showOnHome=%v want true (plan g1.1 / g1.2)", created["showOnHome"])
+	}
+	got := hn.do("GET", "/api/workflows/"+created["id"].(string), nil)
+	if got.Code != http.StatusOK {
+		t.Fatalf("GET created: %d %s", got.Code, got.Body.String())
+	}
+	var fetched map[string]any
+	if err := json.Unmarshal(got.Body.Bytes(), &fetched); err != nil {
+		t.Fatal(err)
+	}
+	if fetched["showOnHome"] != true || fetched["status"] != "published" {
+		t.Fatalf("persisted from-baseline: %#v", fetched)
+	}
+	ignored := hn.do("POST", "/api/workflows/from-baseline", map[string]any{
+		"projectId":  pid,
+		"name":       "Client cannot hide",
+		"showOnHome": false,
+		"repos":      []map[string]any{{"url": "https://github.com/acme/other.git"}},
+	})
+	if ignored.Code != http.StatusCreated {
+		t.Fatalf("create with showOnHome false in body: %d %s", ignored.Code, ignored.Body.String())
+	}
+	var ignoredBody map[string]any
+	if err := json.Unmarshal(ignored.Body.Bytes(), &ignoredBody); err != nil {
+		t.Fatal(err)
+	}
+	if ignoredBody["showOnHome"] != true {
+		t.Fatalf("client showOnHome=false must not stick: %#v", ignoredBody)
+	}
 	variables, ok := created["variables"].([]any)
 	if !ok {
 		t.Fatalf("missing variables: %#v", created["variables"])
