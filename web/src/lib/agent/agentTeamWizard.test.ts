@@ -30,6 +30,23 @@ describe('agentTeamWizard', () => {
     expect(TEAM_ENGINEER_COUNT).toBe(9)
   })
 
+  it('defaults to OpenCode API Key path (g1.3)', () => {
+    const d = freshTeamDraft()
+    expect(d.startPath).toBe('apiKey')
+    expect(d.acpBackend).toBe('opencode')
+    expect(d.cliBackend).toBe('cursor')
+    expect(d.configRoot).toBe('/root/.config/opencode')
+  })
+
+  it('assembles bootstrap with opencode when Agent step skipped', () => {
+    const d = freshTeamDraft()
+    d.projectName = 'Demo'
+    syncDerivedNames(d)
+    d.background = 'build a pipeline team'
+    const payload = assembleTeamBootstrapPayload(d)
+    expect(payload.acpBackend).toBe('opencode')
+  })
+
   it('syncs derived names from project / prefix', () => {
     const d = freshTeamDraft()
     d.projectName = 'Demo'
