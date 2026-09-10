@@ -4,12 +4,14 @@ import { useI18n } from 'vue-i18n'
 import HtmlPreview from '@/components/ui/HtmlPreview.vue'
 import Icon from '@/components/ui/Icon.vue'
 import AppModal from '@/components/ui/AppModal.vue'
+import LangSelect from '@/components/ui/LangSelect.vue'
 import ReviewShell from '@/components/run/ReviewShell.vue'
-import ClarifyChat from '@/components/run/ClarifyChat.vue'
+import ReviewComposer from '@/components/run/ReviewComposer.vue'
 import StructuredArtifactView from '@/components/run/StructuredArtifactView.vue'
 import ReactArtifactStage from '@/components/run/ReactArtifactStage.vue'
 import PublicAppPreviewPanel from '@/components/run/PublicAppPreviewPanel.vue'
-import { applyPublicLocale } from '@/lib/shared/locale'
+import { applyPublicLocale, locale, setLocale, type AppLocale } from '@/lib/shared/locale'
+import { REVIEW_SHELL_WIDTH_KEY_APPROVAL } from '@/lib/inbox/reviewLayoutBudget'
 import { reapplyThemeChrome } from '@/lib/shared/theme'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { provideReviewAnnotate } from '@/lib/inbox/reviewAnnotate'
@@ -121,6 +123,7 @@ function abortPreview() {
 
 const isReview = computed(() => preview.value?.kind === 'review')
 const isClarify = computed(() => isClarifyInteractive(preview.value?.nodeType))
+const composerMode = computed<'clarify' | 'review'>(() => (isClarify.value ? 'clarify' : 'review'))
 const status = computed(() => preview.value?.status || (token.value ? 'invalid' : 'invalid'))
 const isActive = computed(() => status.value === 'active')
 const remainingLabel = ref('')
@@ -250,6 +253,10 @@ function refreshRemainingLabel() {
   const p = preview.value
   const next = formatRemainingSec(remainingSecFromExpiresAt(p?.expiresAt, p?.remainingSec), t)
   if (next !== remainingLabel.value) remainingLabel.value = next
+}
+
+function onLocaleSelect(next: AppLocale) {
+  void setLocale(next)
 }
 
 function noteNonceIssued(nonce?: string) {
@@ -729,6 +736,14 @@ function auditReady(): boolean {
   return true
 }
 
+function onComposerFinish() {
+  if (!isReview.value && !auditReady()) {
+    chatRef.value?.applyQueueState?.(0, [], false, null)
+    return
+  }
+  void submitFinal('confirm')
+}
+
 type DecideFailure = {
   status?: number
   body?: { error?: string; status?: string; message?: string }
@@ -1156,9 +1171,16 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
           {{ presetChipLabel }}
         </span>
       </div>
-      <span v-if="isActive && !doneKind" class="text-[12px] text-txt3" data-testid="public-gate-remaining">
-        {{ t('pages.publicGate.remaining', { remaining: remainingLabel }) }}
-      </span>
+      <div class="flex shrink-0 items-center gap-2">
+        <span v-if="isActive && !doneKind" class="text-[12px] text-txt3" data-testid="public-gate-remaining">
+          {{ t('pages.publicGate.remaining', { remaining: remainingLabel }) }}
+        </span>
+        <LangSelect
+          :model-value="locale"
+          data-testid="public-gate-lang-select"
+          @update:model-value="onLocaleSelect"
+        />
+      </div>
     </header>
 
     <div
@@ -1233,11 +1255,16 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
     </div>
 
     <div v-else class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-workbench">
-      <ReviewShell class="min-h-0 flex-1" :mobile="isMobile">
+      <ReviewShell
+        class="min-h-0 flex-1"
+        :mobile="isMobile"
+        :sidebar-width="400"
+        :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
+      >
         <template #stage>
           <div
             v-if="usePublicArtifactStage"
-            class="flex h-full min-h-0 flex-1 flex-col"
+            class="flex min-h-0 flex-1 flex-col"
             data-testid="public-gate-react-stage"
           >
             <ReactArtifactStage
@@ -1297,6 +1324,28 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               </div>
             </div>
           </section>
+          <div
+            class="flex shrink-0 items-center justify-between gap-3 border-t border-line bg-elevated px-3 py-2 text-xs text-txt2"
+            data-testid="public-gate-upstream"
+          >
+            <div class="min-w-0 truncate">
+              <template v-if="hasUpstream">
+                <span class="font-medium text-txt">{{ t('pages.gateApproval.upstreamContext') }}</span>
+                <span class="text-txt3"> · {{ preview?.upstream?.summary || preview?.upstream?.title || t('pages.gateApproval.upstreamBarHint') }}</span>
+              </template>
+              <span v-else class="text-txt3">{{ t('pages.publicGate.upstreamEmpty') }}</span>
+            </div>
+            <button
+              v-if="hasUpstream"
+              type="button"
+              class="rounded-md inline-flex shrink-0 items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
+              data-testid="public-gate-upstream-enlarge"
+              @click="openUpstreamModal"
+            >
+              <Icon name="expand" :size="14" />
+              {{ t('pages.gateApproval.upstreamEnlarge') }}
+            </button>
+          </div>
         </template>
         <template #sidebar>
           <div class="flex h-full min-h-0 flex-col" data-testid="public-gate-sidebar">
@@ -1318,10 +1367,10 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               >
                 {{ coldHintText }}
               </p>
-              <!-- Wrapper supplies min-h-0 flex-1: ClarifyChat is multi-root so fallthrough class is ignored. -->
               <div class="flex min-h-0 flex-1 flex-col" data-testid="public-gate-chat-host">
-                <ClarifyChat
+                <ReviewComposer
                   ref="chatRef"
+                  :mode="composerMode"
                   run-id="public-share"
                   node-id="public-gate"
                   :iteration="1"
@@ -1329,12 +1378,16 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
                   v-model:attachments="attachments"
                   v-model:annotations="annotations"
                   :turns="turns"
+                  :node-type="preview?.nodeType"
                   :done="false"
                   :active="canReply"
-                  review-mode
-                  annotate-enabled
-                  hide-finish
+                  :cold-session="!canReply"
+                  :can-pass="showConfirm || linkInvalid"
+                  :pass-disabled="confirmDisabled"
+                  :force-confirm="showConfirm || linkInvalid"
+                  :confirm-error="errorText || null"
                   @send="onSend"
+                  @finish="onComposerFinish"
                   @cancel="onCancel"
                   @queue-remove="(itemId) => onQueueRemove(itemId)"
                   @queue-reorder="onQueueReorder"
@@ -1346,30 +1399,12 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
       </ReviewShell>
 
       <footer
+        v-if="!isReview && (showDecideFields || canReject || errorText)"
         class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface md:flex-row md:items-center"
         :class="isMobile ? 'px-3 py-2' : 'px-4 py-2.5'"
         data-testid="public-gate-footer"
       >
-        <div class="min-w-0 flex-1 text-xs text-txt2" data-testid="public-gate-upstream">
-          <template v-if="hasUpstream">
-            <span class="font-medium text-txt">{{ t('pages.gateApproval.upstreamContext') }}</span>
-            <span class="text-txt3"> · {{ preview?.upstream?.summary || preview?.upstream?.title || t('pages.gateApproval.upstreamBarHint') }}</span>
-          </template>
-          <template v-else>
-            <span class="text-txt3">{{ t('pages.publicGate.upstreamEmpty') }}</span>
-          </template>
-        </div>
-        <div class="flex shrink-0 flex-wrap items-center gap-2">
-          <button
-            v-if="hasUpstream"
-            type="button"
-            class="rounded-md inline-flex items-center gap-1.5 bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-2"
-            data-testid="public-gate-upstream-enlarge"
-            @click="openUpstreamModal"
-          >
-            <Icon name="expand" :size="14" />
-            {{ t('pages.gateApproval.upstreamEnlarge') }}
-          </button>
+        <div class="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
           <template v-if="!isReview && showDecideFields">
             <input
               v-model="reviewerName"
@@ -1389,15 +1424,6 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               :placeholder="t('pages.publicGate.commentPh')"
             />
           </template>
-          <span
-            v-if="showDecideFields"
-            class="hidden text-[11px] text-txt3 md:inline"
-            data-testid="public-gate-confirm-hint"
-          >
-            {{
-              isClarify ? t('pages.publicGate.confirmHintClarify') : t('pages.publicGate.confirmHint')
-            }}
-          </span>
           <p v-if="errorText" class="text-xs text-err" role="alert" data-testid="public-gate-error">{{ errorText }}</p>
           <button
             v-if="canReject"
@@ -1411,19 +1437,6 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
           >
             <Icon v-if="submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
             {{ submitting ? t('pages.publicGate.submitting') : t('pages.publicGate.reject') }}
-          </button>
-          <button
-            v-if="showConfirm || linkInvalid"
-            type="button"
-            class="inline-flex min-h-9 min-w-[8rem] items-center justify-center gap-2 bg-ok px-4 text-sm font-medium text-white disabled:opacity-45"
-            data-testid="public-gate-confirm"
-            :disabled="confirmDisabled"
-            :aria-busy="pendingKind === 'confirm' && submitting ? 'true' : 'false'"
-            :aria-label="t('pages.publicGate.confirmAria')"
-            @click="submitFinal('confirm')"
-          >
-            <Icon v-if="pendingKind === 'confirm' && submitting" name="spinner" :size="16" class="animate-spin" aria-hidden="true" />
-            {{ pendingKind === 'confirm' && submitting ? t('pages.publicGate.confirming') : t('pages.publicGate.confirm') }}
           </button>
         </div>
       </footer>

@@ -27,6 +27,12 @@ const props = withDefaults(
     reviewMode?: boolean
     annotateEnabled?: boolean
     hideFinish?: boolean
+    /** Session history plus confirm only; input/send stay unmounted. */
+    coldSession?: boolean
+    /** Host-level lock for the final confirmation action. */
+    finishDisabled?: boolean
+    /** Public adapters may expose confirm for a live react node. */
+    forceConfirmFlow?: boolean
     sendLabel?: string
     confirmError?: string | null
     nodeType?: string
@@ -39,6 +45,9 @@ const props = withDefaults(
     reviewMode: false,
     annotateEnabled: false,
     hideFinish: false,
+    coldSession: false,
+    finishDisabled: false,
+    forceConfirmFlow: false,
     confirmError: null,
     nodeType: '',
     turns: () => [],
@@ -624,8 +633,26 @@ const {
     <div v-if="done" class="border-t border-line p-3 text-center text-[12px] text-ok">
       <Icon name="check" :size="13" class="-mt-0.5 mr-1 inline" />{{ translate('pages.clarify.done') }}
     </div>
-    <div v-else-if="!active" class="border-t border-line p-3 text-center text-[12px] text-txt3">
+    <div v-else-if="!active && !coldSession" class="border-t border-line p-3 text-center text-[12px] text-txt3">
       <Icon name="close" :size="13" class="-mt-0.5 mr-1 inline" />{{ translate('pages.clarify.closed') }}
+    </div>
+    <div v-else-if="coldSession" class="shrink-0 border-t border-line p-3" data-testid="clarify-cold-actions">
+      <ComposerShell :show-chrome="false" :show-footer="true">
+        <template #footer>
+          <button
+            v-if="useConfirmFlowAction"
+            type="button"
+            class="inline-flex h-9 shrink-0 items-center gap-1 rounded-md bg-ok px-3.5 text-sm font-medium text-white hover:bg-ok/90 disabled:opacity-50"
+            data-testid="clarify-confirm-flow"
+            :disabled="confirmDisabled"
+            :title="translate('pages.clarify.confirmFlowTitle')"
+            @click="finishEarly"
+          >
+            <Icon name="check" :size="13" />
+            {{ validating ? translate('pages.clarify.validating') : translate('pages.clarify.confirmFlow') }}
+          </button>
+        </template>
+      </ComposerShell>
     </div>
     <div v-else class="border-t border-line p-3">
       <!-- pending-send queue panel (Demo / AgentChatTester): clarify + review -->

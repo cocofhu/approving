@@ -20,7 +20,7 @@ vi.mock('./i18n', () => {
   }
 })
 
-import { detectLocale, initLocale, setLocale, updateDocumentTitle, locale } from './locale'
+import { applyPublicLocale, detectLocale, initLocale, setLocale, updateDocumentTitle, locale } from './locale'
 import { loadLocaleMessages, prefetchLocale } from './loadLocaleMessages'
 
 describe('locale', () => {
@@ -57,6 +57,19 @@ describe('locale', () => {
     expect(prefetchLocale).toHaveBeenCalledWith('zh-CN')
 
     await setLocale('en')
+    expect(document.documentElement.lang).toBe('en')
+  })
+
+  it('public locale preserves a saved choice before browser detection', async () => {
+    Object.defineProperty(navigator, 'language', { configurable: true, value: 'en-US' })
+    localStorage.setItem('approving-locale', 'zh-CN')
+    await applyPublicLocale()
+    expect(locale.value).toBe('zh-CN')
+    expect(document.documentElement.lang).toBe('zh-CN')
+
+    localStorage.removeItem('approving-locale')
+    await applyPublicLocale()
+    expect(locale.value).toBe('en')
     expect(document.documentElement.lang).toBe('en')
   })
 
