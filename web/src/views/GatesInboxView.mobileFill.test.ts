@@ -93,6 +93,16 @@ describe('GatesInboxView review/clarify composer mode', () => {
 const EMPTY_CARD_CLASS =
   'card flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto'
 
+describe('GatesInboxView list-card-lift hover padding (plan g2.1)', () => {
+  it('mobile and desktop list scroll areas keep py-0.5 so hover top border is not clipped', () => {
+    expect(vueSrc).toMatch(/ref="listEl" class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-0\.5"/)
+    const scrollMatches = vueSrc.match(
+      /scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-0\.5/g,
+    )
+    expect(scrollMatches?.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
 describe('GatesInboxView empty inbox fill (plan g1 / g2.1 / g1.3)', () => {
   it('mobile + desktop empty wrappers both include flex-1 and vertical centering (g1.1 g1.2 g2.1)', () => {
     const escaped = EMPTY_CARD_CLASS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createApp, defineComponent, nextTick, reactive } from 'vue'
 import { createI18n } from 'vue-i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -675,7 +678,7 @@ describe('useAgentFilesPanel explorer', () => {
     app.unmount()
   })
 
-  it('falls back to expanded rails when storage is unavailable', async () => {
+  it('defaults history rail collapsed; explorer stays expanded when storage fails', async () => {
     const getItem = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
       throw new Error('denied')
     })
@@ -684,14 +687,41 @@ describe('useAgentFilesPanel explorer', () => {
     })
     const { panel, app } = withFilesPanel()
     expect(panel.explorerCollapsed.value).toBe(false)
-    expect(panel.historyCollapsed.value).toBe(false)
-    panel.toggleHistoryCollapsed()
     expect(panel.historyCollapsed.value).toBe(true)
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toBe('240px 1fr 28px')
+    panel.toggleHistoryCollapsed()
+    expect(panel.historyCollapsed.value).toBe(false)
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toBe('240px 1fr 300px')
     getItem.mockRestore()
     setItem.mockRestore()
 
     panel.writeCollapsedState(panel.EXPLORER_COLLAPSED_KEY, true)
     expect(panel.readCollapsedState(panel.EXPLORER_COLLAPSED_KEY)).toBe(true)
     app.unmount()
+  })
+
+  it('history key null/missing falls back to collapsed; false persists expanded', async () => {
+    localStorage.removeItem('agent-studio-history-collapsed')
+    const { panel: fresh, app: app1 } = withFilesPanel()
+    expect(fresh.readCollapsedState(fresh.HISTORY_COLLAPSED_KEY, true)).toBe(true)
+    expect(fresh.historyCollapsed.value).toBe(true)
+    app1.unmount()
+
+    localStorage.setItem('agent-studio-history-collapsed', 'false')
+    const { panel: expanded, app: app2 } = withFilesPanel()
+    expect(expanded.historyCollapsed.value).toBe(false)
+    expect(expanded.workspaceGridStyle.value.gridTemplateColumns).toBe('240px 1fr 300px')
+    app2.unmount()
+    localStorage.removeItem('agent-studio-history-collapsed')
+  })
+})
+
+describe('other history entries stay collapsed by default (plan g3.1 / g3.3)', () => {
+  it('WorkflowEditorView showVersions defaults false; PreviewFeedbackChat historyExpanded defaults false', () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
+    const wf = readFileSync(join(root, 'views/WorkflowEditorView.vue'), 'utf8')
+    const fb = readFileSync(join(root, 'components/run/PreviewFeedbackChat.vue'), 'utf8')
+    expect(wf).toMatch(/const showVersions = ref\(false\)/)
+    expect(fb).toMatch(/const historyExpanded = ref\(false\)/)
   })
 })

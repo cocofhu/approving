@@ -321,10 +321,10 @@ onBeforeUnmount(() => {
       <i class="admin-list-thin-bar bg-accent" />
     </div>
 
-    <!-- Mobile card list -->
+    <!-- Mobile card list — plan g2.1: py-0.5 so list-card-lift hover top border is not clipped -->
     <div
       v-if="isMobile"
-      class="min-h-0 flex-1 overflow-y-auto"
+      class="min-h-0 flex-1 overflow-y-auto py-0.5"
       :class="{ 'table-loading': showTableLoading }"
     >
       <template v-if="initialLoading">
