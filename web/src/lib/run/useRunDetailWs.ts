@@ -48,7 +48,8 @@ export function useRunDetailWs(opts: {
   ) => Promise<void> | void
   maybePollSandboxForBoot: () => void
   isClarifySessionBusy: () => boolean
-  loadRun: (hard?: boolean) => Promise<void> | void
+  loadRun: (hard?: boolean, silent?: boolean) => Promise<void> | void
+  patchRunChrome?: () => Promise<void> | void
   refreshArtifactPreview?: (frame?: { previewArtifact?: string }) => void
 }) {
   const {
@@ -71,6 +72,7 @@ export function useRunDetailWs(opts: {
     maybePollSandboxForBoot,
     isClarifySessionBusy,
     loadRun,
+    patchRunChrome,
     refreshArtifactPreview,
   } = opts
 
@@ -340,38 +342,44 @@ export function useRunDetailWs(opts: {
     connectWs()
     if (!timer) {
       timer = window.setInterval(() => {
-        if (run.value.status === 'running' || run.value.status === 'waiting_human') {
-          // Clarify/review session busy: skip full loadRun so we do not wipe
-          // live stream / send lock / input focus (narrow updates via WS frames).
-          if (!isClarifySessionBusy()) {
-            loadRun(false)
-          }
-          const sel = selected.value
-          // Only skip REST once we already have displayable live events;
-          // busy-only / empty live frames must keep the 2s poll fallback.
-          const skipPoll =
-            wsConnected &&
-            !!sel &&
-            liveNode.value === sel &&
-            !!eventPages[sel]?.live &&
-            (eventPages[sel]?.events.length || 0) > 0
-          if (!skipPoll && sel) {
-            const rh = rehydrateByNode[sel] || 'idle'
-            // Do not auto-recover from error; keep polling only after ready.
-            if (rh === 'error' || rh === 'loading') {
-              /* stay put */
-            } else if (rh === 'ready') {
-              void fetchNodeEvents(sel)
-            } else {
-              void rehydrateNodeEvents(sel)
-            }
-          }
-          if (nodeTab.value === 'sandbox') {
-            fetchSandboxLog(selected.value, { intent: 'silent_poll' })
-          }
-          // Boot-stage empty state needs fresh sandbox row status/containerStatus.
-          maybePollSandboxForBoot()
+        const active =
+          run.value.status === 'queued' ||
+          run.value.status === 'running' ||
+          run.value.status === 'waiting_human'
+        if (!active) return
+        // Hidden tab: skip the frequent 2s tick (g1.2 / f5).
+        if (typeof document !== 'undefined' && document.hidden) return
+        // Auto path is always soft + silent — never hard load (g1.3).
+        if (isClarifySessionBusy()) {
+          void patchRunChrome?.()
+        } else {
+          loadRun(false, true)
         }
+        const sel = selected.value
+        // Only skip REST once we already have displayable live events;
+        // busy-only / empty live frames must keep the 2s poll fallback.
+        const skipPoll =
+          wsConnected &&
+          !!sel &&
+          liveNode.value === sel &&
+          !!eventPages[sel]?.live &&
+          (eventPages[sel]?.events.length || 0) > 0
+        if (!skipPoll && sel) {
+          const rh = rehydrateByNode[sel] || 'idle'
+          // Do not auto-recover from error; keep polling only after ready.
+          if (rh === 'error' || rh === 'loading') {
+            /* stay put */
+          } else if (rh === 'ready') {
+            void fetchNodeEvents(sel)
+          } else {
+            void rehydrateNodeEvents(sel)
+          }
+        }
+        if (nodeTab.value === 'sandbox') {
+          fetchSandboxLog(selected.value, { intent: 'silent_poll' })
+        }
+        // Boot-stage empty state needs fresh sandbox row status/containerStatus.
+        maybePollSandboxForBoot()
       }, 2000)
     }
   }
@@ -454,7 +462,7 @@ export function useRunDetailWs(opts: {
           liveBusy[m.nodeId] = false
           dialoguePlatformBusy[m.nodeId] = false
           busySeedRetry.stop()
-          loadRun(false)
+          loadRun(false, true)
         }
       } else if (
         m.type === 'trace' ||
@@ -462,16 +470,15 @@ export function useRunDetailWs(opts: {
         m.type === 'react' ||
         m.type === 'artifact_edit'
       ) {
-        // Node finished / transitioned / human artifact edit: pull authoritative snapshot.
-        // Mid-clarify: review/acp frames project the session — skip full-page rebind for
-        // react/status/trace/artifact_edit alike (g3.2 / review v3).
-        // Soft-refresh path unchanged (g2.3).
+        // Auto path: never hard load (g1.3). Busy → chrome patch + shared preview entry (g1.1 / g2.1).
         if (isClarifySessionBusy()) {
+          void patchRunChrome?.()
           if (m.type === 'artifact_edit') refreshArtifactPreview?.(m)
           return
         }
         if (m.type === 'status') liveNode.value = null
-        loadRun(false)
+        loadRun(false, true)
+        if (m.type === 'artifact_edit') refreshArtifactPreview?.(m)
       }
     }
   }

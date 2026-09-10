@@ -338,6 +338,28 @@ describe('useArtifactPreview coverage', () => {
     app.unmount()
   })
 
+  it('does not reload content when the artifact fingerprint is unchanged (g2.2)', async () => {
+    const { preview, props, app } = mountPreview({
+      artifact: artifact({ id: 'plan', name: 'plan.json', kind: 'json', content: '{"title":"A"}', updatedAt: 't1', revision: 1 }),
+    })
+    await flushPromises()
+    mocks.artifactContent.mockClear()
+    const loads = preview.contentLoadGen
+    props.artifact = artifact({
+      id: 'plan',
+      name: 'plan.json',
+      kind: 'json',
+      content: '{"title":"A"}',
+      updatedAt: 't1',
+      revision: 1,
+    })
+    await flushPromises()
+    expect(mocks.artifactContent).not.toHaveBeenCalled()
+    expect(preview.contentLoadGen).toBe(loads)
+    expect(preview.showStructuredUi.value).toBe(true)
+    app.unmount()
+  })
+
   it('opens, closes, maps, and confirms deletion with guarded and error paths', async () => {
     const { preview, emit, props, app } = mountPreview()
     expect(preview.mapDeleteError({ status: 409 })).toContain('RunNotEnded')
