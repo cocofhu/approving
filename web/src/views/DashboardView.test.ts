@@ -973,4 +973,36 @@ describe('DashboardView home composer', () => {
     )
     wrapper.unmount()
   })
+
+  // plan g1.1 — plus card at the end of the rail; not a selectable pipeline
+  it('appends a new-workflow card that opens the baseline modal and ignores context menu', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const rail = wrapper.get('[data-testid="home-pipeline-cards"]')
+    const add = wrapper.get('[data-testid="home-new-workflow"]')
+    expect(rail.element.lastElementChild).toBe(add.element)
+    expect(add.text()).toContain('新建工作流')
+    await add.trigger('contextmenu')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-menu"]').exists()).toBe(false)
+    await add.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-create-workflow-name"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-create-project-list"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('从零开始')
+    wrapper.unmount()
+  })
+
+  // plan g1.2 — empty pipeline list still offers the same plus card
+  it('keeps the new-workflow card when the home pipeline list is empty', async () => {
+    mocks.listWorkflows.mockResolvedValue([])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipelines-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-new-workflow"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="home-new-workflow"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-create-workflow-name"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
 })

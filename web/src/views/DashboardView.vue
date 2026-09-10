@@ -8,6 +8,7 @@ import HomePrioritySelect from '@/components/dashboard/HomePrioritySelect.vue'
 import Icon from '@/components/ui/Icon.vue'
 import ChatImageThumb from '@/components/ui/ChatImageThumb.vue'
 import ChatImagePreviewModal from '@/components/ui/ChatImagePreviewModal.vue'
+import HomeCreateBaselineModal from '@/components/dashboard/HomeCreateBaselineModal.vue'
 import RunLaunchModal from '@/components/workflow/RunLaunchModal.vue'
 import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useHomeApproveChat } from '@/lib/run/useHomeApproveChat'
@@ -77,6 +78,7 @@ const phVisible = ref('')
 const phCursor = ref(false)
 let phTimer: ReturnType<typeof setTimeout> | null = null
 let phHoldTimer: ReturnType<typeof setTimeout> | null = null
+const createBaselineOpen = ref(false)
 const pipelineMenuOpen = ref(false)
 const pipelineMenuX = ref(0)
 const pipelineMenuY = ref(0)
@@ -240,6 +242,14 @@ function onComposerBlur() {
 
 function goProjects() {
   void router.push('/projects')
+}
+
+function openCreateBaseline(e?: Event) {
+  e?.preventDefault()
+  e?.stopPropagation()
+  closePipelineMenu()
+  clearLongPress()
+  createBaselineOpen.value = true
 }
 
 function closePipelineMenu() {
@@ -635,9 +645,11 @@ onBeforeUnmount(() => {
       </div>
 
       <div
-        v-else
-        class="home-pipeline-rail-wrap mt-10 w-full"
+        v-if="!loadError"
+        class="home-pipeline-rail-wrap w-full"
         :class="{
+          'mt-10': loading || pipelines.length > 0,
+          'mt-4': !loading && pipelines.length === 0,
           'home-pipeline-rail-wrap--has-left': pipelineFadeLeft,
           'home-pipeline-rail-wrap--has-right': pipelineFadeRight,
         }"
@@ -723,6 +735,18 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
+          <button
+            type="button"
+            role="listitem"
+            class="home-shell__card home-shell__card--add w-48 shrink-0"
+            data-testid="home-new-workflow"
+            @click="openCreateBaseline"
+            @contextmenu.prevent
+            @pointerdown.stop
+          >
+            <span class="home-shell__card-plus" aria-hidden="true">+</span>
+            <span class="home-shell__card-add-label">{{ t('pages.dashboard.create.addCard') }}</span>
+          </button>
         </div>
 
         <button
@@ -772,6 +796,8 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </Teleport>
+
+    <HomeCreateBaselineModal :open="createBaselineOpen" @close="createBaselineOpen = false" />
 
     <RunLaunchModal
       :open="launchOpen"
@@ -943,6 +969,55 @@ onBeforeUnmount(() => {
 .home-shell__card--selected {
   border-color: rgb(var(--c-accent));
   box-shadow: inset 0 0 0 1px rgb(var(--c-accent));
+}
+
+.home-shell__card--add {
+  min-height: 148px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed rgb(var(--c-accent) / 0.45);
+  background: linear-gradient(180deg, rgb(var(--c-accent) / 0.08), rgb(var(--c-surface)));
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease;
+}
+.home-shell__card--add:hover {
+  border-color: rgb(var(--c-accent));
+  transform: translateY(-3px);
+  box-shadow: 0 12px 24px rgb(var(--c-txt) / 0.1);
+}
+.home-shell__card--add:active {
+  transform: translateY(0) scale(0.98);
+}
+.home-shell__card-plus {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgb(var(--c-accent));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.home-shell__card--add:hover .home-shell__card-plus {
+  transform: rotate(90deg) scale(1.06);
+}
+.home-shell__card--add:active .home-shell__card-plus {
+  transform: rotate(90deg) scale(0.94);
+}
+.home-shell__card-add-label {
+  font-size: 12px;
+  color: rgb(var(--c-accent));
+  font-weight: 600;
 }
 
 .home-shell__card-top {
@@ -1132,6 +1207,14 @@ onBeforeUnmount(() => {
 
   .home-pipeline-rail {
     scroll-behavior: auto;
+  }
+
+  .home-shell__card--add,
+  .home-shell__card--add:hover,
+  .home-shell__card--add:active,
+  .home-shell__card--add:hover .home-shell__card-plus,
+  .home-shell__card--add:active .home-shell__card-plus {
+    transform: none;
   }
 }
 
