@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createI18n } from 'vue-i18n'
 import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -259,9 +262,6 @@ describe('AppSelect', () => {
   })
 
   it('wraps the panel in overlay-pop Transition and rotates chevron (g2.3)', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs')
-    const { dirname, join } = require('node:path') as typeof import('node:path')
-    const { fileURLToPath } = require('node:url') as typeof import('node:url')
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AppSelect.vue'), 'utf8')
     expect(src).toMatch(/name="overlay-pop"/)
     expect(src).toMatch(/app-select-chevron/)
