@@ -109,6 +109,12 @@ describe('RunListView sticky table + pager pin (g3)', () => {
     expect(mobile).not.toMatch(/applySortClick/)
     expect(mobile).not.toMatch(/sort-icon/)
   })
+
+  it('mobile data list uses overflow-y-auto p-2 so list-card-lift hover is not clipped (g2.3 regress)', () => {
+    const mobile = src.slice(src.indexOf('<!-- Mobile card list -->'), src.indexOf('<!-- Desktop table -->'))
+    expect(mobile).toMatch(/min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2/)
+    expect(mobile).toMatch(/list-card-lift/)
+  })
 })
 
 describe('RunListView fill scope lock (g4.3)', () => {

@@ -39,13 +39,13 @@ const SIDEBAR_COLLAPSED_W = '28px'
 const HISTORY_EXPANDED_W = '300px'
 const HISTORY_COLLAPSED_W = '28px'
 
-function readCollapsedState(key: string): boolean {
+function readCollapsedState(key: string, defaultCollapsed = false): boolean {
   try {
     const v = localStorage.getItem(key)
-    if (v === null) return false
+    if (v === null) return defaultCollapsed
     return v === 'true'
   } catch {
-    return false
+    return defaultCollapsed
   }
 }
 
@@ -63,7 +63,8 @@ function toggleExplorerCollapsed() {
   writeCollapsedState(EXPLORER_COLLAPSED_KEY, explorerCollapsed.value)
 }
 
-const historyCollapsed = ref(false)
+/** plan g3.2: version history defaults to collapsed (narrow rail) */
+const historyCollapsed = ref(true)
 function toggleHistoryCollapsed() {
   historyCollapsed.value = !historyCollapsed.value
   writeCollapsedState(HISTORY_COLLAPSED_KEY, historyCollapsed.value)
@@ -635,7 +636,8 @@ watch(
 
 onMounted(() => {
   explorerCollapsed.value = readCollapsedState(EXPLORER_COLLAPSED_KEY)
-  historyCollapsed.value = readCollapsedState(HISTORY_COLLAPSED_KEY)
+  // HISTORY key missing/unavailable → collapsed (true); explorer still defaults expanded
+  historyCollapsed.value = readCollapsedState(HISTORY_COLLAPSED_KEY, true)
   document.addEventListener('click', onDocumentClick)
   document.addEventListener('keydown', onExplorerKeydown)
   document.addEventListener('keydown', onChromeKeydown)

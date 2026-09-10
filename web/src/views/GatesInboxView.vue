@@ -373,7 +373,8 @@ const listFadeKey = computed(() =>
         class="flex min-h-0 flex-1 flex-col"
         :class="showListRefresh ? 'opacity-[0.55]' : ''"
       >
-        <div ref="listEl" class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <!-- plan g2.1: py-0.5 so list-card-lift hover translateY(-1px) top border is not clipped -->
+        <div ref="listEl" class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-0.5">
         <Transition name="ui-fade" mode="out-in">
         <div :key="listFadeKey" class="flex flex-col gap-2" data-testid="inbox-list-fade">
         <InboxPendingCard
@@ -511,7 +512,8 @@ const listFadeKey = computed(() =>
     >
       <div class="flex h-full min-h-0 flex-col overflow-hidden">
         <RefreshStrip v-if="showListRefresh" data-testid="gates-inbox-refresh-strip" />
-        <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <!-- plan g2.1: py-0.5 so list-card-lift hover translateY(-1px) top border is not clipped -->
+        <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-0.5">
           <Transition name="ui-fade" mode="out-in">
           <div :key="listFadeKey" class="flex flex-col gap-2" data-testid="inbox-list-fade-desktop">
           <InboxPendingCard
