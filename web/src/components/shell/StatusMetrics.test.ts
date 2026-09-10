@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { nextTick, ref } from 'vue'
 import shell from '@/locales/zh-CN/shell.json'
 import { PLATFORM_STATUS_POLL_MS } from '@/lib/composables/usePlatformStatusMetrics'
@@ -20,16 +21,38 @@ vi.mock('@/lib/composables/useBreakpoint', () => ({
   useBreakpoint: () => ({ isMobile }),
 }))
 
-function mountMetrics() {
-  const i18n = createI18n({
+function makeI18n() {
+  return createI18n({
     legacy: false,
     locale: 'zh-CN',
     messages: { 'zh-CN': { ...shell } },
   })
-  return mount(StatusMetrics, {
-    global: { plugins: [i18n] },
+}
+
+function makeRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', name: 'home', component: { template: '<div />' } },
+      {
+        path: '/stats',
+        name: 'stats',
+        component: { template: '<div data-testid="token-analytics-page" />' },
+      },
+    ],
+  })
+}
+
+async function mountMetrics(props?: { variant?: 'auto' | 'full' | 'compact' }) {
+  const i18n = makeI18n()
+  const router = makeRouter()
+  await router.push('/')
+  const w = mount(StatusMetrics, {
+    props,
+    global: { plugins: [i18n, router] },
     attachTo: document.body,
   })
+  return { w, router }
 }
 
 describe('StatusMetrics', () => {
@@ -54,7 +77,7 @@ describe('StatusMetrics', () => {
   })
 
   it('renders four desktop metrics with today tokens (plan g2.2)', async () => {
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     expect(w.find('[data-testid="status-metrics"]').exists()).toBe(true)
     expect(w.find('[data-testid="status-metrics-tokens"]').text()).toContain('1.24M')
@@ -68,7 +91,7 @@ describe('StatusMetrics', () => {
   })
 
   it('keeps lastSuccess on failure and does not flash 0 (plan g2.2)', async () => {
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     expect(w.find('[data-testid="status-metrics-tokens"]').text()).toContain('1.24M')
 
@@ -81,7 +104,7 @@ describe('StatusMetrics', () => {
   })
 
   it('pauses polling while document is hidden (plan g2.2)', async () => {
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     const calls = platformStatus.mock.calls.length
 
@@ -107,7 +130,7 @@ describe('StatusMetrics', () => {
       asOf: '2026-08-12T00:00:00Z',
       timezone: 'UTC',
     })
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     await nextTick()
     expect(w.find('[data-testid="status-metrics-tokens"]').text()).toContain('—')
@@ -119,7 +142,7 @@ describe('StatusMetrics', () => {
 
   it('renders Token·RUN/Q summary under md (plan g2.4)', async () => {
     isMobile.value = true
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     expect(w.find('[data-testid="status-metrics-compact"]').exists()).toBe(true)
     expect(w.find('[data-testid="status-metrics-tokens"]').exists()).toBe(false)
@@ -136,7 +159,7 @@ describe('StatusMetrics', () => {
   })
 
   it('desktop tips are single-line label: value with exact counts (plan g1.1/g1.2)', async () => {
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     const tips = {
       tokens: w.find('[data-testid="status-metrics-tokens"] .sm-tip').text(),
@@ -161,7 +184,7 @@ describe('StatusMetrics', () => {
 
   it('compact tip is four label: value rows aligned with desktop (plan g2.3)', async () => {
     isMobile.value = true
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     const tip = w.find('[data-testid="status-metrics-compact"] .sm-tip')
     const lines = tip.findAll('div').map((d) => d.text())
@@ -178,26 +201,25 @@ describe('StatusMetrics', () => {
     w.unmount()
   })
 
-  it('sidebar compact variant teleports tip above trigger (g1.1)', async () => {
-    const i18n = createI18n({
-      legacy: false,
-      locale: 'zh-CN',
-      messages: { 'zh-CN': { ...shell } },
-    })
+  it('sidebar compact variant teleports tip above trigger on hover (g1.1/g1.3)', async () => {
     const clip = document.createElement('div')
     clip.style.overflow = 'hidden'
     clip.style.height = '120px'
     document.body.appendChild(clip)
 
+    const i18n = makeI18n()
+    const router = makeRouter()
+    await router.push('/')
     const w = mount(StatusMetrics, {
       props: { variant: 'compact' },
-      global: { plugins: [i18n] },
+      global: { plugins: [i18n, router] },
       attachTo: clip,
     })
     await flushPromises()
 
     const trigger = w.find('[data-testid="status-metrics-compact"]')
     expect(trigger.find('.sm-tip').exists()).toBe(false)
+    expect(trigger.attributes('aria-label')).toMatch(/进入统计/)
 
     vi.spyOn(trigger.element as HTMLElement, 'getBoundingClientRect').mockReturnValue({
       top: 320,
@@ -211,7 +233,7 @@ describe('StatusMetrics', () => {
       toJSON: () => ({}),
     } as DOMRect)
 
-    await trigger.trigger('click')
+    await trigger.trigger('mouseenter')
     await flushPromises()
     await nextTick()
 
@@ -223,9 +245,79 @@ describe('StatusMetrics', () => {
     expect(tip.textContent).toMatch(/排队:\s*5/)
     expect(Number.parseInt(tip.style.top, 10)).toBeLessThan(320)
 
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('stats')
+    const afterClick = document.body.querySelector(
+      '[data-testid="status-metrics-compact-tip"]',
+    ) as HTMLElement | null
+    expect(afterClick?.style.display === 'none' || afterClick == null).toBe(true)
+
     w.unmount()
     clip.remove()
     document.body.innerHTML = ''
+  })
+
+  it('click compact navigates to stats and closes teleport tip (plan g1.1)', async () => {
+    const { w, router } = await mountMetrics({ variant: 'compact' })
+    await flushPromises()
+    const compact = w.find('[data-testid="status-metrics-compact"]')
+    await compact.trigger('mouseenter')
+    await flushPromises()
+    expect(document.body.querySelector('[data-testid="status-metrics-compact-tip"]')).toBeTruthy()
+    await compact.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('stats')
+    expect(router.currentRoute.value.path).toBe('/stats')
+    const tip = document.body.querySelector('[data-testid="status-metrics-compact-tip"]') as HTMLElement | null
+    expect(tip == null || (tip as HTMLElement).style.display === 'none' || getComputedStyle(tip).display === 'none').toBe(true)
+    w.unmount()
+  })
+
+  it('Enter/Space on compact navigates to stats (plan g1.1)', async () => {
+    const { w, router } = await mountMetrics({ variant: 'compact' })
+    await flushPromises()
+    await w.find('[data-testid="status-metrics-compact"]').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('stats')
+    w.unmount()
+
+    const again = await mountMetrics({ variant: 'compact' })
+    await flushPromises()
+    await again.w.find('[data-testid="status-metrics-compact"]').trigger('keydown', { key: ' ' })
+    await flushPromises()
+    expect(again.router.currentRoute.value.name).toBe('stats')
+    again.w.unmount()
+  })
+
+  it('desktop four items navigate to stats instead of pinning tip (plan g1.2)', async () => {
+    const ids = [
+      'status-metrics-tokens',
+      'status-metrics-today',
+      'status-metrics-running',
+      'status-metrics-queued',
+    ] as const
+    for (const id of ids) {
+      const { w, router } = await mountMetrics()
+      await flushPromises()
+      expect(w.find(`[data-testid="${id}"]`).attributes('aria-label')).toMatch(/进入统计/)
+      await w.find(`[data-testid="${id}"]`).trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.name).toBe('stats')
+      expect(w.find(`[data-testid="${id}"]`).classes()).not.toContain('tip-open')
+      w.unmount()
+    }
+  })
+
+  it('stays on stats when already there (plan g1.1)', async () => {
+    const { w, router } = await mountMetrics()
+    await router.push({ name: 'stats' })
+    await flushPromises()
+    await w.find('[data-testid="status-metrics-tokens"]').trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('stats')
+    expect(router.currentRoute.value.path).toBe('/stats')
+    w.unmount()
   })
 
   it('zero counts still show label: 0 in tip', async () => {
@@ -237,7 +329,7 @@ describe('StatusMetrics', () => {
       asOf: '2026-08-12T00:00:00Z',
       timezone: 'UTC',
     })
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     expect(w.find('[data-testid="status-metrics-running"] .sm-tip').text()).toMatch(/执行中:\s*0/)
     expect(w.find('[data-testid="status-metrics-queued"] .sm-tip').text()).toMatch(/排队:\s*0/)
@@ -247,7 +339,7 @@ describe('StatusMetrics', () => {
   })
 
   it('uses A-set stroke icon paths (plan g2.4)', async () => {
-    const w = mountMetrics()
+    const { w } = await mountMetrics()
     await flushPromises()
     const html = w.html()
     expect(html).toContain('cx="12" cy="6.6" rx="7.2" ry="3.1"')

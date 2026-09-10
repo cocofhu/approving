@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import {
   placeFixedOverlayAbove,
@@ -19,6 +20,7 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+const router = useRouter()
 const { isMobile } = useBreakpoint()
 const { metrics, stale } = usePlatformStatusMetrics()
 
@@ -31,18 +33,19 @@ const useCompact = computed(() => {
 /** Sidebar/drawer compact tips Teleport above the trigger to escape overflow-hidden. */
 const usePortaledCompactTip = computed(() => props.variant === 'compact')
 
-/** Which tip is pinned via click/touch (Demo tip-open). */
-const tipOpen = ref<string | null>(null)
 const compactTrigger = ref<HTMLElement | null>(null)
 const compactTip = ref<HTMLElement | null>(null)
 const compactTipHovered = ref(false)
 const compactTipFocused = ref(false)
+/** Hide Teleport tip after click until pointer leaves (plan g1.1). */
+const suppressCompactTip = ref(false)
 const compactTipStyle = ref<FixedOverlayAboveStyle | null>(null)
 
 const compactTipVisible = computed(
   () =>
-  usePortaledCompactTip.value &&
-    (tipOpen.value === 'compact' || compactTipHovered.value || compactTipFocused.value),
+    usePortaledCompactTip.value &&
+    !suppressCompactTip.value &&
+    (compactTipHovered.value || compactTipFocused.value),
 )
 
 async function repositionCompactTip() {
@@ -78,19 +81,24 @@ const running = computed(() => metrics.value?.runningCount ?? 0)
 const queued = computed(() => metrics.value?.queuedCount ?? 0)
 
 function todayAria(): string {
-  return `${t('shell.statusMetrics.today')}: ${fmtFull(today.value)}`
+  return `${t('shell.statusMetrics.today')}: ${fmtFull(today.value)} · ${t('shell.statusMetrics.openStats')}`
 }
 
-function toggleTip(id: string, ev: Event) {
+function statsAria(label: string): string {
+  return `${label} · ${t('shell.statusMetrics.openStats')}`
+}
+
+function goToStats() {
+  suppressCompactTip.value = true
+  compactTipHovered.value = false
+  compactTipFocused.value = false
+  void router.push({ name: 'stats' })
+}
+
+function onActivateKey(ev: KeyboardEvent) {
+  if (ev.key !== 'Enter' && ev.key !== ' ') return
   ev.preventDefault()
-  tipOpen.value = tipOpen.value === id ? null : id
-}
-
-function onBlurTip(id: string) {
-  // Delay so focus can move within the same control without flicker.
-  requestAnimationFrame(() => {
-    if (tipOpen.value === id) tipOpen.value = null
-  })
+  goToStats()
 }
 </script>
 
@@ -106,11 +114,10 @@ function onBlurTip(id: string) {
       <button
         type="button"
         class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-        :class="tipOpen === 'tokens' ? 'bg-elevated text-txt tip-open' : ''"
         data-testid="status-metrics-tokens"
-        :aria-label="t('shell.statusMetrics.tokens')"
-        @click="toggleTip('tokens', $event)"
-        @blur="onBlurTip('tokens')"
+        :aria-label="statsAria(t('shell.statusMetrics.tokens'))"
+        @click="goToStats"
+        @keydown="onActivateKey"
       >
         <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <ellipse cx="12" cy="6.6" rx="7.2" ry="3.1" />
@@ -130,11 +137,10 @@ function onBlurTip(id: string) {
       <button
         type="button"
         class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-        :class="tipOpen === 'today' ? 'bg-elevated text-txt tip-open' : ''"
         data-testid="status-metrics-today"
         :aria-label="todayAria()"
-        @click="toggleTip('today', $event)"
-        @blur="onBlurTip('today')"
+        @click="goToStats"
+        @keydown="onActivateKey"
       >
         <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <rect x="3.4" y="5.2" width="17.2" height="15.2" rx="2.6" />
@@ -154,11 +160,10 @@ function onBlurTip(id: string) {
       <button
         type="button"
         class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-        :class="tipOpen === 'running' ? 'bg-elevated text-txt tip-open' : ''"
         data-testid="status-metrics-running"
-        :aria-label="t('shell.statusMetrics.running')"
-        @click="toggleTip('running', $event)"
-        @blur="onBlurTip('running')"
+        :aria-label="statsAria(t('shell.statusMetrics.running'))"
+        @click="goToStats"
+        @keydown="onActivateKey"
       >
         <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="8.2" />
@@ -177,11 +182,10 @@ function onBlurTip(id: string) {
       <button
         type="button"
         class="sm-item relative inline-flex items-center gap-1.5 border-0 bg-transparent px-1.5 py-1 text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-        :class="tipOpen === 'queued' ? 'bg-elevated text-txt tip-open' : ''"
         data-testid="status-metrics-queued"
-        :aria-label="t('shell.statusMetrics.queued')"
-        @click="toggleTip('queued', $event)"
-        @blur="onBlurTip('queued')"
+        :aria-label="statsAria(t('shell.statusMetrics.queued'))"
+        @click="goToStats"
+        @keydown="onActivateKey"
       >
         <svg class="sm-ico block h-3.5 w-3.5 shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 7.2h16M4 12h11.5M4 16.8h7" />
@@ -202,14 +206,15 @@ function onBlurTip(id: string) {
       ref="compactTrigger"
       type="button"
       class="sm-item sm-compact relative inline-flex w-full items-center gap-2 rounded-md border-0 bg-elevated px-2 py-1.5 text-[11px] text-inherit hover:bg-elevated hover:text-txt focus-visible:bg-elevated focus-visible:text-txt focus-visible:outline-none"
-      :class="tipOpen === 'compact' ? 'text-txt tip-open' : ''"
+      :class="suppressCompactTip ? 'tip-suppressed' : ''"
       data-testid="status-metrics-compact"
       :aria-label="t('shell.statusMetrics.compactAria')"
-      @click="toggleTip('compact', $event)"
-      @blur="onBlurTip('compact'); compactTipFocused = false"
+      @click="goToStats"
+      @keydown="onActivateKey"
+      @blur="compactTipFocused = false"
       @focus="compactTipFocused = true"
-      @mouseenter="compactTipHovered = true"
-      @mouseleave="compactTipHovered = false"
+      @mouseenter="suppressCompactTip = false; compactTipHovered = true"
+      @mouseleave="compactTipHovered = false; suppressCompactTip = false"
     >
       <span class="inline-flex items-center gap-1.5">
         <svg class="sm-ico block h-[13px] w-[13px] shrink-0 text-txt3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -273,5 +278,10 @@ function onBlurTip(id: string) {
 .sm-item:focus-visible .sm-tip,
 .sm-item.tip-open .sm-tip {
   display: block;
+}
+.sm-item.tip-suppressed .sm-tip,
+.sm-item.tip-suppressed:hover .sm-tip,
+.sm-item.tip-suppressed:focus-visible .sm-tip {
+  display: none;
 }
 </style>

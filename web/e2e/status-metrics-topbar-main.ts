@@ -1,6 +1,6 @@
 import '../src/styles/global.css'
 import { createApp, defineComponent, h } from 'vue'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { createWebHashHistory, createRouter, RouterView } from 'vue-router'
 import { i18n } from '../src/lib/shared/i18n'
 import { initLocale, setLocale } from '../src/lib/shared/locale'
 import { installIdleScrollbar } from '../src/lib/shared/idleScrollbar'
@@ -83,21 +83,34 @@ async function bootstrap() {
   await setLocale('zh-CN')
 
   const router = createRouter({
-    history: createMemoryHistory(),
-    routes: [{ path: '/', component: { render: () => h('div', 'main') } }],
+    history: createWebHashHistory(),
+    routes: [
+      {
+        path: '/',
+        component: {
+          render: () =>
+            h('main', { class: 'p-6 text-sm text-txt2', 'data-testid': 'page-body' }, [
+              'StatusMetrics E2E harness · scene=',
+              scene,
+            ]),
+        },
+      },
+      {
+        path: '/stats',
+        name: 'stats',
+        component: {
+          render: () =>
+            h('div', { 'data-testid': 'token-analytics-page' }, 'TokenAnalyticsView stub'),
+        },
+      },
+    ],
   })
   await router.push('/')
 
   const Root = defineComponent({
     setup() {
       return () =>
-        h('div', { class: 'min-h-screen bg-base text-txt' }, [
-          h(AppTopbar),
-          h('main', { class: 'p-6 text-sm text-txt2', 'data-testid': 'page-body' }, [
-            'StatusMetrics E2E harness · scene=',
-            scene,
-          ]),
-        ])
+        h('div', { class: 'min-h-screen bg-base text-txt' }, [h(AppTopbar), h(RouterView)])
     },
   })
 

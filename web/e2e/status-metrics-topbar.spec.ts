@@ -56,11 +56,9 @@ test.describe('StatusMetrics topbar E2E', () => {
     await expect(todayTip).toContainText('4,812')
     await expect(todayTip).not.toContainText('/5m')
 
-    // Click pin (tip-open) still works.
     await page.getByTestId('status-metrics-running').click()
-    await expect(page.getByTestId('status-metrics-running')).toHaveClass(/tip-open/)
-    await expect(page.getByTestId('status-metrics-running').locator('.sm-tip')).toBeVisible()
-    await expect(page.getByTestId('status-metrics-running').locator('.sm-tip')).toContainText(/执行中:\s*3/)
+    await expect(page).toHaveURL(/#\/stats/)
+    await expect(page.getByTestId('token-analytics-page')).toBeVisible()
 
     const shot = path.join(testInfo.outputDir, 'desktop-five-metrics.png')
     await page.locator('header').screenshot({ path: shot })
@@ -80,7 +78,7 @@ test.describe('StatusMetrics topbar E2E', () => {
     await expect(compact).toContainText('3')
     await expect(compact).toContainText('5')
 
-    await compact.click()
+    await compact.hover()
     const tip = compact.locator('.sm-tip')
     await expect(tip).toBeVisible()
     await expect(tip).toContainText(/累计 Token:\s*1,240,582/)
@@ -90,6 +88,11 @@ test.describe('StatusMetrics topbar E2E', () => {
     await expect(tip).not.toContainText('/5m')
     await expect(tip).not.toContainText('5 分钟')
     await expect(tip).not.toContainText('完整值')
+
+    await compact.click()
+    await expect(page).toHaveURL(/#\/stats/)
+    await expect(page.getByTestId('token-analytics-page')).toBeVisible()
+    await expect(tip).toBeHidden()
 
     await page.screenshot({
       path: path.join(OUT, '02-narrow-status-metrics.png'),
@@ -111,13 +114,15 @@ test.describe('StatusMetrics topbar E2E', () => {
     })
   })
 
-  test('metrics are buttons that do not navigate', async ({ page }) => {
+  test('metrics click navigates to stats (plan g2.2)', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 })
     await page.goto('/status-metrics-topbar.html')
     await expect(page.getByTestId('status-metrics')).toBeVisible({ timeout: 15_000 })
-    const urlBefore = page.url()
     await page.getByTestId('status-metrics-today').click()
-    await expect(page).toHaveURL(urlBefore)
-    await expect(page.getByTestId('page-body')).toBeVisible()
+    await expect(page).toHaveURL(/#\/stats/)
+    await expect(page.getByTestId('token-analytics-page')).toBeVisible()
+    await page.getByTestId('status-metrics-tokens').click()
+    await expect(page).toHaveURL(/#\/stats/)
+    await expect(page.getByTestId('token-analytics-page')).toBeVisible()
   })
 })
