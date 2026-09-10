@@ -50,6 +50,7 @@ const {
   onPaste,
   removeAttachment,
   load,
+  reloadAfterCreate,
   selectPipeline,
   selectPriority,
   hidePipelineFromHome,
@@ -250,6 +251,11 @@ function openCreateBaseline(e?: Event) {
   closePipelineMenu()
   clearLongPress()
   createBaselineOpen.value = true
+}
+
+async function onBaselineCreated(payload?: { id?: string }) {
+  createBaselineOpen.value = false
+  await reloadAfterCreate(payload?.id)
 }
 
 function closePipelineMenu() {
@@ -797,7 +803,11 @@ onBeforeUnmount(() => {
       </div>
     </Teleport>
 
-    <HomeCreateBaselineModal :open="createBaselineOpen" @close="createBaselineOpen = false" />
+    <HomeCreateBaselineModal
+      :open="createBaselineOpen"
+      @close="createBaselineOpen = false"
+      @created="onBaselineCreated"
+    />
 
     <RunLaunchModal
       :open="launchOpen"

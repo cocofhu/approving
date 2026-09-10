@@ -35,6 +35,8 @@ describe('DashboardView home chat layout', () => {
     expect(src).toMatch(/data-testid="home-go-projects"/)
     expect(src).toMatch(/data-testid="home-new-workflow"/)
     expect(src).toMatch(/HomeCreateBaselineModal/)
+    expect(src).toMatch(/@created="onBaselineCreated"/)
+    expect(src).toMatch(/reloadAfterCreate/)
     expect(src).not.toMatch(/dashboard-kpi-/)
     expect(src).not.toMatch(/dashboard-board-empty/)
     expect(src).not.toMatch(/RunBoardColumn/)

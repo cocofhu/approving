@@ -11,7 +11,10 @@ import { useToast } from '@/lib/composables/useToast'
 import type { Project } from '@/lib/shared/types'
 
 const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'created', workflow: { id: string; name: string }): void
+}>()
 
 const router = useRouter()
 const toast = useToast()
@@ -134,6 +137,7 @@ async function submit() {
       baselineRepos.value,
     )
     toast.success(t('pages.projectDetail.newWorkflow.created', { name: created.name }))
+    emit('created', { id: created.id, name: created.name })
     emit('close')
   } catch (e: any) {
     createError.value = String(e?.message || e)

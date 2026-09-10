@@ -174,11 +174,12 @@ describe('HomeCreateBaselineModal (plan g2 / g3 / g4)', () => {
       expect.arrayContaining([expect.objectContaining({ url: 'https://github.com/org/repo' })]),
     )
     expect(mocks.toastSuccess).toHaveBeenCalled()
+    expect(wrapper.emitted('created')).toEqual([[{ id: 'wf-new', name: '需求对齐流水线' }]])
     expect(wrapper.emitted('close')).toBeTruthy()
     wrapper.unmount()
   })
 
-  // plan g3.3 — create failure restores a clickable submit
+  // plan g2.2 — create failure restores a clickable submit and does not emit created
   it('keeps the form open and restores submit after a create failure', async () => {
     mocks.createWorkflowFromBaseline.mockRejectedValue(new Error('create failed'))
     const wrapper = mountModal()
@@ -191,6 +192,8 @@ describe('HomeCreateBaselineModal (plan g2 / g3 / g4)', () => {
     await flushPromises()
     expect(q('home-create-error').text()).toContain('create failed')
     expect((q('home-create-submit').element as HTMLButtonElement).disabled).toBe(false)
+    expect(wrapper.emitted('created')).toBeFalsy()
+    expect(wrapper.emitted('close')).toBeFalsy()
     wrapper.unmount()
   })
 })

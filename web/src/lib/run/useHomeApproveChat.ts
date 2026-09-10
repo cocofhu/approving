@@ -287,6 +287,22 @@ export function useHomeApproveChat() {
     }
   }
 
+  /** Reload home cards after from-baseline create (plan g2.1). Keep prior list if reload fails. */
+  async function reloadAfterCreate(preferredId?: string) {
+    const previousWorkflows = workflows.value
+    const previousNames = projectNamesById.value
+    await load()
+    if (loadError.value) {
+      workflows.value = previousWorkflows
+      projectNamesById.value = previousNames
+      return
+    }
+    const id = (preferredId || '').trim()
+    if (id && pipelines.value.some((w) => w.id === id)) {
+      selectPipeline(id)
+    }
+  }
+
   function selectPipeline(id: string) {
     if (!id) return
     selectedId.value = id
@@ -472,6 +488,7 @@ export function useHomeApproveChat() {
     onPaste: attach.onPaste,
     removeAttachment: attach.removeAttachment,
     load,
+    reloadAfterCreate,
     selectPipeline,
     selectPriority,
     hidePipelineFromHome,

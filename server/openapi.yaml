@@ -42,7 +42,7 @@ paths:
               $ref: '#/components/schemas/CreateBaselineWorkflowRequest'
       responses:
         '201':
-          description: Published workflow created with the requested name
+          description: Published workflow created with the requested name and showOnHome=true
           content:
             application/json:
               schema:
@@ -549,6 +549,9 @@ components:
         status:
           type: string
           enum: [published]
+        showOnHome:
+          type: boolean
+          description: Always true on a successful from-baseline create
 
     ArtifactListItem:
       type: object

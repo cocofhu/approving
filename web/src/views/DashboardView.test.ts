@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   startRun: vi.fn(),
   getRun: vi.fn(),
   reactReply: vi.fn(),
+  createWorkflowFromBaseline: vi.fn(),
   readStoredProjectId: vi.fn(() => 'proj-1'),
 }))
 
@@ -33,6 +34,7 @@ vi.mock('@/lib/api/api', async () => {
       startRun: mocks.startRun,
       getRun: mocks.getRun,
       reactReply: mocks.reactReply,
+      createWorkflowFromBaseline: mocks.createWorkflowFromBaseline,
     },
   }
 })
@@ -59,6 +61,7 @@ const HomePreviewAppModalStub = {
       <button type="button" data-testid="home-image-preview-close" @click="$emit('close')">×</button>
       <button type="button" data-testid="home-image-preview-backdrop" @click="$emit('close')">backdrop</button>
       <slot />
+      <slot name="footer" />
     </div>
   `,
 }
@@ -137,6 +140,7 @@ describe('DashboardView home composer', () => {
     mocks.startRun.mockReset()
     mocks.getRun.mockReset()
     mocks.reactReply.mockReset()
+    mocks.createWorkflowFromBaseline.mockReset()
     mocks.readStoredProjectId.mockReturnValue('proj-1')
     mocks.listWorkflows.mockResolvedValue([approveWf])
     mocks.listProjects.mockResolvedValue([{ id: 'proj-1', name: '综合项目组', description: '', variables: [] }])
@@ -1003,6 +1007,52 @@ describe('DashboardView home composer', () => {
     await wrapper.get('[data-testid="home-new-workflow"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="home-create-workflow-name"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  // plan g2.1 / g2.2 — successful home create reloads cards and selects the new pipeline
+  it('reloads home cards after a successful baseline create', async () => {
+    const created: Workflow = { ...approveWf, id: 'wf-new', name: '首页新建' }
+    mocks.createWorkflowFromBaseline.mockResolvedValue(created)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const callsAfterMount = mocks.listWorkflows.mock.calls.length
+    await wrapper.get('[data-testid="home-new-workflow"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="home-create-workflow-name"]').setValue('首页新建')
+    const url = wrapper.find('input[placeholder*="https"]')
+    expect(url.exists()).toBe(true)
+    await url.setValue('https://github.com/org/repo')
+    await flushPromises()
+    mocks.listWorkflows.mockResolvedValue([approveWf, created])
+    await wrapper.get('[data-testid="home-create-submit"]').trigger('click')
+    await flushPromises()
+    expect(mocks.createWorkflowFromBaseline).toHaveBeenCalled()
+    expect(mocks.listWorkflows.mock.calls.length).toBeGreaterThan(callsAfterMount)
+    expect(wrapper.find('[data-testid="home-pipeline-card-wf-new"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-new"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
+    wrapper.unmount()
+  })
+
+  // plan g2.2 — failed create must not refresh the home pipeline list
+  it('does not reload home cards when baseline create fails', async () => {
+    mocks.createWorkflowFromBaseline.mockRejectedValue(new Error('create failed'))
+    const wrapper = mountDashboard()
+    await flushPromises()
+    const callsAfterMount = mocks.listWorkflows.mock.calls.length
+    await wrapper.get('[data-testid="home-new-workflow"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="home-create-workflow-name"]').setValue('X')
+    const url = wrapper.find('input[placeholder*="https"]')
+    await url.setValue('https://example.com/r.git')
+    await flushPromises()
+    await wrapper.get('[data-testid="home-create-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-create-error"]').text()).toContain('create failed')
+    expect(mocks.listWorkflows.mock.calls.length).toBe(callsAfterMount)
+    expect(wrapper.find('[data-testid="home-pipeline-card-wf-ap"]').exists()).toBe(true)
     wrapper.unmount()
   })
 })
