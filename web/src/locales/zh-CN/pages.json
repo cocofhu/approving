@@ -30,6 +30,18 @@
         "more": "更多操作",
         "hide": "隐藏",
         "edit": "编辑"
+      },
+      "create": {
+        "addCard": "新建工作流",
+        "pickTitle": "选择项目",
+        "pickStep": "第 1 / 2 步 · 基线工作流将创建在所选项目下",
+        "formStep": "第 2 / 2 步 · 项目：{name}",
+        "formProject": "项目：{name}",
+        "back": "上一步",
+        "emptyTitle": "先创建一个项目",
+        "emptyHint": "工作流必须属于一个项目。当前没有可用项目，请先创建项目。",
+        "goProjects": "前往项目",
+        "loadFailed": "无法加载项目列表"
       }
     },
     "tokenAnalytics": {

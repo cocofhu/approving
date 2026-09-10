@@ -30,6 +30,18 @@
         "more": "More actions",
         "hide": "Hide",
         "edit": "Edit"
+      },
+      "create": {
+        "addCard": "New workflow",
+        "pickTitle": "Select a project",
+        "pickStep": "Step 1 of 2 · The baseline workflow will be created in the selected project",
+        "formStep": "Step 2 of 2 · Project: {name}",
+        "formProject": "Project: {name}",
+        "back": "Back",
+        "emptyTitle": "Create a project first",
+        "emptyHint": "A workflow must belong to a project. You have no projects yet — create one first.",
+        "goProjects": "Go to projects",
+        "loadFailed": "Could not load projects"
       }
     },
     "tokenAnalytics": {
