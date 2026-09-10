@@ -81,14 +81,24 @@ describe('user-facing copy remediation keys', () => {
   it('uses Start and Needs attention consistently in navigation and page titles', () => {
     expect(zhNav.nav.dashboard).toBe('开始')
     expect(zhRoute.route.dashboard).toBe('开始')
-    expect(zhNav.nav.gates).toBe('需要关注')
-    expect(zhRoute.route.gates).toBe('需要关注')
-    expect(zh.global.t('pages.gatesInbox.title')).toBe('需要关注')
+    expect(zhNav.nav.gates).toBe('待办')
+    expect(zhRoute.route.gates).toBe('待办')
+    expect(zh.global.t('pages.gatesInbox.title')).toBe('待办')
     expect(enNav.nav.dashboard).toBe('Start')
     expect(enRoute.route.dashboard).toBe('Start')
     expect(enNav.nav.gates).toBe('Needs attention')
     expect(enRoute.route.gates).toBe('Needs attention')
     expect(en.global.t('pages.gatesInbox.title')).toBe('Needs attention')
+  })
+
+  it('uses 智能体 for zh-CN agent nav/route/page title and keeps body Agent 管理 (g1.1)', () => {
+    expect(zhNav.nav.agents).toBe('智能体')
+    expect(zhRoute.route.agents).toBe('智能体')
+    expect(zh.global.t('pages.agentStudio.title')).toBe('智能体')
+    expect(enNav.nav.agents).toBe('Agent studio')
+    expect(enRoute.route.agents).toBe('Agent studio')
+    expect(zh.global.t('pages.agentStudio.org.manageTitle')).toBe('Agent 管理')
+    expect(zh.global.t('pages.agentStudio.org.gotoManage')).toBe('前往 Agent 管理')
   })
 
   it('human gate canvas subtitle avoids unconditional ReAct promise', () => {

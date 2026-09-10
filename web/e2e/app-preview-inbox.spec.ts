@@ -207,7 +207,7 @@ async function openGates(page: Page, state: { inbox: InboxPayload; finished: boo
   await mockInboxApis(page, state)
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/tag-filter-ux.html?page=gates')
-  await expect(page.getByRole('heading', { name: '需要关注' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('heading', { name: '待办' })).toBeVisible({ timeout: 15_000 })
 }
 
 test.describe('app_preview in Gates Inbox', () => {

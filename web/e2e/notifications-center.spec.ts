@@ -83,11 +83,11 @@ test.describe('shell notification center (IA separation)', () => {
     await expect(page.getByTestId('nav-notifications-badge')).toHaveText('3')
     await expect(page.getByTestId('run-notifications-badge')).toHaveText('3')
 
-    // /notifications uses settings chrome: 通知 is highlighted; 运行/需要关注 are not in this sidebar.
+    // /notifications uses settings chrome: 通知 is highlighted; 运行/待办 are not in this sidebar.
     await expect(page.getByTestId('nav-settings-chrome')).toBeVisible()
     await expect(page.getByRole('link', { name: '通知' })).toBeVisible()
     await expect(page.getByTestId('nav-back-home')).toBeVisible()
-    await expect(page.getByRole('link', { name: '需要关注' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: '待办' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: '运行' })).toHaveCount(0)
 
     await page.getByTestId('notifications-filter-unread').click()

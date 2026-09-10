@@ -65,6 +65,7 @@ onMounted(() => {
   refresh({ source: 'mount' })
   void hydrateDisplay()
   timer = window.setInterval(pollRefresh, 15000)
+  chromeHasMounted.value = true
 })
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
@@ -83,6 +84,27 @@ function isActive(to: string) {
 }
 
 const settingsChrome = computed(() => isSettingsChrome(route.path, route.meta.full === true))
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  )
+}
+
+/** First paint (direct /agents etc.) must not play the push animation. */
+const chromeHasMounted = ref(false)
+const chromeSlideName = ref('chrome-none')
+
+watch(settingsChrome, (now) => {
+  if (!chromeHasMounted.value || prefersReducedMotion()) {
+    chromeSlideName.value = 'chrome-none'
+    return
+  }
+  chromeSlideName.value = now ? 'chrome-slide-left' : 'chrome-slide-right'
+})
+
+const chromeUseCss = computed(() => chromeSlideName.value !== 'chrome-none')
 
 function isSettingsItemActive(item: SettingsNavItem) {
   return settingsItemActive(item, route.path, route.query)
@@ -222,8 +244,10 @@ const settingsItems = settingsNavItems
     data-testid="app-sidebar-nav"
     :data-nav-mode="settingsChrome ? 'settings' : 'workspace'"
   >
-    <!-- Settings chrome: back to home + category list (plan g2.1) -->
-    <div v-if="settingsChrome" class="mb-3" data-testid="nav-settings-chrome">
+    <div class="nav-chrome-viewport">
+    <Transition :name="chromeSlideName" :css="chromeUseCss">
+    <!-- Settings chrome: back to home + category list (plan g2.2) -->
+    <div v-if="settingsChrome" key="settings" class="nav-chrome-pane mb-3" data-testid="nav-settings-chrome">
       <RouterLink
         to="/dashboard"
         class="nav-item mb-2 text-txt3"
@@ -258,8 +282,9 @@ const settingsItems = settingsNavItems
       </template>
     </div>
 
-    <!-- Workspace primary: four items (plan g1.1) -->
-    <div v-else-if="primaryGroup" class="mb-3" data-testid="nav-workspace-chrome">
+    <!-- Workspace primary + quick pipelines slide together (plan g2.2) -->
+    <div v-else-if="primaryGroup" key="workspace" class="nav-chrome-pane">
+    <div class="mb-3" data-testid="nav-workspace-chrome">
       <RouterLink
         v-for="item in primaryGroup.items"
         :key="item.to"
@@ -279,7 +304,7 @@ const settingsItems = settingsNavItems
     </div>
 
     <!-- Quick pipelines: workspace only, and only when favorites exist (plan g1.2) -->
-    <div v-if="!settingsChrome && displayItems.length" class="mb-3" data-testid="nav-quick-pipelines">
+    <div v-if="displayItems.length" class="mb-3" data-testid="nav-quick-pipelines">
       <div class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-txt3">
         {{ t('nav.quickPipelines') }}
       </div>
@@ -339,6 +364,9 @@ const settingsItems = settingsNavItems
         />
       </div>
     </div>
+    </div>
+    </Transition>
+    </div>
 
   </nav>
   <div
@@ -361,6 +389,60 @@ const settingsItems = settingsNavItems
 </template>
 
 <style scoped>
+.nav-chrome-viewport {
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-chrome-pane {
+  width: 100%;
+}
+
+.chrome-slide-left-enter-active,
+.chrome-slide-left-leave-active,
+.chrome-slide-right-enter-active,
+.chrome-slide-right-leave-active {
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 320ms ease;
+}
+
+.chrome-slide-left-leave-active,
+.chrome-slide-right-leave-active {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+}
+
+.chrome-slide-left-enter-from {
+  transform: translateX(100%);
+  opacity: 0.4;
+}
+
+.chrome-slide-left-leave-to {
+  transform: translateX(-100%);
+  opacity: 0.4;
+}
+
+.chrome-slide-right-enter-from {
+  transform: translateX(-100%);
+  opacity: 0.4;
+}
+
+.chrome-slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-slide-left-enter-active,
+  .chrome-slide-left-leave-active,
+  .chrome-slide-right-enter-active,
+  .chrome-slide-right-leave-active {
+    transition: none;
+  }
+}
+
 .quick-pipeline-handle {
   cursor: grab;
   touch-action: none;
