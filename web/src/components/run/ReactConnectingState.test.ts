@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { createI18n } from 'vue-i18n'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import enCommon from '@/locales/en/common.json'
@@ -29,9 +30,32 @@ function mountSidebar(locale: 'zh-CN' | 'en') {
 }
 
 describe('ReactConnectingState', () => {
-  it('shows the Chinese connecting state with all actions disabled', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('shows the Chinese staged loader with all actions disabled', async () => {
+    vi.useFakeTimers()
     const wrapper = mountSidebar('zh-CN')
     expect(wrapper.get('[data-testid="react-connecting-pill"]').text()).toContain('连接中')
+    expect(wrapper.get('icon-stub[name="spinner"]').exists()).toBe(true)
+    const titles = [
+      '正在准备工作环境…',
+      '正在启动 Agent…',
+      '正在连接 Agent…',
+      '正在整理第一轮问题…',
+    ]
+    expect(wrapper.text()).toContain(titles[0])
+    for (const title of titles.slice(1)) {
+      vi.advanceTimersByTime(2600)
+      await nextTick()
+      expect(wrapper.text()).toContain(title)
+    }
+    vi.advanceTimersByTime(2600)
+    await nextTick()
+    expect(wrapper.text()).toContain(titles.at(-1))
+    expect(wrapper.get('[data-testid="clarify-boot-progress"]').findAll('span')).toHaveLength(4)
     const input = wrapper.get('[data-testid="react-connecting-input"]')
     expect(input.attributes('placeholder')).toBe('连接中，暂不可输入')
     expect((input.element as HTMLTextAreaElement).disabled).toBe(true)
@@ -43,6 +67,25 @@ describe('ReactConnectingState', () => {
     const wrapper = mountSidebar('en')
     expect(wrapper.get('[data-testid="react-connecting-pill"]').text()).toContain('Connecting')
     expect(wrapper.get('[data-testid="react-connecting-input"]').attributes('placeholder')).toContain('Connecting')
+  })
+
+  it('keeps the first step static when reduced motion is preferred', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(window, 'matchMedia').mockReturnValue({
+      matches: true,
+      media: '(prefers-reduced-motion: reduce)',
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })
+    const wrapper = mountSidebar('zh-CN')
+    vi.advanceTimersByTime(10_400)
+    await nextTick()
+    expect(wrapper.text()).toContain('正在准备工作环境…')
+    expect(wrapper.text()).not.toContain('正在启动 Agent…')
   })
 
   it('renders a stable artifact-stage skeleton', () => {

@@ -21,9 +21,19 @@ const STARTING_STEPS = computed(() => [
 const step = ref(0)
 let timer: number | undefined
 
+function prefersReducedMotion() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 function startCycling() {
   step.value = 0
   if (timer) clearInterval(timer)
+  if (prefersReducedMotion()) {
+    timer = undefined
+    return
+  }
   timer = window.setInterval(() => {
     // Advance but hold on the last step so it doesn't loop back to the start.
     if (step.value < STARTING_STEPS.value.length - 1) step.value++
@@ -59,7 +69,7 @@ onBeforeUnmount(stopCycling)
       <Transition name="startfade" mode="out-in">
         <p :key="'h' + step" class="max-w-md text-[12px] text-txt3">{{ STARTING_STEPS[step].hint }}</p>
       </Transition>
-      <div class="mt-1 flex items-center gap-1.5">
+      <div class="mt-1 flex items-center gap-1.5" data-testid="clarify-boot-progress">
         <span
           v-for="(_, i) in STARTING_STEPS"
           :key="i"
@@ -83,5 +93,12 @@ onBeforeUnmount(stopCycling)
 .startfade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startfade-enter-active,
+  .startfade-leave-active {
+    transition: none;
+  }
 }
 </style>
