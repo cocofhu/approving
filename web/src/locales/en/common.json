@@ -118,7 +118,10 @@
       "placeholder": "Search workflows, runs…",
       "pipelinePlaceholder": "Search pipelines…",
       "agentPlaceholder": "Search Agents…",
-      "nodePlaceholder": "Search nodes"
+      "nodePlaceholder": "Search nodes",
+      "optionPlaceholder": "Search…",
+      "useTypedValue": "Use \"{value}\"",
+      "loadingOptions": "Loading options…"
     },
     "shutdown": {
       "shuttingDown": "Shutting down",
@@ -172,6 +175,7 @@
       "noArtifactsInGroup": "No artifacts in this group",
       "selectWorkflowGroup": "Select a workflow group on the left",
       "noMatchingGroups": "No matching groups",
+      "noMatchingOptions": "No matching options",
       "noSandboxes": "No sandboxes yet. Node sandboxes are created when workflows run, or start a test sandbox under Project detail → Shared Agent config → Chat test.",
       "noAgents": "No agents yet. Click New agent, or the backend seeds a default on first start.",
       "noPendingGates": "Nothing pending",

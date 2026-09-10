@@ -293,6 +293,15 @@ func (s *TeamService) runBootstrap(ctx context.Context, sessionID string, req no
 				region = "intl"
 			}
 			envEntries = append(envEntries, models.EnvEntry{Key: runtime.EnvTraeRegion, Value: region})
+		case AcpBackendOpenCode:
+			provider := runtime.NormalizeOpenCodeProvider(req.Env[runtime.EnvOpenCodeProvider])
+			envEntries = append(envEntries, models.EnvEntry{Key: runtime.EnvOpenCodeProvider, Value: provider})
+			if v := strings.TrimSpace(req.Env[runtime.EnvOpenCodeBaseURL]); v != "" {
+				envEntries = append(envEntries, models.EnvEntry{Key: runtime.EnvOpenCodeBaseURL, Value: v})
+			}
+			if v := strings.TrimSpace(req.Env[runtime.EnvACPBridgeModel]); v != "" {
+				envEntries = append(envEntries, models.EnvEntry{Key: runtime.EnvACPBridgeModel, Value: v})
+			}
 		}
 	}
 	proj, err := s.Projects.Create(req.ProjectName, req.Background, envEntries, nil)
@@ -607,7 +616,7 @@ func (s *TeamService) CreateAgentFromTemplate(args CreateFromTemplateArgs) (Agen
 		tmpl.MCP = DefaultPlatformMCP()
 	}
 	if strings.TrimSpace(args.CustomConfig) != "" {
-		tmpl.Files = upsertAgentFile(tmpl.Files, "settings.json", strings.TrimSpace(args.CustomConfig))
+		tmpl.Files = upsertAgentFile(tmpl.Files, agentAuthConfigFileName(backend), strings.TrimSpace(args.CustomConfig))
 	}
 
 	if err := s.Skills.Save(tmpl); err != nil {
@@ -708,7 +717,7 @@ func (s *TeamService) buildPMAgent(req normalizedTeamReq, projectID string) (Age
 
 	tmpl.Files = upsertAgentFile(tmpl.Files, "rules/project-context.md", teamPMProjectContextMarkdown(req))
 	if strings.TrimSpace(req.CustomConfig) != "" {
-		tmpl.Files = upsertAgentFile(tmpl.Files, "settings.json", strings.TrimSpace(req.CustomConfig))
+		tmpl.Files = upsertAgentFile(tmpl.Files, agentAuthConfigFileName(backend), strings.TrimSpace(req.CustomConfig))
 	}
 	return tmpl, nil
 }

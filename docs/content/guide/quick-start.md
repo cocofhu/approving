@@ -30,7 +30,7 @@ cd approving
 - Gateway health：http://localhost:8899/healthz
 - 默认登录：`admin` / `demo1234`（local-demo）
 
-`./start.sh` 还会从 GHCR 拉取 **四个 sandbox runtime** 镜像（按 acpBackend：cursor / claude_code / codebuddy / trae，体积较大）。完成前，沙箱对话可能停留在 “starting sandbox…”。
+`./start.sh` 还会从 GHCR 拉取 **五个 sandbox runtime** 镜像（按 acpBackend：cursor / claude_code / codebuddy / trae / opencode，体积较大）。完成前，沙箱对话可能停留在 “starting sandbox…”。
 
 Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` 宿主机目录（bind mount：`gateway` / `db` / `app-data`）。`./start.sh restart` 与 `./start.sh down` 会保留该目录。清空数据：`./start.sh down && rm -rf .localdata`。
 
@@ -49,7 +49,7 @@ Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` �
 ```bash
 ./start.sh logs
 ./start.sh down
-./start.sh pull          # 刷新 GHCR 镜像（含四个 sandbox runtime）
+./start.sh pull          # 刷新 GHCR 镜像（含五个 sandbox runtime）
 ./start.sh restart       # down + up -d（保留 .localdata）
 ./start.sh dev -d        # 源码栈：go run + Vite HMR
 ```

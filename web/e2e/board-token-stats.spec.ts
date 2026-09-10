@@ -468,7 +468,7 @@ test.describe('看板 Token 统计图', () => {
     await routeApi(page, '**/api/workflows**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     })
-    // Non-empty agents also keep shouldAutoOpenOnboarding false if dismiss seed fails.
+    // Onboarding stays closed via the dismiss seed above, not via this agents stub.
     await routeApi(page, '**/api/agents**', async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({

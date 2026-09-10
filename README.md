@@ -134,7 +134,7 @@ Override image tags or digests in `.env`; see [`.env.example`](.env.example).
 ## Build your first workflow
 
 1. Sign in with the local demo account. A fresh installation starts with an empty project and does not create a sample pipeline.
-2. Create an agent in **Agent Studio**, select `cursor`, `claude_code`, `codebuddy`, or `trae`, and configure the matching API key.
+2. Create an agent in **Agent Studio**, select `cursor`, `claude_code`, `codebuddy`, `trae`, or `opencode`, and configure the matching API key.
 3. Create a workflow and connect agent nodes, success/failure edges, rollback paths, and human gates.
 4. Publish and start a run. Observe sandbox execution, MCP artifacts, and nodes waiting for approval.
 

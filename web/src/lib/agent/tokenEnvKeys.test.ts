@@ -13,6 +13,8 @@ describe('tokenEnvKeys', () => {
     expect(isTokenEnvKey('CURSOR_API_KEY')).toBe(true)
     expect(isTokenEnvKey('GITLAB_TOKEN')).toBe(true)
     expect(isTokenEnvKey('GIT_SSH_PRIVATE_KEY')).toBe(true)
+    expect(isTokenEnvKey('APPROVING_OPENCODE_API_KEY')).toBe(true)
+    expect(isTokenEnvKey('OPENCODE_API_KEY')).toBe(true)
     expect(TOKEN_ENV_KEYS.length).toBeGreaterThanOrEqual(12)
   })
 

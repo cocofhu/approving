@@ -122,7 +122,7 @@ cd approving
 ## 四步创建第一个工作流
 
 1. 使用本地演示账号登录。全新安装默认是空项目，不会自动创建样例流水线。
-2. 在 **Agent Studio** 创建 Agent，选择 `cursor`、`claude_code`、`codebuddy` 或 `trae`，并配置对应 API Key。
+2. 在 **Agent Studio** 创建 Agent，选择 `cursor`、`claude_code`、`codebuddy`、`trae` 或 `opencode`，并配置对应 API Key。
 3. 新建工作流，在画布中连接 Agent 节点、成功/失败边、回滚路径与人工 gate。
 4. 发布并启动 run，观察沙箱执行、MCP 产物和待审批节点。
 

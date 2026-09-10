@@ -8,6 +8,8 @@ import { BASE, req } from '../httpCore'
 import type {
   Agent,
   AgentOrg,
+  OpenCodeModelsResponse,
+  OpenCodeProvidersResponse,
   OrgFolderImportResult,
   TeamBootstrapRequest,
   TeamBootstrapSession,
@@ -229,6 +231,11 @@ export const agentsClient = {
       method: 'POST',
       body: JSON.stringify({ groupId, keys }),
     }),
+  /** Vendors OpenCode can resolve models for (models.dev, cached server-side). */
+  openCodeProviders: () => req<OpenCodeProvidersResponse>(`/opencode/providers`),
+  /** One vendor's models; empty for a gateway the catalog does not know. */
+  openCodeModels: (provider: string) =>
+    req<OpenCodeModelsResponse>(`/opencode/providers/${encodeURIComponent(provider)}/models`),
   importAgent: async (zipFile: File, opts: { targetName: string; mode: 'create' | 'overwrite' }): Promise<Agent> => {
     const fd = new FormData()
     fd.append('file', zipFile)

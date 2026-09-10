@@ -49,6 +49,9 @@ type ConfigHomeSpec struct {
 	// home (CodeBuddy staging needs envRouteMode+endpoint here; BASE_URL alone
 	// hits the wrong chat path).
 	Settings map[string]any
+	// OpenCodeConfig, when non-nil, is written as opencode.json if that file
+	// is not already present (user-authored config wins).
+	OpenCodeConfig map[string]any
 	// AgentName is the agent_profile used to resolve per-agent platform-rule
 	// overrides under <ProfilesRoot>/<agent>/platform-rules/.
 	AgentName string
@@ -161,6 +164,11 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 			return "", err
 		}
 	}
+	if len(spec.OpenCodeConfig) > 0 {
+		if err := writeOpenCodeJSONIfAbsent(dir, spec.OpenCodeConfig); err != nil {
+			return "", err
+		}
+	}
 	return dir, nil
 }
 
@@ -181,6 +189,21 @@ func writeMergedSettingsJSON(dir string, platform map[string]any) error {
 	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal settings.json: %w", err)
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
+func writeOpenCodeJSONIfAbsent(dir string, doc map[string]any) error {
+	if len(doc) == 0 {
+		return nil
+	}
+	path := filepath.Join(dir, "opencode.json")
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal opencode.json: %w", err)
 	}
 	return os.WriteFile(path, b, 0o644)
 }

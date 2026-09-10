@@ -31,9 +31,18 @@ import {
   switchBackendRegions,
   type BackendId,
 } from '@/lib/shared/regionPolicy'
+import {
+  applyOpenCodeFields,
+  openCodeCustomBaseRequired,
+  openCodeFieldsFromEnv,
+  openCodeModelRequired,
+  switchOpenCodeEnv,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
+import OpenCodeProviderFields from '@/components/agent/OpenCodeProviderFields.vue'
+import { agentConfigRelPath } from '@/lib/agent/backendAuthGuide'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import { useToast } from '@/lib/composables/useToast'
-import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
 
 const props = defineProps<{ projectId: string }>()
 
@@ -245,7 +254,9 @@ function selectAcpBackend(id: BackendId) {
     draft.value.layout.configRoot = defaultConfigRootFor(id)
   }
   if (prev !== id) {
-    draft.value.env = recToKV(switchBackendRegions(kvToRec(draft.value.env), id))
+    draft.value.env = recToKV(
+      switchOpenCodeEnv(switchBackendRegions(kvToRec(draft.value.env), id), id),
+    )
   }
 }
 
@@ -254,11 +265,21 @@ function selectRegion(id: string) {
   draft.value.env = recToKV(setRegion(kvToRec(draft.value.env), draft.value.acpBackend, id))
 }
 
+const openCodeFields = computed(() =>
+  draft.value ? openCodeFieldsFromEnv(kvToRec(draft.value.env)) : openCodeFieldsFromEnv({}),
+)
+
+function patchSharedOpenCode(fields: Parameters<typeof applyOpenCodeFields>[1]) {
+  if (!draft.value) return
+  draft.value.env = recToKV(applyOpenCodeFields(kvToRec(draft.value.env), fields))
+}
+
 function openSettingsInFiles() {
   if (!draft.value) return
+  const backend = draft.value.acpBackend
   subTab.value = 'files'
   void Promise.resolve().then(() => {
-    filesPanelRef.value?.openPathOrCreate?.(AGENT_SETTINGS_PATH)
+    filesPanelRef.value?.openPathOrCreate?.(agentConfigRelPath(backend))
   })
 }
 
@@ -410,7 +431,7 @@ onMounted(() => {
           <div>
             <div class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.acpBackend') }}</div>
             <p class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.acpBackendDesc') }}</p>
-            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
               <button
                 v-for="b in ACP_BACKENDS"
                 :key="b.id"
@@ -459,6 +480,21 @@ onMounted(() => {
                 <div class="mt-0.5 font-mono text-[10px] text-txt3">{{ r.id }}</div>
               </button>
             </div>
+          </div>
+
+          <div v-if="draft.acpBackend === 'opencode'" class="border-t border-dashed border-line pt-4">
+            <div class="mb-2 text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.openCode.title') }}</div>
+            <p class="mb-3 text-[11px] text-txt3">{{ t('pages.agentStudio.openCode.desc') }}</p>
+            <OpenCodeProviderFields
+              :provider="openCodeFields.provider"
+              :base-url="openCodeFields.baseURL"
+              :model="openCodeFields.model"
+              :require-base="openCodeCustomBaseRequired(openCodeFields.provider, openCodeFields.baseURL)"
+              :require-model="openCodeModelRequired(openCodeFields.model)"
+              @update:provider="patchSharedOpenCode({ provider: $event })"
+              @update:base-url="patchSharedOpenCode({ baseURL: $event })"
+              @update:model="patchSharedOpenCode({ model: $event })"
+            />
           </div>
 
           <label class="block">

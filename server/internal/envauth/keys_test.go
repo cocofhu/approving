@@ -5,7 +5,7 @@ import "testing"
 func TestIsPlatformAuthEnvKey(t *testing.T) {
 	for _, k := range []string{
 		"CURSOR_API_KEY", "ANTHROPIC_API_KEY", "CODEBUDDY_API_KEY",
-		"TRAE_API_KEY", "TRAECLI_PERSONAL_ACCESS_TOKEN",
+		"TRAE_API_KEY", "TRAECLI_PERSONAL_ACCESS_TOKEN", "OPENCODE_API_KEY",
 	} {
 		if !IsPlatformAuthEnvKey(k) {
 			t.Fatalf("%s should be platform auth key", k)

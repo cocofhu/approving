@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ACP_BACKENDS,
   getRegionPolicy,
   isManagedRegionKey,
   normalizeRegions,
@@ -9,6 +10,16 @@ import {
 } from './regionPolicy'
 
 describe('region policy', () => {
+  it('lists five backends including OpenCode', () => {
+    expect(ACP_BACKENDS.map((b) => b.id)).toEqual([
+      'cursor',
+      'claude_code',
+      'codebuddy',
+      'trae',
+      'opencode',
+    ])
+  })
+
   it('defines the four canonical mappings and international defaults', () => {
     expect(getRegionPolicy('codebuddy')).toMatchObject({
       regionEnvKey: 'APPROVING_CODEBUDDY_REGION',
@@ -24,7 +35,7 @@ describe('region policy', () => {
     })
     expect(getRegionPolicy('trae')?.options.map((item) => item.id)).toEqual(['cn', 'intl'])
     expect(getRegionPolicy('cursor')).toBeUndefined()
-    expect(getRegionPolicy('claude_code')).toBeUndefined()
+    expect(getRegionPolicy('opencode')).toBeUndefined()
   })
 
   it('switches backend by clearing all managed keys and writing the target default', () => {

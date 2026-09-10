@@ -70,6 +70,23 @@ const CODEBUDDY_BASE: Omit<BackendAuthGuide, 'links'> = {
   noteKey: 'pages.agentStudio.wizard.apiKey.notes.codebuddySite',
 }
 
+const OPENCODE_GUIDE: BackendAuthGuide = {
+  backend: 'opencode',
+  keys: [{ key: 'APPROVING_OPENCODE_API_KEY', alt: 'OPENCODE_API_KEY' }],
+  pathStepKeys: [
+    'pages.agentStudio.wizard.apiKey.paths.opencode.step1',
+    'pages.agentStudio.wizard.apiKey.paths.opencode.step2',
+    'pages.agentStudio.wizard.apiKey.paths.opencode.step3',
+  ],
+  links: [
+    {
+      labelKey: 'pages.agentStudio.wizard.apiKey.links.opencodeProviders',
+      url: 'https://opencode.ai/docs/providers/',
+    },
+  ],
+  noteKey: 'pages.agentStudio.wizard.apiKey.notes.opencode',
+}
+
 const TRAE_GUIDE: BackendAuthGuide = {
   backend: 'trae',
   keys: [
@@ -129,6 +146,11 @@ export const BACKEND_AUTH_HINTS: Record<
     alt: 'TRAECLI_PERSONAL_ACCESS_TOKEN',
     note: 'Trae ACP 鉴权 (CLI 登录令牌)',
   },
+  opencode: {
+    key: 'APPROVING_OPENCODE_API_KEY',
+    alt: 'OPENCODE_API_KEY',
+    note: 'OpenCode API Key 鉴权',
+  },
 }
 
 /** Resolve apply guide for the current Backend (+ CodeBuddy/Trae site when applicable). */
@@ -136,6 +158,7 @@ export function authGuideFor(backend: BackendId, region = ''): BackendAuthGuide 
   if (backend === 'cursor') return CURSOR_GUIDE
   if (backend === 'claude_code') return CLAUDE_GUIDE
   if (backend === 'trae') return TRAE_GUIDE
+  if (backend === 'opencode') return OPENCODE_GUIDE
 
   const siteLink = CODEBUDDY_SITE_LINKS[region] || CODEBUDDY_SITE_LINKS.public
   return {
@@ -150,11 +173,16 @@ export function authGuideFor(backend: BackendId, region = ''): BackendAuthGuide 
 
 /** Relative path for backend config file written into Agent workspace/files. */
 export const AGENT_SETTINGS_REL_PATH = 'settings.json'
+export const AGENT_OPENCODE_CONFIG_REL_PATH = 'opencode.json'
+
+export function agentConfigRelPath(backend: BackendId): string {
+  return backend === 'opencode' ? AGENT_OPENCODE_CONFIG_REL_PATH : AGENT_SETTINGS_REL_PATH
+}
 
 /** Absolute configRoot path for settings.json (UI display). */
-export function settingsFileAbsPath(configRoot: string): string {
+export function settingsFileAbsPath(configRoot: string, backend: BackendId = 'cursor'): string {
   const root = configRoot.trim() || '/root/.cursor'
-  return `${root}/${AGENT_SETTINGS_REL_PATH}`
+  return `${root}/${agentConfigRelPath(backend)}`
 }
 
 /** Default JSON placeholder when user switches to custom config mode. */
@@ -168,6 +196,20 @@ export function defaultSettingsPlaceholder(backend: BackendId): string {
       return JSON.stringify({ env: { CURSOR_API_KEY: 'your-key' } }, null, 2)
     case 'trae':
       return JSON.stringify({ env: { TRAECLI_PERSONAL_ACCESS_TOKEN: 'trae-lt-...' } }, null, 2)
+    case 'opencode':
+      return JSON.stringify(
+        {
+          $schema: 'https://opencode.ai/config.json',
+          model: 'openai/gpt-4.1',
+          provider: {
+            openai: {
+              options: { apiKey: '{env:OPENCODE_API_KEY}' },
+            },
+          },
+        },
+        null,
+        2,
+      )
     default:
       return '{\n  \n}'
   }
@@ -180,6 +222,8 @@ export function customConfigNoteKey(backend: BackendId): string {
       return 'pages.agentStudio.wizard.apiKey.customConfig.notes.claude'
     case 'codebuddy':
       return 'pages.agentStudio.wizard.apiKey.customConfig.notes.codebuddy'
+    case 'opencode':
+      return 'pages.agentStudio.wizard.apiKey.customConfig.notes.opencode'
     default:
       return 'pages.agentStudio.wizard.apiKey.customConfig.notes.generic'
   }

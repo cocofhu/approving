@@ -12,6 +12,7 @@ import {
   AGENT_SETTINGS_PATH,
   parseCustomConfigJson,
 } from './agentCreateWizard'
+import { AGENT_OPENCODE_CONFIG_REL_PATH } from './backendAuthGuide'
 
 describe('configRootFor', () => {
   it('maps backends to protocol roots', () => {
@@ -19,6 +20,7 @@ describe('configRootFor', () => {
     expect(configRootFor('claude_code')).toBe('/root/.claude')
     expect(configRootFor('codebuddy')).toBe('/root/.codebuddy')
     expect(configRootFor('trae')).toBe('/root/.trae')
+    expect(configRootFor('opencode')).toBe('/root/.config/opencode')
   })
 })
 
@@ -228,6 +230,20 @@ describe('hasPathDeps / buildReviewSummary', () => {
     )
   })
 
+  it('writes opencode.json in OpenCode custom config mode', () => {
+    const d = freshDraft()
+    d.name = 'oc-agent'
+    applyAcpBackend(d, 'opencode')
+    d.authMode = 'customConfig'
+    d.customConfigContent = JSON.stringify({ model: 'openai/gpt-4.1' })
+    d.env.push({ k: 'APPROVING_OPENCODE_API_KEY', v: 'should-strip' })
+    const payload = assembleCreatePayload(d)
+    expect(payload.files?.some((f) => f.path === AGENT_OPENCODE_CONFIG_REL_PATH)).toBe(true)
+    expect(payload.files?.some((f) => f.path === AGENT_SETTINGS_PATH)).toBe(false)
+    expect(payload.env?.APPROVING_OPENCODE_API_KEY).toBeUndefined()
+    expect(payload.env?.APPROVING_OPENCODE_PROVIDER).toBe('openai')
+  })
+
   it('rejects invalid custom config json', () => {
     expect(parseCustomConfigJson('{bad').ok).toBe(false)
     expect(parseCustomConfigJson('{"ok":true}').ok).toBe(true)
@@ -235,6 +251,9 @@ describe('hasPathDeps / buildReviewSummary', () => {
 
   it('resets regions on backend switches and excludes the managed key from ENV count', () => {
     const d = freshDraft()
+    applyAcpBackend(d, 'opencode')
+    expect(d.configRoot).toBe('/root/.config/opencode')
+    expect(d.env).toContainEqual({ k: 'APPROVING_OPENCODE_PROVIDER', v: 'openai' })
     applyAcpBackend(d, 'codebuddy')
     expect(d.env).toContainEqual({ k: 'APPROVING_CODEBUDDY_REGION', v: 'public' })
     d.env.push({ k: 'CUSTOM', v: '1' })

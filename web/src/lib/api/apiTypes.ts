@@ -113,7 +113,7 @@ export interface Agent {
   name: string
   /** Single home project; empty/undefined = unbound (artifact-store only). */
   projectId?: string
-  acpBackend?: 'cursor' | 'claude_code' | 'codebuddy' | 'trae'
+  acpBackend?: 'cursor' | 'claude_code' | 'codebuddy' | 'trae' | 'opencode'
   gitCredentialType?: 'github_https' | 'gitlab_https' | 'ssh'
   /** known_hosts literal (may contain newlines); no ${vars.*}. */
   gitSshKnownHosts?: string
@@ -393,6 +393,35 @@ export interface NotificationListItem {
   finishedApprox: string
   unread: boolean
   beforeBaseline: boolean
+}
+
+/** One vendor of the OpenCode model catalog (models.dev). */
+export interface OpenCodeCatalogProvider {
+  id: string
+  name?: string
+  /** Vendor default base URL, when the catalog publishes one. */
+  api?: string
+  /** Environment variable OpenCode reads this vendor's key from. */
+  keyEnv?: string
+  /** How many models the catalog lists for this vendor. */
+  models: number
+}
+
+export interface OpenCodeCatalogModel {
+  id: string
+  name?: string
+}
+
+export interface OpenCodeProvidersResponse {
+  providers: OpenCodeCatalogProvider[]
+  fetchedAt?: string
+  /** Set when the catalog could not be refreshed; the picker then falls back. */
+  error?: string
+}
+
+export interface OpenCodeModelsResponse {
+  models: OpenCodeCatalogModel[]
+  error?: string
 }
 
 export interface NotificationListResponse {

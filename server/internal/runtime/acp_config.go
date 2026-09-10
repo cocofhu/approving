@@ -40,6 +40,7 @@ func (c *acpProvider) buildConfigHome(req NodeReq, env map[string]string) string
 		IncludeArtifactStore: hasArtifactStore(specs),
 		MCP:                  specs,
 		Settings:             CodeBuddySettingsForEnv(c.backend, env),
+		OpenCodeConfig:       OpenCodeConfigForEnv(c.backend, env),
 		AgentName:            profile,
 		ProfilesRoot:         c.opts.ProfilesRoot,
 		GlobalRulesDir:       c.opts.PlatformRulesRoot,

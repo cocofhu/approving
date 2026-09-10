@@ -80,4 +80,25 @@ describe('WizardApiKeyStepPanel custom config editor', () => {
     expect(wrapper.find('[data-test="custom-config-editor-host"]').exists()).toBe(true)
     wrapper.unmount()
   })
+
+  it('shows OpenCode vendor fields and emits base URL updates', async () => {
+    const guide = authGuideFor('opencode')
+    const wrapper = mountPanel({
+      acpBackend: 'opencode',
+      configRoot: '/root/.config/opencode',
+      authMode: 'apiKey',
+      authGuide: guide,
+      primaryAuthKey: guide.keys[0].key,
+      primaryAuthAlt: guide.keys[0].alt ?? '',
+      env: { APPROVING_OPENCODE_PROVIDER: 'custom' },
+    })
+    expect(wrapper.find('[data-test="opencode-provider-fields"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="opencode-base-required"]').exists()).toBe(true)
+    await wrapper.get('[data-test="opencode-base-url"]').setValue('https://llm.example/v1')
+    const emitted = wrapper.emitted('update:openCodeBaseUrl')
+    expect(emitted?.[emitted.length - 1]).toEqual(['https://llm.example/v1'])
+    await wrapper.setProps({ authMode: 'customConfig' })
+    expect(wrapper.text()).toContain('opencode.json')
+    wrapper.unmount()
+  })
 })

@@ -63,6 +63,9 @@ func New(h *handlers.Handlers) *gin.Engine {
 		api.POST("/notifications/read", h.MarkNotificationRead)
 		api.POST("/notifications/read-all", h.MarkAllNotificationsRead)
 
+		api.GET("/opencode/providers", h.ListOpenCodeProviders)
+		api.GET("/opencode/providers/:provider/models", h.ListOpenCodeProviderModels)
+
 		api.GET("/platform-rules", h.ListPlatformRules)
 		api.GET("/platform-rules/:file/embed", h.GetPlatformRuleEmbed)
 		api.GET("/platform-rules/:file", h.GetPlatformRule)

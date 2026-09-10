@@ -253,16 +253,16 @@
       "emptyDesc": "将配置 ACP 后端、Token 与 Git，并生成综合项目组与「默认工作流」。不会自动开跑。",
       "workflowName": "默认工作流",
       "head": {
-        "language": "选择界面语言",
+        "language": "选择界面语言与主题",
         "overview": "这次会写入什么",
-        "acp": "选择运行后端",
+        "acp": "选择启动方式",
         "apiKey": "填写 API Key",
         "git": "配置仓库、Git 身份与预览（凭据可跳过）",
         "review": "确认并生成",
         "success": "已完成安装"
       },
       "steps": {
-        "language": "语言",
+        "language": "语言与主题",
         "overview": "概览",
         "acp": "后端",
         "apiKey": "API Key",
@@ -271,7 +271,13 @@
       },
       "language": {
         "meta": "选择安装引导和控制面的显示语言。默认已根据你的系统语言选择。",
-        "detected": "后续仍可在左下角随时切换语言。"
+        "detected": "后续仍可在左下角随时切换语言。",
+        "themeLabel": "界面主题",
+        "themeDark": "深色",
+        "themeDarkHint": "默认，适合长时间盯屏",
+        "themeLight": "浅色",
+        "themeLightHint": "适合明亮环境与投屏演示",
+        "themeHint": "选择后立即生效，后续仍可在左下角切换。"
       },
       "overview": {
         "meta": "凭据写入默认项目共享 Agent 配置，供组内 Agent 继承。导入的团队包和工作流不含密钥。",
@@ -286,8 +292,21 @@
         "banner": "密钥只放在共享配置里，不要写进 Agent 工作区。"
       },
       "acp": {
-        "meta": "选择 ACP 后端。密钥将写入本项目共享 Agent 配置，供全部 Agent 共用。",
-        "region": "站点"
+        "meta": "先选启动方式：用模型厂商的 API Key，或用编码 CLI 的厂商账号。密钥都写入本项目共享 Agent 配置，供全部 Agent 共用。",
+        "region": "站点",
+        "paths": {
+          "apiKey": {
+            "title": "从 API Key 开始",
+            "desc": "手上有模型厂商的 API Key（OpenAI / Anthropic / DeepSeek 等），由 OpenCode 后端直接调用，可自定义 API Base 与 model。"
+          },
+          "cli": {
+            "title": "用编码 CLI 账号",
+            "desc": "使用 Cursor / Claude Code / CodeBuddy / Trae 各自的 CLI 账号与密钥，模型由该 CLI 决定。"
+          }
+        },
+        "cliLabel": "选择 CLI 后端",
+        "apiKeyVendorsLabel": "常见模型厂商",
+        "apiKeyVendorsHint": "厂商与模型清单来自 OpenCode 的模型目录（models.dev），下一步可搜索选择；也可填自有兼容端点。配置目录"
       },
       "apiKey": {
         "meta": "按所选后端填写 API Key。此项必填，未填写将无法生成配置。",
@@ -2153,7 +2172,7 @@
         "layoutTitle": "沙箱注入布局(WSP/1)",
         "layoutIntro": "本 Agent 的配置在沙箱内的注入位置,随 Agent 持久化保存,创建沙箱时按此挂载与设置 WORKSPACE_DIR。切换 ACP 后端会自动填充推荐 configRoot,手动修改后尊重覆盖值。",
         "acpBackend": "ACP 后端 (acpBackend)",
-        "acpBackendDesc": "每个 Agent 配置绑定一个 ACP 后端;Run 执行时按此路由到对应 bridge,不支持节点级覆盖。缺省 cursor。",
+        "acpBackendDesc": "每个 Agent 配置绑定一个 ACP 后端;Run 执行时按此路由到对应 bridge,不支持节点级覆盖。缺省 cursor。OpenCode 用 API Key 接主流模型厂商。",
         "configRoot": "配置根目录(configRoot)",
         "configRootDesc": "Agent 工作目录(rules / skills / mcp.json)RW 挂载到容器内的此路径。",
         "workspaceDir": "工作区目录(workspaceDir)",
@@ -2180,6 +2199,35 @@
         "sshPrivateKey": "SSH 私钥",
         "sshPrivateKeyDesc": "整份 PEM 原文；注入为 ~/.ssh/id_rsa（权限 600），不与其它 PEM 拼接。",
         "sshPrivateKeyPh": "-----BEGIN OPENSSH PRIVATE KEY-----"
+      },
+      "openCode": {
+        "title": "OpenCode 厂商与模型",
+        "desc": "用 API Key 启动 OpenCode 沙箱。厂商与模型来自 OpenCode 的模型目录（models.dev）；模型必填。可选 API Base；Custom 必须填写兼容 OpenAI 的 Base URL。",
+        "providerLabel": "模型厂商",
+        "providerSearchPlaceholder": "搜索厂商，或直接输入厂商 id…",
+        "modelLabel": "模型 (ACP_BRIDGE_MODEL)",
+        "modelPlaceholder": "选择或输入 provider/model",
+        "modelPlaceholderCustom": "输入模型 id，例如 my-model",
+        "modelHint": "列表来自 OpenCode 的模型目录；也可在搜索框直接输入其它 provider/model。",
+        "modelHintTyped": "该厂商不在模型目录中，请直接填写端点支持的模型 id。",
+        "modelUnknown": "该模型不在此厂商的模型目录中，OpenCode 可能直接报错。请从列表中选择，或确认端点确实提供该模型。",
+        "modelSearchPlaceholder": "搜索或输入 provider/model…",
+        "modelRequired": "请选择或填写模型，例如 deepseek/deepseek-v4-pro。",
+        "baseLabel": "API Base URL",
+        "basePlaceholder": "https://api.example.com/v1",
+        "baseHint": "留空使用厂商默认端点。代理或自建兼容接口时填写。",
+        "baseRequired": "Custom 厂商必须填写 API Base URL。",
+        "providers": {
+          "openai": "OpenAI",
+          "anthropic": "Anthropic",
+          "google": "Google Gemini",
+          "openrouter": "OpenRouter",
+          "deepseek": "DeepSeek",
+          "moonshotai": "Moonshot / Kimi",
+          "alibaba": "Alibaba Qwen",
+          "xai": "xAI Grok",
+          "custom": "Custom (OpenAI-compatible)"
+        }
       },
       "mobile": {
         "back": "返回",
@@ -2460,7 +2508,8 @@
           "skipHint": "推荐直接「跳过」或「下一步」；在项目详情 → 项目共享 Agent 配置中填写 Token。",
           "notes": {
             "codebuddySite": "Key 与站点绑定；请到与 Agent 步所选站点一致的控制台申请。",
-            "traeToken": "官方 CLI 登录令牌须含 trae-lt- 前缀（旗舰版）。"
+            "traeToken": "官方 CLI 登录令牌须含 trae-lt- 前缀（旗舰版）。",
+            "opencode": "OpenCode 用厂商 API Key 启动；可指定 API Base 与 model。"
           },
           "paths": {
             "cursor": {
@@ -2482,6 +2531,11 @@
               "step1": "打开 Trae 企业控制台：个人信息 → 访问令牌 → CLI 登录令牌",
               "step2": "生成含 trae-lt- 前缀的登录令牌并复制",
               "step3": "将令牌粘贴到下方（APPROVING_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN）"
+            },
+            "opencode": {
+              "step1": "选择模型厂商（OpenAI / Anthropic / OpenRouter 等，或 Custom）",
+              "step2": "在对应控制台创建 API Key；Custom 还需填写 API Base",
+              "step3": "粘贴 Key，并可选填写模型（provider/model）"
             }
           },
           "links": {
@@ -2494,7 +2548,8 @@
             "codebuddyInternal": "国内站申请 Key",
             "codebuddyIoa": "iOA 申请 Key",
             "codebuddyStaging": "Staging 申请 Key",
-            "traeTokenDocs": "Trae CLI 登录令牌文档"
+            "traeTokenDocs": "Trae CLI 登录令牌文档",
+            "opencodeProviders": "OpenCode Providers"
           },
           "customConfig": {
             "cardTitle": "后端配置文件",
@@ -2505,6 +2560,7 @@
             "notes": {
               "claude": "可通过 settings.json 的 env 等字段完成鉴权，无需在本步骤粘贴 Key。",
               "codebuddy": "CodeBuddy 支持通过 settings.json 配置 env 等字段；staging 等平台字段可与用户内容合并。",
+              "opencode": "写入 opencode.json（不是 settings.json）。可配置 provider、baseURL 与 model。",
               "generic": "文件仍写入 configRoot；是否被 CLI 消费取决于后端。推荐优先使用 Env Key，自定义配置为高级/兼容路径。"
             }
           }

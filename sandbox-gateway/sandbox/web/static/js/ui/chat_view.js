@@ -1257,6 +1257,9 @@ export class ChatView {
                     `${u.command || ''} ${(u.args || []).join(' ')}`.trim(),
                     false
                 );
+            } else if (u.type === 'error_text') {
+                /* 错误正文（模型不存在 / 鉴权失败等）走兜底分支只会留下一张空卡片，必须原样展示。 */
+                this.appendMetaInAssistantTurn('error', String(u.text || '') || '事件 · error_text');
             } else {
                 this.appendMetaInAssistantTurn('notice', `事件 · ${u.type || 'unknown'}`);
             }

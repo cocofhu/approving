@@ -5,6 +5,7 @@ import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import EnvCredentialHelpModal from '@/components/agent/EnvCredentialHelpModal.vue'
 import WizardApiKeyStepPanel from '@/components/agent/WizardApiKeyStepPanel.vue'
 
+import { kvToRec } from '@/lib/agent/agentCreateWizard'
 import { useAgentCreateWizard } from '@/lib/agent/useAgentCreateWizard'
 import type { AgentCreateWizardProps, AgentCreateWizardEmit } from '@/lib/agent/useAgentCreateWizard'
 
@@ -23,6 +24,8 @@ const {
   stepAnimKey,
   apiKeyInput,
   customConfigError,
+  openCodeBaseError,
+  openCodeModelError,
   currentStep,
   progressPct,
   reviewItems,
@@ -45,6 +48,9 @@ const {
   setAuthMode,
   onCustomConfigInput,
   onApiKeyInput,
+  onOpenCodeProvider,
+  onOpenCodeBaseURL,
+  onOpenCodeModel,
   onGitCredentialType,
   inheritedEnv,
   goPrev,
@@ -156,7 +162,7 @@ const {
 
                 <template v-else-if="currentStep.id === 'acp'">
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.acp.meta') }}</p>
-                  <div class="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                  <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                     <button
                       v-for="b in ACP_BACKENDS"
                       :key="b.id"
@@ -221,9 +227,15 @@ const {
                     :auth-guide="authGuide"
                     :primary-auth-key="primaryAuthKey"
                     :primary-auth-alt="primaryAuthAlt"
+                    :env="kvToRec(draft.env)"
+                    :open-code-base-error="openCodeBaseError"
+                    :open-code-model-error="openCodeModelError"
                     @update:auth-mode="setAuthMode"
                     @update:api-key-input="onApiKeyInput"
                     @update:custom-config-content="onCustomConfigInput"
+                    @update:open-code-provider="onOpenCodeProvider"
+                    @update:open-code-base-url="onOpenCodeBaseURL"
+                    @update:open-code-model="onOpenCodeModel"
                   />
                 </template>
 

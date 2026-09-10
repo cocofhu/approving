@@ -27,8 +27,10 @@ configured on Agent meta env, not in this platform config table.
 | `APPROVING_SANDBOX_IMAGE_CLAUDE_CODE` | `sandbox.images.claude_code` | image | `Not set` | Public | Sandbox image for claude_code backend; empty uses the built-in default |
 | `APPROVING_SANDBOX_IMAGE_CODEBUDDY` | `sandbox.images.codebuddy` | image | `Not set` | Public | Sandbox image for codebuddy backend; empty uses the built-in default |
 | `APPROVING_SANDBOX_IMAGE_TRAE` | `sandbox.images.trae` | image | `Not set` | Public | Sandbox image for trae backend; empty uses the built-in default |
+| `APPROVING_SANDBOX_IMAGE_OPENCODE` | `sandbox.images.opencode` | image | `Not set` | Public | Sandbox image for opencode backend; empty uses the built-in default |
 | `APPROVING_SANDBOX_GATEWAY_URL` | `sandbox.gateway_url` | URL | `http://127.0.0.1:8899` | Public | sandbox-gateway control-plane URL |
 | `APPROVING_SANDBOX_GATEWAY_API_KEY` | `sandbox.gateway_api_key` | string | `Not set` | Sensitive | Gateway bearer token |
+| `APPROVING_OPENCODE_CATALOG_URL` | `sandbox.opencode_catalog_url` | URL | `https://models.dev/api.json` | Public | OpenCode model catalog URL; point at a mirror when egress is restricted |
 | `APPROVING_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
 | `APPROVING_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
 | `CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated alias; use agent env |

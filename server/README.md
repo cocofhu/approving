@@ -4,7 +4,7 @@
 
 ## 执行后端(ExecProvider)
 
-支持四类 ACP 后端(`cursor` / `claude_code` / `codebuddy` / `trae`),由 Agent 卡片
+支持五类 ACP 后端(`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode`),由 Agent 卡片
 `agent.json` 的 `acpBackend` 字段选择;`ProviderRegistry` 按 Agent profile (`agent_profile`) 路由到
 对应 Provider。统一沙箱镜像内 `acp-bridge` 按 `ACP_BACKEND` 单活启动 bridge(:8765)。
 兼容期容器内 `acp-gateway` / `cursor-acp` 为指向 `acp-bridge` 的软链(计划 0.2.0 移除)。
@@ -28,7 +28,7 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
   - 容器经 `host.docker.internal:<APPROVING_PORT>` 回连平台(`--add-host host.docker.internal:host-gateway` 已设)。
   - 工具:`write_artifact` / `read_artifact` / `list_artifacts` / `node_complete` 等。Agent **原生调用** `write_artifact` 写回产物,结束前必须 `node_complete` 标记完成(已 live 验证:cursor-agent 完成 initialize→tools/list→tools/call 全链路)。
 - **`{configRoot}` 配置树(对齐 auto-coder)**:每个节点按 Agent profile 的 `acpBackend` 解析 configRoot(Agent 卡片可覆盖),在控制面生成一份配置树后注入沙箱:
-  - 默认映射:`cursor`→`/root/.cursor`、`claude_code`→`/root/.claude`、`codebuddy`→`/root/.codebuddy`、`trae`→`/root/.trae`;
+  - 默认映射:`cursor`→`/root/.cursor`、`claude_code`→`/root/.claude`、`codebuddy`→`/root/.codebuddy`、`trae`→`/root/.trae`、`opencode`→`/root/.config/opencode`;
   - `rules/base.md`(基础约束,alwaysApply)、`rules/artifact-store.md`(produces 契约 + MCP 用法)、`react` 节点附 `rules/react.md`;
   - `rules/<profile>.md` 来自平台 `AgentService`(`APPROVING_PROFILES_ROOT`);
   - 需要 push/MR 的节点可在 Agent 工作目录附 `skills/git/SKILL.md`;
@@ -41,7 +41,7 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
 
 ## ACP 后端怎么用
 
-四个后端共用配置入口:**项目沙箱 env**(流水线默认底噪,官方鉴权键强制 Secret)+
+五个后端共用配置入口:**项目沙箱 env**(流水线默认底噪,官方鉴权键强制 Secret)+
 **Agent Studio → Meta 选 `acpBackend` → Env**(同名覆盖;Studio 调试须在 Agent env 单独配置)。
 平台级不提供全局 ACP Key;`MergeAuthEnv` 把项目/Agent 侧别名收成 CLI 认的变量后注入流水线沙箱。
 
@@ -51,9 +51,11 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
 | `claude_code` | `npx @zed-industries/claude-code-acp` | `/root/.claude` | `ANTHROPIC_API_KEY` |
 | `codebuddy` | `codebuddy --acp` | `/root/.codebuddy` | `CODEBUDDY_API_KEY` |
 | `trae` | `traecli acp serve` | `/root/.trae` | `TRAECLI_PERSONAL_ACCESS_TOKEN` |
+| `opencode` | `opencode run --format json` | `/root/.config/opencode` | 厂商原生 Key(由 `OPENCODE_API_KEY` 映射) |
 
 Agent Studio 的 Env 页会按当前后端提示所需 Key;CodeBuddy / Trae 另有「站点」下拉,
-写入 `APPROVING_*_REGION`(运行时再规范化成官方变量)。
+写入 `APPROVING_*_REGION`(运行时再规范化成官方变量)。OpenCode 另有厂商 / API Base / model
+(`APPROVING_OPENCODE_PROVIDER`、`APPROVING_OPENCODE_BASE_URL`、`ACP_BRIDGE_MODEL`)。
 
 ### Cursor
 
@@ -162,6 +164,28 @@ Staging 示例:
 }
 ```
 
+### OpenCode
+
+1. Meta:`acpBackend = opencode`(沙箱镜像 `universal-sandbox-opencode`;CLI 为 `opencode run --format json`,经 ACP 桥包装)。
+2. 共享 Agent env:
+   - `APPROVING_OPENCODE_API_KEY`(别名 `OPENCODE_API_KEY`)
+   - `APPROVING_OPENCODE_PROVIDER`:OpenCode 模型目录(models.dev)里的厂商 id(`openai` / `anthropic` / `deepseek` / `zai` / …),或 `custom`
+   - 可选 `APPROVING_OPENCODE_BASE_URL`(`custom` 必填)
+   - `ACP_BRIDGE_MODEL`,格式 `provider/model`(如 `deepseek/deepseek-v4-pro`);模型 id 必须是该厂商目录里真有的,否则 `opencode run` 直接以 exit 1 结束
+3. 启动时若配置树里还没有用户自己的 `opencode.json`,runtime 可按厂商/Base/Model 生成一份:有 Key 时把 `apiKey` 写在该厂商名下(`{env:OPENCODE_API_KEY}`),因此目录里的任意厂商都能用,不依赖各家专属环境变量;`custom` 额外走 OpenAI-compatible 适配器。
+4. 鉴权门认 `opencode.json` 或 `settings.json`;两者都没有时必须有 API key。厂商文档见 https://opencode.ai/docs/providers/
+
+```json
+{
+  "acpBackend": "opencode",
+  "env": {
+    "APPROVING_OPENCODE_API_KEY": "sk-xxx",
+    "APPROVING_OPENCODE_PROVIDER": "deepseek",
+    "ACP_BRIDGE_MODEL": "deepseek/deepseek-v4-pro"
+  }
+}
+```
+
 ### 速查:鉴权别名 → 容器变量
 
 | acpBackend | Agent env(任选其一) | 容器内 CLI 变量 |
@@ -170,6 +194,7 @@ Staging 示例:
 | `claude_code` | `APPROVING_CLAUDE_API_KEY` / `ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY` |
 | `codebuddy` | `APPROVING_CODEBUDDY_API_KEY` / `CODEBUDDY_API_KEY` | `CODEBUDDY_API_KEY` |
 | `trae` | `APPROVING_TRAE_API_KEY` / `TRAE_API_KEY` / `TRAECLI_PERSONAL_ACCESS_TOKEN` | `TRAECLI_PERSONAL_ACCESS_TOKEN` |
+| `opencode` | `APPROVING_OPENCODE_API_KEY` / `OPENCODE_API_KEY` | 按厂商映射(`OPENAI_API_KEY` 等) + `OPENCODE_API_KEY` |
 
 > 平台级 `APPROVING_CURSOR_API_KEY` / `sandbox.cursor_api_key` 已废弃,**不会**注入沙箱。
 

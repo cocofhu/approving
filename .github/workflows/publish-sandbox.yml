@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        provider: [cursor, claude_code, codebuddy, trae]
+        provider: [cursor, claude_code, codebuddy, trae, opencode]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4

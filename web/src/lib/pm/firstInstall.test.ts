@@ -10,7 +10,7 @@ vi.mock('@/lib/api/api', () => ({
 }))
 
 import { api } from '@/lib/api/api'
-import { DEFAULT_PROJECT_ID, dismissOnboarding } from './onboardingWizard'
+import { DEFAULT_PROJECT_ID, ONBOARDING_WORKFLOW_NAME, suppressOnboarding } from './onboardingWizard'
 import {
   closeFirstInstall,
   firstInstallCompletedAt,
@@ -46,19 +46,28 @@ describe('firstInstall', () => {
     expect(firstInstallOpen.value).toBe(true)
   })
 
-  it('stays closed once dismissed and never calls the API', async () => {
+  it('stays closed while suppressed and never calls the API', async () => {
     stubEmptyDefaultProject()
-    dismissOnboarding(DEFAULT_PROJECT_ID)
+    suppressOnboarding(DEFAULT_PROJECT_ID)
     await probeFirstInstall()
     expect(firstInstallOpen.value).toBe(false)
     expect(mocked.getProject).not.toHaveBeenCalled()
   })
 
-  it('stays closed when the default project already has a workflow', async () => {
+  it('stays closed once the default workflow exists', async () => {
     stubEmptyDefaultProject()
-    mocked.listWorkflows.mockResolvedValue([{ id: 'wf-1' }] as never)
+    mocked.listWorkflows.mockResolvedValue([
+      { id: 'wf-1', name: ONBOARDING_WORKFLOW_NAME },
+    ] as never)
     await probeFirstInstall()
     expect(firstInstallOpen.value).toBe(false)
+  })
+
+  it('still opens when other workflows exist but the default one is missing', async () => {
+    stubEmptyDefaultProject()
+    mocked.listWorkflows.mockResolvedValue([{ id: 'wf-1', name: '我的流程' }] as never)
+    await probeFirstInstall()
+    expect(firstInstallOpen.value).toBe(true)
   })
 
   it('probes once per session so route changes do not reopen it', async () => {

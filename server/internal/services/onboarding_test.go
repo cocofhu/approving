@@ -249,6 +249,48 @@ func TestOnboardingBootstrapWritesCodeBuddyRegionToSharedOnly(t *testing.T) {
 	}
 }
 
+func TestOnboardingBootstrapWritesOpenCodeEnvToShared(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	res, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend:       "opencode",
+		APIKey:           "sk-oc",
+		OpenCodeProvider: "anthropic",
+		OpenCodeBaseURL:  "https://proxy.example/v1",
+		OpenCodeModel:    "anthropic/claude-sonnet-4-5",
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	for _, name := range res.AgentIDs {
+		a, ok := svc.Skills.Get(name)
+		if !ok {
+			t.Fatalf("agent %s missing", name)
+		}
+		if a.AcpBackend != "opencode" {
+			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
+		}
+		if a.Env["APPROVING_OPENCODE_API_KEY"] != "" {
+			t.Fatalf("agent %s must not copy API key", name)
+		}
+		if a.Layout.ConfigRoot != "/root/.config/opencode" {
+			t.Fatalf("agent %s configRoot = %q", name, a.Layout.ConfigRoot)
+		}
+	}
+	shared := svc.SharedAgent.Get(projectID)
+	if shared.Env["APPROVING_OPENCODE_API_KEY"] != "sk-oc" {
+		t.Fatalf("shared key: %+v", shared.Env)
+	}
+	if shared.Env["APPROVING_OPENCODE_PROVIDER"] != "anthropic" {
+		t.Fatalf("shared provider: %+v", shared.Env)
+	}
+	if shared.Env["APPROVING_OPENCODE_BASE_URL"] != "https://proxy.example/v1" {
+		t.Fatalf("shared base: %+v", shared.Env)
+	}
+	if shared.Env["ACP_BRIDGE_MODEL"] != "anthropic/claude-sonnet-4-5" {
+		t.Fatalf("shared model: %+v", shared.Env)
+	}
+}
+
 func TestOnboardingBootstrapDefaultsPublicRegionForCodeBuddy(t *testing.T) {
 	svc, projectID := newOnboardingHarness(t)
 	_, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{

@@ -26,6 +26,15 @@ import {
   recToKV,
   type AgentStudioDraft,
 } from '@/lib/agent/agentStudioDraft'
+import {
+  applyOpenCodeFields,
+  openCodeCustomBaseRequired,
+  openCodeFieldsFromEnv,
+  openCodeModelRequired,
+  switchOpenCodeEnv,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
+import OpenCodeProviderFields from '@/components/agent/OpenCodeProviderFields.vue'
 
 const props = defineProps<{
   draft: AgentStudioDraft
@@ -114,7 +123,11 @@ function selectAcpBackend(id: BackendId) {
   if (!configRootTouched) {
     props.draft.layout.configRoot = defaultConfigRootFor(id)
   }
-  if (prev !== id) props.draft.env = recToKV(switchBackendRegions(kvToRec(props.draft.env), id))
+  if (prev !== id) {
+    props.draft.env = recToKV(
+      switchOpenCodeEnv(switchBackendRegions(kvToRec(props.draft.env), id), id),
+    )
+  }
 }
 
 const currentRegionPolicy = computed(() => getRegionPolicy(props.draft.acpBackend))
@@ -133,6 +146,17 @@ const specialRegion = computed(() => {
 
 function selectRegion(id: string) {
   props.draft.env = recToKV(setRegion(kvToRec(props.draft.env), props.draft.acpBackend, id))
+}
+
+const openCodeFields = computed(() => openCodeFieldsFromEnv(kvToRec(props.draft.env)))
+const showOpenCode = computed(() => props.draft.acpBackend === 'opencode')
+
+function patchOpenCode(fields: Parameters<typeof applyOpenCodeFields>[1]) {
+  props.draft.env = recToKV(applyOpenCodeFields(kvToRec(props.draft.env), fields))
+}
+
+function onOpenCodeProvider(id: OpenCodeProviderId) {
+  patchOpenCode({ provider: id })
 }
 
 function joinConfigPath(root: string, sub: string): string {
@@ -225,7 +249,7 @@ const derivedPaths = computed(() => {
       <div>
         <div class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.acpBackend') }}</div>
         <p class="mb-2 text-[11px] text-txt3">{{ t('pages.agentStudio.meta.acpBackendDesc') }}</p>
-        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <button
             v-for="b in ACP_BACKENDS"
             :key="b.id"
@@ -265,6 +289,20 @@ const derivedPaths = computed(() => {
             <div class="mt-1.5 text-[10px] leading-snug" :class="displayRegion === r.id ? 'text-accent-2' : 'text-txt3'">{{ t(r.hintKey) }}</div>
           </button>
         </div>
+      </div>
+      <div v-if="showOpenCode" class="border-t border-dashed border-line pt-4">
+        <div class="mb-2 text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.openCode.title') }}</div>
+        <p class="mb-3 text-[11px] text-txt3">{{ t('pages.agentStudio.openCode.desc') }}</p>
+        <OpenCodeProviderFields
+          :provider="openCodeFields.provider"
+          :base-url="openCodeFields.baseURL"
+          :model="openCodeFields.model"
+          :require-base="openCodeCustomBaseRequired(openCodeFields.provider, openCodeFields.baseURL)"
+          :require-model="openCodeModelRequired(openCodeFields.model)"
+          @update:provider="onOpenCodeProvider"
+          @update:base-url="patchOpenCode({ baseURL: $event })"
+          @update:model="patchOpenCode({ model: $event })"
+        />
       </div>
       <label class="block">
         <span class="text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.meta.configRoot') }}</span>

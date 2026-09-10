@@ -12,7 +12,11 @@ import {
   buildReviewSummary,
   freshDraft,
   hasPathDeps,
+  kvToRec,
+  parseCustomConfigJson,
+  stripAuthKeysFromEnv,
   validateBasics,
+  type WizardAuthMode,
   type WizardBackendId,
   type WizardDraft,
   type WizardStepId,
@@ -20,12 +24,14 @@ import {
 import { authGuideFor, defaultSettingsPlaceholder, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
-import {
-  parseCustomConfigJson,
-  stripAuthKeysFromEnv,
-  type WizardAuthMode,
-} from '@/lib/agent/agentCreateWizard'
 import { useInheritedGitEnv } from '@/lib/agent/useInheritedGitEnv'
+import {
+  applyOpenCodeFields,
+  openCodeCustomBaseRequired,
+  openCodeFieldsFromEnv,
+  openCodeModelRequired,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
 
 export interface AgentCreateWizardProps {
   open: boolean
@@ -54,6 +60,8 @@ const envHelpOpen = ref(false)
 const stepAnimKey = ref(0)
 const apiKeyInput = ref('')
 const customConfigError = ref(false)
+const openCodeBaseError = ref(false)
+const openCodeModelError = ref(false)
 const customConfigDraft = ref('')
 
 const currentStep = computed(() => WIZARD_STEPS[draft.value.step])
@@ -99,6 +107,8 @@ watch(
       apiKeyInput.value = ''
       customConfigError.value = false
       customConfigDraft.value = ''
+      openCodeBaseError.value = false
+      openCodeModelError.value = false
       stepAnimKey.value++
       nextTick(() => {
         document.getElementById('wiz-name-input')?.focus()
@@ -202,6 +212,29 @@ function onCustomConfigInput(value: string) {
   if (value.trim()) markConfigured('apiKey')
 }
 
+function patchOpenCode(fields: Parameters<typeof applyOpenCodeFields>[1]) {
+  draft.value.env = Object.entries(applyOpenCodeFields(kvToRec(draft.value.env), fields)).map(
+    ([k, v]) => ({ k, v }),
+  )
+  openCodeBaseError.value = false
+  openCodeModelError.value = false
+}
+
+function onOpenCodeProvider(value: OpenCodeProviderId) {
+  patchOpenCode({ provider: value })
+  markConfigured('apiKey')
+}
+
+function onOpenCodeBaseURL(value: string) {
+  patchOpenCode({ baseURL: value })
+  markConfigured('apiKey')
+}
+
+function onOpenCodeModel(value: string) {
+  patchOpenCode({ model: value })
+  markConfigured('apiKey')
+}
+
 function onApiKeyInput(value: string) {
   apiKeyInput.value = value
   const key = primaryAuthKey.value
@@ -243,6 +276,17 @@ function goSkip() {
 }
 
 function validateApiKeyStep(): boolean {
+  if (draft.value.acpBackend === 'opencode' && draft.value.authMode === 'apiKey') {
+    const fields = openCodeFieldsFromEnv(kvToRec(draft.value.env))
+    if (openCodeModelRequired(fields.model)) {
+      openCodeModelError.value = true
+      return false
+    }
+    if (openCodeCustomBaseRequired(fields.provider, fields.baseURL)) {
+      openCodeBaseError.value = true
+      return false
+    }
+  }
   if (draft.value.authMode !== 'customConfig') return true
   const parsed = parseCustomConfigJson(draft.value.customConfigContent)
   if (!parsed.ok) {
@@ -325,6 +369,8 @@ function chipClass(kind: string) {
   stepAnimKey,
   apiKeyInput,
   customConfigError,
+  openCodeBaseError,
+  openCodeModelError,
   currentStep,
   progressPct,
   reviewItems,
@@ -347,6 +393,9 @@ function chipClass(kind: string) {
   setAuthMode,
   onCustomConfigInput,
   onApiKeyInput,
+  onOpenCodeProvider,
+  onOpenCodeBaseURL,
+  onOpenCodeModel,
   onGitCredentialType,
   inheritedEnv,
   goPrev,

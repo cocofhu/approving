@@ -253,16 +253,16 @@
       "emptyDesc": "Configure ACP backend, token, and Git; create the default team and Default Workflow. Does not start a Run.",
       "workflowName": "Default Workflow",
       "head": {
-        "language": "Choose display language",
+        "language": "Choose display language and theme",
         "overview": "What will be written",
-        "acp": "Choose ACP backend",
+        "acp": "Choose how to start",
         "apiKey": "Enter API Key",
         "git": "Repository, Git identity, and preview (credentials optional)",
         "review": "Confirm and generate",
         "success": "Install complete"
       },
       "steps": {
-        "language": "Language",
+        "language": "Language & theme",
         "overview": "Overview",
         "acp": "Backend",
         "apiKey": "API Key",
@@ -271,7 +271,13 @@
       },
       "language": {
         "meta": "Choose the display language for setup and the control plane. It defaults to your system language.",
-        "detected": "You can switch languages later from the bottom-left corner."
+        "detected": "You can switch languages later from the bottom-left corner.",
+        "themeLabel": "Interface theme",
+        "themeDark": "Dark",
+        "themeDarkHint": "Default; easier on long sessions",
+        "themeLight": "Light",
+        "themeLightHint": "Better for bright rooms and screen sharing",
+        "themeHint": "Applies immediately; you can switch it later from the bottom-left corner."
       },
       "overview": {
         "meta": "Credentials go into this project's shared Agent config and are inherited by team Agents. Imported team packs and workflows do not carry secrets.",
@@ -286,8 +292,21 @@
         "banner": "Keep secrets in shared config only — never in Agent workspaces."
       },
       "acp": {
-        "meta": "Pick an ACP backend. The key is stored in this project's shared Agent config.",
-        "region": "Region"
+        "meta": "Pick how to start: a model-vendor API key, or a coding-CLI vendor account. Either way the key is stored in this project's shared Agent config.",
+        "region": "Region",
+        "paths": {
+          "apiKey": {
+            "title": "Start from an API key",
+            "desc": "You already have a model-vendor key (OpenAI / Anthropic / DeepSeek and more). The OpenCode backend calls it directly, with optional API Base and model."
+          },
+          "cli": {
+            "title": "Use a coding-CLI account",
+            "desc": "Use the Cursor / Claude Code / CodeBuddy / Trae CLI account and key; that CLI decides the model."
+          }
+        },
+        "cliLabel": "Choose a CLI backend",
+        "apiKeyVendorsLabel": "Common model vendors",
+        "apiKeyVendorsHint": "The vendor and model lists come from OpenCode's model catalog (models.dev) and are searchable in the next step; a private compatible endpoint works too. Config root"
       },
       "apiKey": {
         "meta": "API Key is required for the selected backend.",
@@ -2153,7 +2172,7 @@
         "layoutTitle": "Sandbox layout (WSP/1)",
         "layoutIntro": "Persisted per agent; applied when creating sandboxes. Switching ACP backend fills recommended configRoot; manual overrides are respected.",
         "acpBackend": "ACP backend (acpBackend)",
-        "acpBackendDesc": "Each Agent profile binds one backend; Run routes by this field (no node-level override). Defaults to cursor.",
+        "acpBackendDesc": "Each Agent profile binds one backend; Run routes by this field (no node-level override). Defaults to cursor. OpenCode uses an API key with mainstream model vendors.",
         "configRoot": "configRoot",
         "configRootDesc": "Agent workspace (rules/skills/mcp.json) RW mount path in container.",
         "workspaceDir": "workspaceDir",
@@ -2180,6 +2199,35 @@
         "sshPrivateKey": "SSH private key",
         "sshPrivateKeyDesc": "Full PEM literal; written to ~/.ssh/id_rsa (mode 600), never concatenated with other PEMs.",
         "sshPrivateKeyPh": "-----BEGIN OPENSSH PRIVATE KEY-----"
+      },
+      "openCode": {
+        "title": "OpenCode provider and model",
+        "desc": "Starts an OpenCode sandbox from an API key. Vendors and models come from OpenCode's model catalog (models.dev); the model is required. API Base is optional, except for Custom, which needs an OpenAI-compatible base URL.",
+        "providerLabel": "Provider",
+        "providerSearchPlaceholder": "Search vendors, or type a vendor id…",
+        "modelLabel": "Model (ACP_BRIDGE_MODEL)",
+        "modelPlaceholder": "Pick or type provider/model",
+        "modelPlaceholderCustom": "Type a model id, e.g. my-model",
+        "modelHint": "The list comes from OpenCode's model catalog; any other provider/model can be typed into the search box.",
+        "modelHintTyped": "This vendor is absent from the catalog, so type a model id the endpoint serves.",
+        "modelUnknown": "This model is absent from the vendor's catalog, so OpenCode may fail outright. Pick one from the list, or confirm the endpoint really serves it.",
+        "modelSearchPlaceholder": "Search or type provider/model…",
+        "modelRequired": "Pick or type a model, e.g. deepseek/deepseek-v4-pro.",
+        "baseLabel": "API Base URL",
+        "basePlaceholder": "https://api.example.com/v1",
+        "baseHint": "Leave empty for the vendor default. Set this for a proxy or compatible endpoint.",
+        "baseRequired": "Custom provider requires an API Base URL.",
+        "providers": {
+          "openai": "OpenAI",
+          "anthropic": "Anthropic",
+          "google": "Google Gemini",
+          "openrouter": "OpenRouter",
+          "deepseek": "DeepSeek",
+          "moonshotai": "Moonshot / Kimi",
+          "alibaba": "Alibaba Qwen",
+          "xai": "xAI Grok",
+          "custom": "Custom (OpenAI-compatible)"
+        }
       },
       "mobile": {
         "back": "Back",
@@ -2460,7 +2508,8 @@
           "skipHint": "Prefer Skip / Next; set Tokens under Project → shared Agent config.",
           "notes": {
             "codebuddySite": "Keys are bound to a site; apply in the console that matches the site chosen in the Agent step.",
-            "traeToken": "Official CLI login tokens must start with trae-lt- (Enterprise plan)."
+            "traeToken": "Official CLI login tokens must start with trae-lt- (Enterprise plan).",
+            "opencode": "OpenCode starts with a vendor API key; you can set API Base and model."
           },
           "paths": {
             "cursor": {
@@ -2482,6 +2531,11 @@
               "step1": "In the Trae enterprise console: Profile → Access tokens → CLI login token",
               "step2": "Generate a trae-lt-… token and copy it",
               "step3": "Paste below (APPROVING_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN)"
+            },
+            "opencode": {
+              "step1": "Pick a vendor (OpenAI / Anthropic / OpenRouter, or Custom)",
+              "step2": "Create an API key in that console; Custom also needs an API Base",
+              "step3": "Paste the key and optionally set model (provider/model)"
             }
           },
           "links": {
@@ -2494,7 +2548,8 @@
             "codebuddyInternal": "Apply key (China)",
             "codebuddyIoa": "Apply key (iOA)",
             "codebuddyStaging": "Apply key (Staging)",
-            "traeTokenDocs": "Trae CLI login-token docs"
+            "traeTokenDocs": "Trae CLI login-token docs",
+            "opencodeProviders": "OpenCode providers"
           },
           "customConfig": {
             "cardTitle": "Backend config file",
@@ -2505,6 +2560,7 @@
             "notes": {
               "claude": "Use settings.json env fields for auth instead of pasting a key here.",
               "codebuddy": "CodeBuddy can use settings.json for env; platform staging fields merge with your content.",
+              "opencode": "Writes opencode.json (not settings.json). Configure provider, baseURL, and model.",
               "generic": "File is still written under configRoot; whether the CLI consumes it depends on the backend. Prefer Env keys; custom config is an advanced path."
             }
           }

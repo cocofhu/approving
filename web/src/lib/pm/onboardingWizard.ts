@@ -1,7 +1,10 @@
 import type { BackendId } from '@/lib/shared/regionPolicy'
-import { getRegionPolicy } from '@/lib/shared/regionPolicy'
+import { ACP_BACKENDS, getRegionPolicy } from '@/lib/shared/regionPolicy'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
+import type { ThemeName } from '@/lib/shared/theme'
+import { theme } from '@/lib/shared/theme'
+import { DEFAULT_OPENCODE_PROVIDER } from '@/lib/agent/openCodeProvider'
 
 /** Matches models.DefaultProjectID — first-install wizard only opens here. */
 export const DEFAULT_PROJECT_ID = 'proj-default'
@@ -35,6 +38,27 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'review', labelKey: 'pages.onboarding.steps.review' },
 ]
 
+/**
+ * Two ways to start: bring a model-vendor API key (BYOK, served by the OpenCode
+ * backend), or sign in with a coding-CLI vendor account (Cursor / Claude Code /
+ * CodeBuddy / Trae). The backend step picks a path first, then its detail.
+ */
+export type OnboardingStartPath = 'apiKey' | 'cli'
+
+/** BYOK path is served by a single backend; keep the mapping in one place. */
+export const ONBOARDING_APIKEY_BACKEND: BackendId = 'opencode'
+
+export const ONBOARDING_CLI_BACKEND_DEFAULT: BackendId = 'cursor'
+
+/** CLI-account backends, in ACP_BACKENDS order (BYOK backend excluded). */
+export const ONBOARDING_CLI_BACKENDS = ACP_BACKENDS.filter(
+  (b) => b.id !== ONBOARDING_APIKEY_BACKEND,
+)
+
+export function startPathForBackend(backend: BackendId): OnboardingStartPath {
+  return backend === ONBOARDING_APIKEY_BACKEND ? 'apiKey' : 'cli'
+}
+
 export const ONBOARDING_GIT_TYPES: { id: GitCredentialType; labelKey: string }[] = [
   { id: 'github_https', labelKey: 'pages.agentStudio.git.types.github_https' },
   { id: 'gitlab_https', labelKey: 'pages.agentStudio.git.types.gitlab_https' },
@@ -44,7 +68,11 @@ export const ONBOARDING_GIT_TYPES: { id: GitCredentialType; labelKey: string }[]
 export type OnboardingDraft = {
   step: number
   language: AppLocale
+  theme: ThemeName
+  startPath: OnboardingStartPath
   acpBackend: BackendId
+  /** Last CLI-path backend, so switching paths back restores the pick. */
+  cliBackend: BackendId
   region: string
   apiKey: string
   gitCredentialType: GitCredentialType | ''
@@ -59,6 +87,9 @@ export type OnboardingDraft = {
   gitUserEmail: string
   vncPreview: boolean
   browserMcp: boolean
+  openCodeProvider: string
+  openCodeBaseURL: string
+  openCodeModel: string
 }
 
 export type OnboardingBootstrapBody = {
@@ -77,6 +108,9 @@ export type OnboardingBootstrapBody = {
   gitUserEmail?: string
   vncPreview?: boolean
   browserMcp?: boolean
+  openCodeProvider?: string
+  openCodeBaseURL?: string
+  openCodeModel?: string
 }
 
 export type OnboardingBootstrapResult = {
@@ -86,25 +120,32 @@ export type OnboardingBootstrapResult = {
   groupName?: string
 }
 
-const DISMISS_PREFIX = 'approving-onboarding-dismiss:'
+/**
+ * Hard suppression for tests and local debugging only. The wizard's "later"
+ * button deliberately does NOT write this: closing it is per-view, and a reload
+ * re-opens the wizard until the default workflow exists (see needsOnboarding).
+ * The key differs from the old `approving-onboarding-dismiss:` one so browsers
+ * that dismissed the wizard before this rule change are not stuck forever.
+ */
+const SUPPRESS_PREFIX = 'approving-onboarding-suppress:'
 
-export function onboardingDismissKey(projectId: string): string {
-  return `${DISMISS_PREFIX}${projectId}`
+export function onboardingSuppressKey(projectId: string): string {
+  return `${SUPPRESS_PREFIX}${projectId}`
 }
 
-export function isOnboardingDismissed(projectId: string): boolean {
+export function isOnboardingSuppressed(projectId: string): boolean {
   if (!projectId) return true
   try {
-    return localStorage.getItem(onboardingDismissKey(projectId)) === '1'
+    return localStorage.getItem(onboardingSuppressKey(projectId)) === '1'
   } catch {
     return true
   }
 }
 
-export function dismissOnboarding(projectId: string): void {
+export function suppressOnboarding(projectId: string): void {
   if (!projectId) return
   try {
-    localStorage.setItem(onboardingDismissKey(projectId), '1')
+    localStorage.setItem(onboardingSuppressKey(projectId), '1')
   } catch {
     /* ignore */
   }
@@ -129,23 +170,53 @@ export function isEmptyProjectForOnboarding(
   return !conflict
 }
 
+/** The default workflow is the completion marker for first install. */
+export function hasDefaultWorkflow(workflows: { name?: string }[]): boolean {
+  return workflows.some((w) => (w.name || '').trim() === ONBOARDING_WORKFLOW_NAME)
+}
+
+/**
+ * First install is pending for as long as the default project has no default
+ * workflow — that, not a "seen it" flag, is what gates the wizard. Already-bound
+ * agents do not count as done (bootstrap is idempotent and re-upserts them), but
+ * a fixed-name agent owned by another project would make bootstrap fail, so that
+ * case stays blocked.
+ */
+export function needsOnboarding(
+  workflows: { name?: string }[],
+  agents: { name?: string; projectId?: string }[],
+  projectId: string,
+): boolean {
+  if (projectId !== DEFAULT_PROJECT_ID) return false
+  if (hasDefaultWorkflow(workflows)) return false
+  const conflict = agents.some((a) => {
+    const name = (a.name || '').trim()
+    if (!name || !(ONBOARDING_AGENT_NAMES as readonly string[]).includes(name)) return false
+    const owner = (a.projectId || '').trim()
+    return owner !== '' && owner !== projectId
+  })
+  return !conflict
+}
+
 export function shouldAutoOpenOnboarding(
   projectId: string,
-  workflowCount: number,
+  workflows: { name?: string }[],
   agents: { name?: string; projectId?: string }[],
 ): boolean {
   if (!projectId) return false
-  if (isOnboardingDismissed(projectId)) return false
-  return isEmptyProjectForOnboarding(workflowCount, agents, projectId)
+  if (isOnboardingSuppressed(projectId)) return false
+  return needsOnboarding(workflows, agents, projectId)
 }
 
 export function freshOnboardingDraft(): OnboardingDraft {
-  const policy = getRegionPolicy('cursor')
   return {
     step: 0,
     language: detectSystemLocale(),
-    acpBackend: 'cursor',
-    region: policy?.defaultRegion || '',
+    theme: theme.value,
+    startPath: 'apiKey',
+    acpBackend: ONBOARDING_APIKEY_BACKEND,
+    cliBackend: ONBOARDING_CLI_BACKEND_DEFAULT,
+    region: getRegionPolicy(ONBOARDING_APIKEY_BACKEND)?.defaultRegion || '',
     apiKey: '',
     gitCredentialType: '',
     githubToken: '',
@@ -159,7 +230,36 @@ export function freshOnboardingDraft(): OnboardingDraft {
     gitUserEmail: '',
     vncPreview: true,
     browserMcp: true,
+    openCodeProvider: DEFAULT_OPENCODE_PROVIDER,
+    openCodeBaseURL: '',
+    openCodeModel: '',
   }
+}
+
+/**
+ * Select a backend. Keeps startPath in sync and resets values that belong to the
+ * previous backend (region default, and the key, which is vendor-specific).
+ */
+export function applyOnboardingBackend(draft: OnboardingDraft, id: BackendId): void {
+  const path = startPathForBackend(id)
+  draft.startPath = path
+  if (path === 'cli') draft.cliBackend = id
+  if (draft.acpBackend === id) return
+  draft.acpBackend = id
+  draft.region = getRegionPolicy(id)?.defaultRegion || ''
+  draft.apiKey = ''
+  if (id === ONBOARDING_APIKEY_BACKEND && !draft.openCodeProvider) {
+    draft.openCodeProvider = DEFAULT_OPENCODE_PROVIDER
+  }
+}
+
+/** Switch start path; the CLI path restores the last CLI backend that was picked. */
+export function applyStartPath(draft: OnboardingDraft, path: OnboardingStartPath): void {
+  const id =
+    path === 'apiKey'
+      ? ONBOARDING_APIKEY_BACKEND
+      : draft.cliBackend || ONBOARDING_CLI_BACKEND_DEFAULT
+  applyOnboardingBackend(draft, id)
 }
 
 /** Mirrors the server's RepoNameFromURL so the wizard can preview the clone dir. */
@@ -217,5 +317,10 @@ export function assembleBootstrapBody(draft: OnboardingDraft): OnboardingBootstr
   if (draft.gitUserEmail.trim()) body.gitUserEmail = draft.gitUserEmail.trim()
   body.vncPreview = draft.vncPreview
   body.browserMcp = draft.browserMcp
+  if (draft.acpBackend === 'opencode') {
+    body.openCodeProvider = draft.openCodeProvider || 'openai'
+    if (draft.openCodeBaseURL.trim()) body.openCodeBaseURL = draft.openCodeBaseURL.trim()
+    if (draft.openCodeModel.trim()) body.openCodeModel = draft.openCodeModel.trim()
+  }
   return body
 }

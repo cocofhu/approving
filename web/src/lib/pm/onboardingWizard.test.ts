@@ -2,15 +2,20 @@
 import { describe, expect, it, beforeEach, beforeAll, vi } from 'vitest'
 import {
   DEFAULT_PROJECT_ID,
+  ONBOARDING_CLI_BACKENDS,
   ONBOARDING_STEPS,
+  ONBOARDING_WORKFLOW_NAME,
+  applyOnboardingBackend,
+  applyStartPath,
   assembleBootstrapBody,
+  startPathForBackend,
   detectSystemLocale,
-  dismissOnboarding,
+  suppressOnboarding,
   freshOnboardingDraft,
   gitConfigured,
   isEmptyProjectForOnboarding,
-  isOnboardingDismissed,
-  onboardingDismissKey,
+  isOnboardingSuppressed,
+  onboardingSuppressKey,
   gitIdentityConfigured,
   repoConfigured,
   repoNameFromUrl,
@@ -42,6 +47,49 @@ describe('onboardingWizard', () => {
     vi.unstubAllGlobals()
   })
 
+  it('starts on the API-key path with OpenCode selected', () => {
+    const d = freshOnboardingDraft()
+    expect(d.startPath).toBe('apiKey')
+    expect(d.acpBackend).toBe('opencode')
+    expect(d.cliBackend).toBe('cursor')
+    expect(d.openCodeProvider).toBe('openai')
+    expect(ONBOARDING_CLI_BACKENDS.map((b) => b.id)).toEqual([
+      'cursor',
+      'claude_code',
+      'codebuddy',
+      'trae',
+    ])
+    expect(startPathForBackend('opencode')).toBe('apiKey')
+    expect(startPathForBackend('trae')).toBe('cli')
+  })
+
+  it('switching to the API-key path selects OpenCode and clears the CLI key', () => {
+    const d = freshOnboardingDraft()
+    applyStartPath(d, 'cli')
+    d.apiKey = 'crsr_cursor_key'
+    applyStartPath(d, 'apiKey')
+    expect(d.acpBackend).toBe('opencode')
+    expect(d.apiKey).toBe('')
+    expect(d.openCodeProvider).toBe('openai')
+    expect(d.region).toBe('')
+  })
+
+  it('returning to the CLI path keeps the previously chosen CLI backend', () => {
+    const d = freshOnboardingDraft()
+    applyOnboardingBackend(d, 'trae')
+    expect(d.startPath).toBe('cli')
+    expect(d.region).toBe('intl')
+    applyStartPath(d, 'apiKey')
+    expect(d.acpBackend).toBe('opencode')
+    applyStartPath(d, 'cli')
+    expect(d.acpBackend).toBe('trae')
+    expect(d.region).toBe('intl')
+  })
+
+  it('defaults theme from the current app theme', () => {
+    expect(freshOnboardingDraft().theme).toBe('dark')
+  })
+
   it('assembles bootstrap body without heroku repos or featureHint', () => {
     const d = freshOnboardingDraft()
     d.acpBackend = 'codebuddy'
@@ -58,6 +106,19 @@ describe('onboardingWizard', () => {
     expect(body).not.toHaveProperty('featureHint')
     expect(body.vncPreview).toBe(true)
     expect(body.browserMcp).toBe(true)
+  })
+
+  it('includes OpenCode vendor fields on bootstrap', () => {
+    const d = freshOnboardingDraft()
+    d.acpBackend = 'opencode'
+    d.apiKey = 'sk-oc'
+    d.openCodeProvider = 'custom'
+    d.openCodeBaseURL = 'https://llm.example/v1'
+    d.openCodeModel = 'custom/my-model'
+    const body = assembleBootstrapBody(d)
+    expect(body.openCodeProvider).toBe('custom')
+    expect(body.openCodeBaseURL).toBe('https://llm.example/v1')
+    expect(body.openCodeModel).toBe('custom/my-model')
   })
 
   it('sends git identity and can turn preview flags off', () => {
@@ -132,12 +193,30 @@ describe('onboardingWizard', () => {
     expect(isEmptyProjectForOnboarding(0, [{ name: '综合AI技术产品', projectId: '' }], DEFAULT_PROJECT_ID)).toBe(true)
   })
 
-  it('auto-open respects dismiss and default project', () => {
-    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, 0, [])).toBe(true)
-    expect(shouldAutoOpenOnboarding('p1', 0, [])).toBe(false)
-    dismissOnboarding(DEFAULT_PROJECT_ID)
-    expect(isOnboardingDismissed(DEFAULT_PROJECT_ID)).toBe(true)
-    expect(localStorage.getItem(onboardingDismissKey(DEFAULT_PROJECT_ID))).toBe('1')
-    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, 0, [])).toBe(false)
+  it('auto-open keys on the default workflow, not on having been seen', () => {
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [], [])).toBe(true)
+    expect(shouldAutoOpenOnboarding('p1', [], [])).toBe(false)
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [{ name: ONBOARDING_WORKFLOW_NAME }], [])).toBe(
+      false,
+    )
+    // Unrelated workflows do not count as a finished first install.
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [{ name: '我的流程' }], [])).toBe(true)
+    // Neither do already-bound agents: bootstrap re-upserts them.
+    expect(
+      shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [], [
+        { name: '综合研发工程师', projectId: DEFAULT_PROJECT_ID },
+      ]),
+    ).toBe(true)
+    // A fixed-name agent owned elsewhere would fail bootstrap, so stay closed.
+    expect(
+      shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [], [{ name: '综合AI技术产品', projectId: 'other' }]),
+    ).toBe(false)
+  })
+
+  it('the storage escape hatch suppresses auto-open for tests and debugging', () => {
+    suppressOnboarding(DEFAULT_PROJECT_ID)
+    expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(true)
+    expect(localStorage.getItem(onboardingSuppressKey(DEFAULT_PROJECT_ID))).toBe('1')
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [], [])).toBe(false)
   })
 })

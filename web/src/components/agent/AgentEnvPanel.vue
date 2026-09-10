@@ -45,7 +45,9 @@ const envHelpOpen = ref(false)
 const envHelpSection = ref<EnvCredentialHelpSection>('inject')
 
 const currentAuthHint = computed(() => BACKEND_AUTH_HINTS[props.draft.acpBackend || 'cursor'])
-const settingsPath = computed(() => settingsFileAbsPath(props.draft.layout?.configRoot || ''))
+const settingsPath = computed(() =>
+  settingsFileAbsPath(props.draft.layout?.configRoot || '', props.draft.acpBackend || 'cursor'),
+)
 const currentRegionPolicy = computed(() => getRegionPolicy(props.draft.acpBackend))
 
 function openEnvHelp(section: EnvCredentialHelpSection) {

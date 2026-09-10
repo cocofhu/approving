@@ -18,6 +18,7 @@ const (
 	BackendClaudeCode AcpBackend = "claude_code"
 	BackendCodeBuddy  AcpBackend = "codebuddy"
 	BackendTrae       AcpBackend = "trae"
+	BackendOpenCode   AcpBackend = "opencode"
 )
 
 // Region / site env keys written by Agent Studio or set manually.
@@ -68,6 +69,8 @@ func DefaultConfigRoot(b AcpBackend) string {
 		return "/root/.codebuddy"
 	case BackendTrae:
 		return "/root/.trae"
+	case BackendOpenCode:
+		return "/root/.config/opencode"
 	default:
 		return "/root/.cursor"
 	}
@@ -76,7 +79,7 @@ func DefaultConfigRoot(b AcpBackend) string {
 // NormalizeBackend coerces unknown/empty values to cursor for backward compat.
 func NormalizeBackend(raw string) AcpBackend {
 	switch AcpBackend(strings.TrimSpace(raw)) {
-	case BackendCursor, BackendClaudeCode, BackendCodeBuddy, BackendTrae:
+	case BackendCursor, BackendClaudeCode, BackendCodeBuddy, BackendTrae, BackendOpenCode:
 		return AcpBackend(strings.TrimSpace(raw))
 	default:
 		return BackendCursor
@@ -120,6 +123,11 @@ func authSpecFor(b AcpBackend) authSpec {
 			},
 			cliKey: EnvTraeCLIToken,
 		}
+	case BackendOpenCode:
+		return authSpec{
+			agentKeys: []string{EnvApprovingOpenCodeAPIKey, EnvOpenCodeAPIKey},
+			cliKey:    EnvOpenCodeAPIKey,
+		}
 	default:
 		return authSpec{
 			agentKeys: []string{"APPROVING_CURSOR_API_KEY", "CURSOR_API_KEY"},
@@ -145,14 +153,39 @@ func SettingsFileExists(workDirSrc string) bool {
 	return err == nil
 }
 
+func OpenCodeConfigFileExists(workDirSrc string) bool {
+	if workDirSrc == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(workDirSrc, "opencode.json"))
+	return err == nil
+}
+
+// AuthConfigFileExists reports whether a backend-specific auth config file is
+// present (settings.json for all backends, plus opencode.json for OpenCode).
+func AuthConfigFileExists(workDirSrc string, backend AcpBackend) bool {
+	if SettingsFileExists(workDirSrc) {
+		return true
+	}
+	if NormalizeBackend(string(backend)) == BackendOpenCode {
+		return OpenCodeConfigFileExists(workDirSrc)
+	}
+	return false
+}
+
 // ResolveSettingsWorkDir picks which workspace root's settings.json wins for the
 // auth gate, matching BuildConfigHome layering: Agent overlay if present, else
 // project-shared extend. Empty sharedWorkDir falls back to the Agent directory only.
 func ResolveSettingsWorkDir(agentWorkDir, sharedWorkDir string) string {
-	if SettingsFileExists(agentWorkDir) {
+	return ResolveAuthWorkDir(agentWorkDir, sharedWorkDir, BackendCursor)
+}
+
+// ResolveAuthWorkDir is ResolveSettingsWorkDir with backend-aware config files.
+func ResolveAuthWorkDir(agentWorkDir, sharedWorkDir string, backend AcpBackend) string {
+	if AuthConfigFileExists(agentWorkDir, backend) {
 		return agentWorkDir
 	}
-	if sharedWorkDir != "" && SettingsFileExists(sharedWorkDir) {
+	if sharedWorkDir != "" && AuthConfigFileExists(sharedWorkDir, backend) {
 		return sharedWorkDir
 	}
 	if agentWorkDir != "" {
@@ -172,10 +205,10 @@ func PrepareAuthEnv(backend AcpBackend, env map[string]string, workDirSrc string
 	if len(sharedWorkDir) > 0 {
 		base = sharedWorkDir[0]
 	}
-	settingsDir := ResolveSettingsWorkDir(workDirSrc, base)
+	settingsDir := ResolveAuthWorkDir(workDirSrc, base, backend)
 	settingsAuth := ReadSettingsAuthEnv(settingsDir, backend)
 	merged := mergeSettingsAuthIntoEnv(env, settingsAuth)
-	requireAuth := !SettingsFileExists(settingsDir)
+	requireAuth := !AuthConfigFileExists(settingsDir, backend)
 	return mergeAuthEnv(backend, merged, requireAuth)
 }
 
@@ -273,8 +306,13 @@ func mergeAuthEnv(backend AcpBackend, env map[string]string, requireAuth bool) (
 	}
 	if val == "" {
 		if requireAuth {
+			cfgHint := "settings.json"
+			if backend == BackendOpenCode {
+				cfgHint = "opencode.json 或 settings.json"
+			}
 			return out, fmt.Errorf(
-				"鉴权未配置:请在项目共享 Agent 工作目录或该 Agent 工作目录添加 settings.json，或在项目沙箱 env、Agent 环境变量中设置 %s",
+				"鉴权未配置:请在项目共享 Agent 工作目录或该 Agent 工作目录添加 %s，或在项目沙箱 env、Agent 环境变量中设置 %s",
+				cfgHint,
 				strings.Join(spec.agentKeys, " 或 "),
 			)
 		}
@@ -294,6 +332,8 @@ func mergeRegionEnv(backend AcpBackend, env map[string]string) {
 		mergeCodeBuddyRegion(env)
 	case BackendTrae:
 		mergeTraeRegion(env)
+	case BackendOpenCode:
+		mergeOpenCodeVendorEnv(env)
 	}
 }
 
@@ -371,6 +411,8 @@ func AgentRuntimeLabel(b AcpBackend) string {
 		return "codebuddy-acp"
 	case BackendTrae:
 		return "trae-acp"
+	case BackendOpenCode:
+		return "opencode-json"
 	default:
 		return "cursor-agent"
 	}

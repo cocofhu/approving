@@ -112,12 +112,13 @@ const (
 	AcpBackendClaudeCode = "claude_code"
 	AcpBackendCodeBuddy  = "codebuddy"
 	AcpBackendTrae       = "trae"
+	AcpBackendOpenCode   = "opencode"
 )
 
 // NormalizeAcpBackend coerces unknown/empty values to cursor.
 func NormalizeAcpBackend(raw string) string {
 	switch strings.TrimSpace(raw) {
-	case AcpBackendCursor, AcpBackendClaudeCode, AcpBackendCodeBuddy, AcpBackendTrae:
+	case AcpBackendCursor, AcpBackendClaudeCode, AcpBackendCodeBuddy, AcpBackendTrae, AcpBackendOpenCode:
 		return strings.TrimSpace(raw)
 	default:
 		return AcpBackendCursor
@@ -153,6 +154,8 @@ func DefaultConfigRootForBackend(backend string) string {
 		return "/root/.codebuddy"
 	case AcpBackendTrae:
 		return "/root/.trae"
+	case AcpBackendOpenCode:
+		return "/root/.config/opencode"
 	default:
 		return DefaultConfigRoot
 	}
@@ -169,7 +172,7 @@ type Agent struct {
 	// Switching or clearing this field purges the Agent's data under the old
 	// project (see PmService.PurgeAgentProjectData).
 	ProjectID string `json:"projectId,omitempty"`
-	// AcpBackend selects the ACP bridge (cursor | claude_code | codebuddy | trae).
+	// AcpBackend selects the ACP bridge (cursor | claude_code | codebuddy | trae | opencode).
 	// Empty defaults to cursor for backward compatibility.
 	AcpBackend string `json:"acpBackend,omitempty"`
 	// GitCredentialType is the Agent-level credential contract selected in Studio.

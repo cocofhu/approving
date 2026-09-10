@@ -18,7 +18,7 @@ import {
   mergeCollapsedWithOrgChange,
 } from '@/lib/agent/agentOrg'
 import { downloadZip, validateAgentName, normalizeAgentName } from '@/lib/agent/agentIO'
-import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
+import { agentConfigRelPath } from '@/lib/agent/backendAuthGuide'
 import { useAgentImport } from '@/lib/agent/useAgentImport'
 import { isManagedRegionKey } from '@/lib/shared/regionPolicy'
 import {
@@ -733,10 +733,11 @@ function showToast(msg: string) {
 
 function openSettingsInFiles() {
   if (!draft.value) return
+  const backend = draft.value.acpBackend || 'cursor'
   tab.value = 'files'
   syncStudioQuery()
   nextTick(() => {
-    filesPanelRef.value?.openPathOrCreate?.(AGENT_SETTINGS_PATH)
+    filesPanelRef.value?.openPathOrCreate?.(agentConfigRelPath(backend))
   })
 }
 

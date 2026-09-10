@@ -6,7 +6,7 @@ import (
 )
 
 // knownSandboxBackends are acpBackend values that have dedicated images.
-var knownSandboxBackends = []string{"cursor", "claude_code", "codebuddy", "trae"}
+var knownSandboxBackends = []string{"cursor", "claude_code", "codebuddy", "trae", "opencode"}
 
 // DefaultSandboxImage returns the local image tag for an acpBackend when no
 // config override is set. Unknown/empty backends fall back to cursor.
@@ -14,7 +14,7 @@ var knownSandboxBackends = []string{"cursor", "claude_code", "codebuddy", "trae"
 func DefaultSandboxImage(backend string) string {
 	b := strings.TrimSpace(backend)
 	switch b {
-	case "cursor", "claude_code", "codebuddy", "trae":
+	case "cursor", "claude_code", "codebuddy", "trae", "opencode":
 		// ok
 	default:
 		b = "cursor"
