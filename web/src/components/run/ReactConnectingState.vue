@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
+import ClarifyBootLoader from './ClarifyBootLoader.vue'
 
 withDefaults(
   defineProps<{
@@ -58,12 +59,8 @@ const { t } = useI18n()
         {{ t('pages.clarify.connecting') }}
       </span>
     </div>
-    <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-4">
-      <div class="h-9 animate-pulse rounded-lg bg-elevated" />
-      <div class="h-7 w-2/3 animate-pulse rounded-lg bg-elevated" />
-      <p class="mt-1 text-center text-[11px] text-txt3">
-        {{ t('pages.clarify.connectingHint') }}
-      </p>
+    <div class="min-h-0 flex-1 overflow-hidden">
+      <ClarifyBootLoader phase="starting" />
     </div>
     <div class="shrink-0 border-t border-line p-3">
       <textarea
