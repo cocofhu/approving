@@ -22,6 +22,8 @@ const props = defineProps<{
   collapsed: boolean
   agents?: AgentProjectRef[]
   projects?: ProjectNameRef[]
+  hideCreateTeam?: boolean
+  hideAssignProject?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -265,7 +267,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
         <Icon name="folder" :size="13" />
       </button>
       <button
-        v-if="!collapsed"
+        v-if="!collapsed && !hideCreateTeam"
         type="button"
         class="flex h-[22px] w-[22px] shrink-0 items-center justify-center text-txt3 transition hover:bg-elevated hover:text-accent-2"
         :title="t('pages.agentStudio.org.newTeam')"
@@ -479,6 +481,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
             {{ t('pages.agentStudio.explorer.rename') }}
           </button>
           <button
+            v-if="!hideAssignProject"
             type="button"
             data-org-ctx-action="assignProject"
             class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-txt hover:bg-overlay"

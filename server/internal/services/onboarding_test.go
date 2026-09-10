@@ -28,18 +28,74 @@ func TestOnboardingBootstrapRequiresAPIKey(t *testing.T) {
 	}
 }
 
-func TestOnboardingBootstrapRejectsNonDefaultProject(t *testing.T) {
-	svc, _ := newOnboardingHarness(t)
-	other, err := svc.Projects.Create("Other", "", nil, nil)
+func TestOnboardingBootstrapAllowsNonDefaultProjectWithDerivedNames(t *testing.T) {
+	svc, defaultID := newOnboardingHarness(t)
+	other, err := svc.Projects.Create("中国象棋", "", nil, nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	_, err = svc.Bootstrap(other.ID, services.OnboardingBootstrapRequest{
+	res, err := svc.Bootstrap(other.ID, services.OnboardingBootstrapRequest{
 		AcpBackend: "cursor",
-		APIKey:     "k",
+		APIKey:     "k-other",
 	})
-	if !errors.Is(err, services.ErrOnboardingNotDefaultProject) {
-		t.Fatalf("want ErrOnboardingNotDefaultProject, got %v", err)
+	if err != nil {
+		t.Fatalf("bootstrap non-default: %v", err)
+	}
+	if len(res.AgentIDs) != 6 {
+		t.Fatalf("want 6 agents, got %v", res.AgentIDs)
+	}
+	wantName := "中国象棋研发工程师"
+	found := false
+	for _, id := range res.AgentIDs {
+		if id == wantName {
+			found = true
+		}
+		if strings.HasPrefix(id, "综合") {
+			t.Fatalf("non-default must not use 综合* name %q", id)
+		}
+		a, ok := svc.Skills.Get(id)
+		if !ok || a.ProjectID != other.ID {
+			t.Fatalf("agent %s missing or wrong project", id)
+		}
+	}
+	if !found {
+		t.Fatalf("missing derived agent %q in %v", wantName, res.AgentIDs)
+	}
+	if res.GroupName != "中国象棋项目组" {
+		t.Fatalf("groupName = %q", res.GroupName)
+	}
+	// Default project agents must remain untouched.
+	if n := len(svc.Skills.List()); n != 6 {
+		t.Fatalf("only other-project agents expected before default bootstrap, got %d", n)
+	}
+	_, err = svc.Bootstrap(defaultID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "k-default",
+	})
+	if err != nil {
+		t.Fatalf("default bootstrap: %v", err)
+	}
+	for _, name := range services.OnboardingAgentNames {
+		a, ok := svc.Skills.Get(name)
+		if !ok {
+			t.Fatalf("default agent %s missing", name)
+		}
+		if a.ProjectID != defaultID {
+			t.Fatalf("default agent %s projectId = %q", name, a.ProjectID)
+		}
+	}
+	wf, ok := svc.WF.Get(res.WorkflowID)
+	if !ok {
+		t.Fatal("workflow missing")
+	}
+	for _, node := range wf.Graph.Nodes {
+		if node.Config == nil {
+			continue
+		}
+		prof, _ := node.Config["agent_profile"].(string)
+		if strings.HasPrefix(prof, "综合") {
+			t.Fatalf("workflow agent_profile still 综合*: %q", prof)
+		}
 	}
 }
 

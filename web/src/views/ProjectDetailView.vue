@@ -21,6 +21,7 @@ import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
 import ProjectSharedAgentPanel from '@/components/project/ProjectSharedAgentPanel.vue'
 import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.vue'
 import ProjectExternalMcpPanel from '@/components/project/ProjectExternalMcpPanel.vue'
+import AgentStudioView from '@/views/AgentStudioView.vue'
 import { useProjectDetail } from '@/lib/project/useProjectDetail'
 
 const {
@@ -947,6 +948,11 @@ onBeforeUnmount(() => {
           </div>
         </div>
         </div>
+      </div>
+
+      <!-- Agents: embedded Agent Studio (fill remaining main area) -->
+      <div v-else-if="tab === 'agents'" class="flex min-h-0 flex-1 flex-col" data-testid="project-agents-tab">
+        <AgentStudioView :project-id="projectId" embedded />
       </div>
 
       <!-- Shared Agent config: fill remaining main area -->

@@ -28,7 +28,8 @@ var (
 	ErrOnboardingProjectNotFound = errors.New("project not found")
 	// ErrOnboardingAgentConflict is returned when a fixed-name agent already belongs to another project.
 	ErrOnboardingAgentConflict = errors.New("onboarding agent already bound to another project")
-	// ErrOnboardingNotDefaultProject is returned when bootstrap is not the default project.
+	// ErrOnboardingNotDefaultProject was used when bootstrap was default-only.
+	// Kept for error-string compatibility with older clients; Bootstrap no longer returns it.
 	ErrOnboardingNotDefaultProject = errors.New("first-install onboarding is only allowed on the default project")
 	// ErrBaselineReposRequired is returned when no non-empty repository URL is submitted.
 	ErrBaselineReposRequired = errors.New("at least one repository URL is required")
@@ -193,10 +194,11 @@ func applyBaselineRepos(graph *models.Graph, repos []BaselineRepo) {
 	}
 }
 
-// Bootstrap writes shared-agent env auth, saves the 综合项目组 agents, and publishes
-// 默认工作流. It is idempotent for the fixed names within the default project.
-// Cross-project name conflicts are rejected with ErrOnboardingAgentConflict.
-// It never starts a Run. Missing apiKey rejects without creating resources.
+// Bootstrap writes shared-agent env auth, saves the install-group agents, and publishes
+// 默认工作流. Allowed on any project: default keeps 综合* names; others derive names
+// from the project name. Idempotent within a project. Cross-project name conflicts
+// are rejected with ErrOnboardingAgentConflict. It never starts a Run. Missing
+// apiKey rejects without creating resources.
 func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapRequest) (OnboardingBootstrapResult, error) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -206,7 +208,8 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 	if apiKey == "" {
 		return OnboardingBootstrapResult{}, ErrOnboardingAPIKeyRequired
 	}
-	if _, ok := s.Projects.Get(projectID); !ok {
+	proj, ok := s.Projects.Get(projectID)
+	if !ok {
 		return OnboardingBootstrapResult{}, ErrOnboardingProjectNotFound
 	}
 	defID := ""
@@ -216,14 +219,16 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 	if defID == "" {
 		defID = models.DefaultProjectID
 	}
-	if projectID != defID {
-		return OnboardingBootstrapResult{}, ErrOnboardingNotDefaultProject
+
+	plan, err := BuildOnboardingNamePlan(projectID, proj.Name, defID)
+	if err != nil {
+		return OnboardingBootstrapResult{}, err
 	}
 
 	backend := NormalizeAcpBackend(req.AcpBackend)
 	region := strings.TrimSpace(req.Region)
 
-	if err := s.checkOnboardingAgentConflicts(projectID); err != nil {
+	if err := s.checkOnboardingAgentConflicts(projectID, plan.AgentNames); err != nil {
 		return OnboardingBootstrapResult{}, err
 	}
 
@@ -231,14 +236,15 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 	if err != nil {
 		return OnboardingBootstrapResult{}, err
 	}
+	RemapOnboardingAgentProfiles(&envelope.Graph, plan.NameMap)
 
 	templates := make([]Agent, 0, len(OnboardingAgentNames))
-	for _, name := range OnboardingAgentNames {
-		tmpl, err := loadFirstInstallAgentTemplate(name)
+	for _, canonical := range OnboardingAgentNames {
+		tmpl, err := loadFirstInstallAgentTemplate(canonical)
 		if err != nil {
 			return OnboardingBootstrapResult{}, err
 		}
-		tmpl.Name = name
+		tmpl.Name = plan.NameMap[canonical]
 		tmpl.ProjectID = projectID
 		tmpl.AcpBackend = backend
 		tmpl.Layout.ConfigRoot = DefaultConfigRootForBackend(backend)
@@ -266,7 +272,7 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		agentIDs = append(agentIDs, tmpl.Name)
 	}
 
-	if err := s.ensureFirstInstallOrg(agentIDs); err != nil {
+	if err := s.ensureOnboardingOrg(plan.GroupID, plan.GroupName, agentIDs); err != nil {
 		return OnboardingBootstrapResult{}, err
 	}
 
@@ -289,12 +295,12 @@ func (s *OnboardingService) Bootstrap(projectID string, req OnboardingBootstrapR
 		AgentIDs:   agentIDs,
 		WorkflowID: published.ID,
 		Published:  published.Status == "published",
-		GroupName:  FirstInstallGroupName,
+		GroupName:  plan.GroupName,
 	}, nil
 }
 
-func (s *OnboardingService) checkOnboardingAgentConflicts(projectID string) error {
-	for _, name := range OnboardingAgentNames {
+func (s *OnboardingService) checkOnboardingAgentConflicts(projectID string, agentNames []string) error {
+	for _, name := range agentNames {
 		existing, ok := s.Skills.Get(name)
 		if !ok {
 			continue
@@ -403,25 +409,45 @@ func agentAuthConfigFileName(backend string) string {
 }
 
 func (s *OnboardingService) ensureFirstInstallOrg(agentNames []string) error {
+	return s.ensureOnboardingOrg(FirstInstallGroupID, FirstInstallGroupName, agentNames)
+}
+
+func (s *OnboardingService) ensureOnboardingOrg(groupID, groupName string, agentNames []string) error {
 	if s.Org == nil {
 		return nil
+	}
+	groupID = strings.TrimSpace(groupID)
+	groupName = strings.TrimSpace(groupName)
+	if groupID == "" {
+		groupID = FirstInstallGroupID
+	}
+	if groupName == "" {
+		groupName = FirstInstallGroupName
 	}
 	org, err := s.Org.Get()
 	if err != nil {
 		return err
 	}
-	gid := FirstInstallGroupID
+	gid := groupID
 	found := false
 	for _, g := range org.Groups {
-		if g.ID == FirstInstallGroupID || (g.Name == FirstInstallGroupName && strings.TrimSpace(g.ParentGroupID) == "") {
+		if g.ID == groupID || (g.Name == groupName && strings.TrimSpace(g.ParentGroupID) == "") {
 			gid = g.ID
 			found = true
 			break
 		}
 	}
 	if !found {
-		org.Groups = append(org.Groups, OrgGroup{ID: FirstInstallGroupID, Name: FirstInstallGroupName})
-		gid = FirstInstallGroupID
+		org.Groups = append(org.Groups, OrgGroup{ID: groupID, Name: groupName})
+		gid = groupID
+	} else {
+		// Keep display name current for derived groups on re-bootstrap.
+		for i := range org.Groups {
+			if org.Groups[i].ID == gid {
+				org.Groups[i].Name = groupName
+				break
+			}
+		}
 	}
 	if org.Agents == nil {
 		org.Agents = map[string]OrgAgentMembership{}

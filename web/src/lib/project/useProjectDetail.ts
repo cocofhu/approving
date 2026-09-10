@@ -22,7 +22,7 @@ import type {
   WorkflowNotifyPolicy,
 } from '@/lib/shared/types'
 import { isEmptyProjectForOnboarding } from '@/lib/pm/onboardingWizard'
-import { firstInstallCompletedAt, openFirstInstall } from '@/lib/pm/firstInstall'
+import { firstInstallCompletedAt, openRetryOnboarding } from '@/lib/pm/firstInstall'
 
 export function useProjectDetail() {
 const PROJECT_TABS = [
@@ -33,6 +33,7 @@ const PROJECT_TABS = [
   'pmLeader',
   'externalMcp',
   'cronJobs',
+  'agents',
   'sharedAgent',
   'variables',
   'audit',
@@ -114,9 +115,14 @@ async function setTab(id: Tab) {
     pmView.value = 'chat'
   }
   tab.value = id
-  const nextQuery = { ...route.query, tab: id }
+  const nextQuery: Record<string, unknown> = { ...route.query, tab: id }
+  if (id !== 'agents') {
+    delete nextQuery.agent
+    delete nextQuery.studioTab
+    delete nextQuery.sub
+  }
   if (route.query.tab === id) return
-  void router.replace({ query: nextQuery })
+  void router.replace({ query: nextQuery as typeof route.query })
 }
 
 /** After settings, remount chat on mobile in conversation view (not thread list). */
@@ -227,12 +233,16 @@ function dismissPmMemoryMigration() {
 }
 
 function goStudioMemory(agent?: string) {
+  const pid = projectId.value
   const name = (agent || pmBinding.value?.agentConfigRef || '').trim()
   if (name) {
-    void router.push({ path: '/agents', query: { agent: name, tab: 'data', sub: 'memory' } })
+    void router.push({
+      path: `/projects/${pid}`,
+      query: { tab: 'agents', agent: name, studioTab: 'data', sub: 'memory' },
+    })
     return
   }
-  void router.push({ path: '/agents' })
+  void router.push({ path: `/projects/${pid}`, query: { tab: 'agents' } })
 }
 const savingMeta = ref(false)
 const savingVars = ref(false)
@@ -267,7 +277,12 @@ const exportTarget = ref<Workflow | null>(null)
 const projectAgents = ref<{ name: string; projectId?: string }[]>([])
 
 const isOnboardingEmpty = computed(() =>
-  isEmptyProjectForOnboarding(workflows.value.length, projectAgents.value, projectId.value),
+  isEmptyProjectForOnboarding(
+    workflows.value.length,
+    projectAgents.value,
+    projectId.value,
+    project.value?.name,
+  ),
 )
 
 const { fileInput, triggerImport, handleFileChange } = useWorkflowImport({
@@ -285,6 +300,7 @@ const tabs: { id: Tab; labelKey: string }[] = [
   { id: 'pmLeader', labelKey: 'pages.projectDetail.tabPmLeader' },
   { id: 'externalMcp', labelKey: 'pages.projectDetail.tabExternalMcp' },
   { id: 'cronJobs', labelKey: 'pages.projectDetail.tabCronJobs' },
+  { id: 'agents', labelKey: 'pages.projectDetail.tabAgents' },
   { id: 'sharedAgent', labelKey: 'pages.projectDetail.tabSharedAgent' },
   { id: 'variables', labelKey: 'pages.projectDetail.tabVariables' },
   { id: 'audit', labelKey: 'pages.projectDetail.tabAudit' },
@@ -500,7 +516,7 @@ async function load() {
 }
 
 function openOnboarding() {
-  openFirstInstall()
+  openRetryOnboarding(projectId.value)
 }
 
 async function refreshAfterOnboarding() {

@@ -13,6 +13,7 @@ import {
 
 vi.mock('@/lib/api/api', () => ({
   api: {
+    createProject: vi.fn(),
     bootstrapProjectOnboarding: vi.fn(async () => ({
       agentIds: [
         '综合AI技术产品',
@@ -37,6 +38,10 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn(), show: vi.fn() }),
 }))
 
+vi.mock('@/lib/composables/useProjectContext', () => ({
+  writeStoredProjectId: vi.fn(),
+}))
+
 vi.mock('vue-i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-i18n')>()
   return {
@@ -47,6 +52,25 @@ vi.mock('vue-i18n', async (importOriginal) => {
   }
 })
 
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+async function mountWizard(props: Record<string, unknown> = {}) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/projects/:id', component: { template: '<div />' } },
+    ],
+  })
+  await router.push('/')
+  return mount(OnboardingWizard, {
+    props: { open: true, projectId: DEFAULT_PROJECT_ID, mode: 'firstInstall', ...props },
+    global: {
+      plugins: [router],
+      stubs: { Teleport: true, Icon: true, AppButton: true },
+    },
+  })
+}
 /** Picks the vendor and model the catalog stub serves, then fills the key. */
 async function fillOpenCodeAuth(wrapper: ReturnType<typeof mount>, key = 'sk-oc-demo') {
   await wrapper
@@ -66,10 +90,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('shows language first and persists a language switch', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     expect(wrapper.find('[data-testid="onboarding-language-zh-CN"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="onboarding-language-en"]').exists()).toBe(true)
     await wrapper.find('[data-testid="onboarding-language-zh-CN"]').trigger('click')
@@ -79,10 +100,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('sets the theme from the first step', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     expect(wrapper.find('[data-testid="onboarding-theme-dark"]').exists()).toBe(true)
     await wrapper.find('[data-testid="onboarding-theme-light"]').trigger('click')
     expect(localStorage.getItem('approving-theme')).toBe('light')
@@ -93,10 +111,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('backend step offers two start paths and swaps the detail block', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 2; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -121,10 +136,7 @@ describe('OnboardingWizard', () => {
 
   it('bootstraps with opencode when the API-key path is chosen', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 2; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -156,10 +168,7 @@ describe('OnboardingWizard', () => {
 
   it('sends the repo typed in the git step', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 3; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -198,10 +207,7 @@ describe('OnboardingWizard', () => {
 
   it('skipping the git step drops the repo too', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 3; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -235,10 +241,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('later closes without persisting, so a reload re-opens the wizard', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.find('[data-testid="onboarding-later"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
     expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
@@ -246,20 +249,14 @@ describe('OnboardingWizard', () => {
   })
 
   it('backdrop close does not persist suppression', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.find('[data-testid="onboarding-backdrop"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
     expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
   })
 
   it('close button does not persist suppression', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.find('[data-testid="onboarding-close"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
     expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
@@ -272,10 +269,7 @@ describe('OnboardingWizard', () => {
 
   it('blocks generate without API key then succeeds with key', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.setProps({ open: false })
     await wrapper.setProps({ open: true })
     await nextTick()

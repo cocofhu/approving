@@ -13,9 +13,9 @@ import AgentMetaPanel from '@/components/agent/AgentMetaPanel.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
 import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
-
 import { useAgentStudio } from '@/lib/agent/useAgentStudio'
 
+const props = defineProps<{ projectId?: string; embedded?: boolean }>()
 
 const {
   t,
@@ -207,6 +207,10 @@ const {
   teamBootstrapSessionId,
   openCreateAgent,
   openCreateTeam,
+  showCreateTeam,
+  hideTeamCreate,
+  embedded,
+  scopedProjectId,
   onWizardCreated,
   onTeamBootstrapStarted,
   refreshAgentsList,
@@ -231,7 +235,7 @@ const {
   onChromeReposition,
   onChromeKeydown,
   UNGROUPED_ID,
-} = useAgentStudio()
+} = useAgentStudio({ projectId: () => props.projectId, embedded: () => !!props.embedded })
 </script>
 <template>
   <div
@@ -251,6 +255,7 @@ const {
           @click="triggerImport"
         >{{ t('pages.agentStudio.exportImport.import') }}</AppButton>
         <AppButton
+          v-if="showCreateTeam"
           variant="outline"
           icon="skills"
           :class="isMobile ? 'min-h-11 w-full justify-center' : ''"
@@ -344,14 +349,23 @@ const {
         class="card flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center"
         data-testid="agent-studio-empty-team"
       >
-        <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyTeamTitle') }}</h2>
-        <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyTeamDesc') }}</p>
-        <AppButton variant="primary" icon="skills" @click="openCreateTeam">
-          {{ t('pages.agentStudio.emptyTeamCta') }}
-        </AppButton>
-        <button type="button" class="text-[12px] text-accent-2 hover:underline" @click="openCreateAgent">
-          {{ t('pages.agentStudio.emptyTeamOrSingle') }}
-        </button>
+        <template v-if="embedded">
+          <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyProjectTitle') }}</h2>
+          <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyProjectDesc') }}</p>
+          <AppButton variant="primary" icon="plus" @click="openCreateAgent">
+            {{ t('common.buttons.newAgent') }}
+          </AppButton>
+        </template>
+        <template v-else>
+          <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyTeamTitle') }}</h2>
+          <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyTeamDesc') }}</p>
+          <AppButton variant="primary" icon="skills" @click="openCreateTeam">
+            {{ t('pages.agentStudio.emptyTeamCta') }}
+          </AppButton>
+          <button type="button" class="text-[12px] text-accent-2 hover:underline" @click="openCreateAgent">
+            {{ t('pages.agentStudio.emptyTeamOrSingle') }}
+          </button>
+        </template>
       </div>
 
       <div
@@ -369,6 +383,8 @@ const {
         :collapsed="agentListCollapsed"
         :agents="agents"
         :projects="projects"
+        :hide-create-team="hideTeamCreate"
+        :hide-assign-project="embedded"
         @select-agent="chooseAgent"
         @rename-agent="onSidebarRenameBlocked"
         @remove-from-group="onRemoveFromGroup"
@@ -1138,11 +1154,13 @@ const {
     <AgentCreateWizard
       :open="showCreateWizard"
       :existing-names="agents.map((a) => a.name)"
+      :project-id="scopedProjectId || undefined"
       @close="showCreateWizard = false"
       @created="onWizardCreated"
     />
 
     <CreateAgentTeamWizard
+      v-if="!embedded"
       :open="showTeamWizard"
       :existing-names="agents.map((a) => a.name)"
       @close="showTeamWizard = false"

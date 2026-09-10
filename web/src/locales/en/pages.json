@@ -253,6 +253,7 @@
       "emptyDesc": "Configure ACP backend, token, and Git; create the default team and Default Workflow. Does not start a Run.",
       "workflowName": "Default Workflow",
       "head": {
+        "projectName": "Enter a project name",
         "language": "Choose display language and theme",
         "overview": "What will be written",
         "acp": "Choose how to start",
@@ -262,12 +263,20 @@
         "success": "Install complete"
       },
       "steps": {
+        "projectName": "Project name",
         "language": "Language & theme",
         "overview": "Overview",
         "acp": "Backend",
         "apiKey": "API Key",
         "git": "Git",
         "review": "Review"
+      },
+      "projectName": {
+        "meta": "The project name is used to derive Agent and team naming prefixes.",
+        "label": "Project name",
+        "placeholder": "e.g. Payments platform",
+        "required": "Please enter a project name",
+        "invalid": "That name cannot produce a valid Agent naming prefix — try another"
       },
       "language": {
         "meta": "Choose the display language for setup and the control plane. It defaults to your system language.",
@@ -420,6 +429,7 @@
       "tabExternalMcp": "External MCP",
       "tabPmMemory": "Project memory",
       "tabCronJobs": "Scheduled tasks",
+      "tabAgents": "Agents",
       "tabSharedAgent": "Shared Agent config",
       "tabVariables": "Workflow variables",
       "tabAudit": "Audit",
@@ -1808,6 +1818,8 @@
       "emptyTeamDesc": "After you fill project background and runtime config, a sandbox creates the project, root group, PM, and 9 engineers with virtual groups.",
       "emptyTeamCta": "Create Agent team",
       "emptyTeamOrSingle": "or create a single Agent",
+      "emptyProjectTitle": "No agents in this project yet",
+      "emptyProjectDesc": "Create an Agent bound to this project. Teams are set up when you create the project.",
       "createTeam": "Create Agent team",
       "unsaved": "Unsaved",
       "saved": "Saved",

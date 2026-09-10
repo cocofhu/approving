@@ -253,6 +253,7 @@
       "emptyDesc": "将配置 ACP 后端、Token 与 Git，并生成综合项目组与「默认工作流」。不会自动开跑。",
       "workflowName": "默认工作流",
       "head": {
+        "projectName": "填写项目名称",
         "language": "选择界面语言与主题",
         "overview": "这次会写入什么",
         "acp": "选择启动方式",
@@ -262,12 +263,20 @@
         "success": "已完成安装"
       },
       "steps": {
+        "projectName": "项目名称",
         "language": "语言与主题",
         "overview": "概览",
         "acp": "后端",
         "apiKey": "API Key",
         "git": "Git",
         "review": "确认"
+      },
+      "projectName": {
+        "meta": "项目名称会用于派生 Agent 与项目组命名前缀。",
+        "label": "项目名称",
+        "placeholder": "例如 支付中台",
+        "required": "请填写项目名称",
+        "invalid": "项目名称无法生成有效的 Agent 命名前缀，请换一个名称"
       },
       "language": {
         "meta": "选择安装引导和控制面的显示语言。默认已根据你的系统语言选择。",
@@ -420,6 +429,7 @@
       "tabExternalMcp": "外部 MCP",
       "tabPmMemory": "项目记忆",
       "tabCronJobs": "定时任务",
+      "tabAgents": "智能体",
       "tabSharedAgent": "项目共享 Agent 配置",
       "tabVariables": "工作流变量",
       "tabAudit": "审计",
@@ -1808,6 +1818,8 @@
       "emptyTeamDesc": "填写项目背景与运行配置后自动起沙箱：创建项目、根组、项目经理与 9 名工程师，并挂好虚拟组。",
       "emptyTeamCta": "创建 Agent 团队",
       "emptyTeamOrSingle": "或新建单个 Agent",
+      "emptyProjectTitle": "本项目还没有 Agent",
+      "emptyProjectDesc": "新建一个绑定到本项目的 Agent。团队在创建项目时已配置。",
       "createTeam": "创建 Agent 团队",
       "unsaved": "未保存",
       "saved": "已保存",

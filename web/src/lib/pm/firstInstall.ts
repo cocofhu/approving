@@ -4,23 +4,48 @@ import {
   DEFAULT_PROJECT_ID,
   isOnboardingSuppressed,
   shouldAutoOpenOnboarding,
+  type OnboardingMode,
 } from '@/lib/pm/onboardingWizard'
 
 /**
- * First install is an app-level state, not a project one: the wizard is mounted
- * once in App.vue and opens on entry regardless of the current route.
+ * First install / new-project / retry share one App-level wizard mount.
  */
-export const firstInstallOpen = ref(false)
+export const onboardingOpen = ref(false)
+export const onboardingMode = ref<OnboardingMode>('firstInstall')
+export const onboardingProjectId = ref(DEFAULT_PROJECT_ID)
+
+/** @deprecated alias — prefer onboardingOpen */
+export const firstInstallOpen = onboardingOpen
 
 /** Bumped after a successful bootstrap so open views can refetch. */
 export const firstInstallCompletedAt = ref(0)
 
 export function openFirstInstall(): void {
-  firstInstallOpen.value = true
+  onboardingMode.value = 'firstInstall'
+  onboardingProjectId.value = DEFAULT_PROJECT_ID
+  onboardingOpen.value = true
+}
+
+export function openCreateProjectOnboarding(): void {
+  onboardingMode.value = 'createProject'
+  onboardingProjectId.value = ''
+  onboardingOpen.value = true
+}
+
+export function openRetryOnboarding(projectId: string): void {
+  const id = projectId.trim()
+  if (!id) return
+  onboardingMode.value = id === DEFAULT_PROJECT_ID ? 'firstInstall' : 'retry'
+  onboardingProjectId.value = id
+  onboardingOpen.value = true
 }
 
 export function closeFirstInstall(): void {
-  firstInstallOpen.value = false
+  onboardingOpen.value = false
+}
+
+export function closeOnboarding(): void {
+  onboardingOpen.value = false
 }
 
 export function markFirstInstallCompleted(): void {
@@ -37,7 +62,9 @@ export function probeFirstInstall(): Promise<void> {
 
 export function resetFirstInstallProbe(): void {
   probe = null
-  firstInstallOpen.value = false
+  onboardingOpen.value = false
+  onboardingMode.value = 'firstInstall'
+  onboardingProjectId.value = DEFAULT_PROJECT_ID
 }
 
 async function runProbe(): Promise<void> {
@@ -51,7 +78,9 @@ async function runProbe(): Promise<void> {
     ])
     const named = agents.map((a) => ({ name: a.name, projectId: a.projectId }))
     if (shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, workflows, named)) {
-      firstInstallOpen.value = true
+      onboardingMode.value = 'firstInstall'
+      onboardingProjectId.value = DEFAULT_PROJECT_ID
+      onboardingOpen.value = true
     }
   } catch {
     /* offline or no default project: stay silent, CTA still opens it manually */

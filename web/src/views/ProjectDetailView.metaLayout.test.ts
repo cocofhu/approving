@@ -76,21 +76,29 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
     expect(detailSrc).toMatch(/tab === 'notify' && project[\s\S]*?class="scroll-area min-h-0 flex-1 overflow-y-auto"/)
     expect(detailSrc).not.toMatch(/tab === 'cronJobs'" class="flex min-h-\[420px\] flex-col"/)
     expect(detailSrc).not.toMatch(/tab === 'notify' && project" class="min-h-\[420px\]"/)
-    // variables / sharedAgent 已接入铺满链（对齐 meta），不再锁定 420 硬底
+    // variables / agents / sharedAgent 已接入铺满链（对齐 meta），不再锁定 420 硬底
+    expect(detailSrc).toMatch(/tab === 'agents'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'sharedAgent'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'variables'" class="flex min-h-0 flex-1 flex-col"/)
     expect(detailSrc).toMatch(/tab === 'audit'" class="flex min-h-0 flex-1 flex-col"/)
   })
 
   it('variables / sharedAgent shells drop bottom border and use three-zone flex (fill-height)', () => {
+    const agentsStart = detailSrc.indexOf("tab === 'agents'")
     const sharedStart = detailSrc.indexOf("tab === 'sharedAgent'")
     const variablesStart = detailSrc.indexOf("tab === 'variables'")
     const auditStart = detailSrc.indexOf("tab === 'audit'")
-    expect(sharedStart).toBeGreaterThanOrEqual(0)
+    expect(agentsStart).toBeGreaterThanOrEqual(0)
+    expect(sharedStart).toBeGreaterThan(agentsStart)
     expect(variablesStart).toBeGreaterThan(sharedStart)
     expect(auditStart).toBeGreaterThan(variablesStart)
+    const agents = detailSrc.slice(agentsStart, sharedStart)
     const shared = detailSrc.slice(sharedStart, variablesStart)
     const variables = detailSrc.slice(variablesStart, auditStart)
+
+    expect(agents).toMatch(/AgentStudioView/)
+    expect(agents).toMatch(/data-testid="project-agents-tab"/)
+    expect(agents).toMatch(/class="flex min-h-0 flex-1 flex-col"/)
 
     expect(shared).toMatch(/ProjectSharedAgentPanel/)
     expect(shared).toMatch(/class="flex min-h-0 flex-1 flex-col"/)
