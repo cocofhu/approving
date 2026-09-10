@@ -80,7 +80,7 @@ const {
   ariaBusy,
 } = usePendingGates()
 const PAGE_SIZE = 20
-const SKELETON_CARDS = 5
+const SKELETON_CARDS = 6
 const listItems = ref<InboxItem[]>([])
 /** Snapshot before the latest list mutation — used for neighbor active selection. */
 let listSnapshotForNeighbor: InboxItem[] = []
@@ -172,6 +172,12 @@ const showListSkeleton = computed(
 )
 /** First-screen error when load failed and nothing to show. */
 const showListError = computed(() => !!listLoadError.value && !listItems.value.length)
+/** Always lead with the actionable copy; append the raw cause when it adds detail. */
+const listErrorMessage = computed(() => {
+  const desc = String(t('common.asyncState.loadFailedDesc'))
+  const raw = listLoadError.value
+  return raw && raw !== desc ? `${desc} · ${raw}` : desc
+})
 /** Keep old rows + RefreshStrip/fade on user refresh or filter reload (plan g2.2). */
 const showListRefresh = computed(
   () =>
@@ -1964,6 +1970,7 @@ function itemSecondary(it: InboxItem) {
     listPage,
     listLoading,
     listLoadError,
+    listErrorMessage,
     listLoadGeneration,
     active,
     homeSeed,

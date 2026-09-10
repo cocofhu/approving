@@ -6,11 +6,13 @@ withDefaults(
     title?: string
     message?: string
     retryLabel?: string
+    retryTestid?: string
   }>(),
   {
     title: '',
     message: '',
     retryLabel: '',
+    retryTestid: 'app-inline-error-retry',
   },
 )
 
@@ -28,7 +30,7 @@ const { t } = useI18n()
     <button
       type="button"
       class="inline-flex min-h-[44px] items-center justify-center rounded-md bg-accent px-3 py-2 text-[13px] text-white outline-none hover:bg-accent-2 focus-visible:ring-2 focus-visible:ring-accent/40"
-      data-testid="app-inline-error-retry"
+      :data-testid="retryTestid"
       @click="$emit('retry')"
     >
       {{ retryLabel || t('common.loading.retry') }}

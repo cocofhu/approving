@@ -111,7 +111,7 @@ const {
   listTotal,
   listPage,
   listLoading,
-  listLoadError,
+  listErrorMessage,
   listLoadGeneration,
   active,
   homeSeed,
@@ -332,13 +332,14 @@ const {
       <div
         v-if="showListSkeleton"
         class="flex min-h-0 flex-1 flex-col gap-2"
-        data-testid="gates-inbox-list-skeleton"
+        data-testid="inbox-list-skeleton"
         aria-hidden="true"
       >
         <div
           v-for="n in SKELETON_CARDS"
           :key="'skel-m-' + n"
           class="flex w-full shrink-0 flex-col gap-2 rounded-lg border border-line bg-surface p-3"
+          data-testid="inbox-pending-card-skeleton"
         >
           <div class="flex items-start gap-3">
             <div class="h-9 w-9 shrink-0 bg-elevated animate-pulse" />
@@ -352,11 +353,12 @@ const {
       <div
         v-else-if="showListError"
         class="card flex min-h-0 flex-1 flex-col items-stretch justify-center overflow-auto p-4"
-        data-testid="gates-inbox-list-error"
+        data-testid="inbox-list-failed"
       >
         <AppInlineError
           :title="t('common.asyncState.loadFailedTitle')"
-          :message="listLoadError ?? undefined"
+          :message="listErrorMessage"
+          retry-testid="inbox-list-retry"
           @retry="retryListLoad"
         />
       </div>
@@ -605,22 +607,35 @@ const {
       </div>
     </div>
 
+    <!-- Desktop loading∧empty: keep the 320px list rail + a weak detail hint (no EmptyState flash). -->
     <div
       v-else-if="!isMobile && showListSkeleton"
-      class="flex min-h-0 flex-1 flex-col gap-2"
-      data-testid="gates-inbox-list-skeleton"
-      aria-hidden="true"
+      class="grid min-h-0 flex-1 grid-cols-[320px_1fr] items-stretch gap-4"
+      data-testid="inbox-list-skeleton"
     >
-      <div
-        v-for="n in SKELETON_CARDS"
-        :key="'skel-d-' + n"
-        class="flex w-full max-w-[320px] shrink-0 flex-col gap-2 rounded-lg border border-line bg-surface p-3"
-      >
-        <div class="flex items-start gap-3">
-          <div class="h-9 w-9 shrink-0 bg-elevated animate-pulse" />
-          <div class="min-w-0 flex-1 space-y-2">
-            <div class="h-3.5 w-2/3 bg-elevated animate-pulse" />
-            <div class="h-2.5 w-full bg-elevated animate-pulse" />
+      <div class="flex h-full min-h-0 flex-col gap-2 overflow-hidden" aria-hidden="true">
+        <div
+          v-for="n in SKELETON_CARDS"
+          :key="'skel-d-' + n"
+          class="flex w-full shrink-0 flex-col gap-2 rounded-lg border border-line bg-surface p-3"
+          data-testid="inbox-pending-card-skeleton"
+        >
+          <div class="flex items-start gap-3">
+            <div class="h-9 w-9 shrink-0 bg-elevated animate-pulse" />
+            <div class="min-w-0 flex-1 space-y-2">
+              <div class="h-3.5 w-2/3 bg-elevated animate-pulse" />
+              <div class="h-2.5 w-full bg-elevated animate-pulse" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="flex h-full min-h-0 min-w-0 flex-col">
+        <div class="card flex h-full min-h-0 w-full flex-col overflow-hidden">
+          <div class="flex shrink-0 items-center justify-between border-b border-line px-4 py-2.5">
+            <span class="text-xs text-txt3">{{ t('pages.gatesInbox.detailPane') }}</span>
+          </div>
+          <div class="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+            <p class="text-sm text-txt2">{{ t('pages.gatesInbox.listLoadingHint') }}</p>
           </div>
         </div>
       </div>
@@ -629,11 +644,12 @@ const {
     <div
       v-else-if="!isMobile && showListError"
       class="card flex min-h-0 flex-1 flex-col items-stretch justify-center overflow-auto p-4"
-      data-testid="gates-inbox-list-error"
+      data-testid="inbox-list-failed"
     >
       <AppInlineError
         :title="t('common.asyncState.loadFailedTitle')"
-        :message="listLoadError ?? undefined"
+        :message="listErrorMessage"
+        retry-testid="inbox-list-retry"
         @retry="retryListLoad"
       />
     </div>
