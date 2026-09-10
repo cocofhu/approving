@@ -1,7 +1,7 @@
 /**
  * Agent Studio view: org/draft/selection/panel orchestration.
  */
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, toValue, type MaybeRefOrGetter } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type AgentFilesPanel from '@/components/agent/AgentFilesPanel.vue'
@@ -11,7 +11,7 @@ import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import {
   emptyOrg, groupPath, newGroupId, applyDeleteGroup, applyMoveAgent,
-  applyRemoveAgentFromGroup, wouldCreateGroupCycle, buildOrgTreeRows,
+  applyRemoveAgentFromGroup, wouldCreateGroupCycle, buildOrgTreeRows, pruneOrgToAgentGroups,
   recursiveMemberNames, classifyAssignTargets, assignNeedsDraftConfirm,
   shouldSyncDraftAfterAssign, isAgentInGroupSubtree, UNGROUPED_ID,
   allGroupCollapseIds, ancestorGroupIdsForAgent, buildDefaultCollapsedSet,
@@ -39,11 +39,32 @@ function parseDataSub(q: unknown): DataSubTab {
 }
 
 
-export function useAgentStudio() {
+export function useAgentStudio(opts?: {
+  projectId?: MaybeRefOrGetter<string | undefined>
+  embedded?: boolean | MaybeRefOrGetter<boolean>
+}) {
 const { t } = useI18n()
 const { isMobile } = useBreakpoint()
 const route = useRoute()
 const router = useRouter()
+
+const scopedProjectId = computed(() => {
+  const raw = toValue(opts?.projectId)
+  return typeof raw === 'string' ? raw.trim() : ''
+})
+const embedded = computed(() => {
+  const e = toValue(opts?.embedded)
+  return e === true || !!scopedProjectId.value
+})
+const hideTeamCreate = computed(() => embedded.value)
+const showCreateTeam = computed(() => !hideTeamCreate.value)
+
+function filterAgentsByScope(list: Agent[] | null | undefined): Agent[] {
+  const all = list || []
+  const pid = scopedProjectId.value
+  if (!pid) return all
+  return all.filter((a) => a.projectId === pid)
+}
 
 const AGENT_LIST_COLLAPSED_KEY = 'agent-studio-agent-list-collapsed'
 const ORG_SIDEBAR_EXPANDED_W = '280px'
@@ -161,17 +182,41 @@ let applyingStudioQuery = false
 
 function syncStudioQuery() {
   if (applyingStudioQuery) return
-  const next: Record<string, string> = {}
+  const useStudioTabKey = embedded.value
+  const next: Record<string, unknown> = useStudioTabKey ? { ...route.query } : {}
   if (activeName.value) next.agent = activeName.value
-  if (tab.value !== 'files') next.tab = tab.value
+  else if (useStudioTabKey) delete next.agent
+
+  if (useStudioTabKey) {
+    if (tab.value !== 'files') next.studioTab = tab.value
+    else delete next.studioTab
+    // Never overwrite project detail `tab=agents`.
+  } else if (tab.value !== 'files') {
+    next.tab = tab.value
+  }
+
   if (tab.value === 'data') next.sub = dataSubTab.value
+  else if (useStudioTabKey) delete next.sub
+
   const curAgent = typeof route.query.agent === 'string' ? route.query.agent : ''
-  const curTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+  const curTabKey = useStudioTabKey ? 'studioTab' : 'tab'
+  const curTab = typeof route.query[curTabKey] === 'string' ? (route.query[curTabKey] as string) : ''
   const curSub = typeof route.query.sub === 'string' ? route.query.sub : ''
-  if (curAgent === (next.agent || '') && curTab === (next.tab || '') && curSub === (next.sub || '')) {
+  const nextTab = useStudioTabKey
+    ? typeof next.studioTab === 'string'
+      ? next.studioTab
+      : ''
+    : typeof next.tab === 'string'
+      ? next.tab
+      : ''
+  if (
+    curAgent === (typeof next.agent === 'string' ? next.agent : '') &&
+    curTab === nextTab &&
+    curSub === (typeof next.sub === 'string' ? next.sub : '')
+  ) {
     return
   }
-  void router.replace({ query: next })
+  void router.replace({ query: next as typeof route.query })
 }
 
 // Data / chat tester follow the last-saved binding so unsaved draft edits
@@ -387,8 +432,12 @@ function clearManageSearch() {
   manageSearch.value = ''
 }
 
+const displayOrg = computed(() =>
+  embedded.value ? pruneOrgToAgentGroups(org.value, agentNames.value) : org.value,
+)
+
 const orgSheetRows = computed(() =>
-  buildOrgTreeRows(org.value, agentNames.value, orgSheetCollapsed.value, agents.value, projects.value),
+  buildOrgTreeRows(displayOrg.value, agentNames.value, orgSheetCollapsed.value, agents.value, projects.value),
 )
 
 type AssignFailItem = { name: string; reason: string }
@@ -421,6 +470,7 @@ function closeAssignModals() {
 }
 
 function onAssignProject(groupId: string) {
+  if (embedded.value) return
   const group = (org.value.groups || []).find((g) => g.id === groupId)
   if (!group) return
   assignFail.value = []
@@ -827,7 +877,7 @@ async function load() {
   try {
     const [list, o, projList] = await Promise.all([api.listAgents(), api.getAgentsOrg(), api.listProjects()])
     if (!studioSeq.isCurrentSeq(localSeq)) return
-    agents.value = list || []
+    agents.value = filterAgentsByScope(list)
     projects.value = (projList || []).map((p) => ({ id: p.id, name: p.name }))
     org.value = o?.groups ? o : { revision: o?.revision || 0, groups: o?.groups || [], agents: o?.agents || {} }
     if (!org.value.agents) org.value.agents = {}
@@ -837,7 +887,11 @@ async function load() {
     applyingStudioQuery = true
     try {
       const qAgent = typeof route.query.agent === 'string' ? route.query.agent.trim() : ''
-      const qTab = isStudioTab(route.query.tab) ? route.query.tab : null
+      // Embedded: studioTab only. Standalone: studioTab, else legacy tab (bookmarks).
+      const qTabRaw = embedded.value
+        ? route.query.studioTab
+        : route.query.studioTab ?? route.query.tab
+      const qTab = isStudioTab(qTabRaw) ? qTabRaw : null
       const qSub = parseDataSub(route.query.sub)
       if (qAgent && agents.value.some((a) => a.name === qAgent)) {
         select(qAgent, { tab: qTab || 'files', dataSub: qSub, skipQuerySync: true })
@@ -1202,6 +1256,7 @@ function openCreateAgent() {
 }
 
 function openCreateTeam() {
+  if (hideTeamCreate.value) return
   showTeamWizard.value = true
 }
 
@@ -1222,7 +1277,7 @@ function onTeamBootstrapStarted(session: TeamBootstrapSession) {
 async function refreshAgentsList() {
   try {
     const list = await api.listAgents()
-    agents.value = list || []
+    agents.value = filterAgentsByScope(list)
     agents.value.sort((a, b) => a.name.localeCompare(b.name))
   } catch {
     /* ignore */
@@ -1520,6 +1575,7 @@ onBeforeUnmount(() => {
   agents,
   projects,
   org,
+  displayOrg,
   orgBaseline,
   activeName,
   draft,
@@ -1672,6 +1728,10 @@ onBeforeUnmount(() => {
   teamBootstrapSessionId,
   openCreateAgent,
   openCreateTeam,
+  showCreateTeam,
+  hideTeamCreate,
+  embedded,
+  scopedProjectId,
   onWizardCreated,
   onTeamBootstrapStarted,
   refreshAgentsList,

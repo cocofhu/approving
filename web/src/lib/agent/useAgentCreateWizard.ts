@@ -359,6 +359,7 @@ async function submitCreate() {
   createError.value = ''
   try {
     const payload = assembleCreatePayload(draft.value)
+    if (props.projectId) payload.projectId = props.projectId
     const created = await api.createAgent(payload)
     emit('created', created)
     emit('close')

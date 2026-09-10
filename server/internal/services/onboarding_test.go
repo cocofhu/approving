@@ -28,18 +28,74 @@ func TestOnboardingBootstrapRequiresAPIKey(t *testing.T) {
 	}
 }
 
-func TestOnboardingBootstrapRejectsNonDefaultProject(t *testing.T) {
-	svc, _ := newOnboardingHarness(t)
-	other, err := svc.Projects.Create("Other", "", nil, nil)
+func TestOnboardingBootstrapAllowsNonDefaultProjectWithDerivedNames(t *testing.T) {
+	svc, defaultID := newOnboardingHarness(t)
+	other, err := svc.Projects.Create("中国象棋", "", nil, nil)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	_, err = svc.Bootstrap(other.ID, services.OnboardingBootstrapRequest{
+	res, err := svc.Bootstrap(other.ID, services.OnboardingBootstrapRequest{
 		AcpBackend: "cursor",
-		APIKey:     "k",
+		APIKey:     "k-other",
 	})
-	if !errors.Is(err, services.ErrOnboardingNotDefaultProject) {
-		t.Fatalf("want ErrOnboardingNotDefaultProject, got %v", err)
+	if err != nil {
+		t.Fatalf("bootstrap non-default: %v", err)
+	}
+	if len(res.AgentIDs) != 6 {
+		t.Fatalf("want 6 agents, got %v", res.AgentIDs)
+	}
+	wantName := "中国象棋研发工程师"
+	found := false
+	for _, id := range res.AgentIDs {
+		if id == wantName {
+			found = true
+		}
+		if strings.HasPrefix(id, "综合") {
+			t.Fatalf("non-default must not use 综合* name %q", id)
+		}
+		a, ok := svc.Skills.Get(id)
+		if !ok || a.ProjectID != other.ID {
+			t.Fatalf("agent %s missing or wrong project", id)
+		}
+	}
+	if !found {
+		t.Fatalf("missing derived agent %q in %v", wantName, res.AgentIDs)
+	}
+	if res.GroupName != "中国象棋项目组" {
+		t.Fatalf("groupName = %q", res.GroupName)
+	}
+	// Default project agents must remain untouched.
+	if n := len(svc.Skills.List()); n != 6 {
+		t.Fatalf("only other-project agents expected before default bootstrap, got %d", n)
+	}
+	_, err = svc.Bootstrap(defaultID, services.OnboardingBootstrapRequest{
+		AcpBackend: "cursor",
+		APIKey:     "k-default",
+	})
+	if err != nil {
+		t.Fatalf("default bootstrap: %v", err)
+	}
+	for _, name := range services.OnboardingAgentNames {
+		a, ok := svc.Skills.Get(name)
+		if !ok {
+			t.Fatalf("default agent %s missing", name)
+		}
+		if a.ProjectID != defaultID {
+			t.Fatalf("default agent %s projectId = %q", name, a.ProjectID)
+		}
+	}
+	wf, ok := svc.WF.Get(res.WorkflowID)
+	if !ok {
+		t.Fatal("workflow missing")
+	}
+	for _, node := range wf.Graph.Nodes {
+		if node.Config == nil {
+			continue
+		}
+		prof, _ := node.Config["agent_profile"].(string)
+		if strings.HasPrefix(prof, "综合") {
+			t.Fatalf("workflow agent_profile still 综合*: %q", prof)
+		}
 	}
 }
 
@@ -491,6 +547,56 @@ func TestCreateFromBaselineDefaultsShowOnHome(t *testing.T) {
 	}
 	if n := len(svc.WF.List(projectID)); n != 1 {
 		t.Fatalf("empty repos must not insert, got %d workflows", n)
+	}
+}
+
+func TestOnboardingBootstrapDoesNotReuseSameNamedForeignGroup(t *testing.T) {
+	svc, _ := newOnboardingHarness(t)
+	org, err := svc.Org.Get()
+	if err != nil {
+		t.Fatalf("org: %v", err)
+	}
+	org.Groups = append(org.Groups, services.OrgGroup{ID: "g_foreign_same_name", Name: "支付中台项目组"})
+	if _, err := svc.Org.Put(org, org.Revision); err != nil {
+		t.Fatalf("seed org: %v", err)
+	}
+
+	p, err := svc.Projects.Create("支付中台", "", nil, nil)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	res, err := svc.Bootstrap(p.ID, services.OnboardingBootstrapRequest{AcpBackend: "cursor", APIKey: "k-pay"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if res.GroupName != "支付中台项目组" {
+		t.Fatalf("groupName = %q", res.GroupName)
+	}
+
+	org2, err := svc.Org.Get()
+	if err != nil {
+		t.Fatalf("org2: %v", err)
+	}
+	wantID := "g_onb_" + p.ID
+	var foundWant, agentsOnForeign bool
+	for _, g := range org2.Groups {
+		if g.ID == wantID {
+			foundWant = true
+		}
+	}
+	if !foundWant {
+		t.Fatalf("expected new group %s, groups=%+v", wantID, org2.Groups)
+	}
+	for _, name := range res.AgentIDs {
+		m := org2.Agents[name]
+		for _, gid := range m.GroupIDs {
+			if gid == "g_foreign_same_name" {
+				agentsOnForeign = true
+			}
+		}
+	}
+	if agentsOnForeign {
+		t.Fatal("agents must not join the foreign same-named group")
 	}
 }
 

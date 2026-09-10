@@ -4,11 +4,10 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
-import AppModal from '@/components/ui/AppModal.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { api } from '@/lib/api/api'
 import { writeStoredProjectId } from '@/lib/composables/useProjectContext'
-import { useToast } from '@/lib/composables/useToast'
+import { openCreateProjectOnboarding } from '@/lib/pm/firstInstall'
 import { fmtTime } from '@/lib/shared/format'
 import { fmtCompactTokenCount } from '@/lib/run/tokenUsage'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
@@ -20,17 +19,11 @@ const listSeq = createListRequestSeq()
 
 const router = useRouter()
 const { t } = useI18n()
-const toast = useToast()
 const projects = ref<Project[]>([])
 const loading = ref(true)
 const hasInitialLoaded = ref(false)
 const loadFailed = ref(false)
 const loadDenied = ref(false)
-const showCreate = ref(false)
-const creating = ref(false)
-const createName = ref('')
-const createDesc = ref('')
-const createError = ref('')
 
 const showRefreshProgress = computed(
   () => loading.value && hasInitialLoaded.value && projects.value.length > 0,
@@ -67,32 +60,7 @@ function openProject(p: Project) {
 }
 
 function openCreate() {
-  createName.value = ''
-  createDesc.value = ''
-  createError.value = ''
-  showCreate.value = true
-}
-
-async function confirmCreate() {
-  const name = createName.value.trim()
-  if (!name) {
-    createError.value = t('pages.projectList.nameRequired')
-    return
-  }
-  if (creating.value) return
-  creating.value = true
-  createError.value = ''
-  try {
-    const p = await api.createProject({ name, description: createDesc.value.trim() })
-    showCreate.value = false
-    toast.success(t('pages.projectList.created', { name: p.name }))
-    writeStoredProjectId(p.id)
-    router.push('/projects/' + p.id)
-  } catch (e: any) {
-    createError.value = String(e?.message || e)
-  } finally {
-    creating.value = false
-  }
+  openCreateProjectOnboarding()
 }
 
 onMounted(() => {
@@ -108,7 +76,13 @@ onMounted(() => {
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.projectList.title') }}</h2>
         <p class="text-sm text-txt3" v-html="t('pages.projectList.subtitle')" />
       </div>
-      <AppButton class="min-h-[44px] md:min-h-0" variant="primary" icon="plus" @click="openCreate">
+      <AppButton
+        class="min-h-[44px] md:min-h-0"
+        variant="primary"
+        icon="plus"
+        data-testid="project-list-new"
+        @click="openCreate"
+      >
         {{ t('pages.projectList.newProject') }}
       </AppButton>
     </div>
@@ -184,7 +158,7 @@ onMounted(() => {
           data-testid="project-list-empty"
         >
           <EmptyState icon="folder" :title="t('pages.projectList.empty')">
-            <AppButton variant="primary" icon="plus" @click="openCreate">
+            <AppButton variant="primary" icon="plus" data-testid="project-list-new-empty" @click="openCreate">
               {{ t('pages.projectList.newProject') }}
             </AppButton>
           </EmptyState>
@@ -243,47 +217,5 @@ onMounted(() => {
         </div>
       </div>
     </div>
-
-    <AppModal
-      :open="showCreate"
-      :title="t('pages.projectList.createTitle')"
-      :width="440"
-      @close="!creating && (showCreate = false)"
-    >
-      <div class="flex flex-col gap-3">
-        <label class="block text-sm">
-          <span class="mb-1 block text-txt2">{{ t('pages.projectList.nameLabel') }}</span>
-          <input
-            v-model="createName"
-            class="w-full rounded border border-line bg-elevated px-3 py-2 text-sm text-txt outline-none focus:border-accent"
-            :placeholder="t('pages.projectList.namePlaceholder')"
-            @keydown.enter="confirmCreate"
-          />
-        </label>
-        <label class="block text-sm">
-          <span class="mb-1 block text-txt2">{{ t('pages.projectList.descLabel') }}</span>
-          <textarea
-            v-model="createDesc"
-            rows="2"
-            class="w-full rounded border border-line bg-elevated px-3 py-2 text-sm text-txt outline-none focus:border-accent"
-            :placeholder="t('pages.projectList.descPlaceholder')"
-          />
-        </label>
-        <p v-if="createError" class="text-sm text-err">{{ createError }}</p>
-        <div class="flex justify-end gap-2">
-          <AppButton variant="outline" :disabled="creating" @click="showCreate = false">
-            {{ t('common.buttons.cancel') }}
-          </AppButton>
-          <AppButton
-            variant="primary"
-            :disabled="creating"
-            data-testid="project-list-create-submit"
-            @click="confirmCreate"
-          >
-            {{ creating ? t('common.buttons.creating') : t('common.buttons.create') }}
-          </AppButton>
-        </div>
-      </div>
-    </AppModal>
   </div>
 </template>

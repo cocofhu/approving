@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
   mergeRunDraft: vi.fn(),
   saveRunDraft: vi.fn(),
   clearRunDraft: vi.fn(),
-  openFirstInstall: vi.fn(),
+  openRetryOnboarding: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   toastWarn: vi.fn(),
@@ -82,7 +82,7 @@ vi.mock('@/lib/run/runDraft', () => ({
 
 vi.mock('@/lib/pm/firstInstall', () => ({
   firstInstallCompletedAt: shared.firstInstallCompletedAt,
-  openFirstInstall: () => mocks.openFirstInstall(),
+  openRetryOnboarding: (id: string) => mocks.openRetryOnboarding(id),
 }))
 
 vi.mock('@/lib/run/useWorkflowImport', () => ({
@@ -359,11 +359,17 @@ describe('useProjectDetail actions', () => {
     app.unmount()
   })
 
-  it('navigates to the studio memory view for the bound PM agent', async () => {
+  it('navigates to the project agents tab memory view for the bound PM agent', async () => {
     const { detail, app, router } = await withProjectDetail()
     detail.goStudioMemory()
     await flushPromises()
-    expect(router.currentRoute.value.query).toMatchObject({ agent: 'pm-agent', tab: 'data', sub: 'memory' })
+    expect(router.currentRoute.value.path).toBe('/projects/proj-a')
+    expect(router.currentRoute.value.query).toMatchObject({
+      tab: 'agents',
+      agent: 'pm-agent',
+      studioTab: 'data',
+      sub: 'memory',
+    })
 
     detail.goStudioMemory('other-agent')
     await flushPromises()
@@ -372,7 +378,7 @@ describe('useProjectDetail actions', () => {
     detail.pmBinding.value = null
     detail.goStudioMemory('   ')
     await flushPromises()
-    expect(router.currentRoute.value.fullPath).toBe('/agents')
+    expect(router.currentRoute.value.fullPath).toBe('/projects/proj-a?tab=agents')
 
     app.unmount()
   })
@@ -677,7 +683,7 @@ describe('useProjectDetail actions', () => {
     expect(detail.isOnboardingEmpty.value).toBe(true)
 
     detail.openOnboarding()
-    expect(mocks.openFirstInstall).toHaveBeenCalled()
+    expect(mocks.openRetryOnboarding).toHaveBeenCalledWith('proj-default')
 
     mocks.listWorkflows.mockResolvedValue([askWorkflow()])
     mocks.listAgents.mockResolvedValue([{ name: 'agent-a', projectId: 'proj-a' }])

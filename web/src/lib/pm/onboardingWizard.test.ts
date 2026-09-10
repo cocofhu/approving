@@ -2,12 +2,14 @@
 import { describe, expect, it, beforeEach, beforeAll, vi } from 'vitest'
 import {
   DEFAULT_PROJECT_ID,
+  ONBOARDING_AGENT_NAMES,
   ONBOARDING_CLI_BACKENDS,
   ONBOARDING_STEPS,
   ONBOARDING_WORKFLOW_NAME,
   applyOnboardingBackend,
   applyStartPath,
   assembleBootstrapBody,
+  deriveOnboardingAgentNames,
   startPathForBackend,
   detectSystemLocale,
   suppressOnboarding,
@@ -15,10 +17,12 @@ import {
   gitConfigured,
   isEmptyProjectForOnboarding,
   isOnboardingSuppressed,
+  onboardingStepsForMode,
   onboardingSuppressKey,
   gitIdentityConfigured,
   repoConfigured,
   repoNameFromUrl,
+  sanitizeOnboardingPrefix,
   shouldAutoOpenOnboarding,
 } from './onboardingWizard'
 import { i18n } from '@/lib/shared/i18n'
@@ -177,9 +181,10 @@ describe('onboardingWizard', () => {
     expect(gitConfigured(d)).toBe(true)
   })
 
-  it('only treats the default project as empty for first-install', () => {
+  it('treats empty projects as eligible for onboarding CTA, including non-default', () => {
     expect(isEmptyProjectForOnboarding(0, [], DEFAULT_PROJECT_ID)).toBe(true)
-    expect(isEmptyProjectForOnboarding(0, [], 'p1')).toBe(false)
+    expect(isEmptyProjectForOnboarding(0, [], 'p1', '支付中台')).toBe(true)
+    expect(isEmptyProjectForOnboarding(0, [], 'p1', '')).toBe(false)
     expect(isEmptyProjectForOnboarding(1, [], DEFAULT_PROJECT_ID)).toBe(false)
     expect(
       isEmptyProjectForOnboarding(0, [{ name: '综合研发工程师', projectId: DEFAULT_PROJECT_ID }], DEFAULT_PROJECT_ID),
@@ -191,6 +196,14 @@ describe('onboardingWizard', () => {
       isEmptyProjectForOnboarding(0, [{ name: '综合AI技术产品', projectId: 'other' }], DEFAULT_PROJECT_ID),
     ).toBe(false)
     expect(isEmptyProjectForOnboarding(0, [{ name: '综合AI技术产品', projectId: '' }], DEFAULT_PROJECT_ID)).toBe(true)
+  })
+
+  it('derives agent names from project prefix for non-default projects', () => {
+    expect(sanitizeOnboardingPrefix('支付中台')).toBe('支付中台')
+    expect(deriveOnboardingAgentNames(DEFAULT_PROJECT_ID, 'ignored')).toEqual([...ONBOARDING_AGENT_NAMES])
+    expect(deriveOnboardingAgentNames('p1', '支付中台')[0]).toBe('支付中台AI技术产品')
+    expect(onboardingStepsForMode('createProject')[0]?.id).toBe('projectName')
+    expect(onboardingStepsForMode('firstInstall')[0]?.id).toBe('language')
   })
 
   it('auto-open keys on the default workflow, not on having been seen', () => {

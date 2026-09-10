@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import { api } from '@/lib/api/api'
@@ -17,49 +18,68 @@ import { setLocale } from '@/lib/shared/locale'
 import { setTheme, type ThemeName } from '@/lib/shared/theme'
 import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 import { useToast } from '@/lib/composables/useToast'
+import { writeStoredProjectId } from '@/lib/composables/useProjectContext'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import {
+  DEFAULT_PROJECT_ID,
   ONBOARDING_AGENT_NAMES,
   ONBOARDING_CLI_BACKENDS,
   ONBOARDING_GIT_TYPES,
-  ONBOARDING_STEPS,
   applyOnboardingBackend,
   applyStartPath,
   assembleBootstrapBody,
+  deriveOnboardingAgentNames,
   freshOnboardingDraft,
   gitConfigured,
   gitIdentityConfigured,
+  onboardingStepsForMode,
   repoConfigured,
   repoNameFromUrl,
+  sanitizeOnboardingPrefix,
   type OnboardingBootstrapResult,
   type OnboardingDraft,
+  type OnboardingMode,
   type OnboardingStartPath,
 } from '@/lib/pm/onboardingWizard'
 import { START_PATH_OPTIONS } from '@/lib/shared/startPath'
 
-const props = defineProps<{
-  open: boolean
-  projectId: string
-}>()
+export type OnboardingCompletedResult = OnboardingBootstrapResult & { projectId?: string }
+
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    /** Used for firstInstall/retry; empty for createProject until created. */
+    projectId?: string
+    mode?: OnboardingMode
+  }>(),
+  {
+    projectId: '',
+    mode: 'firstInstall',
+  },
+)
 
 const emit = defineEmits<{
   close: []
-  completed: [result: OnboardingBootstrapResult]
+  completed: [result: OnboardingCompletedResult]
 }>()
 
 const { t } = useI18n()
 const toast = useToast()
+const router = useRouter()
 
 const draft = ref<OnboardingDraft>(freshOnboardingDraft())
 const creating = ref(false)
 const createError = ref('')
 const phase = ref<'wizard' | 'success'>('wizard')
 const result = ref<OnboardingBootstrapResult | null>(null)
+const createdProjectId = ref('')
 const stepAnimKey = ref(0)
 const keyError = ref(false)
 const modelError = ref(false)
+const projectNameError = ref('')
 
-const currentStep = computed(() => ONBOARDING_STEPS[draft.value.step] || ONBOARDING_STEPS[0])
+const steps = computed(() => onboardingStepsForMode(props.mode || 'firstInstall'))
+const currentStep = computed(() => steps.value[draft.value.step] || steps.value[0])
 const languageOptions: { id: AppLocale; label: string; hint: string }[] = [
   { id: 'zh-CN', label: '简体中文', hint: 'Chinese (Simplified)' },
   { id: 'en', label: 'English', hint: '英语' },
@@ -70,12 +90,25 @@ const themeOptions: { id: ThemeName; labelKey: string; hintKey: string }[] = [
 ]
 const startPathOptions = START_PATH_OPTIONS
 const progressPct = computed(() =>
-  phase.value === 'success' ? 100 : ((draft.value.step + 1) / ONBOARDING_STEPS.length) * 100,
+  phase.value === 'success' ? 100 : ((draft.value.step + 1) / steps.value.length) * 100,
 )
 const regionPolicy = computed(() => getRegionPolicy(draft.value.acpBackend))
 const authGuide = computed(() => authGuideFor(draft.value.acpBackend, draft.value.region))
 const primaryAuthKey = computed(() => authGuide.value.keys[0]?.key || '')
 const primaryAuthAlt = computed(() => authGuide.value.keys[0]?.alt || '')
+const effectiveMode = computed<OnboardingMode>(() => {
+  // After create succeeds, copy/hints switch to retry; steps stay createProject so the rail index stays valid.
+  if (createdProjectId.value) return 'retry'
+  return props.mode || 'firstInstall'
+})
+const wizardTitle = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (props.mode || 'firstInstall') === 'createProject') {
+    return t('pages.onboarding.titleCreate')
+  }
+  if (mode === 'retry') return t('pages.onboarding.titleRetry')
+  return t('pages.onboarding.title')
+})
 const headSub = computed(() => {
   if (phase.value === 'success') return t('pages.onboarding.head.success')
   return t(`pages.onboarding.head.${currentStep.value.id}`)
@@ -84,7 +117,37 @@ const gitOk = computed(() => gitConfigured(draft.value))
 const identityOk = computed(() => gitIdentityConfigured(draft.value))
 const repoOk = computed(() => repoConfigured(draft.value))
 const repoDirName = computed(() => repoNameFromUrl(draft.value.repoUrl))
+const successAgentNames = computed(() => {
+  if (result.value?.agentIds?.length) return result.value.agentIds
+  if ((props.mode || 'firstInstall') === 'createProject' || createdProjectId.value) {
+    return deriveOnboardingAgentNames('new', draft.value.projectName)
+  }
+  const pid = (props.projectId || DEFAULT_PROJECT_ID).trim() || DEFAULT_PROJECT_ID
+  if (pid === DEFAULT_PROJECT_ID) return [...ONBOARDING_AGENT_NAMES]
+  return deriveOnboardingAgentNames(pid, draft.value.projectName)
+})
+const overviewAgentsList = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (mode === 'retry' && (createdProjectId.value || props.projectId) !== DEFAULT_PROJECT_ID)) {
+    return t('pages.onboarding.overview.agentsListDerived')
+  }
+  return t('pages.onboarding.overview.agentsList')
+})
+const reviewFeatureHint = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (mode === 'retry' && (createdProjectId.value || props.projectId) !== DEFAULT_PROJECT_ID)) {
+    return t('pages.onboarding.review.featureHintDerived')
+  }
+  return t('pages.onboarding.review.featureHint')
+})
 
+const successDesc = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (mode === 'retry' && (createdProjectId.value || props.projectId) !== DEFAULT_PROJECT_ID)) {
+    return t('pages.onboarding.success.descDerived')
+  }
+  return t('pages.onboarding.success.desc')
+})
 watch(
   () => props.open,
   (open) => {
@@ -95,8 +158,10 @@ watch(
       createError.value = ''
       phase.value = 'wizard'
       result.value = null
+      createdProjectId.value = ''
       keyError.value = false
       modelError.value = false
+      projectNameError.value = ''
       stepAnimKey.value++
     }
   },
@@ -107,6 +172,13 @@ watch(
 function closeWizard() {
   if (creating.value) return
   emit('close')
+}
+
+function goToProjectAgents(projectId: string) {
+  const id = projectId.trim()
+  if (!id) return
+  writeStoredProjectId(id)
+  void router.push({ path: `/projects/${id}`, query: { tab: 'agents' } })
 }
 
 function selectBackend(id: BackendId) {
@@ -157,12 +229,29 @@ function toggleBrowserMcp() {
   if (draft.value.browserMcp) draft.value.vncPreview = true
 }
 
+function validateProjectNameStep(): boolean {
+  const name = draft.value.projectName.trim()
+  if (!name) {
+    projectNameError.value = t('pages.onboarding.projectName.required')
+    toast.error(projectNameError.value)
+    return false
+  }
+  if (!sanitizeOnboardingPrefix(name)) {
+    projectNameError.value = t('pages.onboarding.projectName.invalid')
+    toast.error(projectNameError.value)
+    return false
+  }
+  projectNameError.value = ''
+  return true
+}
+
 function goPrev() {
   if (draft.value.step === 0 || creating.value || phase.value === 'success') return
   draft.value.step--
   stepAnimKey.value++
   keyError.value = false
   modelError.value = false
+  projectNameError.value = ''
 }
 
 function goSkip() {
@@ -188,6 +277,7 @@ function goSkip() {
 function goNext() {
   if (creating.value) return
   const step = currentStep.value
+  if (step.id === 'projectName' && !validateProjectNameStep()) return
   if (step.id === 'apiKey' && !draft.value.apiKey.trim()) {
     keyError.value = true
     toast.error(t('pages.onboarding.toastNeedKey'))
@@ -220,11 +310,21 @@ function goNext() {
   }
   keyError.value = false
   modelError.value = false
+  projectNameError.value = ''
   draft.value.step++
   stepAnimKey.value++
-  if (ONBOARDING_STEPS[draft.value.step]?.id === 'apiKey') {
+  if (steps.value[draft.value.step]?.id === 'apiKey') {
     nextTick(() => document.getElementById('onb-api-key')?.focus())
   }
+}
+
+async function runBootstrap(projectId: string, body: ReturnType<typeof assembleBootstrapBody>) {
+  const res = await api.bootstrapProjectOnboarding(projectId, body)
+  result.value = res
+  phase.value = 'success'
+  toast.success(t('pages.onboarding.toastOk'))
+  goToProjectAgents(projectId)
+  emit('completed', { ...res, projectId })
 }
 
 async function submitBootstrap() {
@@ -238,15 +338,51 @@ async function submitBootstrap() {
     toast.error(t('pages.agentStudio.openCode.modelRequired'))
     return
   }
+  // Project already created this session: skip name validation and never create again.
+  if ((props.mode || 'firstInstall') === 'createProject' && !createdProjectId.value && !validateProjectNameStep()) {
+    return
+  }
+
   creating.value = true
   createError.value = ''
   try {
     const body = assembleBootstrapBody(draft.value)
-    const res = await api.bootstrapProjectOnboarding(props.projectId, body)
-    result.value = res
-    phase.value = 'success'
-    toast.success(t('pages.onboarding.toastOk'))
-    emit('completed', res)
+
+    // create→bootstrap failure: keep same project id and only retry bootstrap (s3/f6).
+    if (createdProjectId.value) {
+      try {
+        await runBootstrap(createdProjectId.value, body)
+      } catch (e: any) {
+        createError.value = e?.message || String(e)
+        toast.error(createError.value || t('pages.onboarding.toastErr'))
+      }
+      return
+    }
+
+    if ((props.mode || 'firstInstall') === 'createProject') {
+      const created = await api.createProject({
+        name: draft.value.projectName.trim(),
+        description: '',
+      })
+      // Remember id so a bootstrap failure retries bootstrap only — never create again (s3/f6).
+      createdProjectId.value = created.id
+      try {
+        await runBootstrap(created.id, body)
+      } catch (e: any) {
+        createError.value = e?.message || String(e)
+        toast.error(createError.value || t('pages.onboarding.toastErr'))
+        goToProjectAgents(created.id)
+      }
+      return
+    }
+
+    const projectId = (props.projectId || '').trim()
+    if (!projectId) {
+      createError.value = t('pages.onboarding.toastErr')
+      toast.error(createError.value)
+      return
+    }
+    await runBootstrap(projectId, body)
   } catch (e: any) {
     createError.value = e?.message || String(e)
     toast.error(createError.value || t('pages.onboarding.toastErr'))
@@ -271,7 +407,7 @@ async function submitBootstrap() {
             <Icon name="sparkles" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
-            <h2 class="m-0 text-[16px] font-semibold text-txt">{{ t('pages.onboarding.title') }}</h2>
+            <h2 class="m-0 text-[16px] font-semibold text-txt" data-testid="onboarding-title">{{ wizardTitle }}</h2>
             <span class="mt-0.5 block text-[12px] text-txt3">{{ headSub }}</span>
           </div>
           <button
@@ -293,9 +429,9 @@ async function submitBootstrap() {
 
         <div v-if="phase === 'success'" class="flex min-h-0 flex-1 flex-col px-8 py-7" data-testid="onboarding-success">
           <h3 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.onboarding.success.title') }}</h3>
-          <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.success.desc') }}</p>
+          <p class="mt-2 text-[13px] text-txt2">{{ successDesc }}</p>
           <ul class="mt-4 space-y-1.5 text-[13px] text-txt2">
-            <li v-for="n in ONBOARDING_AGENT_NAMES" :key="n">· {{ n }}</li>
+            <li v-for="n in successAgentNames" :key="n">· {{ n }}</li>
             <li>· {{ t('pages.onboarding.success.publishedLine') }}</li>
           </ul>
           <p
@@ -353,7 +489,7 @@ async function submitBootstrap() {
               {{ t('pages.onboarding.railCap') }}
             </div>
             <div
-              v-for="(s, i) in ONBOARDING_STEPS"
+              v-for="(s, i) in steps"
               :key="s.id"
               class="mb-1 flex items-stretch gap-2.5 text-txt3"
               :class="{ 'text-txt2': i < draft.step, 'text-txt': i === draft.step }"
@@ -368,7 +504,7 @@ async function submitBootstrap() {
                     :class="i < draft.step ? 'bg-ok' : i === draft.step ? 'bg-accent' : 'bg-transparent'"
                   />
                 </div>
-                <div v-if="i < ONBOARDING_STEPS.length - 1" class="mt-1 w-px flex-1 bg-line" />
+                <div v-if="i < steps.length - 1" class="mt-1 w-px flex-1 bg-line" />
               </div>
               <strong class="pb-3 text-[13px] font-medium">{{ t(s.labelKey) }}</strong>
             </div>
@@ -379,7 +515,27 @@ async function submitBootstrap() {
               <div :key="stepAnimKey">
                 <h3 class="m-0 text-[15px] font-semibold text-txt">{{ t(currentStep.labelKey) }}</h3>
 
-                <template v-if="currentStep.id === 'language'">
+                <template v-if="currentStep.id === 'projectName'">
+                  <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.projectName.meta') }}</p>
+                  <label class="mt-4 block">
+                    <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+                      {{ t('pages.onboarding.projectName.label') }} <span class="text-err">*</span>
+                    </span>
+                    <input
+                      v-model="draft.projectName"
+                      type="text"
+                      autocomplete="off"
+                      class="rounded-md w-full border border-line bg-base px-3 py-2 text-[13px] text-txt outline-none focus:border-accent"
+                      :placeholder="t('pages.onboarding.projectName.placeholder')"
+                      data-testid="onboarding-project-name"
+                      @input="projectNameError = ''"
+                      @keydown.enter.prevent="goNext"
+                    />
+                    <p v-if="projectNameError" class="mt-1 text-[12px] text-err">{{ projectNameError }}</p>
+                  </label>
+                </template>
+
+                <template v-else-if="currentStep.id === 'language'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.language.meta') }}</p>
                   <div class="mt-5 grid max-w-lg grid-cols-2 gap-3">
                     <button
@@ -439,7 +595,7 @@ async function submitBootstrap() {
                     <div class="rounded-lg border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.agents') }}</div>
                       <div class="mt-1 text-[18px] font-semibold text-txt">6</div>
-                      <p class="mt-1 text-[12px] text-txt2">{{ t('pages.onboarding.overview.agentsList') }}</p>
+                      <p class="mt-1 text-[12px] text-txt2" data-testid="onboarding-overview-agents">{{ overviewAgentsList }}</p>
                     </div>
                     <div class="rounded-lg border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.workflow') }}</div>
@@ -829,7 +985,7 @@ async function submitBootstrap() {
                     <span class="rounded-lg border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.wfChip') }}</span>
                   </div>
                   <p v-if="!draft.apiKey.trim()" class="mt-3 text-[12px] text-warn">{{ t('pages.onboarding.review.needKey') }}</p>
-                  <p class="mt-3 text-[12px] text-txt3">{{ t('pages.onboarding.review.featureHint') }}</p>
+                  <p class="mt-3 text-[12px] text-txt3" data-testid="onboarding-review-hint">{{ reviewFeatureHint }}</p>
                   <p v-if="createError" class="mt-2 text-[12px] text-err">{{ createError }}</p>
                 </template>
               </div>

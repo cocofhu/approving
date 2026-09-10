@@ -13,6 +13,7 @@ import {
 
 vi.mock('@/lib/api/api', () => ({
   api: {
+    createProject: vi.fn(),
     bootstrapProjectOnboarding: vi.fn(async () => ({
       agentIds: [
         '综合AI技术产品',
@@ -37,6 +38,10 @@ vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn(), warn: vi.fn(), show: vi.fn() }),
 }))
 
+vi.mock('@/lib/composables/useProjectContext', () => ({
+  writeStoredProjectId: vi.fn(),
+}))
+
 vi.mock('vue-i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-i18n')>()
   return {
@@ -47,6 +52,25 @@ vi.mock('vue-i18n', async (importOriginal) => {
   }
 })
 
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+async function mountWizard(props: Record<string, unknown> = {}) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', component: { template: '<div />' } },
+      { path: '/projects/:id', component: { template: '<div />' } },
+    ],
+  })
+  await router.push('/')
+  return mount(OnboardingWizard, {
+    props: { open: true, projectId: DEFAULT_PROJECT_ID, mode: 'firstInstall', ...props },
+    global: {
+      plugins: [router],
+      stubs: { Teleport: true, Icon: true, AppButton: true },
+    },
+  })
+}
 /** Picks the vendor and model the catalog stub serves, then fills the key. */
 async function fillOpenCodeAuth(wrapper: ReturnType<typeof mount>, key = 'sk-oc-demo') {
   await wrapper
@@ -66,10 +90,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('shows language first and persists a language switch', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     expect(wrapper.find('[data-testid="onboarding-language-zh-CN"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="onboarding-language-en"]').exists()).toBe(true)
     await wrapper.find('[data-testid="onboarding-language-zh-CN"]').trigger('click')
@@ -79,10 +100,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('sets the theme from the first step', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     expect(wrapper.find('[data-testid="onboarding-theme-dark"]').exists()).toBe(true)
     await wrapper.find('[data-testid="onboarding-theme-light"]').trigger('click')
     expect(localStorage.getItem('approving-theme')).toBe('light')
@@ -93,10 +111,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('backend step offers two start paths and swaps the detail block', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 2; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -121,10 +136,7 @@ describe('OnboardingWizard', () => {
 
   it('bootstraps with opencode when the API-key path is chosen', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 2; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -156,10 +168,7 @@ describe('OnboardingWizard', () => {
 
   it('sends the repo typed in the git step', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 3; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -198,10 +207,7 @@ describe('OnboardingWizard', () => {
 
   it('skipping the git step drops the repo too', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     for (let i = 0; i < 3; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
@@ -235,10 +241,7 @@ describe('OnboardingWizard', () => {
   })
 
   it('later closes without persisting, so a reload re-opens the wizard', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.find('[data-testid="onboarding-later"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
     expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
@@ -246,20 +249,14 @@ describe('OnboardingWizard', () => {
   })
 
   it('backdrop close does not persist suppression', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.find('[data-testid="onboarding-backdrop"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
     expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
   })
 
   it('close button does not persist suppression', async () => {
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.find('[data-testid="onboarding-close"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
     expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
@@ -272,10 +269,7 @@ describe('OnboardingWizard', () => {
 
   it('blocks generate without API key then succeeds with key', async () => {
     const { api } = await import('@/lib/api/api')
-    const wrapper = mount(OnboardingWizard, {
-      props: { open: true, projectId: DEFAULT_PROJECT_ID },
-      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
-    })
+    const wrapper = await mountWizard()
     await wrapper.setProps({ open: false })
     await wrapper.setProps({ open: true })
     await nextTick()
@@ -307,5 +301,72 @@ describe('OnboardingWizard', () => {
     expect(
       shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [{ name: ONBOARDING_WORKFLOW_NAME }], []),
     ).toBe(false)
+  })
+
+  /** Advance createProject wizard from projectName through review (generate). */
+  async function advanceCreateToGenerate(wrapper: Awaited<ReturnType<typeof mountWizard>>) {
+    await wrapper.find('[data-testid="onboarding-project-name"]').setValue('支付中台')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    // language → overview → acp → apiKey
+    for (let i = 0; i < 3; i++) {
+      await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+      await nextTick()
+    }
+    await fillOpenCodeAuth(wrapper, 'sk-create')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    // git (skip identity via filling) → review
+    await wrapper.find('[data-testid="onboarding-git-user-name"]').setValue('Ada')
+    await wrapper.find('[data-testid="onboarding-git-user-email"]').setValue('ada@example.com')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await flushPromises()
+  }
+
+  it('create mode: bootstrap failure then retry does not call createProject again (s3/f6)', async () => {
+    const { api } = await import('@/lib/api/api')
+    vi.mocked(api.createProject).mockResolvedValue({ id: 'proj-created-1', name: '支付中台' } as never)
+    vi.mocked(api.bootstrapProjectOnboarding)
+      .mockRejectedValueOnce(new Error('bootstrap blew up'))
+      .mockResolvedValueOnce({
+        agentIds: ['支付中台研发工程师'],
+        workflowId: 'wf-x',
+        published: true,
+        groupName: '支付中台项目组',
+      } as never)
+
+    const wrapper = await mountWizard({ mode: 'createProject', projectId: '' })
+    expect(wrapper.find('[data-testid="onboarding-title"]').text()).toBe('pages.onboarding.titleCreate')
+
+    await advanceCreateToGenerate(wrapper)
+
+    expect(api.createProject).toHaveBeenCalledTimes(1)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalledTimes(1)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalledWith('proj-created-1', expect.any(Object))
+    expect(wrapper.find('[data-testid="onboarding-success"]').exists()).toBe(false)
+
+    // Stay on review and generate again — must not create another project.
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await flushPromises()
+
+    expect(api.createProject).toHaveBeenCalledTimes(1)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalledTimes(2)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenNthCalledWith(2, 'proj-created-1', expect.any(Object))
+    expect(wrapper.find('[data-testid="onboarding-success"]').exists()).toBe(true)
+  })
+
+  it('create mode shows derived-team copy instead of 综合*', async () => {
+    const wrapper = await mountWizard({ mode: 'createProject', projectId: '' })
+    expect(wrapper.find('[data-testid="onboarding-title"]').text()).toBe('pages.onboarding.titleCreate')
+    await wrapper.find('[data-testid="onboarding-project-name"]').setValue('支付中台')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="onboarding-overview-agents"]').text()).toBe(
+      'pages.onboarding.overview.agentsListDerived',
+    )
   })
 })

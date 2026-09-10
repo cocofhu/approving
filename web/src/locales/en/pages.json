@@ -240,6 +240,8 @@
     },
     "onboarding": {
       "title": "First-time setup",
+      "titleCreate": "New project setup",
+      "titleRetry": "Continue setup",
       "railCap": "Steps",
       "prev": "Back",
       "next": "Next",
@@ -251,8 +253,10 @@
       "cta": "Finish install setup",
       "emptyTitle": "Finish first-time setup",
       "emptyDesc": "Configure ACP backend, token, and Git; create the default team and Default Workflow. Does not start a Run.",
+      "emptyDescCreate": "Configure ACP backend, token, and Git; create this project's team and Default Workflow (agent names derived from the project name). Does not start a Run.",
       "workflowName": "Default Workflow",
       "head": {
+        "projectName": "Enter a project name",
         "language": "Choose display language and theme",
         "overview": "What will be written",
         "acp": "Choose how to start",
@@ -262,12 +266,20 @@
         "success": "Install complete"
       },
       "steps": {
+        "projectName": "Project name",
         "language": "Language & theme",
         "overview": "Overview",
         "acp": "Backend",
         "apiKey": "API Key",
         "git": "Git",
         "review": "Review"
+      },
+      "projectName": {
+        "meta": "The project name is used to derive Agent and team naming prefixes.",
+        "label": "Project name",
+        "placeholder": "e.g. Payments platform",
+        "required": "Please enter a project name",
+        "invalid": "That name cannot produce a valid Agent naming prefix — try another"
       },
       "language": {
         "meta": "Choose the display language for setup and the control plane. It defaults to your system language.",
@@ -287,6 +299,7 @@
         "itemPreview": "Page preview and browser tools on by default so the sandbox can show a page and let the agent use a browser",
         "agents": "Agents",
         "agentsList": "Default team: product / implement / test / review / preview / lead",
+        "agentsListDerived": "This project's team: product / implement / test / review / preview / lead (names derived from the project name)",
         "workflow": "Workflow",
         "workflowHint": "Set the repo now, or when starting a Run",
         "banner": "Keep secrets in shared config only — never in Agent workspaces."
@@ -351,6 +364,7 @@
         "meta": "Confirm below. Existing same-named resources are reused/updated (idempotent).",
         "needKey": "API Key is missing — go back and fill it in.",
         "featureHint": "Installs the default team and Default Workflow. Fill the repo when you start a Run.",
+        "featureHintDerived": "Installs this project's team and Default Workflow (agent names derived from the project name). Fill the repo when you start a Run.",
         "agentsChip": "Agents · 6",
         "wfChip": "Workflow · Default Workflow",
         "keyOn": "set",
@@ -364,6 +378,7 @@
       "success": {
         "title": "Setup ready",
         "desc": "Shared auth written; default team and published Default Workflow are ready.",
+        "descDerived": "Shared auth written; this project's team and published Default Workflow are ready.",
         "limit": "Default Workflow has an empty repo URL — fill it when starting a Run. For private repos, confirm Git credentials in shared Agent config.",
         "repoOk": "Saved to the Default Workflow repos variable, cloning to /root/workspace/{dir}/. You can still change it at run start.",
         "publishedLine": "Default Workflow (published)",
@@ -420,6 +435,7 @@
       "tabExternalMcp": "External MCP",
       "tabPmMemory": "Project memory",
       "tabCronJobs": "Scheduled tasks",
+      "tabAgents": "Agents",
       "tabSharedAgent": "Shared Agent config",
       "tabVariables": "Workflow variables",
       "tabAudit": "Audit",
@@ -1808,6 +1824,8 @@
       "emptyTeamDesc": "After you fill project background and runtime config, a sandbox creates the project, root group, PM, and 9 engineers with virtual groups.",
       "emptyTeamCta": "Create Agent team",
       "emptyTeamOrSingle": "or create a single Agent",
+      "emptyProjectTitle": "No agents in this project yet",
+      "emptyProjectDesc": "Create an Agent bound to this project. Teams are set up when you create the project.",
       "createTeam": "Create Agent team",
       "unsaved": "Unsaved",
       "saved": "Saved",

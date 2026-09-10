@@ -387,6 +387,27 @@ export function mergeCollapsedWithOrgChange(
   return next
 }
 
+/** Keep groups that contain any of agentNames (or ancestors of those groups). */
+export function pruneOrgToAgentGroups(org: AgentOrg, agentNames: string[]): AgentOrg {
+  const byId = groupById(org)
+  const keep = new Set<string>()
+  for (const name of agentNames) {
+    for (const gid of groupIdsOf(org, name)) {
+      let cur: string | undefined = gid
+      const seen = new Set<string>()
+      while (cur && byId.has(cur) && !seen.has(cur)) {
+        seen.add(cur)
+        keep.add(cur)
+        cur = byId.get(cur)?.parentGroupId || undefined
+      }
+    }
+  }
+  return {
+    ...org,
+    groups: (org.groups || []).filter((g) => keep.has(g.id)),
+  }
+}
+
 export function buildOrgTreeRows(
   org: AgentOrg,
   agentNames: string[],

@@ -29,7 +29,7 @@ func (h *Handlers) BootstrapProjectOnboarding(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrOnboardingAPIKeyRequired),
-			errors.Is(err, services.ErrOnboardingNotDefaultProject):
+			errors.Is(err, services.ErrInvalidAgentName):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, services.ErrOnboardingProjectNotFound):
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

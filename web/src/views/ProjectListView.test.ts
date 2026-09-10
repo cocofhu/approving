@@ -13,7 +13,10 @@ import enPages from '@/locales/en/pages.json'
 
 const apiMocks = vi.hoisted(() => ({
   listProjects: vi.fn(),
-  createProject: vi.fn(),
+}))
+
+const firstInstallMocks = vi.hoisted(() => ({
+  openCreateProjectOnboarding: vi.fn(),
 }))
 
 vi.mock('@/lib/api/api', async () => {
@@ -23,10 +26,13 @@ vi.mock('@/lib/api/api', async () => {
     api: {
       ...actual.api,
       listProjects: apiMocks.listProjects,
-      createProject: apiMocks.createProject,
     },
   }
 })
+
+vi.mock('@/lib/pm/firstInstall', () => ({
+  openCreateProjectOnboarding: firstInstallMocks.openCreateProjectOnboarding,
+}))
 
 vi.mock('@/lib/composables/useToast', () => ({
   useToast: () => ({ success: vi.fn(), error: vi.fn() }),
@@ -68,10 +74,6 @@ function mountList(locale: 'zh-CN' | 'en' = 'zh-CN') {
       stubs: {
         Icon: true,
         AppButton: { template: '<button type="button" v-bind="$attrs"><slot /></button>' },
-        AppModal: {
-          props: ['open', 'title'],
-          template: '<div v-if="open" data-testid="create-modal"><slot /></div>',
-        },
         EmptyState: { props: ['title'], template: '<div data-testid="empty-state"><p>{{ title }}</p><slot /></div>' },
         TokenUsageHoverTip: true,
       },
@@ -163,15 +165,17 @@ describe('ProjectListView source lock (Demo loading)', () => {
     expect(src).toMatch(/:aria-busy="loading \? 'true' : 'false'"/)
   })
 
-  it('four states and creating pending copy are Demo-locked', () => {
+  it('four states and create-onboarding entry are Demo-locked', () => {
     expect(src).toMatch(/data-testid="project-list-failed"/)
     expect(src).toMatch(/data-testid="project-list-denied"/)
     expect(src).toMatch(/data-testid="project-list-empty"/)
     expect(src).toMatch(/common\.asyncState\.loadFailedTitle/)
     expect(src).toMatch(/common\.asyncState\.permissionDeniedTitle/)
     expect(src).toMatch(/Icon name="lock"/)
-    expect(src).toMatch(/common\.buttons\.creating/)
+    expect(src).toMatch(/openCreateProjectOnboarding/)
     expect(src).toMatch(/createListRequestSeq/)
+    expect(src).not.toMatch(/AppModal/)
+    expect(src).not.toMatch(/project-list-create-submit/)
   })
 })
 
@@ -232,37 +236,25 @@ describe('ProjectListView loading states', () => {
     w.unmount()
   })
 
-  it('create submit shows Creating… / 创建中… and disables', async () => {
+  it('new project opens create-project onboarding wizard', async () => {
     apiMocks.listProjects.mockResolvedValue([])
-    let release!: (v: unknown) => void
-    apiMocks.createProject.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    firstInstallMocks.openCreateProjectOnboarding.mockClear()
     const w = mountList()
     await flushPromises()
-    await w.findAll('button').find((b) => b.text().includes('新建项目'))!.trigger('click')
-    await flushPromises()
-    const name = w.find('input')
-    await name.setValue('New')
-    await w.get('[data-testid="project-list-create-submit"]').trigger('click')
-    await flushPromises()
-    const submit = w.get('[data-testid="project-list-create-submit"]')
-    expect(submit.text()).toBe('创建中…')
-    expect((submit.element as HTMLButtonElement).disabled).toBe(true)
-    release!({ id: 'p9', name: 'New' })
-    await flushPromises()
+    await w.get('[data-testid="project-list-new"]').trigger('click')
+    expect(firstInstallMocks.openCreateProjectOnboarding).toHaveBeenCalledTimes(1)
+    expect(w.find('[data-testid="create-modal"]').exists()).toBe(false)
+    expect(w.find('[data-testid="project-list-create-submit"]').exists()).toBe(false)
     w.unmount()
   })
 
-  it('en pending copy is Creating…', async () => {
+  it('empty-state CTA also opens create-project onboarding', async () => {
     apiMocks.listProjects.mockResolvedValue([])
-    apiMocks.createProject.mockReturnValue(new Promise(() => {}))
-    const w = mountList('en')
+    firstInstallMocks.openCreateProjectOnboarding.mockClear()
+    const w = mountList()
     await flushPromises()
-    await w.findAll('button').find((b) => /new project/i.test(b.text()))!.trigger('click')
-    await flushPromises()
-    await w.find('input').setValue('New')
-    await w.get('[data-testid="project-list-create-submit"]').trigger('click')
-    await flushPromises()
-    expect(w.get('[data-testid="project-list-create-submit"]').text()).toBe('Creating…')
+    await w.get('[data-testid="project-list-new-empty"]').trigger('click')
+    expect(firstInstallMocks.openCreateProjectOnboarding).toHaveBeenCalledTimes(1)
     w.unmount()
   })
 

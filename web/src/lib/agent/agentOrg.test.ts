@@ -12,6 +12,7 @@ import {
   groupPath,
   groupProjectLabel,
   mergeCollapsedWithOrgChange,
+  pruneOrgToAgentGroups,
   recursiveMemberNames,
   shouldSyncDraftAfterAssign,
   unifiedProjectId,
@@ -214,6 +215,26 @@ describe('recursive members + unique project label', () => {
     expect(root?.kind === 'group' && root.projectLabel).toBe('')
     expect(empty?.kind === 'group' && empty.count).toBe(0)
     expect(empty?.kind === 'group' && empty.projectLabel).toBe('')
+  })
+
+  it('pruneOrgToAgentGroups drops foreign empty install groups (embedded studio)', () => {
+    const org: AgentOrg = {
+      revision: 1,
+      groups: [
+        { id: 'g_onb_proj-a', name: 'Alpha项目组' },
+        { id: 'g_onb_proj-b', name: 'Beta项目组' },
+        { id: 'g_child', name: '子组', parentGroupId: 'g_onb_proj-a' },
+      ],
+      agents: {
+        'Alpha研发工程师': { groupIds: ['g_onb_proj-a'] },
+        'Alpha测试工程师': { groupIds: ['g_child'] },
+      },
+    }
+    const pruned = pruneOrgToAgentGroups(org, ['Alpha研发工程师', 'Alpha测试工程师'])
+    expect(pruned.groups?.map((g) => g.id).sort()).toEqual(['g_child', 'g_onb_proj-a'])
+    const rows = buildOrgTreeRows(pruned, ['Alpha研发工程师', 'Alpha测试工程师'], new Set())
+    expect(rows.some((r) => r.kind === 'group' && r.id === 'g_onb_proj-b')).toBe(false)
+    expect(rows.some((r) => r.kind === 'group' && r.id === 'g_onb_proj-a')).toBe(true)
   })
 
   it('classifyAssignTargets + draft sync helpers', () => {

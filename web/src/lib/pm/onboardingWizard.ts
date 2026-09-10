@@ -5,6 +5,7 @@ import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 import type { ThemeName } from '@/lib/shared/theme'
 import { theme } from '@/lib/shared/theme'
 import { DEFAULT_OPENCODE_PROVIDER } from '@/lib/agent/openCodeProvider'
+import { normalizeAgentName, validateAgentName } from '@/lib/agent/agentIO'
 import {
   APIKEY_BACKEND,
   CLI_BACKEND_DEFAULT,
@@ -27,6 +28,11 @@ export const DEFAULT_PROJECT_ID = 'proj-default'
 
 export const ONBOARDING_WORKFLOW_NAME = '默认工作流'
 export const FIRST_INSTALL_GROUP_NAME = '综合项目组'
+export const ONBOARDING_NAME_MARKER = '综合'
+
+/** Longest role suffix after replacing 综合 (代码审查工程师). */
+const LONGEST_ONBOARDING_ROLE_SUFFIX = 7
+const MAX_AGENT_NAME_RUNES = 64
 
 export const ONBOARDING_AGENT_NAMES = [
   '综合AI技术产品',
@@ -37,7 +43,16 @@ export const ONBOARDING_AGENT_NAMES = [
   '综合项目组组长',
 ] as const
 
-export type OnboardingStepId = 'language' | 'overview' | 'acp' | 'apiKey' | 'git' | 'review'
+export type OnboardingMode = 'firstInstall' | 'createProject' | 'retry'
+
+export type OnboardingStepId =
+  | 'projectName'
+  | 'language'
+  | 'overview'
+  | 'acp'
+  | 'apiKey'
+  | 'git'
+  | 'review'
 
 export type OnboardingStep = {
   id: OnboardingStepId
@@ -45,7 +60,7 @@ export type OnboardingStep = {
   skip?: boolean
 }
 
-export const ONBOARDING_STEPS: OnboardingStep[] = [
+const BASE_ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'language', labelKey: 'pages.onboarding.steps.language' },
   { id: 'overview', labelKey: 'pages.onboarding.steps.overview' },
   { id: 'acp', labelKey: 'pages.onboarding.steps.acp' },
@@ -53,6 +68,19 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'git', labelKey: 'pages.onboarding.steps.git', skip: true },
   { id: 'review', labelKey: 'pages.onboarding.steps.review' },
 ]
+
+/** Default-project / retry steps (no project name). */
+export const ONBOARDING_STEPS: OnboardingStep[] = BASE_ONBOARDING_STEPS
+
+export function onboardingStepsForMode(mode: OnboardingMode): OnboardingStep[] {
+  if (mode === 'createProject') {
+    return [
+      { id: 'projectName', labelKey: 'pages.onboarding.steps.projectName' },
+      ...BASE_ONBOARDING_STEPS,
+    ]
+  }
+  return BASE_ONBOARDING_STEPS
+}
 
 export const ONBOARDING_GIT_TYPES: { id: GitCredentialType; labelKey: string }[] = [
   { id: 'github_https', labelKey: 'pages.agentStudio.git.types.github_https' },
@@ -62,6 +90,7 @@ export const ONBOARDING_GIT_TYPES: { id: GitCredentialType; labelKey: string }[]
 
 export type OnboardingDraft = {
   step: number
+  projectName: string
   language: AppLocale
   theme: ThemeName
   startPath: StartPath
@@ -146,23 +175,62 @@ export function suppressOnboarding(projectId: string): void {
   }
 }
 
-/** First-install empty default project: 0 workflows, 0 bound agents, no name conflicts. */
+/** Wash project name into a valid Agent-name prefix (mirrors server SanitizeOnboardingPrefix). */
+export function sanitizeOnboardingPrefix(projectName: string): string {
+  const raw = normalizeAgentName(projectName)
+  if (!raw) return ''
+  let out = ''
+  for (const ch of raw) {
+    if (/\s/u.test(ch)) continue
+    if (/[./\\]/u.test(ch)) continue
+    if (/[－＿．／＼、，。！？：；（）【】]/u.test(ch)) continue
+    if (/^[\p{L}\p{N}_-]$/u.test(ch)) out += ch
+  }
+  const maxPrefix = MAX_AGENT_NAME_RUNES - LONGEST_ONBOARDING_ROLE_SUFFIX
+  if (Array.from(out).length > maxPrefix) {
+    out = Array.from(out).slice(0, maxPrefix).join('')
+  }
+  return validateAgentName(out) === '' ? out : ''
+}
+
+/** Agent names that bootstrap will create for this project. */
+export function deriveOnboardingAgentNames(projectId: string, projectName: string): string[] {
+  if (projectId === DEFAULT_PROJECT_ID) return [...ONBOARDING_AGENT_NAMES]
+  const prefix = sanitizeOnboardingPrefix(projectName)
+  if (!prefix) return []
+  return ONBOARDING_AGENT_NAMES.map((n) => n.replace(ONBOARDING_NAME_MARKER, prefix))
+}
+
+function hasOnboardingNameConflict(
+  agents: { name?: string; projectId?: string }[],
+  projectId: string,
+  names: readonly string[],
+): boolean {
+  return agents.some((a) => {
+    const name = (a.name || '').trim()
+    if (!name || !(names as readonly string[]).includes(name)) return false
+    const owner = (a.projectId || '').trim()
+    return owner !== '' && owner !== projectId
+  })
+}
+
+/**
+ * Empty project eligible for install CTA: 0 workflows, 0 bound agents, no name conflicts.
+ * Any project may retry; App-level auto-open stays default-only via needsOnboarding.
+ */
 export function isEmptyProjectForOnboarding(
   workflowCount: number,
   agents: { name?: string; projectId?: string }[],
   projectId: string,
+  projectName = '',
 ): boolean {
-  if (projectId !== DEFAULT_PROJECT_ID) return false
+  if (!projectId) return false
   if (workflowCount > 0) return false
   const bound = agents.filter((a) => (a.projectId || '') === projectId)
   if (bound.length > 0) return false
-  const conflict = agents.some((a) => {
-    const name = (a.name || '').trim()
-    if (!name || !(ONBOARDING_AGENT_NAMES as readonly string[]).includes(name)) return false
-    const owner = (a.projectId || '').trim()
-    return owner !== '' && owner !== projectId
-  })
-  return !conflict
+  const names = deriveOnboardingAgentNames(projectId, projectName)
+  if (!names.length) return projectId === DEFAULT_PROJECT_ID
+  return !hasOnboardingNameConflict(agents, projectId, names)
 }
 
 /** The default workflow is the completion marker for first install. */
@@ -171,11 +239,7 @@ export function hasDefaultWorkflow(workflows: { name?: string }[]): boolean {
 }
 
 /**
- * First install is pending for as long as the default project has no default
- * workflow — that, not a "seen it" flag, is what gates the wizard. Already-bound
- * agents do not count as done (bootstrap is idempotent and re-upserts them), but
- * a fixed-name agent owned by another project would make bootstrap fail, so that
- * case stays blocked.
+ * App-level auto-open only for the default project until 默认工作流 exists.
  */
 export function needsOnboarding(
   workflows: { name?: string }[],
@@ -184,13 +248,7 @@ export function needsOnboarding(
 ): boolean {
   if (projectId !== DEFAULT_PROJECT_ID) return false
   if (hasDefaultWorkflow(workflows)) return false
-  const conflict = agents.some((a) => {
-    const name = (a.name || '').trim()
-    if (!name || !(ONBOARDING_AGENT_NAMES as readonly string[]).includes(name)) return false
-    const owner = (a.projectId || '').trim()
-    return owner !== '' && owner !== projectId
-  })
-  return !conflict
+  return !hasOnboardingNameConflict(agents, projectId, ONBOARDING_AGENT_NAMES)
 }
 
 export function shouldAutoOpenOnboarding(
@@ -206,6 +264,7 @@ export function shouldAutoOpenOnboarding(
 export function freshOnboardingDraft(): OnboardingDraft {
   return {
     step: 0,
+    projectName: '',
     language: detectSystemLocale(),
     theme: theme.value,
     startPath: 'apiKey',

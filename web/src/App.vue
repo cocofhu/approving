@@ -6,11 +6,12 @@ import ToastHost from './components/ui/ToastHost.vue'
 import AppSkeleton from './components/ui/AppSkeleton.vue'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard.vue'
 import { locale, updateDocumentTitle } from '@/lib/shared/locale'
-import { DEFAULT_PROJECT_ID } from '@/lib/pm/onboardingWizard'
 import {
   closeFirstInstall,
-  firstInstallOpen,
   markFirstInstallCompleted,
+  onboardingMode,
+  onboardingOpen,
+  onboardingProjectId,
   probeFirstInstall,
 } from '@/lib/pm/firstInstall'
 import { useAuth } from '@/lib/composables/useAuth'
@@ -71,8 +72,9 @@ watch(
   <router-view v-else />
   <OnboardingWizard
     v-if="!bareLayout"
-    :open="firstInstallOpen"
-    :project-id="DEFAULT_PROJECT_ID"
+    :open="onboardingOpen"
+    :project-id="onboardingProjectId"
+    :mode="onboardingMode"
     @close="closeFirstInstall"
     @completed="markFirstInstallCompleted"
   />
