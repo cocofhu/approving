@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -364,6 +365,69 @@ func TestGlobalTokenStatsOmitsWindowDefaultsAll(t *testing.T) {
 	}
 	if res.BucketWidth != TokenStatsBucketWeek {
 		t.Fatalf("all should use week buckets, got %s", res.BucketWidth)
+	}
+}
+
+func TestGlobalTokenStatsRankRowsIncludeTokenParts(t *testing.T) {
+	cur := &globalAgg{
+		models:       map[string]*tokenModelAgg{},
+		modelBuckets: map[string]map[string]*tokenBucketAgg{},
+		workflows:    map[string]*globalWorkflowAgg{},
+		wfNames:      map[string]string{},
+	}
+	for i := 0; i < 11; i++ {
+		key := fmt.Sprintf("model-%02d", i)
+		input := int64(100 - i)
+		output := int64(i + 1)
+		cacheRead := int64(i + 2)
+		cacheWrite := int64(i + 3)
+		total := input + output + cacheRead + cacheWrite
+		cur.models[key] = &tokenModelAgg{total: total}
+		cur.modelBuckets[key] = map[string]*tokenBucketAgg{
+			"2026-07-25": {
+				input: input, output: output,
+				cacheRead: cacheRead, cacheWrite: cacheWrite,
+			},
+		}
+
+		workflowID := fmt.Sprintf("workflow-%02d", i)
+		cur.workflows[workflowID] = &globalWorkflowAgg{
+			total: total, input: input, output: output,
+			cacheRead: cacheRead, cacheWrite: cacheWrite,
+		}
+		cur.wfNames[workflowID] = workflowID
+	}
+
+	modelRows, _ := buildGlobalModelStats(cur, nil, nil, globalTokenStatsTopModels)
+	assertTokenPartsMatchModelTotals(t, modelRows)
+	if len(modelRows) != 11 || !modelRows[len(modelRows)-1].Other {
+		t.Fatalf("expected model Top10 + other, got %+v", modelRows)
+	}
+
+	workflowRows := buildGlobalWorkflowRank(cur)
+	assertTokenPartsMatchWorkflowTotals(t, workflowRows)
+	if len(workflowRows) != 11 || !workflowRows[len(workflowRows)-1].Other {
+		t.Fatalf("expected workflow Top10 + other, got %+v", workflowRows)
+	}
+}
+
+func assertTokenPartsMatchModelTotals(t *testing.T, rows []TokenStatsModel) {
+	t.Helper()
+	for _, row := range rows {
+		parts := row.InputTokens + row.OutputTokens + row.CacheReadTokens + row.CacheWriteTokens
+		if parts != row.Total {
+			t.Fatalf("model %q parts=%d total=%d row=%+v", row.Name, parts, row.Total, row)
+		}
+	}
+}
+
+func assertTokenPartsMatchWorkflowTotals(t *testing.T, rows []TokenStatsWorkflow) {
+	t.Helper()
+	for _, row := range rows {
+		parts := row.InputTokens + row.OutputTokens + row.CacheReadTokens + row.CacheWriteTokens
+		if parts != row.Total {
+			t.Fatalf("workflow %q parts=%d total=%d row=%+v", row.Name, parts, row.Total, row)
+		}
 	}
 }
 

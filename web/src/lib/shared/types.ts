@@ -227,6 +227,10 @@ export interface TokenStatsWorkflow {
   workflowId?: string
   name: string
   total: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
   other?: boolean
   /** Rank row kind: workflow | pm | other (other = non-top workflows only). */
   kind?: TokenStatsRankKind
@@ -237,6 +241,10 @@ export interface TokenStatsModel {
   modelKey?: string
   name: string
   total: number
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
   /** 「未知/未分桶」. Shown in ranking only when it ranks in Top10; otherwise its usage is folded into other. */
   unknown?: boolean
   /** Top10 remainder (may include unknown usage that did not qualify). other is not unknown. */

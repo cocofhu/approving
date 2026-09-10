@@ -15,7 +15,13 @@ import {
   statsTooltip,
 } from '@/components/charts/chartTheme'
 import { api } from '@/lib/api/api'
-import type { GlobalTokenStats, TokenStatsWindow } from '@/lib/shared/types'
+import type {
+  GlobalTokenStats,
+  GlobalTokenStatsProjectRow,
+  TokenStatsModel,
+  TokenStatsWindow,
+  TokenStatsWorkflow,
+} from '@/lib/shared/types'
 import { fmtCompactTokenCount, fmtTokenCount } from '@/lib/run/tokenUsage'
 import { displayRunTitle } from '@/lib/run/runTitle'
 import { truncateText } from '@/lib/shared/format'
@@ -42,6 +48,11 @@ const projectSel = ref('')
 const modelSel = ref('')
 const lineMode = ref<'total' | 'project' | 'model'>('total')
 const areaMode = ref<'source' | 'comp'>('source')
+type BarDimension = 'project' | 'workflow' | 'model'
+const BAR_DIMENSIONS: BarDimension[] = ['project', 'workflow', 'model']
+const BAR_MAX_WIDTH = 28
+const BAR_TOP_RADIUS = 4
+const barDimension = ref<BarDimension>('project')
 const loading = ref(true)
 const failed = ref(false)
 const data = ref<GlobalTokenStats | null>(null)
@@ -197,19 +208,95 @@ function buildPieSlices() {
 
 const pieSlices = computed(() => buildPieSlices())
 
+interface BarRow {
+  name: string
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  filterKey?: string
+  other: boolean
+}
+
+function barPartValue(
+  row: GlobalTokenStatsProjectRow | TokenStatsWorkflow | TokenStatsModel,
+  key: TokenPartKey,
+): number {
+  if (key === 'input') return row.inputTokens || 0
+  if (key === 'output') return row.outputTokens || 0
+  if (key === 'cacheRead') return row.cacheReadTokens || 0
+  return row.cacheWriteTokens || 0
+}
+
+function normalizeBarRows(dimension: BarDimension): BarRow[] {
+  if (!data.value) return []
+  let source: Array<GlobalTokenStatsProjectRow | TokenStatsWorkflow | TokenStatsModel>
+  if (dimension === 'project') source = data.value.projects.slice(0, 10)
+  else if (dimension === 'workflow') source = data.value.workflows
+  else source = data.value.modelRanking
+  return source.map((row) => ({
+    name: row.name,
+    input: barPartValue(row, 'input'),
+    output: barPartValue(row, 'output'),
+    cacheRead: barPartValue(row, 'cacheRead'),
+    cacheWrite: barPartValue(row, 'cacheWrite'),
+    filterKey:
+      dimension === 'project'
+        ? (row as GlobalTokenStatsProjectRow).projectId
+        : dimension === 'model'
+          ? (row as TokenStatsModel).modelKey
+          : undefined,
+    other: !!('other' in row && row.other),
+  }))
+}
+
+const barRowsByDimension = computed<Record<BarDimension, BarRow[]>>(() => ({
+  project: normalizeBarRows('project'),
+  workflow: normalizeBarRows('workflow'),
+  model: normalizeBarRows('model'),
+}))
+
+const barDimensionEnabled = computed<Record<BarDimension, boolean>>(() => ({
+  project: barRowsByDimension.value.project.length >= 2,
+  workflow: barRowsByDimension.value.workflow.length >= 2,
+  model: barRowsByDimension.value.model.length >= 2,
+}))
+
+const hasComparableBarDimension = computed(() =>
+  BAR_DIMENSIONS.some((dimension) => barDimensionEnabled.value[dimension]),
+)
+
+function reconcileBarDimension() {
+  if (barDimensionEnabled.value[barDimension.value]) return
+  const fallback = BAR_DIMENSIONS.find((dimension) => barDimensionEnabled.value[dimension])
+  if (fallback) barDimension.value = fallback
+}
+
+function selectBarDimension(dimension: BarDimension) {
+  if (barDimensionEnabled.value[dimension]) barDimension.value = dimension
+}
+
 function barChartOption() {
-  if (!data.value?.projects.length) return null
-  const projs = data.value.projects.slice(0, 10)
+  const rows = barRowsByDimension.value[barDimension.value]
+  if (rows.length < 2) return null
   const partSeries = (key: TokenPartKey) => ({
     type: 'bar' as const,
     stack: 'total',
     name: partLabel(key),
+    barMaxWidth: BAR_MAX_WIDTH,
     itemStyle: { color: TOKEN_PART_COLORS[key] },
-    data: projs.map((p) => {
-      if (key === 'input') return p.inputTokens
-      if (key === 'output') return p.outputTokens
-      if (key === 'cacheRead') return p.cacheReadTokens || 0
-      return p.cacheWriteTokens || 0
+    data: rows.map((row) => {
+      const value = row[key]
+      const topKey = [...TOKEN_PART_KEYS].reverse().find((partKey) => row[partKey] > 0)
+      return {
+        value,
+        filterKey: row.filterKey,
+        other: row.other,
+        itemStyle: {
+          color: TOKEN_PART_COLORS[key],
+          borderRadius: key === topKey ? [BAR_TOP_RADIUS, BAR_TOP_RADIUS, 0, 0] : 0,
+        },
+      }
     }),
   })
   return {
@@ -221,10 +308,10 @@ function barChartOption() {
     },
     xAxis: {
       type: 'category',
-      data: projs.map((p) => p.name),
+      data: rows.map((row) => row.name),
       ...statsAxis(),
       splitLine: { show: false },
-      axisLabel: { ...statsAxis().axisLabel, interval: 0, rotate: projs.length > 6 ? 30 : 0 },
+      axisLabel: { ...statsAxis().axisLabel, interval: 0, rotate: rows.length > 6 ? 30 : 0 },
     },
     yAxis: {
       type: 'value',
@@ -382,6 +469,7 @@ async function load() {
     )
     if (gen !== generation) return
     data.value = res
+    reconcileBarDimension()
     failed.value = false
   } catch (e: unknown) {
     if (gen !== generation) return
@@ -410,12 +498,21 @@ function applySource(s: 'all' | 'workflow' | 'pm') {
 }
 
 function onBarClick(params: unknown) {
-  const ev = params as { name?: string; componentType?: string }
-  if (ev.componentType !== 'series' || !ev.name) return
-  const proj = data.value?.projects.find((p) => p.name === ev.name)
-  if (!proj) return
-  projectSel.value = proj.projectId
-  toast.show(t('pages.tokenAnalytics.filterApplied', { name: proj.name }))
+  const ev = params as {
+    name?: string
+    componentType?: string
+    data?: { filterKey?: string; other?: boolean }
+  }
+  if (
+    ev.componentType !== 'series'
+    || !ev.name
+    || ev.data?.other
+    || !ev.data?.filterKey
+    || barDimension.value === 'workflow'
+  ) return
+  if (barDimension.value === 'project') projectSel.value = ev.data.filterKey
+  else modelSel.value = ev.data.filterKey
+  toast.show(t('pages.tokenAnalytics.filterApplied', { name: ev.name }))
   void load()
 }
 
@@ -718,11 +815,35 @@ watch([windowSel], () => void load())
           </div>
         </section>
 
-        <section id="bars" class="mb-3 rounded-lg border border-line bg-surface p-3.5" data-testid="token-analytics-bars">
+        <section
+          v-if="hasComparableBarDimension"
+          id="bars"
+          class="mb-3 rounded-lg border border-line bg-surface p-3.5"
+          data-testid="token-analytics-bars"
+        >
           <h2 class="m-0 text-sm font-semibold">
             {{ t('pages.tokenAnalytics.charts.bars') }}
-            <em class="ml-2 text-[11px] font-normal text-txt3">{{ t('pages.tokenAnalytics.charts.barsHint') }}</em>
+            <em class="ml-2 text-[11px] font-normal text-txt3">
+              {{ t(`pages.tokenAnalytics.charts.barsHints.${barDimension}`) }}
+            </em>
           </h2>
+          <div class="mt-2 flex gap-1.5">
+            <button
+              v-for="dimension in BAR_DIMENSIONS"
+              :key="dimension"
+              type="button"
+              class="px-2.5 py-1 text-xs"
+              :class="[
+                barDimension === dimension ? 'bg-elevated font-semibold' : 'text-txt3',
+                !barDimensionEnabled[dimension] ? 'cursor-not-allowed opacity-40' : '',
+              ]"
+              :disabled="!barDimensionEnabled[dimension]"
+              :data-testid="`token-analytics-bar-dimension-${dimension}`"
+              @click="selectBarDimension(dimension)"
+            >
+              {{ t(`pages.tokenAnalytics.barDimensions.${dimension}`) }}
+            </button>
+          </div>
           <div class="token-analytics-plot mt-2 h-[200px] overflow-visible" data-testid="token-analytics-plot-bars">
             <VChart
               v-if="barChartOption()"

@@ -39,10 +39,19 @@ const MOCK_STATS = {
     cacheReadTokens: 800,
     cacheWriteTokens: 200,
   },
-  projects: [{ projectId: 'p1', name: 'Demo', total: 9000, inputTokens: 5000, outputTokens: 3000, cacheReadTokens: 800, cacheWriteTokens: 200 }],
-  modelRanking: [{ modelKey: 'm1', name: 'Model', total: 9000 }],
+  projects: [
+    { projectId: 'p1', name: 'Demo', total: 7000, inputTokens: 4000, outputTokens: 2200, cacheReadTokens: 600, cacheWriteTokens: 200 },
+    { projectId: 'p2', name: 'Docs', total: 2000, inputTokens: 1000, outputTokens: 800, cacheReadTokens: 200, cacheWriteTokens: 0 },
+  ],
+  modelRanking: [
+    { modelKey: 'm1', name: 'Model', total: 7000, inputTokens: 4000, outputTokens: 2200, cacheReadTokens: 600, cacheWriteTokens: 200 },
+    { modelKey: 'm2', name: 'Model Mini', total: 2000, inputTokens: 1000, outputTokens: 800, cacheReadTokens: 200, cacheWriteTokens: 0 },
+  ],
   nodeTypes: [{ name: 'agent', total: 9000 }],
-  workflows: [{ name: 'wf', total: 9000, kind: 'workflow' }],
+  workflows: [
+    { workflowId: 'w1', name: 'wf', total: 7000, inputTokens: 4000, outputTokens: 2200, cacheReadTokens: 600, cacheWriteTokens: 200, kind: 'workflow' },
+    { workflowId: 'w2', name: 'review', total: 2000, inputTokens: 1000, outputTokens: 800, cacheReadTokens: 200, cacheWriteTokens: 0, kind: 'workflow' },
+  ],
   heatmap: { rows: ['Model'], cols: ['Demo'], grid: [[9000]] },
   topRuns: [
     {
@@ -124,6 +133,24 @@ test.describe('Global token analytics', () => {
     await expect(page.getByRole('button', { name: '按模型' })).toHaveClass(/font-semibold/)
     await page.getByRole('button', { name: '总量（对比上一周期）' }).click()
     await expect(page.getByRole('button', { name: '总量（对比上一周期）' })).toHaveClass(/font-semibold/)
+  })
+
+  test('bar dimensions switch without page errors', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await openStatsPage(page)
+    const bars = page.getByTestId('token-analytics-bars')
+    await expect(bars).toBeVisible()
+    await expect(page.getByTestId('token-analytics-bar-dimension-project')).toHaveClass(/font-semibold/)
+
+    await page.getByTestId('token-analytics-bar-dimension-workflow').click()
+    await expect(page.getByTestId('token-analytics-bar-dimension-workflow')).toHaveClass(/font-semibold/)
+    await expect(bars).toContainText('各工作流用量堆叠对比')
+
+    await page.getByTestId('token-analytics-bar-dimension-model').click()
+    await expect(page.getByTestId('token-analytics-bar-dimension-model')).toHaveClass(/font-semibold/)
+    await expect(bars).toContainText('各模型用量堆叠对比')
+    expect(errors).toEqual([])
   })
 
   test('project table link navigates to project board tab', async ({ page }) => {

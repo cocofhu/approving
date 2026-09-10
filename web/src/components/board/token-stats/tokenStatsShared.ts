@@ -1,9 +1,9 @@
 /** Shared Token stats chart colors aligned with approved page.html Demo. */
 export const TOKEN_PART_COLORS = {
-  input: '#3b82f6',
-  output: '#8b5cf6',
-  cacheRead: '#14b8a6',
-  cacheWrite: '#f59e0b',
+  input: '#4f46e5',
+  output: '#7c6dff',
+  cacheRead: '#a99cff',
+  cacheWrite: '#c9c0ff',
 } as const
 
 /** Trend/rank source colors (workflow / pm share purple; PM distinguished by dashed line). */

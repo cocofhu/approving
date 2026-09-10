@@ -75,13 +75,22 @@
         "source": "By source",
         "comp": "By input/output/cache"
       },
+      "barDimensions": {
+        "project": "Project",
+        "workflow": "Workflow",
+        "model": "Model"
+      },
       "charts": {
         "lines": "Line chart",
         "linesHint": "Compare the current range with the previous period; split by project or model",
         "pies": "Share",
         "piesHint": "Click a slice to filter",
         "bars": "Bar chart",
-        "barsHint": "Stacked usage by project",
+        "barsHints": {
+          "project": "Stacked usage by project",
+          "workflow": "Stacked usage by workflow",
+          "model": "Stacked usage by model"
+        },
         "area": "Stacked area",
         "areaHint": "Daily by source, or input/output/cache",
         "heat": "Models vs projects",

@@ -7,6 +7,7 @@ import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import nav from '@/locales/zh-CN/nav.json'
 import route from '@/locales/zh-CN/route.json'
+import { TOKEN_PART_COLORS } from '@/components/board/token-stats/tokenStatsShared'
 
 vi.mock('@/lib/api/api', () => ({
   api: {
@@ -62,10 +63,19 @@ const sampleData = {
   trend: [{ bucket: '2026-07-01', total: 100, workflowTotal: 80, pmTotal: 20, inputTokens: 40, outputTokens: 30, cacheReadTokens: 20, cacheWriteTokens: 10 }],
   prevTrend: [{ bucket: '2026-06-01', total: 80, workflowTotal: 60, pmTotal: 20, inputTokens: 30, outputTokens: 25, cacheReadTokens: 15, cacheWriteTokens: 10 }],
   composition: { inputTokens: 3000, outputTokens: 1500, cacheReadTokens: 400, cacheWriteTokens: 100, total: 5000 },
-  projects: [{ projectId: 'p1', name: 'Approving', total: 3000, inputTokens: 1800, outputTokens: 900, cacheReadTokens: 200, cacheWriteTokens: 100 }],
-  modelRanking: [{ modelKey: 'sonnet', name: 'Sonnet', total: 4000 }],
+  projects: [
+    { projectId: 'p1', name: 'Approving', total: 3000, inputTokens: 1800, outputTokens: 900, cacheReadTokens: 200, cacheWriteTokens: 100 },
+    { projectId: 'p2', name: 'Other project', total: 2000, inputTokens: 1200, outputTokens: 600, cacheReadTokens: 200, cacheWriteTokens: 0 },
+  ],
+  modelRanking: [
+    { modelKey: 'sonnet', name: 'Sonnet', total: 4000, inputTokens: 2400, outputTokens: 1200, cacheReadTokens: 300, cacheWriteTokens: 100 },
+    { modelKey: 'opus', name: 'Opus', total: 1000, inputTokens: 600, outputTokens: 300, cacheReadTokens: 100, cacheWriteTokens: 0 },
+  ],
   nodeTypes: [{ name: 'agent', total: 4000 }],
-  workflows: [{ workflowId: 'w1', name: 'main', total: 3000, kind: 'workflow' as const }],
+  workflows: [
+    { workflowId: 'w1', name: 'main', total: 3000, inputTokens: 1800, outputTokens: 900, cacheReadTokens: 200, cacheWriteTokens: 100, kind: 'workflow' as const },
+    { workflowId: 'w2', name: 'review', total: 2000, inputTokens: 1200, outputTokens: 600, cacheReadTokens: 200, cacheWriteTokens: 0, kind: 'workflow' as const },
+  ],
   heatmap: { rows: ['Sonnet'], cols: ['Approving'], grid: [[3000]] },
   topRuns: [{ runId: 'r1', title: 'Run 1', projectId: 'p1', projectName: 'Approving', workflowName: 'main', modelKey: 'sonnet', modelName: 'Sonnet', total: 500 }],
   projectTrends: [{ key: 'p1', name: 'Approving', trend: [{ bucket: '2026-07-01', total: 100, workflowTotal: 80, pmTotal: 20, inputTokens: 40, outputTokens: 30, cacheReadTokens: 20, cacheWriteTokens: 10 }] }],
@@ -205,6 +215,134 @@ describe('TokenAnalyticsView', () => {
     expect(option.tooltip?.confine).toBe(false)
     expect(option.tooltip?.valueFormatter?.(2_080_982_825)).toBe('2.08B')
     expect(option.yAxis?.axisLabel?.formatter?.(2_500_000_000)).toBe('2.5B')
+    wrapper.unmount()
+  })
+
+  it('defaults and falls back to the first comparable bar dimension', async () => {
+    const cases = [
+      { data: sampleData, active: 'project' },
+      { data: { ...sampleData, projects: sampleData.projects.slice(0, 1) }, active: 'workflow' },
+      {
+        data: {
+          ...sampleData,
+          projects: sampleData.projects.slice(0, 1),
+          workflows: sampleData.workflows.slice(0, 1),
+        },
+        active: 'model',
+      },
+    ]
+    for (const scenario of cases) {
+      vi.mocked(api.getGlobalTokenStats).mockResolvedValueOnce(scenario.data)
+      const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+      await flushPromises()
+      expect(wrapper.find(`[data-testid="token-analytics-bar-dimension-${scenario.active}"]`).classes())
+        .toContain('font-semibold')
+      wrapper.unmount()
+    }
+  })
+
+  it('disables non-comparable dimensions and hides bars when none are comparable', async () => {
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValueOnce({
+      ...sampleData,
+      projects: sampleData.projects.slice(0, 1),
+      workflows: sampleData.workflows.slice(0, 1),
+      modelRanking: sampleData.modelRanking.slice(0, 1),
+    })
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="token-analytics-bars"]').exists()).toBe(false)
+    wrapper.unmount()
+
+    vi.mocked(api.getGlobalTokenStats).mockResolvedValueOnce({
+      ...sampleData,
+      projects: sampleData.projects.slice(0, 1),
+    })
+    const fallbackWrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const projectButton = fallbackWrapper.find('[data-testid="token-analytics-bar-dimension-project"]')
+    expect(projectButton.attributes('disabled')).toBeDefined()
+    expect(projectButton.classes()).toContain('opacity-40')
+    fallbackWrapper.unmount()
+  })
+
+  it('switches bar dimensions locally and applies bar styling and colors', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    await wrapper.find('[data-testid="token-analytics-bar-dimension-workflow"]').trigger('click')
+    await flushPromises()
+    expect(api.getGlobalTokenStats).not.toHaveBeenCalled()
+
+    const barChart = wrapper.findAllComponents({ name: 'VChart' }).find((chart) => {
+      const option = chart.props('option') as { series?: { type?: string }[] }
+      return option.series?.[0]?.type === 'bar'
+    })
+    const option = barChart!.props('option') as {
+      xAxis: { data: string[] }
+      series: Array<{
+        barMaxWidth: number
+        itemStyle: { color: string }
+        data: Array<{ itemStyle: { borderRadius: number | number[] } }>
+      }>
+    }
+    expect(option.xAxis.data).toEqual(['main', 'review'])
+    expect(option.series.every((series) => series.barMaxWidth === 28)).toBe(true)
+    expect(option.series.map((series) => series.itemStyle.color)).toEqual(
+      Object.values(TOKEN_PART_COLORS),
+    )
+    expect(option.series.some((series) =>
+      series.data.some((item) => Array.isArray(item.itemStyle.borderRadius)),
+    )).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('filters on project/model bars but not workflow or other bars', async () => {
+    const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const getBarChart = () => wrapper.findAllComponents({ name: 'VChart' }).find((chart) => {
+      const option = chart.props('option') as { series?: { type?: string }[] }
+      return option.series?.[0]?.type === 'bar'
+    })!
+
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    getBarChart().vm.$emit('click', {
+      componentType: 'series',
+      name: 'Approving',
+      data: { filterKey: 'p1', other: false },
+    })
+    await flushPromises()
+    expect(api.getGlobalTokenStats).toHaveBeenLastCalledWith(
+      expect.objectContaining({ projectId: 'p1' }),
+      expect.anything(),
+    )
+
+    await wrapper.find('[data-testid="token-analytics-bar-dimension-model"]').trigger('click')
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    getBarChart().vm.$emit('click', {
+      componentType: 'series',
+      name: 'Sonnet',
+      data: { filterKey: 'sonnet', other: false },
+    })
+    await flushPromises()
+    expect(api.getGlobalTokenStats).toHaveBeenLastCalledWith(
+      expect.objectContaining({ modelKey: 'sonnet' }),
+      expect.anything(),
+    )
+
+    await wrapper.find('[data-testid="token-analytics-bar-dimension-workflow"]').trigger('click')
+    vi.mocked(api.getGlobalTokenStats).mockClear()
+    getBarChart().vm.$emit('click', {
+      componentType: 'series',
+      name: 'main',
+      data: { filterKey: undefined, other: false },
+    })
+    getBarChart().vm.$emit('click', {
+      componentType: 'series',
+      name: 'other',
+      data: { filterKey: 'ignored', other: true },
+    })
+    await flushPromises()
+    expect(api.getGlobalTokenStats).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
