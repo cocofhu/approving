@@ -12,6 +12,7 @@ const viewsDir = dirname(fileURLToPath(import.meta.url))
 const viewSrc = readFileSync(join(viewsDir, 'PublicGateApprovalView.vue'), 'utf8')
 const shellSrc = readFileSync(join(viewsDir, '../components/run/ReviewShell.vue'), 'utf8')
 const chatSrc = readFileSync(join(viewsDir, '../components/run/ClarifyChat.vue'), 'utf8')
+const composerSrc = readFileSync(join(viewsDir, '../components/run/ReviewComposer.vue'), 'utf8')
 
 function publicGateRootClass(): string {
   const rootIdx = viewSrc.indexOf('data-testid="public-gate-root"')
@@ -38,7 +39,7 @@ describe('PublicGateApproval height chain to clarify-scroller (g1.2 / g2)', () =
   it('workbench and sidebar keep min-h-0 flex chain', () => {
     expect(viewSrc).toMatch(/data-testid="public-gate-workbench"/)
     expect(viewSrc).toMatch(/class="flex min-h-0 flex-1 flex-col"[^>]*data-testid="public-gate-workbench"/)
-    expect(viewSrc).toMatch(/ReviewShell class="min-h-0 flex-1"/)
+    expect(viewSrc).toMatch(/<ReviewShell\s+class="min-h-0 flex-1"/)
     expect(viewSrc).toMatch(/data-testid="public-gate-sidebar"/)
     expect(viewSrc).toMatch(/class="flex h-full min-h-0 flex-col"[^>]*data-testid="public-gate-sidebar"/)
     // Chat host wrapper (ClarifyChat is multi-root; fallthrough class is ignored)
@@ -46,13 +47,17 @@ describe('PublicGateApproval height chain to clarify-scroller (g1.2 / g2)', () =
     expect(viewSrc).toMatch(/class="flex min-h-0 flex-1 flex-col"[^>]*data-testid="public-gate-chat-host"/)
   })
 
-  it('footer stays shrink-0 in workbench (confirm stays in page footer, g2.1)', () => {
+  it('confirm stays in the bounded ReviewComposer instead of the page footer', () => {
     const footerIdx = viewSrc.indexOf('data-testid="public-gate-footer"')
     expect(footerIdx).toBeGreaterThanOrEqual(0)
     const footerOpen = viewSrc.slice(Math.max(0, footerIdx - 200), footerIdx + 40)
     expect(footerOpen).toMatch(/\bshrink-0\b/)
-    expect(viewSrc).toMatch(/data-testid="public-gate-confirm"/)
-    expect(viewSrc).toMatch(/hide-finish/)
+    expect(viewSrc).toMatch(/<ReviewComposer/)
+    expect(viewSrc).toMatch(/@finish="onComposerFinish"/)
+    expect(viewSrc).not.toMatch(/data-testid="public-gate-confirm"/)
+    expect(viewSrc).not.toMatch(/\bhide-finish\b/)
+    expect(composerSrc).toMatch(/data-testid="review-composer-shell"/)
+    expect(chatSrc).toMatch(/data-testid="clarify-confirm-flow"/)
   })
 
   it('stage keeps bounded height with internal scroll for tall content (g2.3)', () => {

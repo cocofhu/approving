@@ -40,6 +40,8 @@ const props = withDefaults(
     textOnly?: boolean
     /** Gate: disable confirm (e.g. open PreviewIssues). */
     passDisabled?: boolean
+    /** Adapter-only override for react nodes that own a final decision action. */
+    forceConfirm?: boolean
     /**
      * Gate: when true, send may fire without draft/attachments/annotations
      * (e.g. PreviewIssues n_open≥1 — issues already recorded elsewhere).
@@ -81,6 +83,7 @@ const props = withDefaults(
     coldSession: false,
     textOnly: false,
     passDisabled: false,
+    forceConfirm: false,
     rejectAllowEmpty: false,
     passLabel: '',
     rejectLabel: '',
@@ -114,6 +117,12 @@ const paragraphRef = ref<{ pickFiles?: () => void } | null>(null)
 const chatRef = ref<{
   applyReviewFrame: (frame: any) => void
   applyAcpEvents: (events: AcpEvent[] | undefined, nodeId?: string) => boolean | void
+  applyQueueState: (
+    waiting: number,
+    items: any[] | null,
+    busy?: boolean,
+    activeItem?: any | null,
+  ) => void
   cancelReview: () => void
   discardLastQueued: () => void
   isSessionBusy?: () => boolean
@@ -134,6 +143,12 @@ defineExpose({
     if (!chatRef.value?.applyAcpEvents) return false
     return chatRef.value.applyAcpEvents(events, nodeId) !== false
   },
+  applyQueueState: (
+    waiting: number,
+    items: any[] | null,
+    busy?: boolean,
+    activeItem?: any | null,
+  ) => chatRef.value?.applyQueueState?.(waiting, items, busy, activeItem),
   cancelReview: () => chatRef.value?.cancelReview(),
   discardLastQueued: () => chatRef.value?.discardLastQueued(),
   isChatReady: () => !!chatRef.value,
@@ -215,7 +230,6 @@ function onConfirm() {
   >
     <ClarifyChat
       ref="chatRef"
-      class="min-h-0 flex-1"
       :run-id="runId || ''"
       :node-id="nodeId || ''"
       :iteration="iteration"
@@ -226,9 +240,12 @@ function onConfirm() {
       :node-type="nodeType"
       :done="done"
       :active="active"
+      :cold-session="coldSession"
+      :finish-disabled="passDisabled"
+      :force-confirm-flow="forceConfirm"
       :review-mode="mode === 'review'"
       :annotate-enabled="mode === 'clarify' || mode === 'review'"
-      :hide-finish="mode === 'clarify' && nodeType !== 'approve'"
+      :hide-finish="!canPass || (mode === 'clarify' && nodeType !== 'approve' && !forceConfirm)"
       :seed-human-text="seedHumanText"
       :seed-human-images="seedHumanImages"
       :send-label="mode === 'clarify' ? t('pages.reviewComposer.sendClarify') : undefined"

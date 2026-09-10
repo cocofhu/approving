@@ -9,6 +9,8 @@ import commonEn from '@/locales/en/common.json'
 import pagesEn from '@/locales/en/pages.json'
 import shellEn from '@/locales/en/shell.json'
 import { setTheme } from '@/lib/shared/theme'
+import { i18n as appI18n } from '@/lib/shared/i18n'
+import { locale as appLocale } from '@/lib/shared/locale'
 
 const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
@@ -90,6 +92,16 @@ function mountView(locale: 'zh-CN' | 'en' = 'zh-CN') {
   return wrapper
 }
 
+function mountSharedLocaleView(locale: 'zh-CN' | 'en' = 'zh-CN') {
+  appI18n.global.setLocaleMessage('zh-CN', { ...common, ...pages, ...shell })
+  appI18n.global.setLocaleMessage('en', { ...commonEn, ...pagesEn, ...shellEn })
+  appI18n.global.locale.value = locale
+  appLocale.value = locale
+  const wrapper = mount(PublicGateApprovalView, { global: { plugins: [appI18n] } })
+  mounted.push(wrapper)
+  return wrapper
+}
+
 beforeEach(() => {
   mocks.preview.mockReset()
   mocks.upstream.mockReset()
@@ -112,6 +124,19 @@ afterEach(() => {
 })
 
 describe('PublicGateApprovalView workbench', () => {
+  it('switches language from the top-right control and persists it', async () => {
+    const w = mountSharedLocaleView('zh-CN')
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('链接无效')
+    await w.get('[data-testid="lang-select-trigger"]').trigger('click')
+    const english = w.findAll('[role="option"]').find((option) => option.text().includes('English'))
+    expect(english).toBeTruthy()
+    await english!.trigger('click')
+    await flushPromises()
+    expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('invalid')
+    expect(localStorage.getItem('approving-locale')).toBe('en')
+  })
+
   it('renders dark three-pane workbench for human_gate without purple chrome', async () => {
     window.location.hash = `#t=${'aa'.repeat(32)}`
     mocks.preview.mockResolvedValue({
@@ -136,19 +161,18 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="review-shell"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-product-label"]').text()).toContain('视觉网页产物')
     expect(w.get('[data-testid="public-gate-product-name"]').text()).toBe('page.html')
-    expect(w.get('[data-testid="public-gate-footer"]').text()).toContain('上游上下文')
+    expect(w.get('[data-testid="public-gate-upstream"]').text()).toContain('上游上下文')
     expect(w.get('[data-testid="public-gate-upstream-enlarge"]').text()).toContain('放大上游上下文')
-    expect(w.get('[data-testid="public-gate-confirm"]').text()).toBe('确认并流转')
+    expect(w.get('[data-testid="clarify-confirm-flow"]').text()).toBe('确认并流转')
     expect(w.get('[data-testid="public-gate-reject"]').text()).toBe('驳回')
-    expect(w.get('[data-testid="public-gate-confirm-hint"]').text()).toContain('不触发 Agent')
     expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('Agent交互')
-    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
     expect(w.find('[data-testid="clarify-input"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/请确认本次交付|这是交付预览|不是审批工作台|Approving|打开运行详情|run-/)
     expect(w.find('[data-testid="html-preview-inspect-toggle"]').exists()).toBe(true)
   })
 
-  it('review hot session has ReAct + footer confirm and no reject', async () => {
+  it('review hot session has ReAct + composer confirm and no reject', async () => {
     window.location.hash = `#t=${'ee'.repeat(32)}`
     mocks.preview.mockResolvedValue({
       status: 'active',
@@ -172,14 +196,15 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="public-gate-react-stage"]').exists()).toBe(true)
     expect(w.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('共 2 条')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-name"]').exists()).toBe(false)
-    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
-    expect(w.get('[data-testid="public-gate-footer"]').text()).toContain('放大上游上下文')
+    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.get('[data-testid="public-gate-upstream"]').text()).toContain('放大上游上下文')
+    expect(w.find('[data-testid="public-gate-footer"]').exists()).toBe(false)
 
     mocks.decide.mockResolvedValue({ status: 'confirmed', action: 'confirm' })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'confirm' }),
@@ -209,7 +234,7 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.get('[data-testid="public-gate-cold-hint"]').text()).toContain('仅可确认并流转')
     expect(w.find('[data-testid="clarify-input"]').exists()).toBe(false)
     expect(w.find('[data-testid="html-preview-inspect-toggle"]').exists()).toBe(false)
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
     expect(w.get('[data-testid="public-gate-sidebar"]').text()).toContain('历史回合')
   })
 
@@ -227,7 +252,7 @@ describe('PublicGateApprovalView workbench', () => {
     const w = mountView()
     await flushPromises()
     expect(w.get('[data-testid="public-gate-preset-chip"]').text()).toContain('仅 ReAct')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-reject"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-name"]').exists()).toBe(false)
 
@@ -244,7 +269,7 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.get('[data-testid="public-gate-react-only-deadend"]').text()).toContain('无法继续操作')
     expect(w.get('[data-testid="public-gate-react-only-deadend"]').text()).toContain('禁止确认')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-cold-hint"]').exists()).toBe(false)
   })
 
@@ -259,15 +284,16 @@ describe('PublicGateApprovalView workbench', () => {
     })
     const w = mountView()
     await flushPromises()
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).not.toHaveBeenCalled()
-    expect(w.get('[data-testid="public-gate-error"]').text()).toContain('姓名与意见')
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toContain('姓名与意见')
+    expect(w.find('[data-testid="public-gate-error"]').exists()).toBe(false)
 
     await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
     await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
     mocks.decide.mockResolvedValue({ status: 'approved' })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -316,7 +342,7 @@ describe('PublicGateApprovalView workbench', () => {
     expect(mocks.reply).toHaveBeenCalledWith(expect.objectContaining({ token: 'aa'.repeat(32), text: '改标题' }))
     expect(mocks.decide).not.toHaveBeenCalled()
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
   })
 
   it('busy confirm stays on workbench and keeps the link', async () => {
@@ -336,10 +362,10 @@ describe('PublicGateApprovalView workbench', () => {
       error: 'review_busy',
       message: '复审进行中，请稍后再试',
     })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
-    expect(w.get('[data-testid="public-gate-error"]').text()).toContain('复审进行中')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toContain('复审进行中')
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
   })
 
@@ -390,7 +416,7 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.find('[data-testid="clarify-review-queue"]').exists()).toBe(true)
     // plan g1/g2: busy keeps confirm mounted and disabled (not unmounted).
-    const confirmBusy = w.find('[data-testid="public-gate-confirm"]')
+    const confirmBusy = w.find('[data-testid="clarify-confirm-flow"]')
     expect(confirmBusy.exists()).toBe(true)
     expect((confirmBusy.element as HTMLButtonElement).disabled).toBe(true)
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
@@ -415,7 +441,7 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
     // plan g1/g2: sessionBusy resume keeps confirm visible + disabled.
-    const confirmResume = w.find('[data-testid="public-gate-confirm"]')
+    const confirmResume = w.find('[data-testid="clarify-confirm-flow"]')
     expect(confirmResume.exists()).toBe(true)
     expect((confirmResume.element as HTMLButtonElement).disabled).toBe(true)
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
@@ -560,7 +586,7 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.get('[data-testid="public-gate-badge"]').text()).toBe('外部一次决策')
     expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('已过期')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(false)
     expect(w.find('[data-testid="clarify-input"]').exists()).toBe(false)
     expect(w.get('[data-testid="public-gate-root"]').text()).not.toMatch(/请确认本次交付/)
   })
@@ -631,17 +657,15 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
     await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await w.get('[data-testid="public-gate-reject"]').trigger('click')
     await flushPromises()
 
     expect(mocks.decide).toHaveBeenCalledTimes(1)
-    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('正在确认…')
-    expect(w.get('[data-testid="public-gate-confirm"]').text()).not.toContain('提交中…')
+    expect(w.get('[data-testid="clarify-confirm-flow"]').text()).toContain('校验中')
     expect(w.get('[data-testid="public-gate-reject"]').text()).toContain('提交中…')
-    expect(w.get('[data-testid="public-gate-confirm"]').attributes('aria-busy')).toBe('true')
-    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect((w.get('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(true)
     expect((w.get('[data-testid="public-gate-reject"]').element as HTMLButtonElement).disabled).toBe(true)
 
     resolveDecide({ status: 'approved' })
@@ -671,15 +695,15 @@ describe('PublicGateApprovalView workbench', () => {
     await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
     await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
     mocks.decide.mockRejectedValueOnce(new Error('postgres connection refused at 10.1.2.3'))
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
-    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('安全校验未通过，请再试一次「确认并流转」')
-    expect(w.get('[data-testid="public-gate-error"]').text()).not.toMatch(/网络错误/)
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toBe('安全校验未通过，请再试一次「确认并流转」')
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).not.toMatch(/网络错误/)
     expect(w.text()).not.toContain('postgres')
     expect(w.text()).not.toContain('10.1.2.3')
     expect(w.text()).not.toMatch(/\bcsrf\b|\bnonce\b/i)
     expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
-    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect((w.get('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('maps decide failures to Demo-locked footnotes without leaking internals', async () => {
@@ -715,13 +739,13 @@ describe('PublicGateApprovalView workbench', () => {
     ]
     for (const c of cases) {
       mocks.decide.mockRejectedValueOnce(c.err)
-      await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+      await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
       await flushPromises()
-      expect(w.get('[data-testid="public-gate-error"]').text()).toBe(c.copy)
+      expect(w.get('[data-testid="clarify-confirm-error"]').text()).toBe(c.copy)
       expect(w.text()).not.toMatch(/\bcsrf\b|\bnonce\b/i)
       expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
       expect(w.find('[data-testid="public-gate-invalid"]').exists()).toBe(false)
-      expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+      expect((w.get('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(false)
     }
   })
 
@@ -745,12 +769,12 @@ describe('PublicGateApprovalView workbench', () => {
     await w.get('[data-testid="public-gate-name"]').setValue('Jordan')
     await w.get('[data-testid="public-gate-comment"]').setValue('可以流转')
     const previewCalls = mocks.preview.mock.calls.length
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     await new Promise((r) => setTimeout(r, 2500))
     await flushPromises()
     expect(mocks.preview.mock.calls.length).toBe(previewCalls)
-    expect(w.get('[data-testid="public-gate-confirm"]').text()).toContain('正在确认…')
+    expect(w.get('[data-testid="clarify-confirm-flow"]').text()).toContain('校验中')
     resolveDecide({ status: 'approved' })
     await flushPromises()
     expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
@@ -779,12 +803,12 @@ describe('PublicGateApprovalView workbench', () => {
       reactSessionAlive: true,
       actions: { confirm: 'confirm' },
     })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledTimes(2)
     expect(mocks.decide.mock.calls[0][0]).toEqual(expect.objectContaining({ nonce: 'n-old' }))
     expect(mocks.decide.mock.calls[1][0]).toEqual(expect.objectContaining({ nonce: 'n-new' }))
-    expect(w.find('[data-testid="public-gate-error"]').exists()).toBe(false)
+    expect(w.find('[data-testid="clarify-confirm-error"]').exists()).toBe(false)
     expect(w.get('[data-testid="public-gate-done"]').text()).toContain('已确认')
     expect(w.text()).not.toMatch(/\bnonce\b/i)
   })
@@ -810,12 +834,12 @@ describe('PublicGateApprovalView workbench', () => {
       reactSessionAlive: true,
       actions: { confirm: 'confirm' },
     })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledTimes(2)
-    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('安全校验未通过，请再试一次「确认并流转」')
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toBe('安全校验未通过，请再试一次「确认并流转」')
     expect(w.text()).not.toMatch(/\bnonce\b/i)
-    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect((w.get('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('does not refresh nonce for csrf, rate limit, or network failures', async () => {
@@ -833,27 +857,27 @@ describe('PublicGateApprovalView workbench', () => {
     mocks.decide.mockRejectedValueOnce(
       Object.assign(new Error('csrf'), { status: 403, body: { error: 'csrf' } }),
     )
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledTimes(1)
     expect(mocks.preview.mock.calls.length).toBe(previewCalls)
-    expect(w.get('[data-testid="public-gate-error"]').text()).toContain('安全校验未通过')
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toContain('安全校验未通过')
 
     mocks.decide.mockRejectedValueOnce(
       Object.assign(new Error('rate'), { status: 429, body: { error: 'rate_limited' } }),
     )
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledTimes(2)
     expect(mocks.preview.mock.calls.length).toBe(previewCalls)
-    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('请求过于频繁，请稍后再试')
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toBe('请求过于频繁，请稍后再试')
 
     mocks.decide.mockRejectedValueOnce(Object.assign(new Error('Failed to fetch'), { name: 'TypeError' }))
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(mocks.decide).toHaveBeenCalledTimes(3)
     expect(mocks.preview.mock.calls.length).toBe(previewCalls)
-    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('网络故障，请检查网络后重试')
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toBe('网络故障，请检查网络后重试')
   })
 
   it('keeps workbench with disabled confirm when the link becomes invalid after open', async () => {
@@ -869,14 +893,14 @@ describe('PublicGateApprovalView workbench', () => {
     await flushPromises()
     expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
     mocks.decide.mockResolvedValueOnce({ status: 'used', error: 'conflict' })
-    await w.get('[data-testid="public-gate-confirm"]').trigger('click')
+    await w.get('[data-testid="clarify-confirm-flow"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="public-gate-workbench"]').exists()).toBe(true)
     expect(w.find('[data-testid="public-gate-invalid"]').exists()).toBe(false)
     expect(w.find('[data-testid="public-gate-done"]').exists()).toBe(false)
-    expect(w.get('[data-testid="public-gate-error"]').text()).toBe('链接失效，请重新打开复审链接')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
-    expect((w.get('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.get('[data-testid="clarify-confirm-error"]').text()).toBe('链接失效，请重新打开复审链接')
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
+    expect((w.get('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('silent poll merge keeps visualHtml when server omits unchanged body (plan g2.2)', async () => {
@@ -946,7 +970,7 @@ describe('PublicGateApprovalView workbench', () => {
     expect(mocks.upstream).toHaveBeenCalledTimes(1)
     const errEl = document.body.querySelector('[data-testid="public-gate-upstream-error"]')
     expect(errEl?.textContent || '').toContain('upstream_timeout')
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
 
     mocks.upstream.mockResolvedValueOnce({
       status: 'active',
@@ -1179,7 +1203,7 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(true)
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(true)
     // plan g1/g2: sticky busy keeps confirm visible + disabled until idle.
-    const confirmSticky = w.find('[data-testid="public-gate-confirm"]')
+    const confirmSticky = w.find('[data-testid="clarify-confirm-flow"]')
     expect(confirmSticky.exists()).toBe(true)
     expect((confirmSticky.element as HTMLButtonElement).disabled).toBe(true)
 
@@ -1208,7 +1232,7 @@ describe('PublicGateApprovalView workbench', () => {
     expect(w.text()).not.toContain('Agent 正在思考下一轮')
     expect(w.find('[data-testid="clarify-review-cancel"]').exists()).toBe(false)
     expect(w.find('[data-testid="clarify-busy-placeholder"]').exists()).toBe(false)
-    const confirm = w.find('[data-testid="public-gate-confirm"]')
+    const confirm = w.find('[data-testid="clarify-confirm-flow"]')
     expect(confirm.exists()).toBe(true)
     expect((confirm.element as HTMLButtonElement).disabled).toBe(false)
 
@@ -1216,7 +1240,7 @@ describe('PublicGateApprovalView workbench', () => {
     const preview = (w.vm as unknown as { preview: { sessionBusy?: boolean } }).preview
     if (preview) preview.sessionBusy = true
     await flushPromises()
-    expect((w.find('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect((w.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('plan g4.3: ghost queued + turn_done synthesizes idle; confirm follows local busy', async () => {
@@ -1283,13 +1307,13 @@ describe('PublicGateApprovalView workbench', () => {
     })
     await flushPromises()
 
-    expect(w.find('[data-testid="public-gate-confirm"]').exists()).toBe(true)
-    expect((w.find('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect(w.find('[data-testid="clarify-confirm-flow"]').exists()).toBe(true)
+    expect((w.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(false)
 
     // Even if preview.sessionBusy lags true, local idle keeps confirm clickable.
     const preview = (w.vm as unknown as { preview: { sessionBusy?: boolean } }).preview
     if (preview) preview.sessionBusy = true
     await flushPromises()
-    expect((w.find('[data-testid="public-gate-confirm"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect((w.find('[data-testid="clarify-confirm-flow"]').element as HTMLButtonElement).disabled).toBe(false)
   })
 })

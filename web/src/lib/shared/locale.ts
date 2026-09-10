@@ -28,7 +28,8 @@ function detectPublicLocale(): AppLocale {
 }
 
 export async function applyPublicLocale(): Promise<void> {
-  const next = detectPublicLocale()
+  const saved = localStorage.getItem(STORAGE_KEY)
+  const next = saved === 'zh-CN' || saved === 'en' ? saved : detectPublicLocale()
   const messages = await loadLocaleMessages(next)
   i18n.global.setLocaleMessage(next, messages)
   i18n.global.locale.value = next

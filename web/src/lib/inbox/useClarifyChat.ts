@@ -60,6 +60,9 @@ export type ClarifyChatProps = {
   reviewMode?: boolean
   annotateEnabled?: boolean
   hideFinish?: boolean
+  coldSession?: boolean
+  finishDisabled?: boolean
+  forceConfirmFlow?: boolean
   sendLabel?: string
   confirmError?: string | null
   nodeType?: string
@@ -138,7 +141,7 @@ const showApproveEmptyHint = computed(
     !seedHumanTurn.value,
 )
 const useConfirmFlowAction = computed(
-  () => props.reviewMode || props.nodeType === 'approve',
+  () => props.reviewMode || props.nodeType === 'approve' || !!props.forceConfirmFlow,
 )
 
 function humanMatchesSeed(t: ClarifyTurn, seed: ClarifyTurn): boolean {
@@ -868,7 +871,7 @@ function send() {
 // Clarify: force Agent wrap-up (disabled while thinking).
 // Review: accept store snapshot only when ready (not thinking / queue empty).
 function finishEarly() {
-  if (props.done || !props.active) return
+  if (props.done || (!props.active && !props.coldSession)) return
   if (props.reviewMode) {
     if (validating.value || confirmDisabled.value) return
     validating.value = true
@@ -884,7 +887,7 @@ function finishEarly() {
 
 const confirmDisabled = computed(() => {
   // Force finish / 确认并流转: only when session idle (no in-flight / queue).
-  return validating.value || thinking.value || queued.value.length > 0 || liveAgentIdx.value >= 0
+  return !!props.finishDisabled || validating.value || thinking.value || queued.value.length > 0 || liveAgentIdx.value >= 0
 })
 
 function cancelReview() {
