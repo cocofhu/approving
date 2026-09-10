@@ -1399,7 +1399,7 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
       </ReviewShell>
 
       <footer
-        v-if="!isReview && (showDecideFields || canReject || errorText)"
+        v-if="!isReview && (showDecideFields || canReject)"
         class="flex shrink-0 flex-col gap-2 border-t border-line bg-surface md:flex-row md:items-center"
         :class="isMobile ? 'px-3 py-2' : 'px-4 py-2.5'"
         data-testid="public-gate-footer"
@@ -1424,7 +1424,6 @@ defineExpose({ loadPreview, loadUpstreamFull, openUpstreamModal })
               :placeholder="t('pages.publicGate.commentPh')"
             />
           </template>
-          <p v-if="errorText" class="text-xs text-err" role="alert" data-testid="public-gate-error">{{ errorText }}</p>
           <button
             v-if="canReject"
             type="button"
