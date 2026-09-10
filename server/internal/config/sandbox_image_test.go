@@ -52,3 +52,15 @@ func TestApplySandboxImageEnv(t *testing.T) {
 		t.Fatalf("claude_code env: %v", c.Sandbox.Images)
 	}
 }
+
+func TestApplySandboxImageEnvSkipsEmptyOpenCode(t *testing.T) {
+	t.Setenv("APPROVING_SANDBOX_IMAGE_OPENCODE", "")
+	c := &Config{}
+	applySandboxImageEnv(c)
+	if _, ok := c.Sandbox.Images["opencode"]; ok {
+		t.Fatalf("empty OPENCODE env must not pin a missing GHCR tag: %v", c.Sandbox.Images)
+	}
+	if got := c.ResolveSandboxImage("opencode"); got != DefaultSandboxImage("opencode") {
+		t.Fatalf("opencode fallback = %q", got)
+	}
+}

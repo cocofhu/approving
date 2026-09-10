@@ -156,10 +156,11 @@ Default tags used by `./start.sh` (overridable in `.env`):
 
 - `ghcr.io/cocofhu/approving:0.3.8-beta`
 - `ghcr.io/cocofhu/sandbox-gateway:0.3.8-beta`
-- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}:0.3.8-beta`
+- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.3.8-beta`
   (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke).
-  The `opencode` matrix image is published on the next `v*` `publish-sandbox`; until then pin or build locally with
-  `docker build --build-arg AGENT_PROVIDER=opencode -t universal-sandbox-opencode:local sandbox-gateway/sandbox`.
+  `opencode` is not on `0.3.8-beta`. `./start.sh` leaves `APPROVING_SANDBOX_IMAGE_OPENCODE` empty so it does not pull a missing tag; the server then uses `universal-sandbox-opencode:local`. Build it with
+  `docker build --build-arg AGENT_PROVIDER=opencode -t universal-sandbox-opencode:local sandbox-gateway/sandbox`
+  (or set the GHCR pin after the next `v*` `publish-sandbox`).
 
 ### release-smoke (manual; not a PR required check)
 
