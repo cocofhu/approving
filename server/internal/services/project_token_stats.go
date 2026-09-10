@@ -78,18 +78,26 @@ const (
 
 // TokenStatsWorkflow is one consumption-rank row (workflow Top-N, PM, or other).
 type TokenStatsWorkflow struct {
-	WorkflowID string `json:"workflowId,omitempty"`
-	Name       string `json:"name"`
-	Total      int64  `json:"total"`
-	Other      bool   `json:"other,omitempty"`
-	Kind       string `json:"kind,omitempty"` // workflow | pm | other
+	WorkflowID       string `json:"workflowId,omitempty"`
+	Name             string `json:"name"`
+	Total            int64  `json:"total"`
+	InputTokens      int64  `json:"inputTokens,omitempty"`
+	OutputTokens     int64  `json:"outputTokens,omitempty"`
+	CacheReadTokens  int64  `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens int64  `json:"cacheWriteTokens,omitempty"`
+	Other            bool   `json:"other,omitempty"`
+	Kind             string `json:"kind,omitempty"` // workflow | pm | other
 }
 
 // TokenStatsModel is one model-composition / model-ranking row.
 type TokenStatsModel struct {
-	ModelKey string `json:"modelKey"`
-	Name     string `json:"name"`
-	Total    int64  `json:"total"`
+	ModelKey         string `json:"modelKey"`
+	Name             string `json:"name"`
+	Total            int64  `json:"total"`
+	InputTokens      int64  `json:"inputTokens,omitempty"`
+	OutputTokens     int64  `json:"outputTokens,omitempty"`
+	CacheReadTokens  int64  `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens int64  `json:"cacheWriteTokens,omitempty"`
 	// Unknown marks the「未知/未分桶」bucket. It is a normal model bucket:
 	// it appears in ranking only when its total places it in Top10; otherwise
 	// its usage is folded into other. other.Unknown must stay false.

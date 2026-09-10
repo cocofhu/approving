@@ -423,7 +423,7 @@ type globalAgg struct {
 	projects     map[string]*globalProjectAgg
 	models       map[string]*tokenModelAgg
 	nodeTypes    map[string]int64
-	workflows    map[string]int64
+	workflows    map[string]*globalWorkflowAgg
 	wfNames      map[string]string
 	runs         map[string]*globalRunAgg
 	projBuckets  map[string]map[string]*tokenBucketAgg
@@ -434,6 +434,12 @@ type globalAgg struct {
 
 type globalProjectAgg struct {
 	name                  string
+	total                 int64
+	input, output         int64
+	cacheRead, cacheWrite int64
+}
+
+type globalWorkflowAgg struct {
 	total                 int64
 	input, output         int64
 	cacheRead, cacheWrite int64
@@ -463,7 +469,7 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 		projects:     map[string]*globalProjectAgg{},
 		models:       map[string]*tokenModelAgg{},
 		nodeTypes:    map[string]int64{},
-		workflows:    map[string]int64{},
+		workflows:    map[string]*globalWorkflowAgg{},
 		wfNames:      map[string]string{},
 		runs:         map[string]*globalRunAgg{},
 		projBuckets:  map[string]map[string]*tokenBucketAgg{},
@@ -524,7 +530,16 @@ func aggregateGlobalRows(rows []globalTokenUsageRow, loc *time.Location, bucketW
 		}
 
 		if row.source == TokenStatsKindWorkflow && row.workflowID != "" {
-			agg.workflows[row.workflowID] += row.usage.Total()
+			wa := agg.workflows[row.workflowID]
+			if wa == nil {
+				wa = &globalWorkflowAgg{}
+				agg.workflows[row.workflowID] = wa
+			}
+			wa.total += row.usage.Total()
+			wa.input += row.usage.InputTokens
+			wa.output += row.usage.OutputTokens
+			wa.cacheRead += row.usage.CacheReadTokens
+			wa.cacheWrite += row.usage.CacheWriteTokens
 			if row.workflowName != "" {
 				agg.wfNames[row.workflowID] = row.workflowName
 			}
@@ -744,6 +759,26 @@ func projectTrendFromBuckets(buckets map[string]*tokenBucketAgg) []TokenStatsBuc
 
 func buildGlobalModelStats(cur, prev *globalAgg, unknownAliases map[string]string, topN int) ([]TokenStatsModel, []GlobalTokenStatsSeries) {
 	_, ranking := buildModelStats(cur.models, "")
+	topKeys := make(map[string]struct{}, len(ranking))
+	for i := range ranking {
+		row := &ranking[i]
+		if row.Other {
+			continue
+		}
+		topKeys[row.ModelKey] = struct{}{}
+		addModelBucketParts(row, cur.modelBuckets[row.ModelKey])
+	}
+	for i := range ranking {
+		if !ranking[i].Other {
+			continue
+		}
+		for key, buckets := range cur.modelBuckets {
+			if _, ok := topKeys[key]; ok {
+				continue
+			}
+			addModelBucketParts(&ranking[i], buckets)
+		}
+	}
 	series := make([]GlobalTokenStatsSeries, 0, topN)
 	for i, m := range ranking {
 		if m.Other {
@@ -769,6 +804,18 @@ func buildGlobalModelStats(cur, prev *globalAgg, unknownAliases map[string]strin
 	return ranking, series
 }
 
+func addModelBucketParts(row *TokenStatsModel, buckets map[string]*tokenBucketAgg) {
+	for _, bucket := range buckets {
+		if bucket == nil {
+			continue
+		}
+		row.InputTokens += bucket.input
+		row.OutputTokens += bucket.output
+		row.CacheReadTokens += bucket.cacheRead
+		row.CacheWriteTokens += bucket.cacheWrite
+	}
+}
+
 func buildNodeTypeStats(cur *globalAgg) []GlobalTokenStatsNamedBucket {
 	type item struct {
 		name  string
@@ -792,9 +839,46 @@ func buildNodeTypeStats(cur *globalAgg) []GlobalTokenStatsNamedBucket {
 }
 
 func buildGlobalWorkflowRank(cur *globalAgg) []TokenStatsWorkflow {
-	totals := cur.workflows
-	names := cur.wfNames
-	return buildConsumptionRank(totals, names, 0, false)
+	totals := make(map[string]int64, len(cur.workflows))
+	for id, agg := range cur.workflows {
+		if agg != nil {
+			totals[id] = agg.total
+		}
+	}
+	rows := buildConsumptionRank(totals, cur.wfNames, 0, false)
+	topIDs := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		row := &rows[i]
+		if row.Other {
+			continue
+		}
+		topIDs[row.WorkflowID] = struct{}{}
+		if agg := cur.workflows[row.WorkflowID]; agg != nil {
+			setWorkflowParts(row, agg)
+		}
+	}
+	for i := range rows {
+		if !rows[i].Other {
+			continue
+		}
+		for id, agg := range cur.workflows {
+			if _, ok := topIDs[id]; ok || agg == nil {
+				continue
+			}
+			rows[i].InputTokens += agg.input
+			rows[i].OutputTokens += agg.output
+			rows[i].CacheReadTokens += agg.cacheRead
+			rows[i].CacheWriteTokens += agg.cacheWrite
+		}
+	}
+	return rows
+}
+
+func setWorkflowParts(row *TokenStatsWorkflow, agg *globalWorkflowAgg) {
+	row.InputTokens = agg.input
+	row.OutputTokens = agg.output
+	row.CacheReadTokens = agg.cacheRead
+	row.CacheWriteTokens = agg.cacheWrite
 }
 
 func buildHeatmap(cur *globalAgg, topModels, topProjects int) GlobalTokenStatsHeatmap {

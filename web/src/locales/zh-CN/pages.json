@@ -75,13 +75,22 @@
         "source": "按来源",
         "comp": "按输入/输出/缓存"
       },
+      "barDimensions": {
+        "project": "项目",
+        "workflow": "工作流",
+        "model": "模型"
+      },
       "charts": {
         "lines": "折线图",
         "linesHint": "对比当前时间范围与上一周期，也可按项目或模型分开看",
         "pies": "占比",
         "piesHint": "点击扇区可筛选",
         "bars": "柱状图",
-        "barsHint": "各项目用量堆叠对比",
+        "barsHints": {
+          "project": "各项目用量堆叠对比",
+          "workflow": "各工作流用量堆叠对比",
+          "model": "各模型用量堆叠对比"
+        },
         "area": "堆叠面积",
         "areaHint": "按天查看来源，或输入/输出/缓存",
         "heat": "模型与项目对照",
