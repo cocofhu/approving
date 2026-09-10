@@ -138,6 +138,12 @@ func (s *OnboardingService) CreateFromBaseline(req CreateBaselineWorkflowRequest
 		_ = s.WF.Delete(wf.ID)
 		return models.WorkflowDef{}, fmt.Errorf("publish baseline workflow: %w", err)
 	}
+	// Align with Bootstrap: Save still forces showOnHome=false; open Home after publish.
+	published, err = s.WF.UpdateShowOnHome(published.ID, true)
+	if err != nil {
+		_ = s.WF.Delete(published.ID)
+		return models.WorkflowDef{}, fmt.Errorf("show workflow on home: %w", err)
+	}
 	return published, nil
 }
 

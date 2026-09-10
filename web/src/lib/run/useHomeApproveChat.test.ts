@@ -670,4 +670,27 @@ describe('useHomeApproveChat', () => {
     expect(chat.pipelines.value).toHaveLength(0)
     expect(chat.selected.value).toBeNull()
   })
+
+  // plan g2.1 / g2.2 — from-baseline success reloads and selects the new card
+  it('reloadAfterCreate loads the new pipeline and selects it', async () => {
+    const created = { ...approveWf, id: 'wf-new', name: '首页新建', showOnHome: true }
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap'])
+    mocks.listWorkflows.mockResolvedValue([approveWf, created])
+    await chat.reloadAfterCreate('wf-new')
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap', 'wf-new'])
+    expect(chat.selectedId.value).toBe('wf-new')
+    expect(localStorage.getItem(HOME_PIPELINE_MEMORY_KEY)).toBe('wf-new')
+  })
+
+  // plan g2.2 — reload failure must not wipe existing home cards
+  it('reloadAfterCreate keeps the previous list when reload fails', async () => {
+    const chat = withSetup(() => useHomeApproveChat())
+    await chat.load()
+    mocks.listWorkflows.mockRejectedValue(new Error('reload failed'))
+    await chat.reloadAfterCreate('wf-new')
+    expect(chat.pipelines.value.map((w) => w.id)).toEqual(['wf-ap'])
+    expect(chat.selectedId.value).toBe('wf-ap')
+  })
 })
