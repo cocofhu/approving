@@ -106,7 +106,7 @@ onMounted(() => {
     <div class="mb-5 flex shrink-0 flex-col gap-2.5 md:flex-row md:items-start md:justify-between">
       <div class="min-w-0">
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.projectList.title') }}</h2>
-        <p class="text-sm text-txt3">{{ t('pages.projectList.subtitle') }}</p>
+        <p class="text-sm text-txt3" v-html="t('pages.projectList.subtitle')" />
       </div>
       <AppButton class="min-h-[44px] md:min-h-0" variant="primary" icon="plus" @click="openCreate">
         {{ t('pages.projectList.newProject') }}

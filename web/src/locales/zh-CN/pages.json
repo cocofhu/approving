@@ -46,7 +46,7 @@
     },
     "tokenAnalytics": {
       "title": "用量统计",
-      "subtitle": "查看各项目的 Token 用量趋势和构成",
+      "subtitle": "<strong class=\"font-medium text-warn\">明察秋毫</strong> <em class=\"not-italic text-n-clarify\">洞若观火</em>",
       "loading": "正在加载…",
       "loadFailed": "加载失败，请重试",
       "retry": "重试",
@@ -225,7 +225,7 @@
     },
     "projectList": {
       "title": "项目",
-      "subtitle": "组织工作流与项目配置 · 可设置共享 Agent 配置与项目级工作流变量",
+      "subtitle": "<strong class=\"font-medium text-warn\">纲举目张</strong> <em class=\"not-italic text-n-clarify\">各安其位</em>",
       "newProject": "新建项目",
       "empty": "暂无项目",
       "workflowCount": "{n} 个工作流",
@@ -1342,7 +1342,7 @@
     },
     "gatesInbox": {
       "title": "待办",
-      "subtitleHtml": "<strong class=\"font-medium text-warn\">门禁审批</strong> + <em class=\"not-italic text-n-clarify\">需求澄清</em> 收件箱 · 工作流在此挂起等待人工处理",
+      "subtitleHtml": "<strong class=\"font-medium text-warn\">运筹帷幄之中</strong> <em class=\"not-italic text-n-clarify\">决胜千里之外</em>",
       "statusPending": "有新审批 · 待刷新",
       "statusEditing": "正在填写 · 后台同步中",
       "statusIdle": "空闲 · 后台同步中",
@@ -1524,7 +1524,7 @@
     },
     "artifacts": {
       "title": "产物",
-      "subtitle": "Agent / 澄清等节点的输出自动留存为平台产物(PRD / 设计 / 方案等),无需额外配置,不依赖代码托管平台",
+      "subtitle": "<strong class=\"font-medium text-warn\">藏之名山</strong> <em class=\"not-italic text-n-clarify\">传之其人</em>",
       "groupsTitle": "工作流分组",
       "groupsCount": "· {n} 组",
       "platformArtifacts": "平台产物",

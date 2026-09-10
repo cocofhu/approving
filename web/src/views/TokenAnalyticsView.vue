@@ -629,7 +629,7 @@ watch([windowSel], () => void load())
       <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 class="m-0 text-[22px] font-semibold">{{ t('pages.tokenAnalytics.title') }}</h1>
-          <p class="mt-1 text-xs text-txt3">{{ t('pages.tokenAnalytics.subtitle') }}</p>
+          <p class="mt-1 text-xs text-txt3" v-html="t('pages.tokenAnalytics.subtitle')" />
         </div>
         <div
           class="flex gap-1 rounded bg-elevated p-1"
