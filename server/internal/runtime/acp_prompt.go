@@ -100,9 +100,11 @@ func approveInputSeed(req NodeReq) string {
 
 // nodeTouchesRepos reports whether a node type operates on the cloned repos
 // (and thus benefits from the flat multi-repo layout description).
+// visual is included so the agent can read-only locate existing business UI;
+// the VisualContract still forbids writing, formatting, or committing repo files.
 func nodeTouchesRepos(nodeType string) bool {
 	switch nodeType {
-	case "agent", "implement", "review", "test", "submit_mr", "research", "app_preview", "approve":
+	case "agent", "implement", "review", "test", "submit_mr", "research", "app_preview", "approve", "visual":
 		return true
 	default:
 		return false

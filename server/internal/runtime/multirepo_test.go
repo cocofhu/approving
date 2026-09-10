@@ -253,12 +253,12 @@ func TestFirstRepoURL(t *testing.T) {
 }
 
 func TestNodeTouchesRepos(t *testing.T) {
-	for _, nt := range []string{"agent", "implement", "review", "test", "submit_mr", "research", "app_preview", "approve"} {
+	for _, nt := range []string{"agent", "implement", "review", "test", "submit_mr", "research", "app_preview", "approve", "visual"} {
 		if !nodeTouchesRepos(nt) {
 			t.Errorf("%q should touch repos", nt)
 		}
 	}
-	for _, nt := range []string{"input", "human_gate", "clarify", "proposal", "visual", ""} {
+	for _, nt := range []string{"input", "human_gate", "clarify", "proposal", ""} {
 		if nodeTouchesRepos(nt) {
 			t.Errorf("%q should not touch repos", nt)
 		}
@@ -338,6 +338,30 @@ func TestMRBranchesMultiRepo(t *testing.T) {
 	})
 	if src4 != "" || tgt4 != "release" {
 		t.Errorf("no branches map: src=%q tgt=%q", src4, tgt4)
+	}
+}
+
+func TestVisualPromptIncludesContractAndRepoLayout(t *testing.T) {
+	host := mcp.NewHost(newMemStore())
+	p := newACPProvider(host, Options{}).(*acpProvider)
+	got := p.buildAgentPrompt(NodeReq{
+		NodeType: "visual",
+		Config:   map[string]any{"prompt": "VISUAL_USER_PROMPT"},
+		Vars: map[string]any{
+			"repos": `[{"name":"web","url":"https://h/web.git"},{"name":"api","url":"https://h/api.git"}]`,
+		},
+	}, nil)
+	for _, want := range []string{
+		"VISUAL_USER_PROMPT",
+		"视觉网页契约",
+		"只读检查现有业务 UI",
+		"不构成任何写入授权",
+		"/root/workspace/web/",
+		"/root/workspace/api/",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("visual prompt missing %q:\n%s", want, got)
+		}
 	}
 }
 

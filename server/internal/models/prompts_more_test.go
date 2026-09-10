@@ -240,3 +240,33 @@ func TestDefaultPreviewContractAcceptsURL(t *testing.T) {
 		t.Fatal("DefaultPreviewRetry must not be port-only")
 	}
 }
+
+func TestDefaultVisualContractHighFidelitySemantics(t *testing.T) {
+	got := DefaultVisualContract
+	mustContain := []string{
+		"只读检查现有业务 UI",
+		"设计令牌",
+		"布局",
+		"业务文案",
+		"改后目标态",
+		"无既有前端基线时(降级)",
+		"不构成任何写入授权",
+		"git add",
+		"write_artifact",
+		"page.html",
+		"<!doctype html>",
+		"localStorage",
+		"sessionStorage",
+		"不引用任何外部资源",
+		"只读定位",
+		"真实页面骨架",
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(got, want) {
+			t.Fatalf("DefaultVisualContract missing %q\n---\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "简洁美观") {
+		t.Fatal("DefaultVisualContract must not fall back to generic demo wording")
+	}
+}
