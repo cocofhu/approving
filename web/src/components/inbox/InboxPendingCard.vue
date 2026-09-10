@@ -66,7 +66,7 @@ function onOpenShare() {
 <template>
   <article
     class="list-card-lift flex w-full shrink-0 flex-col rounded-lg border p-3"
-    :class="active ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:bg-elevated'"
+    :class="active ? 'border-accent/50 bg-accent-dim/40' : 'border-line bg-surface hover:border-line-strong hover:bg-elevated'"
     data-testid="inbox-item-card"
     :data-starting="starting ? 'true' : undefined"
     :data-replying="replying ? 'true' : undefined"

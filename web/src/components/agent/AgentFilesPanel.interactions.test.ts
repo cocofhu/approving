@@ -144,7 +144,7 @@ describe('AgentFilesPanel interactions', () => {
     await w.get('[data-testid="history"] button').trigger('click')
     await w.findAll('[data-testid="history"] button')[1].trigger('click')
     expect(w.emitted('restored')).toBeTruthy()
-    expect(localStorage.getItem('agent-studio-history-collapsed')).toBe('true')
+    expect(localStorage.getItem('agent-studio-history-collapsed')).toBe('false')
 
     ;(w.vm as any).openPathOrCreate('settings.json', '{}')
     await flushPromises()

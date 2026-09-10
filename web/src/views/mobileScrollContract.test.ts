@@ -22,7 +22,7 @@ describe('mobile scroll contract — list A (plan g1 / g3.1)', () => {
     const src = read('ProjectListView.vue')
     expect(src).toMatch(FILL_ROOT)
     expect(src).toMatch(/mb-5 flex shrink-0/)
-    expect(src).toMatch(/data-testid="project-list-panel"[\s\S]*?class="min-h-0 flex-1 overflow-y-auto"/)
+    expect(src).toMatch(/data-testid="project-list-panel"[\s\S]*?class="min-h-0 flex-1 overflow-y-auto py-0\.5"/)
     expect(src).not.toMatch(/^\s*<div>\s*$/m)
   })
 
@@ -38,7 +38,7 @@ describe('mobile scroll contract — list A (plan g1 / g3.1)', () => {
     const src = read('SandboxListView.vue')
     expect(src).toMatch(FILL_ROOT)
     expect(src).toMatch(/mb-5 flex shrink-0/)
-    expect(src).toMatch(/v-if="isMobile"[\s\S]*?class="min-h-0 flex-1 overflow-y-auto"/)
+    expect(src).toMatch(/v-if="isMobile"[\s\S]*?class="min-h-0 flex-1 overflow-y-auto py-0\.5"/)
     expect(src).toMatch(/card flex min-h-0 flex-1 flex-col overflow-hidden/)
     expect(src).toMatch(/scroll-area min-h-0 flex-1 overflow-auto/)
   })

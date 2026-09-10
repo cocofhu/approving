@@ -115,7 +115,7 @@ onMounted(() => {
 
     <div
       data-testid="project-list-panel"
-      class="min-h-0 flex-1 overflow-y-auto"
+      class="min-h-0 flex-1 overflow-y-auto py-0.5"
       :aria-busy="loading ? 'true' : 'false'"
     >
       <div
@@ -195,7 +195,7 @@ onMounted(() => {
             v-for="p in projects"
             :key="p.id"
             type="button"
-            class="list-card-lift flex min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden rounded-lg border border-line bg-surface p-4 text-left hover:border-line-strong hover:bg-elevated"
+            class="list-card-lift flex min-w-0 w-full max-w-full flex-col gap-2 rounded-lg border border-line bg-surface p-4 text-left hover:border-line-strong hover:bg-elevated"
             @click="openProject(p)"
           >
             <div class="flex items-start gap-3">
