@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.8-beta — 2026-09-10
+
+- Public beta follow-up on [`v0.3.8-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.8-beta)
+  (relative to `v0.3.7-beta`: PRs #531–#536). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.8-beta` (tag publish does not rewrite these files).
+- Highlights: StatusMetrics opens `/stats`; home baseline-workflow modal;
+  ReAct connecting loader; live run-detail chrome during clarify; public
+  approval inbox parity; token analytics stacked-bar dimensions.
+
 ## 0.3.7-beta — 2026-09-10
 
 - Public beta follow-up on [`v0.3.7-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.7-beta)
