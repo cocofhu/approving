@@ -67,4 +67,17 @@ describe('AppButton', () => {
     expect(cls).not.toMatch(/\bpy-/)
     wrapper.unmount()
   })
+
+  it('adds pressable class when idle and skips it when loading/disabled (g2.1)', () => {
+    const idle = mountBtn({ variant: 'primary' })
+    expect(idle.classes()).toContain('ui-pressable')
+    expect(idle.classes().join(' ')).toMatch(/focus-visible:ring-2/)
+    idle.unmount()
+    const loading = mountBtn({ variant: 'primary', loading: true })
+    expect(loading.classes()).not.toContain('ui-pressable')
+    loading.unmount()
+    const disabled = mountBtn({ disabled: true })
+    expect(disabled.classes()).not.toContain('ui-pressable')
+    disabled.unmount()
+  })
 })

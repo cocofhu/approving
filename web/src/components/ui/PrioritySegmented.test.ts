@@ -39,4 +39,19 @@ describe('PrioritySegmented', () => {
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
     wrapper.unmount()
   })
+
+  it('renders a sliding indicator for the active tier (g2.2)', () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common } },
+    })
+    const wrapper = mount(PrioritySegmented, {
+      props: { modelValue: 'normal' },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.find('[data-testid="priority-seg-indicator"]').exists()).toBe(true)
+    expect(wrapper.find('[data-seg-active="true"]').text()).toContain('普通')
+    wrapper.unmount()
+  })
 })

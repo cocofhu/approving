@@ -189,11 +189,18 @@ function onPageSizeChange(event: Event) {
   color: rgb(var(--c-txt));
   padding: 6px 10px;
   font-size: 12px;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  transition:
+    border-color var(--dur-ui) ease,
+    color var(--dur-ui) ease,
+    background var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out-expo);
 }
 .pg-btn:hover:not(:disabled) {
   border-color: rgb(var(--c-line-strong));
   background: rgb(var(--c-overlay));
+}
+.pg-btn:not(:disabled):active {
+  transform: scale(0.97) translateY(1px);
 }
 .pg-btn:disabled {
   color: rgb(var(--c-txt2));
@@ -213,7 +220,12 @@ function onPageSizeChange(event: Event) {
   color: rgb(var(--c-txt2));
   font-size: 12px;
   padding: 0 8px;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  transition:
+    border-color var(--dur-ui) ease,
+    color var(--dur-ui) ease,
+    background var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out-expo);
 }
 .page-num.active {
   color: rgb(var(--c-accent-2));
@@ -225,6 +237,9 @@ function onPageSizeChange(event: Event) {
 .page-num:hover:not(:disabled):not(.active) {
   border-color: rgb(var(--c-line-strong));
   color: rgb(var(--c-txt));
+}
+.page-num:not(:disabled):active {
+  transform: scale(0.96);
 }
 .page-num:disabled {
   color: rgb(var(--c-txt2));

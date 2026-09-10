@@ -640,14 +640,14 @@ async function startRun() {
   align-items: center;
   padding-right: 36px;
   transition:
-    opacity 250ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity var(--dur-overlay) var(--ease-out-expo),
+    transform var(--dur-overlay) var(--ease-out-expo);
 }
 
 .body-layer {
   transition:
-    opacity 250ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity var(--dur-overlay) var(--ease-out-expo),
+    transform var(--dur-overlay) var(--ease-out-expo);
 }
 
 .layer-hidden {
@@ -677,7 +677,7 @@ async function startRun() {
 }
 
 .check-icon-wrap.check-pop {
-  animation: checkPop 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: checkPop var(--dur-overlay) var(--ease-out-expo) forwards;
 }
 
 @keyframes checkPop {

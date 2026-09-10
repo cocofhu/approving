@@ -119,6 +119,15 @@ function makeItems(n: number, unreadCount = n): RunTerminalNotificationItem[] {
   })
 }
 
+/** ui-fade uses mode=out-in (~200ms leave then enter); settle before list DOM asserts. */
+async function settleListFade() {
+  await flushPromises()
+  await nextTick()
+  await new Promise((r) => setTimeout(r, 450))
+  await flushPromises()
+  await nextTick()
+}
+
 async function mountView(items: RunTerminalNotificationItem[]) {
   listStore.value = items.map((x) => ({ ...x }))
   vi.mocked(api.listNotifications).mockImplementation(async (opts) => {
@@ -206,7 +215,7 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
 
     const next = pager.findAll('button.pg-btn')[1]!
     await next.trigger('click')
-    await nextTick()
+    await settleListFade()
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(1)
     expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     wrapper.unmount()
@@ -216,12 +225,10 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const items = makeItems(21).map((item, i) => ({ ...item, unread: i >= 18 }))
     const { wrapper } = await mountView(items)
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
-    await flushPromises()
-    await nextTick()
+    await settleListFade()
 
     await wrapper.find('[data-testid="notifications-filter-unread"]').trigger('click')
-    await flushPromises()
-    await nextTick()
+    await settleListFade()
     expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-testid="notifications-item"]').length).toBeLessThanOrEqual(20)
@@ -232,18 +239,13 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const items = makeItems(21)
     const { wrapper } = await mountView(items)
     await wrapper.find('[data-testid="notifications-filter-unread"]').trigger('click')
-    await flushPromises()
-    await nextTick()
+    await settleListFade()
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
-    await flushPromises()
-    await nextTick()
+    await settleListFade()
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(1)
     const lastId = wrapper.find('[data-testid="notifications-item"]').attributes('data-run-id')!
     useRunTerminalNotifications().markRead(lastId)
-    await flushPromises()
-    await nextTick()
-    await flushPromises()
-    await nextTick()
+    await settleListFade()
     expect(wrapper.find('[data-testid="notifications-pagination"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     expect(wrapper.findAll('[data-testid="notifications-item"]')).toHaveLength(20)
@@ -254,7 +256,7 @@ describe('NotificationsView pagination (g1/g2/g4)', () => {
     const items = makeItems(25)
     const { wrapper } = await mountView(items)
     await wrapper.find('[data-testid="notifications-pagination"]').findAll('button.pg-btn')[1]!.trigger('click')
-    await nextTick()
+    await settleListFade()
     expect(wrapper.find('[data-testid="notifications-page-range"]').exists()).toBe(false)
     const firstOnPage = wrapper.find('[data-testid="notifications-item"]').attributes('data-run-id')!
     useRunTerminalNotifications().markRead(firstOnPage)
@@ -344,5 +346,12 @@ describe('NotificationsView pagination conventions (g4.4 / g1.5)', () => {
     expect(poolSrc).toMatch(/export const NOTIFICATION_PAGE_SIZE = 20/)
     expect(NOTIFICATION_PAGE_SIZE).toBe(20)
     expect(poolSrc).not.toMatch(/RUN_TERMINAL_POOL_SIZE/)
+  })
+
+  it('wraps the list in ui-fade with listFadeKey and list-card-lift (g3)', () => {
+    expect(viewSrc).toMatch(/name="ui-fade"/)
+    expect(viewSrc).toMatch(/listFadeKey/)
+    expect(viewSrc).toMatch(/data-testid="notifications-list-fade"/)
+    expect(viewSrc).toMatch(/list-card-lift/)
   })
 })

@@ -34,7 +34,7 @@ function onKeydown(e: KeyboardEvent) {
   <button
     type="button"
     role="switch"
-    class="relative h-[22px] w-10 shrink-0 rounded-full border transition disabled:cursor-not-allowed disabled:opacity-45"
+    class="app-switch relative h-[22px] w-10 shrink-0 rounded-full border disabled:cursor-not-allowed disabled:opacity-45"
     :class="modelValue ? 'border-accent bg-accent' : 'border-line-strong bg-base'"
     :aria-checked="modelValue"
     :aria-disabled="disabled ? 'true' : undefined"
@@ -44,8 +44,19 @@ function onKeydown(e: KeyboardEvent) {
     @keydown="onKeydown"
   >
     <span
-      class="pointer-events-none absolute top-0.5 h-4 w-4 rounded-full transition-all"
+      class="app-switch-thumb pointer-events-none absolute top-0.5 h-4 w-4 rounded-full"
       :class="modelValue ? 'left-[18px] bg-white' : 'left-0.5 bg-txt2'"
     />
   </button>
 </template>
+
+<style scoped>
+.app-switch,
+.app-switch-thumb {
+  transition:
+    background-color var(--dur-ui) var(--ease-out-expo),
+    border-color var(--dur-ui) var(--ease-out-expo),
+    left var(--dur-ui) var(--ease-out-expo),
+    transform var(--dur-ui) var(--ease-out-expo);
+}
+</style>

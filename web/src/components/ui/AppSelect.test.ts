@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createI18n } from 'vue-i18n'
 import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -256,5 +259,12 @@ describe('AppSelect', () => {
     // Opens below the trigger (bottom + gap).
     expect(Number.parseInt(panel.style.top, 10)).toBeGreaterThan(132)
     wrapper.unmount()
+  })
+
+  it('wraps the panel in overlay-pop Transition and rotates chevron (g2.3)', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AppSelect.vue'), 'utf8')
+    expect(src).toMatch(/name="overlay-pop"/)
+    expect(src).toMatch(/app-select-chevron/)
+    expect(src).toMatch(/is-open/)
   })
 })

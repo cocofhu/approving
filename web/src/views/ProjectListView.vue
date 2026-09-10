@@ -195,7 +195,7 @@ onMounted(() => {
             v-for="p in projects"
             :key="p.id"
             type="button"
-            class="flex min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden rounded-lg border border-line bg-surface p-4 text-left transition hover:border-line-strong hover:bg-elevated"
+            class="list-card-lift flex min-w-0 w-full max-w-full flex-col gap-2 overflow-hidden rounded-lg border border-line bg-surface p-4 text-left hover:border-line-strong hover:bg-elevated"
             @click="openProject(p)"
           >
             <div class="flex items-start gap-3">

@@ -20,4 +20,15 @@ describe('global loading reduced-motion (g4.4)', () => {
     expect(css).toMatch(/\.app-desktop-sidebar/)
     expect(css).toMatch(/transition:\s*none/)
   })
+
+  it('defines motion tokens and gates new Transition classes (g1.1 / g1.2)', () => {
+    expect(css).toMatch(/--dur-press:\s*90ms/)
+    expect(css).toMatch(/--dur-ui:\s*160ms/)
+    expect(css).toMatch(/--dur-overlay:\s*200ms/)
+    expect(css).toMatch(/--ease-out-expo:\s*cubic-bezier\(0\.16,\s*1,\s*0\.3,\s*1\)/)
+    expect(css).toMatch(/\.ui-fade-enter-active/)
+    expect(css).toMatch(/\.overlay-pop-enter-active/)
+    expect(css).toMatch(/\.ui-pressable/)
+    expect(css).toMatch(/\.list-card-lift/)
+  })
 })

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AppModal from '@/components/ui/AppModal.vue'
@@ -168,6 +169,39 @@ const {
   fmtCompactTokenCount
 } = useProjectDetail()
 
+const projectTabTrack = ref<HTMLElement | null>(null)
+const projectTabIndicator = ref<Record<string, string>>({
+  opacity: '0',
+  transform: 'translateX(0)',
+  width: '0px',
+})
+
+function updateProjectTabIndicator() {
+  const root = projectTabTrack.value
+  if (!root) return
+  const active = root.querySelector<HTMLElement>('[data-project-tab-active="true"]')
+  if (!active) {
+    projectTabIndicator.value = { opacity: '0', transform: 'translateX(0)', width: '0px' }
+    return
+  }
+  projectTabIndicator.value = {
+    opacity: '1',
+    transform: `translateX(${active.offsetLeft}px)`,
+    width: `${active.offsetWidth}px`,
+  }
+}
+
+watch(tab, () => {
+  void nextTick(updateProjectTabIndicator)
+})
+onMounted(() => {
+  void nextTick(updateProjectTabIndicator)
+  window.addEventListener('resize', updateProjectTabIndicator)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateProjectTabIndicator)
+})
+
 </script>
 
 <template>
@@ -279,26 +313,36 @@ const {
 
     <template v-if="initialLoading || project">
       <div
-        class="scroll-area flex shrink-0 flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-line [-webkit-overflow-scrolling:touch]"
+        ref="projectTabTrack"
+        class="scroll-area relative flex shrink-0 flex-nowrap gap-1 overflow-x-auto overflow-y-hidden border-b border-line [-webkit-overflow-scrolling:touch]"
         data-testid="project-detail-tabs"
       >
         <button
           v-for="tb in tabs"
           :key="tb.id"
           type="button"
-          class="shrink-0 whitespace-nowrap border-b-2 px-3 py-1.5 text-sm transition"
-          :class="
-            tab === tb.id
-              ? 'border-accent text-accent-2'
-              : 'border-transparent text-txt3 hover:text-txt2'
-          "
+          class="relative z-[1] shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-1.5 text-sm transition"
+          :class="tab === tb.id ? 'text-accent-2' : 'text-txt3 hover:text-txt2'"
           :data-testid="`project-tab-${tb.id}`"
+          :data-project-tab-active="tab === tb.id ? 'true' : undefined"
           @click="setTab(tb.id)"
         >
           {{ t(tb.labelKey) }}
         </button>
+        <span
+          class="app-tabs-indicator pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-accent"
+          data-testid="project-tabs-indicator"
+          :style="projectTabIndicator"
+          aria-hidden="true"
+        />
       </div>
 
+      <Transition name="ui-fade" mode="out-in">
+      <div
+        :key="String(tab)"
+        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+        data-testid="project-detail-tab-panel"
+      >
       <div
         v-if="showPmMemoryMigration"
         data-testid="pm-memory-migration-banner"
@@ -1176,6 +1220,8 @@ const {
           </div>
         </div>
       </div>
+      </div>
+      </Transition>
     </template>
     </div>
 
@@ -1317,3 +1363,12 @@ const {
     </AppModal>
   </div>
 </template>
+
+<style scoped>
+.app-tabs-indicator {
+  transition:
+    transform var(--dur-ui) var(--ease-out-expo),
+    width var(--dur-ui) var(--ease-out-expo),
+    opacity var(--dur-ui) ease;
+}
+</style>

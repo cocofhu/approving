@@ -17,6 +17,7 @@ import ReactConnectingState from '@/components/run/ReactConnectingState.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import AppInlineError from '@/components/ui/AppInlineError.vue'
 import Pagination from '@/components/ui/Pagination.vue'
+import { computed } from 'vue'
 import { useGatesInbox } from '@/lib/inbox/useGatesInbox'
 
 const {
@@ -207,6 +208,11 @@ const {
   inboxShareKind,
   REVIEW_SHELL_WIDTH_KEY_APPROVAL,
 } = useGatesInbox()
+
+/** Whole-list fade when filter/page changes (g3.2). */
+const listFadeKey = computed(() =>
+  [listPage.value, selectedProject.value || '', selectedTags.value.slice().sort().join(',')].join('|'),
+)
 </script>
 
 <template>
@@ -368,6 +374,8 @@ const {
         :class="showListRefresh ? 'opacity-[0.55]' : ''"
       >
         <div ref="listEl" class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <Transition name="ui-fade" mode="out-in">
+        <div :key="listFadeKey" class="flex flex-col gap-2" data-testid="inbox-list-fade">
         <InboxPendingCard
           v-for="it in listItems"
           :key="itemKey(it)"
@@ -378,6 +386,8 @@ const {
           @select="openDetail(it)"
           @open-share="openSharePanel(it, true)"
         />
+        </div>
+        </Transition>
         </div>
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>
@@ -502,6 +512,8 @@ const {
       <div class="flex h-full min-h-0 flex-col overflow-hidden">
         <RefreshStrip v-if="showListRefresh" data-testid="gates-inbox-refresh-strip" />
         <div class="scroll-area flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          <Transition name="ui-fade" mode="out-in">
+          <div :key="listFadeKey" class="flex flex-col gap-2" data-testid="inbox-list-fade-desktop">
           <InboxPendingCard
             v-for="it in listItems"
             :key="itemKey(it)"
@@ -511,6 +523,8 @@ const {
             @select="selectItem(it)"
             @open-share="openSharePanel(it)"
           />
+          </div>
+          </Transition>
         </div>
         <Pagination v-if="listTotal > PAGE_SIZE" v-model:page="listPage" :page-size="PAGE_SIZE" :total="listTotal" />
       </div>

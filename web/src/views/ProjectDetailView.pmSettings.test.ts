@@ -163,8 +163,10 @@ describe('ProjectDetailView PM Leader settings inline', () => {
     )
     expect(boardTab.classes()).not.toContain('min-h-11')
     expect(tabs.classes()).not.toContain('mb-4')
-    // Desktop selected underline style preserved
-    expect(boardTab.classes()).toEqual(expect.arrayContaining(['border-accent']))
+    expect(boardTab.classes()).toContain('text-accent-2')
+    const indicator = wrapper.find('[data-testid="project-tabs-indicator"]')
+    expect(indicator.exists()).toBe(true)
+    expect(indicator.classes()).toEqual(expect.arrayContaining(['bg-accent', 'app-tabs-indicator']))
     expect(wrapper.find('[data-testid="project-board-panel"]').classes()).toContain('min-w-0')
   })
 

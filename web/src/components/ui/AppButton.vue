@@ -17,7 +17,7 @@ const props = withDefaults(
 
 const cls = computed(() => {
   const base =
-    'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition outline-none disabled:opacity-50 disabled:cursor-not-allowed'
+    'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium outline-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-1 focus-visible:ring-offset-base'
   // Height tokens: sm=h-6 (24px), md=h-9 (36px). Vertical padding no longer drives height.
   const sizes = props.size === 'sm' ? 'h-6 px-2.5 text-xs' : 'h-9 px-3.5 text-sm'
   const variants: Record<string, string> = {
@@ -27,7 +27,9 @@ const cls = computed(() => {
     danger: 'border border-err/40 bg-err/10 text-err hover:bg-err/20',
     subtle: 'bg-elevated text-txt2 hover:text-txt',
   }
-  return [base, sizes, variants[props.variant], props.block ? 'w-full' : '']
+  const press =
+    props.disabled || props.loading ? '' : 'ui-pressable'
+  return [base, sizes, variants[props.variant], press, props.block ? 'w-full' : '']
 })
 
 const isDisabled = computed(() => props.disabled || props.loading)

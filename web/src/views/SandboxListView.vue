@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
         <div
           v-for="s in rows"
           :key="s.id"
-          class="rounded-lg border border-line bg-surface p-3 transition hover:border-line-strong hover:bg-elevated"
+          class="list-card-lift rounded-lg border border-line bg-surface p-3 hover:border-line-strong hover:bg-elevated"
         >
           <div class="flex items-start justify-between gap-2.5">
             <div class="min-w-0 flex-1">
