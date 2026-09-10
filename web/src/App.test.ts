@@ -8,6 +8,7 @@ import pages from '@/locales/zh-CN/pages.json'
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ path: '/', meta: { bare: false, titleKey: 'shell.appName' } }),
+  useRouter: () => ({ push: vi.fn() }),
 }))
 
 vi.mock('@/lib/shared/locale', async () => {
@@ -40,6 +41,7 @@ describe('App', () => {
           }),
           ToastHost: defineComponent({ template: '<div data-testid="toast-host" />' }),
           RouterView: defineComponent({ template: '<div data-testid="router-view" />' }),
+          OnboardingWizard: defineComponent({ template: '<div data-testid="onboarding-wizard" />' }),
         },
       },
     })
@@ -68,6 +70,7 @@ describe('App', () => {
           }),
           ToastHost: defineComponent({ template: '<div data-testid="toast-host" />' }),
           RouterView: defineComponent({ template: '<div data-testid="router-view" />' }),
+          OnboardingWizard: defineComponent({ template: '<div data-testid="onboarding-wizard" />' }),
         },
       },
     })
