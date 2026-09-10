@@ -15,7 +15,43 @@ async function mockOnboardingApi(page: Page) {
       return
     }
     const url = new URL(route.request().url())
-    if (url.pathname.includes('/bootstrap-onboarding') && route.request().method() === 'POST') {
+    const pathname = url.pathname
+    const method = route.request().method()
+
+    if (pathname === '/api/opencode/providers' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          providers: [{ id: 'deepseek', name: 'DeepSeek', models: 1 }],
+        }),
+      })
+      return
+    }
+    if (pathname.match(/^\/api\/opencode\/providers\/[^/]+\/models$/) && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ models: [{ id: 'deepseek-v4-pro' }] }),
+      })
+      return
+    }
+    if (pathname === '/api/projects' && method === 'POST') {
+      const body = route.request().postDataJSON() as { name?: string }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'proj-e2e-created',
+          name: body?.name || 'created',
+          description: '',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        }),
+      })
+      return
+    }
+    if (pathname.includes('/bootstrap-onboarding') && method === 'POST') {
       const body = route.request().postDataJSON() as { apiKey?: string }
       if (!body?.apiKey?.trim()) {
         await route.fulfill({
@@ -25,21 +61,31 @@ async function mockOnboardingApi(page: Page) {
         })
         return
       }
+      const isNewProject = pathname.includes('proj-e2e-created')
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          agentIds: [
-            '综合AI技术产品',
-            '综合研发工程师',
-            '综合测试工程师',
-            '综合代码审查工程师',
-            '综合运维工程师',
-            '综合项目组组长',
-          ],
-          workflowId: 'wf-onboard-1',
+          agentIds: isNewProject
+            ? [
+                '中国象棋AI技术产品',
+                '中国象棋研发工程师',
+                '中国象棋测试工程师',
+                '中国象棋代码审查工程师',
+                '中国象棋运维工程师',
+                '中国象棋项目组组长',
+              ]
+            : [
+                '综合AI技术产品',
+                '综合研发工程师',
+                '综合测试工程师',
+                '综合代码审查工程师',
+                '综合运维工程师',
+                '综合项目组组长',
+              ],
+          workflowId: isNewProject ? 'wf-onboard-new' : 'wf-onboard-1',
           published: true,
-          groupName: '综合项目组',
+          groupName: isNewProject ? '中国象棋项目组' : '综合项目组',
         }),
       })
       return
@@ -48,11 +94,20 @@ async function mockOnboardingApi(page: Page) {
   })
 }
 
+/** Select OpenCode vendor/model then fill API key (required to leave the apiKey step). */
+async function fillOpenCodeAuth(page: Page, apiKey: string) {
+  await page.locator('[data-test="opencode-provider"] [data-test="app-select-trigger"]').click()
+  await page.locator('[data-test="app-select-option-deepseek"]').click()
+  await page.locator('[data-test="opencode-model"] [data-test="app-select-trigger"]').click()
+  await page.locator('[data-test="app-select-option-deepseek/deepseek-v4-pro"]').click()
+  await page.getByTestId('onboarding-api-key').fill(apiKey)
+}
+
 async function walkWizardToSuccess(page: Page, opts: { generateLabel: string; apiKey: string }) {
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
-  await page.getByTestId('onboarding-api-key').fill(opts.apiKey)
+  await fillOpenCodeAuth(page, opts.apiKey)
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-git-user-name').fill('Ada Lovelace')
   await page.getByTestId('onboarding-git-user-email').fill('ada@example.com')
@@ -88,7 +143,7 @@ test('空项目安装引导六步向导浏览器验收（zh）', async ({ page }
   await page.getByTestId('onboarding-next').click()
   await expect(page.getByTestId('onboarding-api-key')).toBeVisible()
 
-  await page.getByTestId('onboarding-api-key').fill('crsr_e2e_test_key')
+  await fillOpenCodeAuth(page, 'crsr_e2e_test_key')
   await page.getByTestId('onboarding-next').click()
   await expect(page.getByTestId('onboarding-git-type-github_https')).toBeVisible()
   await expect(page.getByTestId('onboarding-repo-url')).toBeVisible()
@@ -126,7 +181,27 @@ test('onboarding wizard English shell copy', async ({ page }) => {
       return
     }
     const url = new URL(route.request().url())
-    if (url.pathname.includes('/bootstrap-onboarding') && route.request().method() === 'POST') {
+    const pathname = url.pathname
+    const method = route.request().method()
+    if (pathname === '/api/opencode/providers' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          providers: [{ id: 'deepseek', name: 'DeepSeek', models: 1 }],
+        }),
+      })
+      return
+    }
+    if (pathname.match(/^\/api\/opencode\/providers\/[^/]+\/models$/) && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ models: [{ id: 'deepseek-v4-pro' }] }),
+      })
+      return
+    }
+    if (pathname.includes('/bootstrap-onboarding') && method === 'POST') {
       bootstrapBody = route.request().postDataJSON() as typeof bootstrapBody
       await route.fulfill({
         status: 200,
@@ -170,7 +245,7 @@ test('onboarding English empty CTA / review chip', async ({ page }) => {
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
-  await page.getByTestId('onboarding-api-key').fill('crsr_chip')
+  await fillOpenCodeAuth(page, 'crsr_chip')
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-git-user-name').fill('Ada Lovelace')
   await page.getByTestId('onboarding-git-user-email').fill('ada@example.com')
@@ -182,4 +257,101 @@ test('onboarding English empty CTA / review chip', async ({ page }) => {
   expect(pane).not.toContain('快速上手·轻量')
   expect(pane).toContain('Default Workflow')
   await page.screenshot({ path: path.join(OUT, 'en-review-chip.png'), fullPage: true })
+})
+
+test('新建项目 create 模式：首步项目名 → create+bootstrap', async ({ page }) => {
+  let createBody: { name?: string } | null = null
+  let bootstrapPath = ''
+  await page.route('**/api/**', async (route) => {
+    if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
+      await route.continue()
+      return
+    }
+    const url = new URL(route.request().url())
+    const pathname = url.pathname
+    const method = route.request().method()
+    if (pathname === '/api/opencode/providers' && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          providers: [{ id: 'deepseek', name: 'DeepSeek', models: 1 }],
+        }),
+      })
+      return
+    }
+    if (pathname.match(/^\/api\/opencode\/providers\/[^/]+\/models$/) && method === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ models: [{ id: 'deepseek-v4-pro' }] }),
+      })
+      return
+    }
+    if (pathname === '/api/projects' && method === 'POST') {
+      createBody = route.request().postDataJSON() as { name?: string }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'proj-e2e-created',
+          name: createBody?.name || 'created',
+          description: '',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        }),
+      })
+      return
+    }
+    if (pathname.includes('/bootstrap-onboarding') && method === 'POST') {
+      bootstrapPath = pathname
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          agentIds: [
+            '中国象棋AI技术产品',
+            '中国象棋研发工程师',
+            '中国象棋测试工程师',
+            '中国象棋代码审查工程师',
+            '中国象棋运维工程师',
+            '中国象棋项目组组长',
+          ],
+          workflowId: 'wf-onboard-new',
+          published: true,
+          groupName: '中国象棋项目组',
+        }),
+      })
+      return
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
+  })
+
+  await page.goto('/onboarding-wizard.html?mode=createProject', { waitUntil: 'networkidle' })
+  await expect(page.getByTestId('onboarding-project-name')).toBeVisible()
+  await page.screenshot({ path: path.join(OUT, 'create-01-name.png'), fullPage: true })
+
+  await page.getByTestId('onboarding-next').click()
+  await expect(page.getByTestId('onboarding-project-name')).toBeVisible()
+
+  await page.getByTestId('onboarding-project-name').fill('中国象棋')
+  await page.getByTestId('onboarding-next').click()
+  await expect(page.getByTestId('onboarding-language-zh-CN')).toBeVisible()
+  await page.getByTestId('onboarding-next').click()
+  await page.getByTestId('onboarding-next').click()
+  await page.getByTestId('onboarding-next').click()
+  await fillOpenCodeAuth(page, 'sk-create-e2e')
+  await page.getByTestId('onboarding-next').click()
+  await page.getByTestId('onboarding-git-user-name').fill('Ada Lovelace')
+  await page.getByTestId('onboarding-git-user-email').fill('ada@example.com')
+  await page.getByTestId('onboarding-skip').click()
+  await expect(page.getByText('生成配置')).toBeVisible()
+  await page.screenshot({ path: path.join(OUT, 'create-02-review.png'), fullPage: true })
+  await page.getByTestId('onboarding-next').click()
+
+  await expect(page.getByTestId('onboarding-success')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('中国象棋研发工程师')).toBeVisible()
+  expect(createBody?.name).toBe('中国象棋')
+  expect(bootstrapPath).toContain('/projects/proj-e2e-created/bootstrap-onboarding')
+  await page.screenshot({ path: path.join(OUT, 'create-03-success.png'), fullPage: true })
 })
