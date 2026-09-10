@@ -35,6 +35,7 @@ import {
   type OnboardingDraft,
   type OnboardingStartPath,
 } from '@/lib/pm/onboardingWizard'
+import { START_PATH_OPTIONS } from '@/lib/shared/startPath'
 
 const props = defineProps<{
   open: boolean
@@ -67,18 +68,7 @@ const themeOptions: { id: ThemeName; labelKey: string; hintKey: string }[] = [
   { id: 'dark', labelKey: 'pages.onboarding.language.themeDark', hintKey: 'pages.onboarding.language.themeDarkHint' },
   { id: 'light', labelKey: 'pages.onboarding.language.themeLight', hintKey: 'pages.onboarding.language.themeLightHint' },
 ]
-const startPathOptions: { id: OnboardingStartPath; titleKey: string; descKey: string }[] = [
-  {
-    id: 'apiKey',
-    titleKey: 'pages.onboarding.acp.paths.apiKey.title',
-    descKey: 'pages.onboarding.acp.paths.apiKey.desc',
-  },
-  {
-    id: 'cli',
-    titleKey: 'pages.onboarding.acp.paths.cli.title',
-    descKey: 'pages.onboarding.acp.paths.cli.desc',
-  },
-]
+const startPathOptions = START_PATH_OPTIONS
 const progressPct = computed(() =>
   phase.value === 'success' ? 100 : ((draft.value.step + 1) / ONBOARDING_STEPS.length) * 100,
 )

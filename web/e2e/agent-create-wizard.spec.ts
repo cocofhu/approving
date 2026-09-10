@@ -44,6 +44,7 @@ test('新建 Agent 五步向导浏览器验收', async ({ page }) => {
   await expect(page.locator('.sec-head h3')).toHaveText('Agent')
   await page.screenshot({ path: path.join(OUT, '02-agent.png'), fullPage: true })
 
+  await page.getByRole('button', { name: /用编码 CLI 账号/ }).click()
   await page.getByRole('button', { name: /Cursor/ }).click()
   await page.getByRole('button', { name: /^下一步/ }).click()
   await expect(page.locator('.sec-head h3')).toHaveText('API Key')

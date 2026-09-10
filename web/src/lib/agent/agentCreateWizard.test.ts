@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assembleCreatePayload,
   applyAcpBackend,
+  applyWizardStartPath,
   buildDefaultRule,
   buildReviewSummary,
   configRootFor,
@@ -11,8 +12,38 @@ import {
   validateBasics,
   AGENT_SETTINGS_PATH,
   parseCustomConfigJson,
+  CLI_BACKENDS,
 } from './agentCreateWizard'
 import { AGENT_OPENCODE_CONFIG_REL_PATH } from './backendAuthGuide'
+
+describe('freshDraft defaults (g1.2)', () => {
+  it('defaults to API Key path with OpenCode', () => {
+    const d = freshDraft()
+    expect(d.startPath).toBe('apiKey')
+    expect(d.acpBackend).toBe('opencode')
+    expect(d.cliBackend).toBe('cursor')
+    expect(d.configRoot).toBe('/root/.config/opencode')
+    expect(CLI_BACKENDS.map((b) => b.id)).toEqual([
+      'cursor',
+      'claude_code',
+      'codebuddy',
+      'trae',
+    ])
+  })
+
+  it('applyWizardStartPath restores last CLI backend', () => {
+    const d = freshDraft()
+    applyAcpBackend(d, 'codebuddy')
+    expect(d.startPath).toBe('cli')
+    expect(d.cliBackend).toBe('codebuddy')
+    applyWizardStartPath(d, 'apiKey')
+    expect(d.acpBackend).toBe('opencode')
+    expect(d.configRoot).toBe('/root/.config/opencode')
+    applyWizardStartPath(d, 'cli')
+    expect(d.acpBackend).toBe('codebuddy')
+    expect(d.cliBackend).toBe('codebuddy')
+  })
+})
 
 describe('configRootFor', () => {
   it('maps backends to protocol roots', () => {
@@ -208,6 +239,8 @@ describe('hasPathDeps / buildReviewSummary', () => {
   it('marks API Key configured when auth env is present', () => {
     const d = freshDraft()
     d.name = 'n'
+    d.acpBackend = 'cursor'
+    d.startPath = 'cli'
     d.env = [{ k: 'APPROVING_CURSOR_API_KEY', v: 'crsr_demo' }]
     const items = buildReviewSummary(d)
     expect(items.find((i) => i.key === 'apiKey')?.kind).toBe('ok')

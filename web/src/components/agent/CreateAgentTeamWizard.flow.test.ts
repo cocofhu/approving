@@ -81,6 +81,20 @@ function fillBasics(vm: any, name = '登月') {
   vm.draft.background = '把火箭送上天'
 }
 
+/** OpenCode API Key step requires a model before Next (g1.3 default). */
+function ensureOpenCodeModel(vm: any) {
+  if (vm.draft.acpBackend !== 'opencode') return
+  const has = vm.draft.env.some((e: any) => e.k === 'ACP_BRIDGE_MODEL' && String(e.v || '').trim())
+  if (!has) vm.draft.env.push({ k: 'ACP_BRIDGE_MODEL', v: 'openai/gpt-4.1' })
+}
+
+function goNextThrough(vm: any, count: number) {
+  for (let i = 0; i < count; i++) {
+    if (vm.currentStep.id === 'apiKey') ensureOpenCodeModel(vm)
+    vm.goNext()
+  }
+}
+
 describe('CreateAgentTeamWizard flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -152,8 +166,15 @@ describe('CreateAgentTeamWizard flow', () => {
 
     // Re-selecting the active backend is a no-op.
     const before = vm.draft.configRoot
-    vm.selectAcp('cursor')
+    vm.selectAcp(vm.draft.acpBackend)
     expect(vm.draft.configRoot).toBe(before)
+    expect(vm.draft.acpBackend).toBe('opencode')
+    expect(vm.draft.startPath).toBe('apiKey')
+
+    vm.selectStartPath('cli')
+    await flushPromises()
+    expect(vm.draft.startPath).toBe('cli')
+    expect(vm.draft.acpBackend).toBe('cursor')
 
     vm.selectAcp('claude_code')
     await flushPromises()
@@ -279,6 +300,7 @@ describe('CreateAgentTeamWizard flow', () => {
     fillBasics(vm)
     vm.goNext()
     vm.goNext()
+    ensureOpenCodeModel(vm)
     vm.goNext()
     await flushPromises()
     expect(vm.currentStep.id).toBe('git')
@@ -303,7 +325,7 @@ describe('CreateAgentTeamWizard flow', () => {
     const vm = w.vm as any
 
     fillBasics(vm)
-    for (let i = 0; i < 4; i++) vm.goNext()
+    goNextThrough(vm, 4)
     await flushPromises()
     expect(vm.currentStep.id).toBe('mcp')
     expect(vm.hasArtifact).toBe(true)
@@ -340,7 +362,7 @@ describe('CreateAgentTeamWizard flow', () => {
     const vm = w.vm as any
 
     fillBasics(vm)
-    for (let i = 0; i < 5; i++) vm.goNext()
+    goNextThrough(vm, 5)
     await flushPromises()
     expect(vm.currentStep.id).toBe('env')
     expect(vm.envSummary).toContain('GIT_REPOS')
@@ -366,7 +388,7 @@ describe('CreateAgentTeamWizard flow', () => {
     await flushPromises()
     emitPanel(w, 'update:apiKeyInput', 'sk-live')
     await flushPromises()
-    for (let i = 0; i < 4; i++) vm.goNext()
+    goNextThrough(vm, 4)
     await flushPromises()
     expect(vm.currentStep.id).toBe('review')
     expect(w.html()).toContain('登月项目组')
@@ -398,7 +420,7 @@ describe('CreateAgentTeamWizard flow', () => {
     mocks.bootstrapAgentTeam.mockRejectedValueOnce(new Error('quota exhausted'))
 
     fillBasics(vm)
-    for (let i = 0; i < 6; i++) vm.goNext()
+    goNextThrough(vm, 6)
     await flushPromises()
     expect(vm.currentStep.id).toBe('review')
 
@@ -418,7 +440,7 @@ describe('CreateAgentTeamWizard flow', () => {
     const vm = w.vm as any
 
     fillBasics(vm)
-    for (let i = 0; i < 6; i++) vm.goNext()
+    goNextThrough(vm, 6)
     await flushPromises()
     expect(vm.currentStep.id).toBe('review')
 

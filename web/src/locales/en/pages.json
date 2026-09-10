@@ -2403,7 +2403,7 @@
           "backgroundHint": "Like a prompt: injected into the sandbox to generate groups and engineers."
         },
         "acp": {
-          "meta": "Used as the default ACP for the PM and engineers."
+          "meta": "Used as the default ACP for the PM and engineers. Pick a start path first — same as onboarding and New Agent."
         },
         "git": {
           "meta": "Optional. Pick GitHub / GitLab / SSH; skip when a Git Token already exists (including project shared).",
@@ -2490,7 +2490,7 @@
           "descHint": "Optional. When set, it is prepended to the default alwaysApply rule."
         },
         "acp": {
-          "meta": "Pick an Agent Backend. CodeBuddy and Trae also require a China or International site; International is the default.",
+          "meta": "Choose how to start: a model-vendor API key, or a coding-CLI vendor account. CodeBuddy and Trae also require a China or International site; International is the default.",
           "remapTitle": "Switch Backend?",
           "remapBody": "MCP / Skills / Commands / Rules may depend on the current paths. Switching remaps to the new configRoot; cancel keeps the current Backend."
         },

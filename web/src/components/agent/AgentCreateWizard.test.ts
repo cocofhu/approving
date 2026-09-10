@@ -26,6 +26,8 @@ vi.mock('@/lib/api/api', () => ({
     createAgent: (payload: unknown) => createAgent(payload),
     listProjectRunTags: (projectId: string) => listProjectRunTags(projectId),
     getProjectSharedAgentConfig: (projectId: string) => getProjectSharedAgentConfig(projectId),
+    openCodeProviders: async () => ({ providers: [] }),
+    openCodeModels: async () => ({ models: [] }),
   },
 }))
 
@@ -91,6 +93,8 @@ describe('AgentCreateWizard 5-step IA', () => {
     buttonByText('下一步').click()
     await wrapper.vm.$nextTick()
 
+    buttonByText('用编码 CLI 账号').click()
+    await wrapper.vm.$nextTick()
     buttonByText('CodeBuddy').click()
     await wrapper.vm.$nextTick()
     const international = document.body.querySelector(
@@ -99,6 +103,7 @@ describe('AgentCreateWizard 5-step IA', () => {
     expect(international?.getAttribute('aria-checked')).toBe('true')
     expect(document.body.textContent).toContain('Agent')
     expect(document.body.textContent).not.toMatch(/配置步骤[\s\S]*\bACP\b/)
+    expect(document.body.textContent).toContain('从 API Key 开始')
     wrapper.unmount()
   })
 
@@ -107,6 +112,8 @@ describe('AgentCreateWizard 5-step IA', () => {
     fillName('key-agent')
     await wrapper.vm.$nextTick()
     buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('用编码 CLI 账号').click()
     await wrapper.vm.$nextTick()
     buttonByText('Cursor').click()
     await wrapper.vm.$nextTick()
@@ -124,6 +131,34 @@ describe('AgentCreateWizard 5-step IA', () => {
     buttonByText('跳过').click()
     await wrapper.vm.$nextTick()
     expect(document.body.textContent).toContain('Git')
+    wrapper.unmount()
+  })
+
+  it('defaults Agent step to API Key path and creates OpenCode when skipped', async () => {
+    const wrapper = mountWizard()
+    fillName('default-opencode')
+    await wrapper.vm.$nextTick()
+    buttonByText('下一步').click()
+    await wrapper.vm.$nextTick()
+    expect(document.body.textContent).toContain('从 API Key 开始')
+    expect(document.body.querySelector('[data-testid="agent-wizard-path-apiKey"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="agent-wizard-path-apikey-detail"]')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('/root/.cursor')
+    // Skip Agent step — payload stays OpenCode
+    buttonByText('跳过').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('跳过').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('跳过').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('创建并进入 Studio').click()
+    await wrapper.vm.$nextTick()
+    await vi.waitFor(() => {
+      expect(createAgent).toHaveBeenCalled()
+    })
+    const payload = createAgent.mock.calls[0][0]
+    expect(payload.acpBackend).toBe('opencode')
+    expect(payload.layout?.configRoot).toBe('/root/.config/opencode')
     wrapper.unmount()
   })
 
@@ -259,6 +294,8 @@ describe('AgentCreateWizard 5-step IA', () => {
     fillName('region-agent')
     await wrapper.vm.$nextTick()
     buttonByText('Next').click()
+    await wrapper.vm.$nextTick()
+    buttonByText('Use a coding-CLI account').click()
     await wrapper.vm.$nextTick()
     buttonByText('Trae').click()
     await wrapper.vm.$nextTick()

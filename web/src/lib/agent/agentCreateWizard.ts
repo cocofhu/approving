@@ -18,9 +18,18 @@ import {
   switchBackendRegions,
   type BackendId,
 } from '@/lib/shared/regionPolicy'
+import {
+  APIKEY_BACKEND,
+  CLI_BACKEND_DEFAULT,
+  CLI_BACKENDS,
+  START_PATH_OPTIONS,
+  backendForStartPath,
+  syncStartPathFields,
+  type StartPath,
+} from '@/lib/shared/startPath'
 
 export type WizardBackendId = BackendId
-export { ACP_BACKENDS }
+export { ACP_BACKENDS, CLI_BACKENDS, START_PATH_OPTIONS, type StartPath }
 /** Wizard step ids. Internal `acp` is shown as Agent via i18n; capability/env steps are not in WIZARD_STEPS. */
 export type WizardStepId =
   | 'basics'
@@ -63,7 +72,11 @@ export type WizardDraft = {
   step: number
   name: string
   description: string
+  /** apiKey (OpenCode BYOK) or cli (coding-CLI vendor). */
+  startPath: StartPath
   acpBackend: WizardBackendId
+  /** Last CLI-path backend, restored when switching back from apiKey. */
+  cliBackend: WizardBackendId
   authMode: WizardAuthMode
   customConfigContent: string
   gitCredentialType?: GitCredentialType
@@ -127,11 +140,13 @@ export function freshDraft(): WizardDraft {
     step: 0,
     name: '',
     description: '',
-    acpBackend: 'cursor',
+    startPath: 'apiKey',
+    acpBackend: APIKEY_BACKEND,
+    cliBackend: CLI_BACKEND_DEFAULT,
     authMode: 'apiKey',
     customConfigContent: '',
     gitCredentialType: undefined,
-    configRoot: DEFAULT_CONFIG_ROOT,
+    configRoot: configRootFor(APIKEY_BACKEND),
     env: [],
     mcp: [],
     rulesEdited: false,
@@ -148,9 +163,15 @@ export function configRootFor(backend: WizardBackendId): string {
 }
 
 export function applyAcpBackend(draft: WizardDraft, id: WizardBackendId): void {
+  syncStartPathFields(draft, id)
   draft.acpBackend = id
   draft.configRoot = configRootFor(id)
   draft.env = recToKV(switchOpenCodeEnv(switchBackendRegions(kvToRec(draft.env), id), id))
+}
+
+/** Switch start path; CLI restores the last CLI backend that was picked. */
+export function applyWizardStartPath(draft: WizardDraft, path: StartPath): void {
+  applyAcpBackend(draft, backendForStartPath(path, draft.cliBackend))
 }
 
 /** True when switching Backend may remapping path-dependent configs. */
@@ -313,7 +334,7 @@ export function assembleCreatePayload(draft: WizardDraft): Agent {
   const env = stripTokenKeysFromRecord(normalizeWizardRegions(envDraft))
   return {
     name,
-    acpBackend: draft.acpBackend || 'cursor',
+    acpBackend: draft.acpBackend || APIKEY_BACKEND,
     ...(draft.gitCredentialType ? { gitCredentialType: draft.gitCredentialType } : {}),
     files: collectFiles(draft),
     mcp: draft.mcp.filter((m) => m.name.trim()).map(draftMcpToApi),
