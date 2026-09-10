@@ -302,4 +302,71 @@ describe('OnboardingWizard', () => {
       shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [{ name: ONBOARDING_WORKFLOW_NAME }], []),
     ).toBe(false)
   })
+
+  /** Advance createProject wizard from projectName through review (generate). */
+  async function advanceCreateToGenerate(wrapper: Awaited<ReturnType<typeof mountWizard>>) {
+    await wrapper.find('[data-testid="onboarding-project-name"]').setValue('支付中台')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    // language → overview → acp → apiKey
+    for (let i = 0; i < 3; i++) {
+      await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+      await nextTick()
+    }
+    await fillOpenCodeAuth(wrapper, 'sk-create')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    // git (skip identity via filling) → review
+    await wrapper.find('[data-testid="onboarding-git-user-name"]').setValue('Ada')
+    await wrapper.find('[data-testid="onboarding-git-user-email"]').setValue('ada@example.com')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await flushPromises()
+  }
+
+  it('create mode: bootstrap failure then retry does not call createProject again (s3/f6)', async () => {
+    const { api } = await import('@/lib/api/api')
+    vi.mocked(api.createProject).mockResolvedValue({ id: 'proj-created-1', name: '支付中台' } as never)
+    vi.mocked(api.bootstrapProjectOnboarding)
+      .mockRejectedValueOnce(new Error('bootstrap blew up'))
+      .mockResolvedValueOnce({
+        agentIds: ['支付中台研发工程师'],
+        workflowId: 'wf-x',
+        published: true,
+        groupName: '支付中台项目组',
+      } as never)
+
+    const wrapper = await mountWizard({ mode: 'createProject', projectId: '' })
+    expect(wrapper.find('[data-testid="onboarding-title"]').text()).toBe('pages.onboarding.titleCreate')
+
+    await advanceCreateToGenerate(wrapper)
+
+    expect(api.createProject).toHaveBeenCalledTimes(1)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalledTimes(1)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalledWith('proj-created-1', expect.any(Object))
+    expect(wrapper.find('[data-testid="onboarding-success"]').exists()).toBe(false)
+
+    // Stay on review and generate again — must not create another project.
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await flushPromises()
+
+    expect(api.createProject).toHaveBeenCalledTimes(1)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalledTimes(2)
+    expect(api.bootstrapProjectOnboarding).toHaveBeenNthCalledWith(2, 'proj-created-1', expect.any(Object))
+    expect(wrapper.find('[data-testid="onboarding-success"]').exists()).toBe(true)
+  })
+
+  it('create mode shows derived-team copy instead of 综合*', async () => {
+    const wrapper = await mountWizard({ mode: 'createProject', projectId: '' })
+    expect(wrapper.find('[data-testid="onboarding-title"]').text()).toBe('pages.onboarding.titleCreate')
+    await wrapper.find('[data-testid="onboarding-project-name"]').setValue('支付中台')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="onboarding-overview-agents"]').text()).toBe(
+      'pages.onboarding.overview.agentsListDerived',
+    )
+  })
 })

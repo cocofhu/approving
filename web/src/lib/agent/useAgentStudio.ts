@@ -11,7 +11,7 @@ import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
 import { useBreakpoint } from '@/lib/composables/useBreakpoint'
 import {
   emptyOrg, groupPath, newGroupId, applyDeleteGroup, applyMoveAgent,
-  applyRemoveAgentFromGroup, wouldCreateGroupCycle, buildOrgTreeRows,
+  applyRemoveAgentFromGroup, wouldCreateGroupCycle, buildOrgTreeRows, pruneOrgToAgentGroups,
   recursiveMemberNames, classifyAssignTargets, assignNeedsDraftConfirm,
   shouldSyncDraftAfterAssign, isAgentInGroupSubtree, UNGROUPED_ID,
   allGroupCollapseIds, ancestorGroupIdsForAgent, buildDefaultCollapsedSet,
@@ -432,8 +432,12 @@ function clearManageSearch() {
   manageSearch.value = ''
 }
 
+const displayOrg = computed(() =>
+  embedded.value ? pruneOrgToAgentGroups(org.value, agentNames.value) : org.value,
+)
+
 const orgSheetRows = computed(() =>
-  buildOrgTreeRows(org.value, agentNames.value, orgSheetCollapsed.value, agents.value, projects.value),
+  buildOrgTreeRows(displayOrg.value, agentNames.value, orgSheetCollapsed.value, agents.value, projects.value),
 )
 
 type AssignFailItem = { name: string; reason: string }
@@ -1571,6 +1575,7 @@ onBeforeUnmount(() => {
   agents,
   projects,
   org,
+  displayOrg,
   orgBaseline,
   activeName,
   draft,

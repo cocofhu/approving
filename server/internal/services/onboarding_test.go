@@ -550,6 +550,56 @@ func TestCreateFromBaselineDefaultsShowOnHome(t *testing.T) {
 	}
 }
 
+func TestOnboardingBootstrapDoesNotReuseSameNamedForeignGroup(t *testing.T) {
+	svc, _ := newOnboardingHarness(t)
+	org, err := svc.Org.Get()
+	if err != nil {
+		t.Fatalf("org: %v", err)
+	}
+	org.Groups = append(org.Groups, services.OrgGroup{ID: "g_foreign_same_name", Name: "支付中台项目组"})
+	if _, err := svc.Org.Put(org, org.Revision); err != nil {
+		t.Fatalf("seed org: %v", err)
+	}
+
+	p, err := svc.Projects.Create("支付中台", "", nil, nil)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	res, err := svc.Bootstrap(p.ID, services.OnboardingBootstrapRequest{AcpBackend: "cursor", APIKey: "k-pay"})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	if res.GroupName != "支付中台项目组" {
+		t.Fatalf("groupName = %q", res.GroupName)
+	}
+
+	org2, err := svc.Org.Get()
+	if err != nil {
+		t.Fatalf("org2: %v", err)
+	}
+	wantID := "g_onb_" + p.ID
+	var foundWant, agentsOnForeign bool
+	for _, g := range org2.Groups {
+		if g.ID == wantID {
+			foundWant = true
+		}
+	}
+	if !foundWant {
+		t.Fatalf("expected new group %s, groups=%+v", wantID, org2.Groups)
+	}
+	for _, name := range res.AgentIDs {
+		m := org2.Agents[name]
+		for _, gid := range m.GroupIDs {
+			if gid == "g_foreign_same_name" {
+				agentsOnForeign = true
+			}
+		}
+	}
+	if agentsOnForeign {
+		t.Fatal("agents must not join the foreign same-named group")
+	}
+}
+
 func newOnboardingHarness(t *testing.T) (*services.OnboardingService, string) {
 	t.Helper()
 	db, err := database.OpenSQLiteTest(filepath.Join(t.TempDir(), "onboarding.db"))

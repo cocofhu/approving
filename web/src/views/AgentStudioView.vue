@@ -49,6 +49,7 @@ const {
   agents,
   projects,
   org,
+  displayOrg,
   orgBaseline,
   activeName,
   draft,
@@ -377,7 +378,7 @@ const {
       <!-- agent org tree (hidden on narrow screens; agent name bar remains) -->
       <AgentOrgSidebar
         v-if="!isMobile"
-        :org="org"
+        :org="displayOrg"
         :agent-names="agentNames"
         :active-name="activeName"
         :collapsed="agentListCollapsed"

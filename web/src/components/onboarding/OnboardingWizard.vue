@@ -96,6 +96,19 @@ const regionPolicy = computed(() => getRegionPolicy(draft.value.acpBackend))
 const authGuide = computed(() => authGuideFor(draft.value.acpBackend, draft.value.region))
 const primaryAuthKey = computed(() => authGuide.value.keys[0]?.key || '')
 const primaryAuthAlt = computed(() => authGuide.value.keys[0]?.alt || '')
+const effectiveMode = computed<OnboardingMode>(() => {
+  // After create succeeds, copy/hints switch to retry; steps stay createProject so the rail index stays valid.
+  if (createdProjectId.value) return 'retry'
+  return props.mode || 'firstInstall'
+})
+const wizardTitle = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (props.mode || 'firstInstall') === 'createProject') {
+    return t('pages.onboarding.titleCreate')
+  }
+  if (mode === 'retry') return t('pages.onboarding.titleRetry')
+  return t('pages.onboarding.title')
+})
 const headSub = computed(() => {
   if (phase.value === 'success') return t('pages.onboarding.head.success')
   return t(`pages.onboarding.head.${currentStep.value.id}`)
@@ -106,14 +119,35 @@ const repoOk = computed(() => repoConfigured(draft.value))
 const repoDirName = computed(() => repoNameFromUrl(draft.value.repoUrl))
 const successAgentNames = computed(() => {
   if (result.value?.agentIds?.length) return result.value.agentIds
-  if ((props.mode || 'firstInstall') === 'createProject') {
+  if ((props.mode || 'firstInstall') === 'createProject' || createdProjectId.value) {
     return deriveOnboardingAgentNames('new', draft.value.projectName)
   }
   const pid = (props.projectId || DEFAULT_PROJECT_ID).trim() || DEFAULT_PROJECT_ID
   if (pid === DEFAULT_PROJECT_ID) return [...ONBOARDING_AGENT_NAMES]
   return deriveOnboardingAgentNames(pid, draft.value.projectName)
 })
+const overviewAgentsList = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (mode === 'retry' && (createdProjectId.value || props.projectId) !== DEFAULT_PROJECT_ID)) {
+    return t('pages.onboarding.overview.agentsListDerived')
+  }
+  return t('pages.onboarding.overview.agentsList')
+})
+const reviewFeatureHint = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (mode === 'retry' && (createdProjectId.value || props.projectId) !== DEFAULT_PROJECT_ID)) {
+    return t('pages.onboarding.review.featureHintDerived')
+  }
+  return t('pages.onboarding.review.featureHint')
+})
 
+const successDesc = computed(() => {
+  const mode = effectiveMode.value
+  if (mode === 'createProject' || (mode === 'retry' && (createdProjectId.value || props.projectId) !== DEFAULT_PROJECT_ID)) {
+    return t('pages.onboarding.success.descDerived')
+  }
+  return t('pages.onboarding.success.desc')
+})
 watch(
   () => props.open,
   (open) => {
@@ -284,6 +318,15 @@ function goNext() {
   }
 }
 
+async function runBootstrap(projectId: string, body: ReturnType<typeof assembleBootstrapBody>) {
+  const res = await api.bootstrapProjectOnboarding(projectId, body)
+  result.value = res
+  phase.value = 'success'
+  toast.success(t('pages.onboarding.toastOk'))
+  goToProjectAgents(projectId)
+  emit('completed', { ...res, projectId })
+}
+
 async function submitBootstrap() {
   if (!draft.value.apiKey.trim()) {
     keyError.value = true
@@ -295,25 +338,36 @@ async function submitBootstrap() {
     toast.error(t('pages.agentStudio.openCode.modelRequired'))
     return
   }
-  if ((props.mode || 'firstInstall') === 'createProject' && !validateProjectNameStep()) return
+  // Project already created this session: skip name validation and never create again.
+  if ((props.mode || 'firstInstall') === 'createProject' && !createdProjectId.value && !validateProjectNameStep()) {
+    return
+  }
 
   creating.value = true
   createError.value = ''
   try {
     const body = assembleBootstrapBody(draft.value)
+
+    // create→bootstrap failure: keep same project id and only retry bootstrap (s3/f6).
+    if (createdProjectId.value) {
+      try {
+        await runBootstrap(createdProjectId.value, body)
+      } catch (e: any) {
+        createError.value = e?.message || String(e)
+        toast.error(createError.value || t('pages.onboarding.toastErr'))
+      }
+      return
+    }
+
     if ((props.mode || 'firstInstall') === 'createProject') {
       const created = await api.createProject({
         name: draft.value.projectName.trim(),
         description: '',
       })
+      // Remember id so a bootstrap failure retries bootstrap only — never create again (s3/f6).
       createdProjectId.value = created.id
       try {
-        const res = await api.bootstrapProjectOnboarding(created.id, body)
-        result.value = res
-        phase.value = 'success'
-        toast.success(t('pages.onboarding.toastOk'))
-        goToProjectAgents(created.id)
-        emit('completed', { ...res, projectId: created.id })
+        await runBootstrap(created.id, body)
       } catch (e: any) {
         createError.value = e?.message || String(e)
         toast.error(createError.value || t('pages.onboarding.toastErr'))
@@ -328,11 +382,7 @@ async function submitBootstrap() {
       toast.error(createError.value)
       return
     }
-    const res = await api.bootstrapProjectOnboarding(projectId, body)
-    result.value = res
-    phase.value = 'success'
-    toast.success(t('pages.onboarding.toastOk'))
-    emit('completed', { ...res, projectId })
+    await runBootstrap(projectId, body)
   } catch (e: any) {
     createError.value = e?.message || String(e)
     toast.error(createError.value || t('pages.onboarding.toastErr'))
@@ -357,7 +407,7 @@ async function submitBootstrap() {
             <Icon name="sparkles" :size="20" />
           </div>
           <div class="min-w-0 flex-1">
-            <h2 class="m-0 text-[16px] font-semibold text-txt">{{ t('pages.onboarding.title') }}</h2>
+            <h2 class="m-0 text-[16px] font-semibold text-txt" data-testid="onboarding-title">{{ wizardTitle }}</h2>
             <span class="mt-0.5 block text-[12px] text-txt3">{{ headSub }}</span>
           </div>
           <button
@@ -379,7 +429,7 @@ async function submitBootstrap() {
 
         <div v-if="phase === 'success'" class="flex min-h-0 flex-1 flex-col px-8 py-7" data-testid="onboarding-success">
           <h3 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.onboarding.success.title') }}</h3>
-          <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.success.desc') }}</p>
+          <p class="mt-2 text-[13px] text-txt2">{{ successDesc }}</p>
           <ul class="mt-4 space-y-1.5 text-[13px] text-txt2">
             <li v-for="n in successAgentNames" :key="n">· {{ n }}</li>
             <li>· {{ t('pages.onboarding.success.publishedLine') }}</li>
@@ -545,7 +595,7 @@ async function submitBootstrap() {
                     <div class="rounded-lg border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.agents') }}</div>
                       <div class="mt-1 text-[18px] font-semibold text-txt">6</div>
-                      <p class="mt-1 text-[12px] text-txt2">{{ t('pages.onboarding.overview.agentsList') }}</p>
+                      <p class="mt-1 text-[12px] text-txt2" data-testid="onboarding-overview-agents">{{ overviewAgentsList }}</p>
                     </div>
                     <div class="rounded-lg border border-line bg-base px-3 py-3">
                       <div class="text-[11px] uppercase text-txt3">{{ t('pages.onboarding.overview.workflow') }}</div>
@@ -935,7 +985,7 @@ async function submitBootstrap() {
                     <span class="rounded-lg border border-ok/35 bg-ok/10 px-2 py-1 text-ok">{{ t('pages.onboarding.review.wfChip') }}</span>
                   </div>
                   <p v-if="!draft.apiKey.trim()" class="mt-3 text-[12px] text-warn">{{ t('pages.onboarding.review.needKey') }}</p>
-                  <p class="mt-3 text-[12px] text-txt3">{{ t('pages.onboarding.review.featureHint') }}</p>
+                  <p class="mt-3 text-[12px] text-txt3" data-testid="onboarding-review-hint">{{ reviewFeatureHint }}</p>
                   <p v-if="createError" class="mt-2 text-[12px] text-err">{{ createError }}</p>
                 </template>
               </div>

@@ -240,6 +240,8 @@
     },
     "onboarding": {
       "title": "第一次安装",
+      "titleCreate": "新建项目引导",
+      "titleRetry": "继续安装配置",
       "railCap": "配置步骤",
       "prev": "上一步",
       "next": "下一步",
@@ -251,6 +253,7 @@
       "cta": "完成安装配置",
       "emptyTitle": "完成第一次安装",
       "emptyDesc": "将配置 ACP 后端、Token 与 Git，并生成综合项目组与「默认工作流」。不会自动开跑。",
+      "emptyDescCreate": "将配置 ACP 后端、Token 与 Git，并生成本项目项目组与「默认工作流」（Agent 名按项目名派生）。不会自动开跑。",
       "workflowName": "默认工作流",
       "head": {
         "projectName": "填写项目名称",
@@ -296,6 +299,7 @@
         "itemPreview": "默认打开页面预览和浏览器工具，方便在沙箱里看页面、让 Agent 操作浏览器",
         "agents": "Agent",
         "agentsList": "综合项目组：产品 / 研发 / 测试 / 审查 / 运维 / 组长",
+        "agentsListDerived": "本项目项目组：产品 / 研发 / 测试 / 审查 / 运维 / 组长（名称按项目名派生）",
         "workflow": "工作流",
         "workflowHint": "仓库可现在填，也可运行时再填",
         "banner": "密钥只放在共享配置里，不要写进 Agent 工作区。"
@@ -360,6 +364,7 @@
         "meta": "确认下列信息。同名资源将复用并更新，不会重复创建。",
         "needKey": "尚未配置 API Key，请返回上一步填写后再生成。",
         "featureHint": "安装综合项目组与默认工作流；仓库在启动 Run 时再填。",
+        "featureHintDerived": "安装本项目项目组与默认工作流（Agent 名按项目名派生）；仓库在启动 Run 时再填。",
         "agentsChip": "Agents · 6",
         "wfChip": "工作流 · 默认工作流",
         "keyOn": "已配置",
@@ -373,6 +378,7 @@
       "success": {
         "title": "配置已生成",
         "desc": "已写入共享鉴权，并生成综合项目组与已发布的「默认工作流」。",
+        "descDerived": "已写入共享鉴权，并生成本项目项目组与已发布的「默认工作流」。",
         "limit": "默认工作流的仓库 URL 为空，请在启动 Run 时填写。私有仓请确认 Git 凭据已在共享配置中。",
         "repoOk": "已写入默认工作流的 repos 变量，clone 到 /root/workspace/{dir}/。启动 Run 时仍可改。",
         "publishedLine": "默认工作流（已发布）",

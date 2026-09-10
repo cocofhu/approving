@@ -428,10 +428,12 @@ func (s *OnboardingService) ensureOnboardingOrg(groupID, groupName string, agent
 	if err != nil {
 		return err
 	}
+	// Match by stable group id only. Name-based reuse would merge two same-named
+	// projects into one org folder (both derive "{projectName}项目组").
 	gid := groupID
 	found := false
 	for _, g := range org.Groups {
-		if g.ID == groupID || (g.Name == groupName && strings.TrimSpace(g.ParentGroupID) == "") {
+		if g.ID == groupID {
 			gid = g.ID
 			found = true
 			break

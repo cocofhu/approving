@@ -23,6 +23,7 @@ import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.
 import ProjectExternalMcpPanel from '@/components/project/ProjectExternalMcpPanel.vue'
 import AgentStudioView from '@/views/AgentStudioView.vue'
 import { useProjectDetail } from '@/lib/project/useProjectDetail'
+import { DEFAULT_PROJECT_ID } from '@/lib/pm/onboardingWizard'
 
 const {
   PROJECT_TABS,
@@ -202,6 +203,12 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateProjectTabIndicator)
 })
+
+const onboardingEmptyDesc = computed(() =>
+  projectId.value === DEFAULT_PROJECT_ID
+    ? t('pages.onboarding.emptyDesc')
+    : t('pages.onboarding.emptyDescCreate'),
+)
 
 </script>
 
@@ -543,7 +550,7 @@ onBeforeUnmount(() => {
           data-testid="onboarding-empty"
         >
           <p class="text-[15px] font-medium text-txt">{{ t('pages.onboarding.emptyTitle') }}</p>
-          <p class="mt-2 text-txt2">{{ t('pages.onboarding.emptyDesc') }}</p>
+          <p class="mt-2 text-txt2" data-testid="onboarding-empty-desc">{{ onboardingEmptyDesc }}</p>
           <div class="mt-4 flex justify-center gap-2">
             <AppButton variant="primary" icon="sparkles" @click="openOnboarding">
               {{ t('pages.onboarding.cta') }}
