@@ -323,7 +323,7 @@ onMounted(async () => {
     <div class="mb-5 flex shrink-0 flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.artifacts.title') }}</h2>
-        <p class="text-sm text-txt3">{{ t('pages.artifacts.subtitle') }}</p>
+        <p class="text-sm text-txt3" v-html="t('pages.artifacts.subtitle')" />
       </div>
       <ProjectFilter v-model="selectedProject" />
     </div>
