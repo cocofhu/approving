@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authGuideFor, hasAuthKeyConfigured } from './backendAuthGuide'
+import { authGuideFor, hasAuthKeyConfigured, agentConfigRelPath } from './backendAuthGuide'
 
 describe('backendAuthGuide', () => {
   it('returns Cursor console path + official entry links', () => {
@@ -33,5 +33,19 @@ describe('backendAuthGuide', () => {
     expect(
       hasAuthKeyConfigured({ TRAE_API_KEY: 'trae-lt-x' }, 'trae'),
     ).toBe(true)
+    expect(
+      hasAuthKeyConfigured({ OPENCODE_API_KEY: 'sk-oc' }, 'opencode'),
+    ).toBe(true)
+  })
+
+  it('routes OpenCode custom config to opencode.json and provider docs', () => {
+    const guide = authGuideFor('opencode')
+    expect(guide.keys[0]).toMatchObject({
+      key: 'APPROVING_OPENCODE_API_KEY',
+      alt: 'OPENCODE_API_KEY',
+    })
+    expect(guide.links.some((l) => l.url.includes('opencode.ai/docs/providers'))).toBe(true)
+    expect(agentConfigRelPath('opencode')).toBe('opencode.json')
+    expect(agentConfigRelPath('cursor')).toBe('settings.json')
   })
 })

@@ -18,6 +18,7 @@ func TestNormalizeBackend(t *testing.T) {
 		{"claude_code", BackendClaudeCode},
 		{"codebuddy", BackendCodeBuddy},
 		{"trae", BackendTrae},
+		{"opencode", BackendOpenCode},
 		{"", BackendCursor},
 		{" unknown ", BackendCursor},
 		{"CURSOR", BackendCursor}, // case-sensitive; unknown → cursor
@@ -39,8 +40,8 @@ func TestDefaultConfigRootAndResolve(t *testing.T) {
 	if got := DefaultConfigRoot(BackendClaudeCode); got != "/root/.claude" {
 		t.Fatalf("claude root=%q", got)
 	}
-	if got := DefaultConfigRoot(BackendCursor); got != "/root/.cursor" {
-		t.Fatalf("cursor root=%q", got)
+	if got := DefaultConfigRoot(BackendOpenCode); got != "/root/.config/opencode" {
+		t.Fatalf("opencode root=%q", got)
 	}
 	if got := ResolveConfigRoot(BackendTrae, "  /custom  "); got != "/custom" {
 		t.Fatalf("explicit root=%q", got)
@@ -56,6 +57,7 @@ func TestAgentRuntimeLabel(t *testing.T) {
 		BackendClaudeCode: "claude-code-acp",
 		BackendCodeBuddy:  "codebuddy-acp",
 		BackendTrae:       "trae-acp",
+		BackendOpenCode:   "opencode-json",
 	}
 	for b, want := range cases {
 		if got := AgentRuntimeLabel(b); got != want {
@@ -123,7 +125,7 @@ func TestMergeAuthEnv_CodeBuddyAliases(t *testing.T) {
 }
 
 func TestMergeAuthEnv_MissingKey(t *testing.T) {
-	for _, b := range []AcpBackend{BackendCursor, BackendClaudeCode, BackendCodeBuddy, BackendTrae} {
+	for _, b := range []AcpBackend{BackendCursor, BackendClaudeCode, BackendCodeBuddy, BackendTrae, BackendOpenCode} {
 		t.Run(string(b), func(t *testing.T) {
 			_, err := MergeAuthEnv(b, map[string]string{})
 			if err == nil {
@@ -318,7 +320,7 @@ func TestCodeBuddySettingsForEnv(t *testing.T) {
 		t.Fatal("region compare is case-insensitive")
 	}
 	// Stray CodeBuddy REGION on other backends must not materialize settings.json.
-	for _, b := range []AcpBackend{BackendCursor, BackendClaudeCode, BackendTrae} {
+	for _, b := range []AcpBackend{BackendCursor, BackendClaudeCode, BackendTrae, BackendOpenCode} {
 		if CodeBuddySettingsForEnv(b, staging) != nil {
 			t.Fatalf("backend %s must ignore codebuddy staging region", b)
 		}

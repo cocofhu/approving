@@ -8,6 +8,8 @@ import {
   hasAuthKeyConfigured,
 } from '@/lib/agent/backendAuthGuide'
 import { stripTokenKeysFromKV, stripTokenKeysFromRecord } from '@/lib/agent/tokenEnvKeys'
+import { switchOpenCodeEnv } from '@/lib/agent/openCodeProvider'
+import { agentConfigRelPath } from '@/lib/agent/backendAuthGuide'
 import {
   ACP_BACKENDS,
   isManagedRegionKey,
@@ -148,7 +150,7 @@ export function configRootFor(backend: WizardBackendId): string {
 export function applyAcpBackend(draft: WizardDraft, id: WizardBackendId): void {
   draft.acpBackend = id
   draft.configRoot = configRootFor(id)
-  draft.env = recToKV(switchBackendRegions(kvToRec(draft.env), id))
+  draft.env = recToKV(switchOpenCodeEnv(switchBackendRegions(kvToRec(draft.env), id), id))
 }
 
 /** True when switching Backend may remapping path-dependent configs. */
@@ -289,7 +291,7 @@ function collectFiles(draft: WizardDraft): AgentFile[] {
   if (draft.authMode === 'customConfig') {
     const parsed = parseCustomConfigJson(draft.customConfigContent)
     if (parsed.ok && parsed.normalized) {
-      files.push({ path: AGENT_SETTINGS_PATH, content: parsed.normalized })
+      files.push({ path: agentConfigRelPath(draft.acpBackend), content: parsed.normalized })
     }
   }
   return files

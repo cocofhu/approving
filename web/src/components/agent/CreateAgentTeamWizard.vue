@@ -24,10 +24,18 @@ import { authGuideFor, defaultSettingsPlaceholder } from '@/lib/agent/backendAut
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
 import {
+  kvToRec,
   parseCustomConfigJson,
   stripAuthKeysFromEnv,
   type WizardAuthMode,
 } from '@/lib/agent/agentCreateWizard'
+import {
+  applyOpenCodeFields,
+  openCodeCustomBaseRequired,
+  openCodeFieldsFromEnv,
+  openCodeModelRequired,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
 import { useInheritedGitEnv } from '@/lib/agent/useInheritedGitEnv'
 
 const props = defineProps<{
@@ -50,6 +58,8 @@ const submitError = ref('')
 const submitting = ref(false)
 const apiKeyInput = ref('')
 const customConfigError = ref(false)
+const openCodeBaseError = ref(false)
+const openCodeModelError = ref(false)
 const customConfigDraft = ref('')
 const stepAnimKey = ref(0)
 const bgExpanded = ref(true)
@@ -155,6 +165,26 @@ function onCustomConfigInput(value: string) {
   customConfigError.value = false
 }
 
+function patchOpenCode(fields: Parameters<typeof applyOpenCodeFields>[1]) {
+  draft.value.env = Object.entries(applyOpenCodeFields(kvToRec(draft.value.env), fields)).map(
+    ([k, v]) => ({ k, v }),
+  )
+  openCodeBaseError.value = false
+  openCodeModelError.value = false
+}
+
+function onOpenCodeProvider(value: OpenCodeProviderId) {
+  patchOpenCode({ provider: value })
+}
+
+function onOpenCodeBaseURL(value: string) {
+  patchOpenCode({ baseURL: value })
+}
+
+function onOpenCodeModel(value: string) {
+  patchOpenCode({ model: value })
+}
+
 function onApiKeyInput(value: string) {
   apiKeyInput.value = value
   const key = primaryAuthKey.value
@@ -193,6 +223,17 @@ function goSkip() {
 }
 
 function validateApiKeyStep(): boolean {
+  if (draft.value.acpBackend === 'opencode' && draft.value.authMode === 'apiKey') {
+    const fields = openCodeFieldsFromEnv(kvToRec(draft.value.env))
+    if (openCodeModelRequired(fields.model)) {
+      openCodeModelError.value = true
+      return false
+    }
+    if (openCodeCustomBaseRequired(fields.provider, fields.baseURL)) {
+      openCodeBaseError.value = true
+      return false
+    }
+  }
   if (draft.value.authMode !== 'customConfig') return true
   const parsed = parseCustomConfigJson(draft.value.customConfigContent)
   if (!parsed.ok) {
@@ -440,7 +481,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
 
                 <template v-else-if="currentStep.id === 'acp'">
                   <p class="sec-meta">{{ t('pages.agentStudio.teamWizard.acp.meta') }}</p>
-                  <div class="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                  <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                     <button
                       v-for="b in ACP_BACKENDS"
                       :key="b.id"
@@ -481,9 +522,15 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     :auth-guide="authGuide"
                     :primary-auth-key="primaryAuthKey"
                     :primary-auth-alt="primaryAuthAlt"
+                    :env="kvToRec(draft.env)"
+                    :open-code-base-error="openCodeBaseError"
+                    :open-code-model-error="openCodeModelError"
                     @update:auth-mode="setAuthMode"
                     @update:api-key-input="onApiKeyInput"
                     @update:custom-config-content="onCustomConfigInput"
+                    @update:open-code-provider="onOpenCodeProvider"
+                    @update:open-code-base-url="onOpenCodeBaseURL"
+                    @update:open-code-model="onOpenCodeModel"
                   />
                 </template>
 

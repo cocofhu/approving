@@ -30,7 +30,7 @@ Then open:
 - Gateway health: http://localhost:8899/healthz
 - Default login: `admin` / `demo1234` (local-demo)
 
-`./start.sh` also pulls **four sandbox runtime** images from GHCR (one per acpBackend: cursor / claude_code / codebuddy / trae; large). Until that finishes, sandbox chats may stay on “starting sandbox…”.
+`./start.sh` also pulls **five sandbox runtime** images from GHCR (one per acpBackend: cursor / claude_code / codebuddy / trae / opencode; large). Until that finishes, sandbox chats may stay on “starting sandbox…”.
 
 Agent / workspace / platform-rules and SQLite data live under `.localdata` at the repo root (bind mounts: `gateway` / `db` / `app-data`). `./start.sh restart` and `./start.sh down` keep that directory. To wipe: `./start.sh down && rm -rf .localdata`.
 
@@ -49,7 +49,7 @@ Ops rules:
 ```bash
 ./start.sh logs
 ./start.sh down
-./start.sh pull          # refresh GHCR images (including four sandbox runtimes)
+./start.sh pull          # refresh GHCR images (including five sandbox runtimes)
 ./start.sh restart       # down + up -d (keeps .localdata)
 ./start.sh dev -d        # source stack: go run + Vite HMR
 ```

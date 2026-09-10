@@ -1,0 +1,191 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import AppSelect from '@/components/ui/AppSelect.vue'
+import { loadOpenCodeModels, loadOpenCodeProviders } from '@/lib/agent/openCodeCatalog'
+import {
+  OPENCODE_CUSTOM_PROVIDER,
+  OPENCODE_FALLBACK_PROVIDERS,
+  openCodeModelMatchesProvider,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
+import type { OpenCodeCatalogModel, OpenCodeCatalogProvider } from '@/lib/api/apiTypes'
+
+const props = defineProps<{
+  provider: OpenCodeProviderId
+  baseUrl: string
+  model: string
+  requireBase?: boolean
+  requireModel?: boolean
+}>()
+
+const emit = defineEmits<{
+  'update:provider': [value: OpenCodeProviderId]
+  'update:baseUrl': [value: string]
+  'update:model': [value: string]
+}>()
+
+const { t } = useI18n()
+
+const catalog = ref<OpenCodeCatalogProvider[]>([])
+const catalogLoading = ref(true)
+const models = ref<OpenCodeCatalogModel[]>([])
+const modelsLoading = ref(false)
+
+const custom = computed(() => props.provider === OPENCODE_CUSTOM_PROVIDER)
+
+/**
+ * Vendors come from the catalog OpenCode itself resolves ids against. When it is
+ * unreachable the shipped shortlist stands in, and `custom` is appended either
+ * way because a private gateway is never in the catalog.
+ */
+const providerOptions = computed(() => {
+  const customOption = {
+    value: OPENCODE_CUSTOM_PROVIDER,
+    label: t('pages.agentStudio.openCode.providers.custom'),
+    hint: '',
+  }
+  if (!catalog.value.length) {
+    return OPENCODE_FALLBACK_PROVIDERS.map((p) =>
+      p.id === OPENCODE_CUSTOM_PROVIDER
+        ? customOption
+        : { value: p.id, label: t(p.labelKey), hint: p.id },
+    )
+  }
+  // hint carries the id so both "Anthropic" and "anthropic" find the vendor.
+  const fromCatalog = catalog.value.map((p) => ({
+    value: p.id,
+    label: p.name || p.id,
+    hint: p.id,
+  }))
+  return [...fromCatalog, customOption]
+})
+
+/** Models of the picked vendor, as the `provider/model` id OpenCode expects. */
+const modelOptions = computed(() =>
+  models.value.map((m) => ({
+    value: `${props.provider}/${m.id}`,
+    label: m.id,
+    hint: m.name && m.name !== m.id ? m.name : '',
+  })),
+)
+
+const modelPlaceholder = computed(() =>
+  custom.value
+    ? t('pages.agentStudio.openCode.modelPlaceholderCustom')
+    : t('pages.agentStudio.openCode.modelPlaceholder'),
+)
+
+/**
+ * A model the vendor's catalog does not list is the one mistake that costs a whole
+ * sandbox: OpenCode resolves it, fails, and `opencode run` exits 1 with no stderr.
+ */
+const modelUnknown = computed(() => {
+  const model = props.model.trim()
+  if (!model || custom.value || modelsLoading.value || !modelOptions.value.length) return false
+  return !modelOptions.value.some((o) => o.value === model)
+})
+
+/** A gateway absent from the catalog has no list to offer; ids are typed in. */
+const modelHint = computed(() =>
+  custom.value || (!modelsLoading.value && !models.value.length)
+    ? t('pages.agentStudio.openCode.modelHintTyped')
+    : t('pages.agentStudio.openCode.modelHint'),
+)
+
+onMounted(async () => {
+  catalog.value = await loadOpenCodeProviders()
+  catalogLoading.value = false
+})
+
+watch(
+  () => props.provider,
+  async (provider, previous) => {
+    // A model names its vendor, so one kept across a switch would name the old one.
+    if (previous !== undefined && props.model && !openCodeModelMatchesProvider(props.model, provider)) {
+      emit('update:model', '')
+    }
+    if (!provider || provider === OPENCODE_CUSTOM_PROVIDER) {
+      models.value = []
+      modelsLoading.value = false
+      return
+    }
+    modelsLoading.value = true
+    const loaded = await loadOpenCodeModels(provider)
+    // A slower answer for a vendor the user already left must not land.
+    if (props.provider !== provider) return
+    models.value = loaded
+    modelsLoading.value = false
+  },
+  { immediate: true },
+)
+</script>
+
+<template>
+  <div class="space-y-3" data-test="opencode-provider-fields">
+    <div class="block">
+      <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+        {{ t('pages.agentStudio.openCode.providerLabel') }}
+      </span>
+      <AppSelect
+        :model-value="provider"
+        :options="providerOptions"
+        size="sm"
+        searchable
+        allow-custom
+        :loading="catalogLoading"
+        :search-placeholder="t('pages.agentStudio.openCode.providerSearchPlaceholder')"
+        :aria-label="t('pages.agentStudio.openCode.providerLabel')"
+        data-test="opencode-provider"
+        @update:model-value="emit('update:provider', $event)"
+      />
+    </div>
+    <div class="block">
+      <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+        {{ t('pages.agentStudio.openCode.modelLabel') }}
+        <span class="text-err">*</span>
+      </span>
+      <AppSelect
+        :model-value="model"
+        :options="modelOptions"
+        size="sm"
+        searchable
+        allow-custom
+        :loading="modelsLoading"
+        :invalid="requireModel"
+        :placeholder="modelPlaceholder"
+        :search-placeholder="t('pages.agentStudio.openCode.modelSearchPlaceholder')"
+        :aria-label="t('pages.agentStudio.openCode.modelLabel')"
+        data-test="opencode-model"
+        @update:model-value="emit('update:model', $event)"
+      />
+      <p class="mt-1 text-[11px] text-txt3">{{ modelHint }}</p>
+      <p v-if="modelUnknown" class="mt-1 text-[11px] text-warn" data-test="opencode-model-unknown">
+        {{ t('pages.agentStudio.openCode.modelUnknown') }}
+      </p>
+      <p v-if="requireModel" class="mt-1 text-[11px] text-err" data-test="opencode-model-required">
+        {{ t('pages.agentStudio.openCode.modelRequired') }}
+      </p>
+    </div>
+    <label class="block">
+      <span class="mb-1.5 block text-[12px] font-medium text-txt2">
+        {{ t('pages.agentStudio.openCode.baseLabel') }}
+        <span v-if="custom" class="text-err">*</span>
+      </span>
+      <input
+        :value="baseUrl"
+        type="url"
+        spellcheck="false"
+        class="w-full rounded-md border bg-base px-3 py-2 font-mono text-[12px] text-txt outline-none focus:border-accent"
+        :class="requireBase ? 'border-err' : 'border-line'"
+        :placeholder="t('pages.agentStudio.openCode.basePlaceholder')"
+        data-test="opencode-base-url"
+        @input="emit('update:baseUrl', ($event.target as HTMLInputElement).value)"
+      />
+      <p class="mt-1 text-[11px] text-txt3">{{ t('pages.agentStudio.openCode.baseHint') }}</p>
+      <p v-if="requireBase" class="mt-1 text-[11px] text-err" data-test="opencode-base-required">
+        {{ t('pages.agentStudio.openCode.baseRequired') }}
+      </p>
+    </label>
+  </div>
+</template>

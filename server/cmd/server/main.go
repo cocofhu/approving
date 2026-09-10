@@ -33,6 +33,7 @@ import (
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/memorymcp"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/opencodecatalog"
 	"github.com/cocofhu/approving/internal/pmmcp"
 	"github.com/cocofhu/approving/internal/router"
 	"github.com/cocofhu/approving/internal/runtime"
@@ -476,6 +477,7 @@ func main() {
 		Blobs:             blobStore,
 		Onboarding:        services.NewOnboardingService(projectSvc, agentSvc, sharedAgentSvc, wfSvc, orgSvc),
 		Team:              services.NewTeamService(projectSvc, agentSvc, orgSvc, pmSvc, sbxSvc),
+		OpenCodeCatalog:   opencodecatalog.New(cfg.Sandbox.OpenCodeCatalogURL),
 	}
 	if h.Team != nil && h.PMMCP != nil {
 		h.PMMCP.SetTeam(h.Team)

@@ -572,6 +572,11 @@ describe('useAgentFilesPanel explorer', () => {
     expect(panel.activeFile.value?.path).toBe(AGENT_SETTINGS_PATH)
     expect(panel.activeFile.value?.content).toBeTruthy()
 
+    props.draft.acpBackend = 'opencode'
+    panel.openPathOrCreate('opencode.json')
+    expect(panel.activeFile.value?.path).toBe('opencode.json')
+    expect(panel.activeFile.value?.content).toContain('opencode.ai/config.json')
+
     panel.openPathOrCreate('notes/todo.md', 'seed')
     expect(props.draft.files.find((f: DraftFile) => f.path === 'notes/todo.md')?.content).toBe('seed')
     expect(panel.expanded.value.has('notes')).toBe(true)

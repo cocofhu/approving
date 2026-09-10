@@ -2,13 +2,19 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import CodeEditor from '@/components/ui/CodeEditor.vue'
+import OpenCodeProviderFields from '@/components/agent/OpenCodeProviderFields.vue'
 import {
+  agentConfigRelPath,
   customConfigNoteKey,
   settingsFileAbsPath,
   type BackendAuthGuide,
 } from '@/lib/agent/backendAuthGuide'
 import type { WizardAuthMode, WizardBackendId } from '@/lib/agent/agentCreateWizard'
-import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
+import {
+  openCodeCustomBaseRequired,
+  openCodeFieldsFromEnv,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
 
 const props = defineProps<{
   acpBackend: WizardBackendId
@@ -20,18 +26,33 @@ const props = defineProps<{
   authGuide: BackendAuthGuide
   primaryAuthKey: string
   primaryAuthAlt: string
+  env?: Record<string, string>
+  openCodeBaseError?: boolean
+  openCodeModelError?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:authMode': [mode: WizardAuthMode]
   'update:apiKeyInput': [value: string]
   'update:customConfigContent': [value: string]
+  'update:openCodeProvider': [value: OpenCodeProviderId]
+  'update:openCodeBaseUrl': [value: string]
+  'update:openCodeModel': [value: string]
 }>()
 
 const { t } = useI18n()
 
-const settingsAbsPath = computed(() => settingsFileAbsPath(props.configRoot))
+const settingsAbsPath = computed(() => settingsFileAbsPath(props.configRoot, props.acpBackend))
+const configRelPath = computed(() => agentConfigRelPath(props.acpBackend))
 const configNoteKey = computed(() => customConfigNoteKey(props.acpBackend))
+const openCode = computed(() => openCodeFieldsFromEnv(props.env || {}))
+const showOpenCode = computed(() => props.acpBackend === 'opencode' && props.authMode === 'apiKey')
+const requireOpenCodeBase = computed(
+  () =>
+    !!props.openCodeBaseError ||
+    openCodeCustomBaseRequired(openCode.value.provider, openCode.value.baseURL),
+)
+const requireOpenCodeModel = computed(() => !!props.openCodeModelError)
 
 function setMode(mode: WizardAuthMode) {
   if (mode === props.authMode) return
@@ -93,6 +114,18 @@ function setMode(mode: WizardAuthMode) {
     </div>
 
     <div v-if="authMode === 'apiKey'">
+      <OpenCodeProviderFields
+        v-if="showOpenCode"
+        class="mb-4"
+        :provider="openCode.provider"
+        :base-url="openCode.baseURL"
+        :model="openCode.model"
+        :require-base="requireOpenCodeBase && openCode.provider === 'custom'"
+        :require-model="requireOpenCodeModel"
+        @update:provider="emit('update:openCodeProvider', $event)"
+        @update:base-url="emit('update:openCodeBaseUrl', $event)"
+        @update:model="emit('update:openCodeModel', $event)"
+      />
       <div class="mb-4 rounded-lg border border-line bg-base p-3.5">
         <div class="text-[13px] font-semibold text-txt">
           <code class="text-accent-2">{{ primaryAuthKey }}</code>
@@ -151,14 +184,14 @@ function setMode(mode: WizardAuthMode) {
           <span class="text-accent-2">{{ settingsAbsPath }}</span>
           <span class="text-txt3">
             （{{ t('pages.agentStudio.wizard.apiKey.customConfig.agentFiles') }}
-            <span class="text-accent-2">{{ AGENT_SETTINGS_PATH }}</span>）
+            <span class="text-accent-2">{{ configRelPath }}</span>）
           </span>
         </p>
         <p class="mt-2 text-[11px] leading-5 text-txt2">{{ t(configNoteKey) }}</p>
       </div>
       <label class="block">
         <span class="mb-1.5 block text-[12px] font-medium text-txt2">
-          {{ AGENT_SETTINGS_PATH }}
+          {{ configRelPath }}
         </span>
         <div class="h-[220px] overflow-hidden rounded-lg border border-line" data-test="custom-config-editor-host">
           <CodeEditor

@@ -10,6 +10,7 @@ func TestDefaultSandboxImage(t *testing.T) {
 		{"claude_code", "universal-sandbox-claude_code:local"},
 		{"codebuddy", "universal-sandbox-codebuddy:local"},
 		{"trae", "universal-sandbox-trae:local"},
+		{"opencode", "universal-sandbox-opencode:local"},
 		{"", "universal-sandbox-cursor:local"},
 		{"nope", "universal-sandbox-cursor:local"},
 	}
@@ -49,5 +50,17 @@ func TestApplySandboxImageEnv(t *testing.T) {
 	}
 	if c.Sandbox.Images["claude_code"] != "env/claude:1" {
 		t.Fatalf("claude_code env: %v", c.Sandbox.Images)
+	}
+}
+
+func TestApplySandboxImageEnvSkipsEmptyOpenCode(t *testing.T) {
+	t.Setenv("APPROVING_SANDBOX_IMAGE_OPENCODE", "")
+	c := &Config{}
+	applySandboxImageEnv(c)
+	if _, ok := c.Sandbox.Images["opencode"]; ok {
+		t.Fatalf("empty OPENCODE env must not pin a missing GHCR tag: %v", c.Sandbox.Images)
+	}
+	if got := c.ResolveSandboxImage("opencode"); got != DefaultSandboxImage("opencode") {
+		t.Fatalf("opencode fallback = %q", got)
 	}
 }

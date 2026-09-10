@@ -174,7 +174,7 @@ type SandboxConfig struct {
 	// Image, when non-empty, forces the same image for every acpBackend
 	// (legacy override). Prefer Images for per-backend routing.
 	Image string `yaml:"image"`
-	// Images maps acpBackend → image ref (cursor / claude_code / codebuddy / trae).
+	// Images maps acpBackend → image ref (cursor / claude_code / codebuddy / trae / opencode).
 	// Empty entries fall back to DefaultSandboxImage(backend).
 	Images map[string]string `yaml:"images"`
 	// GatewayURL is the sandbox-gateway control-plane base URL. approving calls
@@ -184,6 +184,9 @@ type SandboxConfig struct {
 	// GatewayAPIKey is the optional bearer token for the gateway (empty when
 	// the gateway runs with auth disabled).
 	GatewayAPIKey string `yaml:"gateway_api_key"`
+	// OpenCodeCatalogURL overrides where the OpenCode model catalog is read from
+	// (models.dev by default). Point it at a mirror when egress is restricted.
+	OpenCodeCatalogURL string `yaml:"opencode_catalog_url"`
 	// Env is the vendor-neutral set of environment variables injected into
 	// every sandbox container. ACP API keys belong in Agent env or acp_env, not here.
 	Env map[string]string `yaml:"env"`
@@ -369,6 +372,9 @@ func applyEnvOverrides(c *Config) {
 	}
 	if v := env("APPROVING_SANDBOX_GATEWAY_API_KEY"); v != "" {
 		c.Sandbox.GatewayAPIKey = v
+	}
+	if v := env("APPROVING_OPENCODE_CATALOG_URL"); v != "" {
+		c.Sandbox.OpenCodeCatalogURL = v
 	}
 	if v := env("APPROVING_BROWSER_ENABLED"); v != "" {
 		lv := strings.ToLower(v)

@@ -201,6 +201,7 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		IncludeArtifactStore: hasArtifactStoreSpec(specs),
 		MCP:                  specs,
 		Settings:             runtime.CodeBuddySettingsForEnv(backend, env),
+		OpenCodeConfig:       runtime.OpenCodeConfigForEnv(backend, env),
 		AgentName:            profile,
 		ProfilesRoot:         s.profilesRoot,
 		GlobalRulesDir:       s.platformRulesRoot,

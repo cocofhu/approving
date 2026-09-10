@@ -141,11 +141,11 @@ Pushing a `v*` tag runs:
 
 - `publish-image` → `ghcr.io/cocofhu/approving`
 - `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
-- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}`
+- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}`
 
 A release is complete only when all three workflows succeed, and
 `publish-sandbox` is green for every matrix provider
-(`cursor`, `claude_code`, `codebuddy`, `trae`). If any job fails, re-run the
+(`cursor`, `claude_code`, `codebuddy`, `trae`, `opencode`). If any job fails, re-run the
 failed workflow via **Actions → workflow_dispatch** (e.g. re-run
 `publish-sandbox` for an existing `v*` tag such as `v0.3.8-beta`).
 
@@ -157,7 +157,10 @@ Default tags used by `./start.sh` (overridable in `.env`):
 - `ghcr.io/cocofhu/approving:0.3.8-beta`
 - `ghcr.io/cocofhu/sandbox-gateway:0.3.8-beta`
 - `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae}:0.3.8-beta`
-  (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke)
+  (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke).
+  `opencode` is not on `0.3.8-beta`. `./start.sh` leaves `APPROVING_SANDBOX_IMAGE_OPENCODE` empty so it does not pull a missing tag; the server then uses `universal-sandbox-opencode:local`. Build it with
+  `docker build --build-arg AGENT_PROVIDER=opencode -t universal-sandbox-opencode:local sandbox-gateway/sandbox`
+  (or set the GHCR pin after the next `v*` `publish-sandbox`).
 
 ### release-smoke (manual; not a PR required check)
 

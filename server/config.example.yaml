@@ -42,7 +42,7 @@ engine:
 
 sandbox:
   # 留空：按 Agent acpBackend 选用 images / 内置默认
-  # universal-sandbox-{cursor|claude_code|codebuddy|trae}:latest
+  # universal-sandbox-{cursor|claude_code|codebuddy|trae|opencode}:latest
   # 非空则强制所有后端用同一镜像（不推荐）。
   image: ""
   # 按需覆盖某后端镜像；留空走内置默认。

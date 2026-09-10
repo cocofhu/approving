@@ -61,6 +61,8 @@ _user_sandbox_image="${SANDBOX_IMAGE-}"
 : "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.8-beta}"
 : "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.8-beta}"
 : "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.8-beta}"
+# Not published on 0.3.8-beta; leave empty so ./start.sh does not pull a missing tag.
+: "${APPROVING_SANDBOX_IMAGE_OPENCODE:=}"
 : "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.8-beta}"
 # Explicit SANDBOX_IMAGE (or APPROVING_SANDBOX_IMAGE) → global force; default path leaves it empty.
 if [[ -z "${APPROVING_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
@@ -82,6 +84,7 @@ export APPROVING_DEPLOYMENT_MODE APPROVING_IMAGE SANDBOX_GATEWAY_IMAGE
 export SANDBOX_IMAGE SANDBOX_GATEWAY_API_KEY APPROVING_AUTH_USERS APPROVING_DOCTOR_TOKEN
 export APPROVING_SANDBOX_IMAGE_CURSOR APPROVING_SANDBOX_IMAGE_CLAUDE_CODE
 export APPROVING_SANDBOX_IMAGE_CODEBUDDY APPROVING_SANDBOX_IMAGE_TRAE
+export APPROVING_SANDBOX_IMAGE_OPENCODE
 export SBGW_IMAGE_TEMPLATE
 # May be empty (no global force). Export so compose substitutes ${APPROVING_SANDBOX_IMAGE:-}.
 export APPROVING_SANDBOX_IMAGE="${APPROVING_SANDBOX_IMAGE:-}"
@@ -138,6 +141,11 @@ print_release_endpoints() {
   echo "           claude_code ${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
   echo "           codebuddy  ${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
   echo "           trae       ${APPROVING_SANDBOX_IMAGE_TRAE}"
+  if [[ -n "${APPROVING_SANDBOX_IMAGE_OPENCODE:-}" ]]; then
+    echo "           opencode   ${APPROVING_SANDBOX_IMAGE_OPENCODE}"
+  else
+    echo "           opencode   universal-sandbox-opencode:local (GHCR tag after next sandbox publish)"
+  fi
   if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then
     echo "—— sandbox GLOBAL FORCE  ${APPROVING_SANDBOX_IMAGE}"
   fi
@@ -146,13 +154,14 @@ print_release_endpoints() {
 }
 
 # Sandbox runtime images are NOT compose services — compose pull never fetches them.
-# Pull all four GHCR runtimes so per-backend Agents can create sandboxes.
+# Pull published GHCR runtimes. OpenCode is omitted until its tag is set.
 ensure_sandbox_runtime_image() {
   local images=(
     "${APPROVING_SANDBOX_IMAGE_CURSOR}"
     "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
     "${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
     "${APPROVING_SANDBOX_IMAGE_TRAE}"
+    "${APPROVING_SANDBOX_IMAGE_OPENCODE:-}"
   )
   # Deduplicate while preserving order (global force may equal one backend).
   if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then

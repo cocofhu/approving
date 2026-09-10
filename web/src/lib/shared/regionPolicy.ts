@@ -1,4 +1,4 @@
-export type BackendId = 'cursor' | 'claude_code' | 'codebuddy' | 'trae'
+export type BackendId = 'cursor' | 'claude_code' | 'codebuddy' | 'trae' | 'opencode'
 export type RegionSite = 'domestic' | 'international'
 export type RegionMode = 'strict' | 'preserve-special'
 
@@ -20,6 +20,7 @@ export const ACP_BACKENDS: { id: BackendId; label: string; configRoot: string }[
   { id: 'claude_code', label: 'Claude Code', configRoot: '/root/.claude' },
   { id: 'codebuddy', label: 'CodeBuddy', configRoot: '/root/.codebuddy' },
   { id: 'trae', label: 'Trae', configRoot: '/root/.trae' },
+  { id: 'opencode', label: 'OpenCode', configRoot: '/root/.config/opencode' },
 ]
 
 const REGION_POLICIES: Partial<Record<BackendId, RegionPolicy>> = {

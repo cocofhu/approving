@@ -3,8 +3,7 @@
  */
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AGENT_SETTINGS_PATH } from '@/lib/agent/agentCreateWizard'
-import { defaultSettingsPlaceholder } from '@/lib/agent/backendAuthGuide'
+import { agentConfigRelPath, defaultSettingsPlaceholder } from '@/lib/agent/backendAuthGuide'
 import type { AgentStudioDraft, DraftFile } from '@/lib/agent/agentStudioDraft'
 import type { CtxTarget } from '@/components/agent/ExplorerContextMenu.vue'
 
@@ -278,7 +277,7 @@ function openPathOrCreate(path: string, placeholder?: string) {
       path,
       content:
         placeholder ??
-        (path === AGENT_SETTINGS_PATH
+        (path === agentConfigRelPath(props.draft.acpBackend || 'cursor')
           ? defaultSettingsPlaceholder(props.draft.acpBackend || 'cursor')
           : ''),
     }

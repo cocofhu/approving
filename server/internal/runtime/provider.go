@@ -1,6 +1,6 @@
 // Package runtime executes agent/react nodes behind an ExecProvider
 // abstraction. ProviderRegistry routes agent_profile.acpBackend to one of four
-// ACP backends (cursor, claude_code, codebuddy, trae) sharing baseACPProvider
+// ACP backends (cursor, claude_code, codebuddy, trae, opencode) sharing baseACPProvider
 // logic. Production runs real CLI bridges in per-node Docker sandboxes; fake-
 // bridge E2E tests in this package exercise the same path without live CLIs.
 package runtime

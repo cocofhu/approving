@@ -5,8 +5,9 @@ import { nextTick } from 'vue'
 import OnboardingWizard from './OnboardingWizard.vue'
 import {
   DEFAULT_PROJECT_ID,
-  dismissOnboarding,
-  isOnboardingDismissed,
+  suppressOnboarding,
+  isOnboardingSuppressed,
+  ONBOARDING_WORKFLOW_NAME,
   shouldAutoOpenOnboarding,
 } from '@/lib/pm/onboardingWizard'
 
@@ -25,6 +26,10 @@ vi.mock('@/lib/api/api', () => ({
       published: true,
       groupName: '综合项目组',
     })),
+    openCodeProviders: vi.fn(async () => ({
+      providers: [{ id: 'deepseek', name: 'DeepSeek', models: 1 }],
+    })),
+    openCodeModels: vi.fn(async () => ({ models: [{ id: 'deepseek-v4-pro' }] })),
   },
 }))
 
@@ -41,6 +46,18 @@ vi.mock('vue-i18n', async (importOriginal) => {
     }),
   }
 })
+
+/** Picks the vendor and model the catalog stub serves, then fills the key. */
+async function fillOpenCodeAuth(wrapper: ReturnType<typeof mount>, key = 'sk-oc-demo') {
+  await wrapper
+    .get('[data-test="opencode-provider"] [data-test="app-select-trigger"]')
+    .trigger('click')
+  await wrapper.get('[data-test="app-select-option-deepseek"]').trigger('click')
+  await flushPromises()
+  await wrapper.get('[data-test="opencode-model"] [data-test="app-select-trigger"]').trigger('click')
+  await wrapper.get('[data-test="app-select-option-deepseek/deepseek-v4-pro"]').trigger('click')
+  await wrapper.find('[data-testid="onboarding-api-key"]').setValue(key)
+}
 
 describe('OnboardingWizard', () => {
   beforeEach(() => {
@@ -61,6 +78,82 @@ describe('OnboardingWizard', () => {
     })
   })
 
+  it('sets the theme from the first step', async () => {
+    const wrapper = mount(OnboardingWizard, {
+      props: { open: true, projectId: DEFAULT_PROJECT_ID },
+      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
+    })
+    expect(wrapper.find('[data-testid="onboarding-theme-dark"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="onboarding-theme-light"]').trigger('click')
+    expect(localStorage.getItem('approving-theme')).toBe('light')
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    await wrapper.find('[data-testid="onboarding-theme-dark"]').trigger('click')
+    expect(localStorage.getItem('approving-theme')).toBe('dark')
+    expect(document.documentElement.classList.contains('light')).toBe(false)
+  })
+
+  it('backend step offers two start paths and swaps the detail block', async () => {
+    const wrapper = mount(OnboardingWizard, {
+      props: { open: true, projectId: DEFAULT_PROJECT_ID },
+      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
+    })
+    for (let i = 0; i < 2; i++) {
+      await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+      await nextTick()
+    }
+    // API-key path is the default: vendor chips, no CLI tiles.
+    expect(wrapper.find('[data-testid="onboarding-path-apikey-detail"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="onboarding-backend-cursor"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="onboarding-backend-opencode"]').exists()).toBe(false)
+
+    await wrapper.find('[data-testid="onboarding-path-cli"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="onboarding-backend-cursor"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="onboarding-backend-trae"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="onboarding-path-apikey-detail"]').exists()).toBe(false)
+
+    // Back to the API-key path restores the vendor chips.
+    await wrapper.find('[data-testid="onboarding-path-apiKey"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="onboarding-path-apikey-detail"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="onboarding-backend-cursor"]').exists()).toBe(false)
+  })
+
+  it('bootstraps with opencode when the API-key path is chosen', async () => {
+    const { api } = await import('@/lib/api/api')
+    const wrapper = mount(OnboardingWizard, {
+      props: { open: true, projectId: DEFAULT_PROJECT_ID },
+      global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
+    })
+    for (let i = 0; i < 2; i++) {
+      await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+      await nextTick()
+    }
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-api-key"]').setValue('sk-oc-demo')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-test="opencode-model-required"]').exists()).toBe(true)
+
+    await fillOpenCodeAuth(wrapper)
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-git-user-name"]').setValue('Ada')
+    await wrapper.find('[data-testid="onboarding-git-user-email"]').setValue('ada@example.com')
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await nextTick()
+    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
+    await flushPromises()
+
+    expect(api.bootstrapProjectOnboarding).toHaveBeenCalled()
+    const body = (api.bootstrapProjectOnboarding as any).mock.calls[0][1]
+    expect(body.acpBackend).toBe('opencode')
+    expect(body.apiKey).toBe('sk-oc-demo')
+    expect(body.openCodeProvider).toBe('deepseek')
+    expect(body.openCodeModel).toBe('deepseek/deepseek-v4-pro')
+  })
+
   it('sends the repo typed in the git step', async () => {
     const { api } = await import('@/lib/api/api')
     const wrapper = mount(OnboardingWizard, {
@@ -71,7 +164,7 @@ describe('OnboardingWizard', () => {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
     }
-    await wrapper.find('[data-testid="onboarding-api-key"]').setValue('crsr_test')
+    await fillOpenCodeAuth(wrapper, 'crsr_test')
     await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
     await nextTick()
 
@@ -113,7 +206,7 @@ describe('OnboardingWizard', () => {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
     }
-    await wrapper.find('[data-testid="onboarding-api-key"]').setValue('crsr_test')
+    await fillOpenCodeAuth(wrapper, 'crsr_test')
     await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
     await nextTick()
 
@@ -141,38 +234,40 @@ describe('OnboardingWizard', () => {
     )
   })
 
-  it('dismiss via later suppresses auto-open', async () => {
+  it('later closes without persisting, so a reload re-opens the wizard', async () => {
     const wrapper = mount(OnboardingWizard, {
       props: { open: true, projectId: DEFAULT_PROJECT_ID },
       global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
     })
     await wrapper.find('[data-testid="onboarding-later"]').trigger('click')
     expect(wrapper.emitted('close')).toBeTruthy()
-    expect(isOnboardingDismissed(DEFAULT_PROJECT_ID)).toBe(true)
-    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, 0, [])).toBe(false)
+    expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [], [])).toBe(true)
   })
 
-  it('backdrop dismiss suppresses auto-open', async () => {
+  it('backdrop close does not persist suppression', async () => {
     const wrapper = mount(OnboardingWizard, {
       props: { open: true, projectId: DEFAULT_PROJECT_ID },
       global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
     })
     await wrapper.find('[data-testid="onboarding-backdrop"]').trigger('click')
-    expect(isOnboardingDismissed(DEFAULT_PROJECT_ID)).toBe(true)
+    expect(wrapper.emitted('close')).toBeTruthy()
+    expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
   })
 
-  it('close button suppresses auto-open', async () => {
+  it('close button does not persist suppression', async () => {
     const wrapper = mount(OnboardingWizard, {
       props: { open: true, projectId: DEFAULT_PROJECT_ID },
       global: { stubs: { Teleport: true, Icon: true, AppButton: true } },
     })
     await wrapper.find('[data-testid="onboarding-close"]').trigger('click')
-    expect(isOnboardingDismissed(DEFAULT_PROJECT_ID)).toBe(true)
+    expect(wrapper.emitted('close')).toBeTruthy()
+    expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
   })
 
-  it('manual CTA can open even after dismiss', () => {
-    dismissOnboarding(DEFAULT_PROJECT_ID)
-    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, 0, [])).toBe(false)
+  it('the storage escape hatch still suppresses auto-open', () => {
+    suppressOnboarding(DEFAULT_PROJECT_ID)
+    expect(shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [], [])).toBe(false)
   })
 
   it('blocks generate without API key then succeeds with key', async () => {
@@ -192,8 +287,7 @@ describe('OnboardingWizard', () => {
     await nextTick()
     expect(api.bootstrapProjectOnboarding).not.toHaveBeenCalled()
 
-    const input = wrapper.find('[data-testid="onboarding-api-key"]')
-    await input.setValue('crsr_test')
+    await fillOpenCodeAuth(wrapper, 'crsr_test')
     await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
     await nextTick()
     await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
@@ -208,6 +302,10 @@ describe('OnboardingWizard', () => {
     expect(wrapper.find('[data-testid="onboarding-success"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="onboarding-success-git"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="onboarding-start-run"]').exists()).toBe(false)
-    expect(isOnboardingDismissed(DEFAULT_PROJECT_ID)).toBe(true)
+    // The created default workflow is what stops the wizard from re-opening.
+    expect(isOnboardingSuppressed(DEFAULT_PROJECT_ID)).toBe(false)
+    expect(
+      shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, [{ name: ONBOARDING_WORKFLOW_NAME }], []),
+    ).toBe(false)
   })
 })

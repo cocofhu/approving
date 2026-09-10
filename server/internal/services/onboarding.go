@@ -39,6 +39,9 @@ type OnboardingBootstrapRequest struct {
 	AcpBackend        string `json:"acpBackend"`
 	APIKey            string `json:"apiKey"`
 	Region            string `json:"region,omitempty"`
+	OpenCodeProvider  string `json:"openCodeProvider,omitempty"`
+	OpenCodeBaseURL   string `json:"openCodeBaseURL,omitempty"`
+	OpenCodeModel     string `json:"openCodeModel,omitempty"`
 	GitCredentialType string `json:"gitCredentialType,omitempty"`
 	GitHubToken       string `json:"githubToken,omitempty"`
 	GitLabToken       string `json:"gitlabToken,omitempty"`
@@ -326,6 +329,8 @@ func (s *OnboardingService) writeProjectAuth(projectID, backend, apiKey, region 
 			region = "intl"
 		}
 		cfg.Env[runtime.EnvTraeRegion] = region
+	case AcpBackendOpenCode:
+		applyOpenCodeSharedEnv(cfg.Env, req)
 	}
 	cred := strings.TrimSpace(req.GitCredentialType)
 	if cred != "" {
@@ -383,9 +388,18 @@ func primaryAuthEnvKey(backend string) string {
 		return "APPROVING_CODEBUDDY_API_KEY"
 	case AcpBackendTrae:
 		return "APPROVING_TRAE_API_KEY"
+	case AcpBackendOpenCode:
+		return "APPROVING_OPENCODE_API_KEY"
 	default:
 		return "APPROVING_CURSOR_API_KEY"
 	}
+}
+
+func agentAuthConfigFileName(backend string) string {
+	if NormalizeAcpBackend(backend) == AcpBackendOpenCode {
+		return "opencode.json"
+	}
+	return "settings.json"
 }
 
 func (s *OnboardingService) ensureFirstInstallOrg(agentNames []string) error {
@@ -508,5 +522,19 @@ func applyOnboardingAgentRegion(env map[string]string, backend, region string) {
 			region = "intl"
 		}
 		env[runtime.EnvTraeRegion] = region
+	}
+}
+
+func applyOpenCodeSharedEnv(env map[string]string, req OnboardingBootstrapRequest) {
+	if env == nil {
+		return
+	}
+	provider := runtime.NormalizeOpenCodeProvider(req.OpenCodeProvider)
+	env[runtime.EnvOpenCodeProvider] = provider
+	if v := strings.TrimSpace(req.OpenCodeBaseURL); v != "" {
+		env[runtime.EnvOpenCodeBaseURL] = v
+	}
+	if v := strings.TrimSpace(req.OpenCodeModel); v != "" {
+		env[runtime.EnvACPBridgeModel] = v
 	}
 }

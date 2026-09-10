@@ -6,16 +6,26 @@ import AppButton from '@/components/ui/AppButton.vue'
 import { api } from '@/lib/api/api'
 import { authGuideFor } from '@/lib/agent/backendAuthGuide'
 import { ACP_BACKENDS, getRegionPolicy, type BackendId } from '@/lib/shared/regionPolicy'
+import OpenCodeProviderFields from '@/components/agent/OpenCodeProviderFields.vue'
+import {
+  OPENCODE_FALLBACK_PROVIDERS,
+  openCodeCustomBaseRequired,
+  openCodeModelRequired,
+  type OpenCodeProviderId,
+} from '@/lib/agent/openCodeProvider'
 import { setLocale } from '@/lib/shared/locale'
+import { setTheme, type ThemeName } from '@/lib/shared/theme'
 import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 import { useToast } from '@/lib/composables/useToast'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import {
   ONBOARDING_AGENT_NAMES,
+  ONBOARDING_CLI_BACKENDS,
   ONBOARDING_GIT_TYPES,
   ONBOARDING_STEPS,
+  applyOnboardingBackend,
+  applyStartPath,
   assembleBootstrapBody,
-  dismissOnboarding,
   freshOnboardingDraft,
   gitConfigured,
   gitIdentityConfigured,
@@ -23,6 +33,7 @@ import {
   repoNameFromUrl,
   type OnboardingBootstrapResult,
   type OnboardingDraft,
+  type OnboardingStartPath,
 } from '@/lib/pm/onboardingWizard'
 
 const props = defineProps<{
@@ -45,11 +56,28 @@ const phase = ref<'wizard' | 'success'>('wizard')
 const result = ref<OnboardingBootstrapResult | null>(null)
 const stepAnimKey = ref(0)
 const keyError = ref(false)
+const modelError = ref(false)
 
 const currentStep = computed(() => ONBOARDING_STEPS[draft.value.step] || ONBOARDING_STEPS[0])
 const languageOptions: { id: AppLocale; label: string; hint: string }[] = [
   { id: 'zh-CN', label: '简体中文', hint: 'Chinese (Simplified)' },
   { id: 'en', label: 'English', hint: '英语' },
+]
+const themeOptions: { id: ThemeName; labelKey: string; hintKey: string }[] = [
+  { id: 'dark', labelKey: 'pages.onboarding.language.themeDark', hintKey: 'pages.onboarding.language.themeDarkHint' },
+  { id: 'light', labelKey: 'pages.onboarding.language.themeLight', hintKey: 'pages.onboarding.language.themeLightHint' },
+]
+const startPathOptions: { id: OnboardingStartPath; titleKey: string; descKey: string }[] = [
+  {
+    id: 'apiKey',
+    titleKey: 'pages.onboarding.acp.paths.apiKey.title',
+    descKey: 'pages.onboarding.acp.paths.apiKey.desc',
+  },
+  {
+    id: 'cli',
+    titleKey: 'pages.onboarding.acp.paths.cli.title',
+    descKey: 'pages.onboarding.acp.paths.cli.desc',
+  },
 ]
 const progressPct = computed(() =>
   phase.value === 'success' ? 100 : ((draft.value.step + 1) / ONBOARDING_STEPS.length) * 100,
@@ -78,29 +106,47 @@ watch(
       phase.value = 'wizard'
       result.value = null
       keyError.value = false
+      modelError.value = false
       stepAnimKey.value++
     }
   },
   { immediate: true },
 )
 
-function suppressAndClose() {
+/** Closes for this view only; a reload re-opens it until the default workflow exists. */
+function closeWizard() {
   if (creating.value) return
-  dismissOnboarding(props.projectId)
   emit('close')
 }
 
 function selectBackend(id: BackendId) {
-  if (draft.value.acpBackend === id) return
-  draft.value.acpBackend = id
-  const policy = getRegionPolicy(id)
-  draft.value.region = policy?.defaultRegion || ''
+  applyOnboardingBackend(draft.value, id)
+  keyError.value = false
+  modelError.value = false
+}
+
+function selectOpenCodeModel(value: string) {
+  draft.value.openCodeModel = value
+  modelError.value = false
+}
+
+function selectStartPath(path: OnboardingStartPath) {
+  applyStartPath(draft.value, path)
+  keyError.value = false
+  modelError.value = false
 }
 
 function selectLanguage(language: AppLocale) {
   if (draft.value.language === language) return
   draft.value.language = language
   void setLocale(language)
+}
+
+/** Theme applies immediately (like language) so the wizard previews the choice. */
+function selectTheme(name: ThemeName) {
+  if (draft.value.theme === name) return
+  draft.value.theme = name
+  setTheme(name)
 }
 
 function selectRegion(id: string) {
@@ -126,6 +172,7 @@ function goPrev() {
   draft.value.step--
   stepAnimKey.value++
   keyError.value = false
+  modelError.value = false
 }
 
 function goSkip() {
@@ -156,6 +203,23 @@ function goNext() {
     toast.error(t('pages.onboarding.toastNeedKey'))
     return
   }
+  if (
+    step.id === 'apiKey' &&
+    draft.value.acpBackend === 'opencode' &&
+    openCodeModelRequired(draft.value.openCodeModel)
+  ) {
+    modelError.value = true
+    toast.error(t('pages.agentStudio.openCode.modelRequired'))
+    return
+  }
+  if (
+    step.id === 'apiKey' &&
+    draft.value.acpBackend === 'opencode' &&
+    openCodeCustomBaseRequired(draft.value.openCodeProvider, draft.value.openCodeBaseURL)
+  ) {
+    toast.error(t('pages.agentStudio.openCode.baseRequired'))
+    return
+  }
   if (step.id === 'git' && !gitIdentityConfigured(draft.value)) {
     toast.error(t('pages.onboarding.toastNeedGitUser'))
     return
@@ -165,6 +229,7 @@ function goNext() {
     return
   }
   keyError.value = false
+  modelError.value = false
   draft.value.step++
   stepAnimKey.value++
   if (ONBOARDING_STEPS[draft.value.step]?.id === 'apiKey') {
@@ -178,6 +243,11 @@ async function submitBootstrap() {
     toast.error(t('pages.onboarding.toastNeedKey'))
     return
   }
+  if (draft.value.acpBackend === 'opencode' && openCodeModelRequired(draft.value.openCodeModel)) {
+    modelError.value = true
+    toast.error(t('pages.agentStudio.openCode.modelRequired'))
+    return
+  }
   creating.value = true
   createError.value = ''
   try {
@@ -185,7 +255,6 @@ async function submitBootstrap() {
     const res = await api.bootstrapProjectOnboarding(props.projectId, body)
     result.value = res
     phase.value = 'success'
-    dismissOnboarding(props.projectId)
     toast.success(t('pages.onboarding.toastOk'))
     emit('completed', res)
   } catch (e: any) {
@@ -200,7 +269,7 @@ async function submitBootstrap() {
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="onboarding-wizard">
-      <div class="absolute inset-0 bg-black/70" data-testid="onboarding-backdrop" @click="suppressAndClose" />
+      <div class="absolute inset-0 bg-black/70" data-testid="onboarding-backdrop" @click="closeWizard" />
       <div
         class="rounded-xl relative z-10 flex w-full flex-col overflow-hidden border border-line bg-surface shadow-card"
         style="width: min(980px, 100%); height: min(640px, 92vh); border-radius: 16px"
@@ -220,7 +289,7 @@ async function submitBootstrap() {
             class="grid h-8 w-8 shrink-0 place-items-center text-txt3 hover:bg-elevated hover:text-txt"
             :disabled="creating"
             data-testid="onboarding-close"
-            @click="suppressAndClose"
+            @click="closeWizard"
           >
             <Icon name="close" :size="18" />
           </button>
@@ -341,6 +410,31 @@ async function submitBootstrap() {
                     </button>
                   </div>
                   <p class="mt-4 text-[12px] text-txt3">{{ t('pages.onboarding.language.detected') }}</p>
+
+                  <div class="mt-5 border-t border-dashed border-line pt-4">
+                    <div class="mb-2 text-[12px] font-medium text-txt2">
+                      {{ t('pages.onboarding.language.themeLabel') }}
+                    </div>
+                    <div class="grid max-w-lg grid-cols-2 gap-3">
+                      <button
+                        v-for="option in themeOptions"
+                        :key="option.id"
+                        type="button"
+                        class="rounded-lg border px-4 py-4 text-left transition"
+                        :class="
+                          draft.theme === option.id
+                            ? 'border-accent bg-accent-dim'
+                            : 'border-line bg-base hover:border-line-strong'
+                        "
+                        :data-testid="`onboarding-theme-${option.id}`"
+                        @click="selectTheme(option.id)"
+                      >
+                        <strong class="block text-[14px] text-txt">{{ t(option.labelKey) }}</strong>
+                        <span class="mt-1 block text-[11px] text-txt3">{{ t(option.hintKey) }}</span>
+                      </button>
+                    </div>
+                    <p class="mt-3 text-[12px] text-txt3">{{ t('pages.onboarding.language.themeHint') }}</p>
+                  </div>
                 </template>
 
                 <template v-else-if="currentStep.id === 'overview'">
@@ -370,22 +464,68 @@ async function submitBootstrap() {
 
                 <template v-else-if="currentStep.id === 'acp'">
                   <p class="mt-2 text-[13px] text-txt2">{{ t('pages.onboarding.acp.meta') }}</p>
-                  <div class="mt-4 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+                  <div class="mt-4 grid gap-3 sm:grid-cols-2">
                     <button
-                      v-for="b in ACP_BACKENDS"
-                      :key="b.id"
+                      v-for="option in startPathOptions"
+                      :key="option.id"
                       type="button"
-                      class="rounded-lg border px-3 py-3.5 text-center transition"
+                      class="rounded-lg border px-4 py-4 text-left transition"
                       :class="
-                        draft.acpBackend === b.id
+                        draft.startPath === option.id
                           ? 'border-accent bg-accent-dim'
                           : 'border-line bg-base hover:border-line-strong'
                       "
-                      @click="selectBackend(b.id)"
+                      :data-testid="`onboarding-path-${option.id}`"
+                      @click="selectStartPath(option.id)"
                     >
-                      <strong class="block text-[13px] text-txt">{{ b.label }}</strong>
-                      <span class="mt-1 block font-mono text-[10px] text-txt3">{{ b.configRoot }}</span>
+                      <strong class="block text-[13px] text-txt">{{ t(option.titleKey) }}</strong>
+                      <span class="mt-1.5 block text-[11px] leading-5 text-txt3">{{ t(option.descKey) }}</span>
                     </button>
+                  </div>
+
+                  <div
+                    v-if="draft.startPath === 'apiKey'"
+                    class="mt-5 border-t border-dashed border-line pt-4"
+                    data-testid="onboarding-path-apikey-detail"
+                  >
+                    <div class="mb-2 text-[12px] font-medium text-txt2">
+                      {{ t('pages.onboarding.acp.apiKeyVendorsLabel') }}
+                    </div>
+                    <div class="flex flex-wrap gap-1.5">
+                      <span
+                        v-for="p in OPENCODE_FALLBACK_PROVIDERS"
+                        :key="p.id"
+                        class="rounded-md border border-line px-2 py-1 text-[11px] text-txt2"
+                      >{{ t(p.labelKey) }}</span>
+                    </div>
+                    <p class="mt-3 text-[12px] text-txt3">
+                      {{ t('pages.onboarding.acp.apiKeyVendorsHint') }}
+                      <code class="ml-1 font-mono text-[11px] text-accent-2">/root/.config/opencode</code>
+                    </p>
+                  </div>
+
+                  <div v-else class="mt-5 border-t border-dashed border-line pt-4">
+                    <div class="mb-2 text-[12px] font-medium text-txt2">
+                      {{ t('pages.onboarding.acp.cliLabel') }}
+                    </div>
+                    <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                      <button
+                        v-for="b in ONBOARDING_CLI_BACKENDS"
+                        :key="b.id"
+                        type="button"
+                        class="rounded-lg border px-3 py-3.5 text-center transition"
+                        :class="
+                          draft.acpBackend === b.id
+                            ? 'border-accent bg-accent-dim'
+                            : 'border-line bg-base hover:border-line-strong'
+                        "
+                        :data-testid="`onboarding-backend-${b.id}`"
+                        @click="selectBackend(b.id)"
+                      >
+                        <strong class="block text-[13px] text-txt">{{ b.label }}</strong>
+                        <span class="mt-1 block font-mono text-[10px] text-txt3">{{ b.configRoot }}</span>
+                      </button>
+                    </div>
                   </div>
                   <div v-if="regionPolicy" class="mt-5 border-t border-dashed border-line pt-4">
                     <div class="mb-2 text-[12px] font-medium text-txt2">{{ t('pages.onboarding.acp.region') }}</div>
@@ -428,6 +568,18 @@ async function submitBootstrap() {
                       class="rounded-md border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong hover:text-txt"
                     >{{ t(link.labelKey) }}</a>
                   </div>
+                  <OpenCodeProviderFields
+                    v-if="draft.acpBackend === 'opencode'"
+                    class="mt-4"
+                    :provider="(draft.openCodeProvider || 'openai') as OpenCodeProviderId"
+                    :base-url="draft.openCodeBaseURL"
+                    :model="draft.openCodeModel"
+                    :require-base="openCodeCustomBaseRequired(draft.openCodeProvider, draft.openCodeBaseURL)"
+                    :require-model="modelError"
+                    @update:provider="draft.openCodeProvider = $event"
+                    @update:base-url="draft.openCodeBaseURL = $event"
+                    @update:model="selectOpenCodeModel"
+                  />
                   <label class="mt-4 block">
                     <span class="mb-1.5 block text-[12px] font-medium text-txt2">
                       API Key <span class="text-err">*</span>
@@ -694,7 +846,7 @@ async function submitBootstrap() {
             </div>
 
             <div class="flex shrink-0 items-center gap-2 border-t border-line px-6 py-3">
-              <AppButton variant="ghost" data-testid="onboarding-later" :disabled="creating" @click="suppressAndClose">
+              <AppButton variant="ghost" data-testid="onboarding-later" :disabled="creating" @click="closeWizard">
                 {{ t('pages.onboarding.later') }}
               </AppButton>
               <div class="flex-1" />

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -321,5 +322,50 @@ func TestBuildConfigHomeArtifactStoreConditional(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(dir2) })
 	if _, err := os.Stat(filepath.Join(dir2, "rules/artifact-store.md")); err != nil {
 		t.Fatalf("artifact-store missing when enabled: %v", err)
+	}
+}
+
+func TestBuildConfigHomeWritesOpenCodeJSON(t *testing.T) {
+	HomeBaseDir = ""
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		OpenCodeConfig: map[string]any{"model": "openai/gpt-4.1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	b, err := os.ReadFile(filepath.Join(dir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["model"] != "openai/gpt-4.1" {
+		t.Fatalf("got=%v", got)
+	}
+}
+
+func TestBuildConfigHomeDoesNotOverwriteOpenCodeJSON(t *testing.T) {
+	HomeBaseDir = ""
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "opencode.json"), []byte(`{"model":"user/model"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		WorkDirSrc:     src,
+		OpenCodeConfig: map[string]any{"model": "platform/model"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	b, err := os.ReadFile(filepath.Join(dir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "user/model") {
+		t.Fatalf("user file overwritten: %s", b)
 	}
 }

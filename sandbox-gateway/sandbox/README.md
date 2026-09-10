@@ -5,7 +5,8 @@
 - **运行环境**（来自 ai-tool/sandbox）：Ubuntu 22.04、多语言工具链、容器内 **Docker（DinD）**、**SSH**、**code-server**（浏览器 IDE）、DB 客户端（mysql/redis/psql/mongosh）、Cursor CLI、Claude Code、glab、gh。
 - **agent 与代码能力**（来自 code-flow/sandbox）：多后端 **backend**（ACP 桥接服务）、**多仓库 PULL**、多托管商 **git 凭据路由**、**Playwright（Chromium）+ noVNC 预览栈**。
 
-四类 agent 后端 CLI 均已预装，`ACP_BACKEND` 单活切换：`cursor`（Cursor CLI）、`claude_code`（`@zed-industries/claude-code-acp`）、`codebuddy`（`@tencent-ai/codebuddy-code`）、`trae`（Trae CLI）。
+五类 agent 后端 CLI 均已预装，`ACP_BACKEND` 单活切换：`cursor`（Cursor CLI）、`claude_code`（`@zed-industries/claude-code-acp`）、`codebuddy`（`@tencent-ai/codebuddy-code`）、`trae`（Trae CLI）、`opencode`（`opencode-ai`，`run --format json`）。
+按 `AGENT_PROVIDER` 发布分镜像 `universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}`。
 
 ## 目录结构
 
@@ -123,11 +124,11 @@ docker run --privileged -d \
 
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `ACP_BACKEND` | `cursor` | agent 后端，单活：`cursor` / `claude_code` / `codebuddy` / `trae` |
+| `ACP_BACKEND` | `cursor` | agent 后端，单活：`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode` |
 | `ACP_BRIDGE_PORT` | `8765` | backend 监听端口 |
 | `ACP_BRIDGE_PASSWORD` | 空 | 设置后 backend 启用登录页鉴权 |
 | `ACP_BRIDGE_MODEL` | 空 | 锁定 agent 模型（不设则用后端默认） |
-| `CONFIG_ROOT` | 随后端 | 能力发现的配置树根，默认按后端取 `/root/.cursor` `/.claude` `/.codebuddy` `/.trae` |
+| `CONFIG_ROOT` | 随后端 | 能力发现的配置树根，默认按后端取 `/root/.cursor` `/.claude` `/.codebuddy` `/.trae` `/.config/opencode` |
 
 > `CURSOR_ACP_PORT` / `CURSOR_ACP_PASSWORD` / `CURSOR_ACP_MODEL` 为上述三项的 deprecated 兼容别名。
 

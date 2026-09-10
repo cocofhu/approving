@@ -13,6 +13,7 @@ func TestNormalizeAcpBackend(t *testing.T) {
 		"claude_code": AcpBackendClaudeCode,
 		"codebuddy":   AcpBackendCodeBuddy,
 		"trae":        AcpBackendTrae,
+		"opencode":    AcpBackendOpenCode,
 		"":            AcpBackendCursor,
 		"  trae  ":    AcpBackendTrae,
 		"CURSOR":      AcpBackendCursor, // case-sensitive; unknown → cursor
@@ -31,6 +32,7 @@ func TestDefaultConfigRootForBackend(t *testing.T) {
 		AcpBackendClaudeCode: "/root/.claude",
 		AcpBackendCodeBuddy:  "/root/.codebuddy",
 		AcpBackendTrae:       "/root/.trae",
+		AcpBackendOpenCode:   "/root/.config/opencode",
 		"unknown":            "/root/.cursor",
 	}
 	for backend, want := range cases {
@@ -57,6 +59,7 @@ func TestSaveGetBackendConfigRoot(t *testing.T) {
 		{"claude-agent", AcpBackendClaudeCode, "/root/.claude", AcpBackendClaudeCode},
 		{"buddy-agent", AcpBackendCodeBuddy, "/root/.codebuddy", AcpBackendCodeBuddy},
 		{"trae-agent", AcpBackendTrae, "/root/.trae", AcpBackendTrae},
+		{"opencode-agent", AcpBackendOpenCode, "/root/.config/opencode", AcpBackendOpenCode},
 		{"legacy-empty", "", "/root/.cursor", AcpBackendCursor},
 		{"bogus-backend", "made-up", "/root/.cursor", AcpBackendCursor},
 	}

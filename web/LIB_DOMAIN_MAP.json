@@ -9,6 +9,8 @@
       "agentTeamWizard.ts",
       "backendAuthGuide.ts",
       "gitCredentialAnalysis.ts",
+      "openCodeCatalog.ts",
+      "openCodeProvider.ts",
       "sandboxPurposeLabel.ts",
       "tokenEnvKeys.ts",
       "useAgentCreateWizard.ts",
@@ -177,7 +179,7 @@
     ]
   },
   "totals": {
-    "agent": 15,
+    "agent": 17,
     "api": 3,
     "composables": 17,
     "inbox": 21,

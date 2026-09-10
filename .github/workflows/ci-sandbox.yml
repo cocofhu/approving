@@ -2,7 +2,7 @@ name: ci-sandbox
 
 # Path-filtered suite for the universal sandbox image + its startup/scripts.
 # PR CI: scripts/Go + cli-tools fast check + full final sandbox image build
-# for all four AGENT_PROVIDER values (aligned with publish-sandbox; push:false).
+# for all five AGENT_PROVIDER values (aligned with publish-sandbox; push:false).
 on:
   push:
     paths:
@@ -133,7 +133,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        provider: [cursor, claude_code, codebuddy, trae]
+        provider: [cursor, claude_code, codebuddy, trae, opencode]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4

@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { api } from '@/lib/api/api'
 import {
   DEFAULT_PROJECT_ID,
-  isOnboardingDismissed,
+  isOnboardingSuppressed,
   shouldAutoOpenOnboarding,
 } from '@/lib/pm/onboardingWizard'
 
@@ -41,7 +41,7 @@ export function resetFirstInstallProbe(): void {
 }
 
 async function runProbe(): Promise<void> {
-  if (isOnboardingDismissed(DEFAULT_PROJECT_ID)) return
+  if (isOnboardingSuppressed(DEFAULT_PROJECT_ID)) return
   try {
     // getProject rejects when the default project is absent — nothing to bootstrap into.
     const [, workflows, agents] = await Promise.all([
@@ -50,7 +50,7 @@ async function runProbe(): Promise<void> {
       api.listAgents(),
     ])
     const named = agents.map((a) => ({ name: a.name, projectId: a.projectId }))
-    if (shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, workflows.length, named)) {
+    if (shouldAutoOpenOnboarding(DEFAULT_PROJECT_ID, workflows, named)) {
       firstInstallOpen.value = true
     }
   } catch {

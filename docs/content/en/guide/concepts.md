@@ -37,7 +37,7 @@ Inbox **pending review** and **app preview** cards reuse the same management pan
 
 Agents are not black-box prompts on a laptop. They execute in Docker containers through the in-repo [sandbox-gateway](https://github.com/cocofhu/approving/tree/main/sandbox-gateway), talking over ACP.
 
-Supported backends: **Cursor**, **Claude Code**, **CodeBuddy**, and **Trae**. Configure `acpBackend` per agent; keep secrets in agent meta env.
+Supported backends: **Cursor**, **Claude Code**, **CodeBuddy**, **Trae**, and **OpenCode**. Configure `acpBackend` per agent; keep secrets in agent meta env (OpenCode also takes vendor, optional API Base, and model).
 
 ## Artifact contract and MCP
 

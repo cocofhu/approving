@@ -1,14 +1,15 @@
 import type { Page } from '@playwright/test'
 
-/** localStorage key used by shouldAutoOpenOnboarding / dismissOnboarding. */
+/** localStorage key read by shouldAutoOpenOnboarding. */
 export function onboardingDismissStorageKey(projectId: string): string {
-  return `approving-onboarding-dismiss:${projectId}`
+  return `approving-onboarding-suppress:${projectId}`
 }
 
 /**
- * Seed dismiss flag before navigation so empty ProjectDetailView stubs
- * (0 workflows + 0 agents) do not auto-open the onboarding overlay and
- * intercept pointer events in unrelated e2e suites.
+ * Seed dismiss flag before navigation so stubs without the default workflow do
+ * not auto-open the onboarding overlay and intercept pointer events in
+ * unrelated e2e suites. This storage key is the only hard suppression left —
+ * the wizard's own "later" button closes it for the current view only.
  */
 export async function seedOnboardingDismissed(
   page: Page,
@@ -17,7 +18,7 @@ export async function seedOnboardingDismissed(
   await page.addInitScript((pids: string[]) => {
     try {
       for (const pid of pids) {
-        localStorage.setItem(`approving-onboarding-dismiss:${pid}`, '1')
+        localStorage.setItem(`approving-onboarding-suppress:${pid}`, '1')
       }
     } catch {
       /* ignore */
