@@ -474,14 +474,14 @@
     },
     "visual": {
       "label": "Visual page",
-      "desc": "HTML prototype demo as self-contained page.html with iframe preview",
+      "desc": "High-fidelity target-state page.html grounded in the existing business frontend, with iframe preview",
       "fields": {
         "agent_profile": {
           "label": "Agent (user-defined · Agent Studio)"
         },
         "prompt": {
           "label": "Prompt template",
-          "placeholder": "Build a clean visual web demo (prototype) from upstream requirements"
+          "placeholder": "From upstream requirements, read the existing UI then generate a high-fidelity target-state page"
         },
         "timeout": {
           "label": "Timeout (minutes)"
@@ -498,7 +498,7 @@
           "desc": "Artifact id via artifact-store MCP"
         }
       },
-      "help": "### Visual page (visual)\n\nSelf-contained `page.html` prototype with iframe preview.\n\n**Mandatory**: single-file HTML via `write_artifact` only (no workspace files).\n\n**Preview**: artifacts tab and human gates render iframe."
+      "help": "### Visual page (visual)\n\nSelf-contained `page.html` that should match the existing business frontend as a high-fidelity **target-state** page (not a generic demo), with iframe preview.\n\nFor UI changes, the agent read-only locates routes, components, design tokens, and copy in the cloned repos, then applies the requested changes. Repo layout is for locating source only — never write workspace files.\n\n**Mandatory**: single-file HTML via `write_artifact` only (no workspace files).\n\n**Preview**: artifacts tab and human gates render iframe."
     },
     "human_gate": {
       "label": "Human gate",

@@ -474,14 +474,14 @@
     },
     "visual": {
       "label": "视觉网页",
-      "desc": "用 HTML 生成可视化网页/原型 demo:产出自包含单文件 page.html,可在运行内 iframe 预览供人确认",
+      "desc": "用 HTML 生成贴合现有业务前端的高保真目标态页面:产出自包含单文件 page.html,可在运行内 iframe 预览供人确认",
       "fields": {
         "agent_profile": {
           "label": "Agent(用户定义 · Agent 管理)"
         },
         "prompt": {
           "label": "Prompt 模板",
-          "placeholder": "根据上游需求,做一个简洁美观的可视化网页 demo(原型)"
+          "placeholder": "根据上游需求,基于现有业务前端生成高保真目标态页面"
         },
         "timeout": {
           "label": "超时(分钟)"
@@ -498,7 +498,7 @@
           "desc": "经 artifact-store MCP 写入的产物 id"
         }
       },
-      "help": "### 视觉网页(visual)\n\n用 HTML 把上游需求做成**可直接预览**的可视化网页 / 原型 demo,常接「人工门禁」在开工前给人确认。\n\n**唯一交付(强制)**:一个**单文件、自包含**的 `page.html`(完整 `<!doctype html>` 文档,CSS/JS 全部内联,**不引用任何外部资源**)。你只需在 Prompt 里描述\"做什么页面\"即可——**\"必须产出 page.html、怎么产出、格式要求\"这些平台会自动作为强制契约注入**,无需在 Prompt 里重复。\n\n**怎么产出**:Agent **只通过 `write_artifact` 工具**写入 `page.html`(kind=`html`),**不往项目/工作区写文件**,以免污染仓库改动。缺该产物则节点失败。\n\n**预览**:平台把 `page.html` 存为 `html` 产物——运行详情的「产物」tab、产物列表、以及**人工门禁**都用 iframe 直接渲染网页。门禁的「展示内容」选择本节点的「网页预览」即可让审批人看到页面。\n\n**Issue 打回闭环(推荐)**:human_gate 展示 page.html 时可点选 DOM、自动截图并「提交问题」;Fail/退回会快照 `{'{{vars.preview_issues}}'}`。典型模板应把 fail/revise 指向唯一 implement,implement Prompt 引用 `{'{{vars.preview_issues}}'}`,implement 成功后再入 visual 复审,直至 Pass。"
+      "help": "### 视觉网页(visual)\n\n用 HTML 把上游需求做成**可贴合现有业务前端的高保真目标态页面**,常接「人工门禁」在开工前给人确认。涉及既有前端修改时,Agent 会只读查看仓库中的路由、组件、设计令牌与文案,再生成改后页面,而不是从零编造通用 demo。\n\n**唯一交付(强制)**:一个**单文件、自包含**的 `page.html`(完整 `<!doctype html>` 文档,CSS/JS 全部内联,**不引用任何外部资源**)。你只需在 Prompt 里描述\"做什么页面\"即可——**\"必须产出 page.html、怎么产出、格式要求\"这些平台会自动作为强制契约注入**,无需在 Prompt 里重复。\n\n**怎么产出**:Agent **只通过 `write_artifact` 工具**写入 `page.html`(kind=`html`),**不往项目/工作区写文件**,以免污染仓库改动。仓库布局仅用于只读定位。缺该产物则节点失败。\n\n**预览**:平台把 `page.html` 存为 `html` 产物——运行详情的「产物」tab、产物列表、以及**人工门禁**都用 iframe 直接渲染网页。门禁的「展示内容」选择本节点的「网页预览」即可让审批人看到页面。\n\n**Issue 打回闭环(推荐)**:human_gate 展示 page.html 时可点选 DOM、自动截图并「提交问题」;Fail/退回会快照 `{'{{vars.preview_issues}}'}`。典型模板应把 fail/revise 指向唯一 implement,implement Prompt 引用 `{'{{vars.preview_issues}}'}`,implement 成功后再入 visual 复审,直至 Pass。"
     },
     "human_gate": {
       "label": "人工门禁",

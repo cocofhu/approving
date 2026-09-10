@@ -290,7 +290,7 @@ export const NODE_DEFS: Record<NodeType, NodeTypeDef> = {
     outputs: productOutputDefs('visual', [
       { key: 'artifact_id', desc: 'nodes.visual.outputs.artifact_id.desc' },
     ]),
-    defaults: { prompt: '根据上游需求,做一个简洁美观的可视化网页 demo(原型)。' },
+    defaults: { prompt: '根据上游需求,基于仓库中现有业务前端做高保真目标态页面:先只读定位目标路由、组件、设计令牌与文案,再生成改后 page.html;无基线时沿用项目设计系统。不要编造通用 demo。' },
     help: 'nodes.visual.help',
   },
   human_gate: {

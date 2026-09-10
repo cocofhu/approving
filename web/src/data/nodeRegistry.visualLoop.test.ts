@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { NODE_DEFS, defaultHumanGateForm, isPageHtmlGateBody } from './nodeRegistry'
+import zhNodes from '@/locales/zh-CN/nodes.json'
+import enNodes from '@/locales/en/nodes.json'
 
 /**
  * Official typical templates with visual/HtmlPreview are not shipped as seed
@@ -9,6 +11,26 @@ import { NODE_DEFS, defaultHumanGateForm, isPageHtmlGateBody } from './nodeRegis
  * need a one-time migration or manual update.
  */
 describe('visual HtmlPreview Issue loop defaults (g4)', () => {
+  it('visual default prompt requires high-fidelity business UI not a generic demo', () => {
+    const prompt = String(NODE_DEFS.visual.defaults?.prompt || '')
+    expect(prompt).toContain('高保真')
+    expect(prompt).toContain('现有业务前端')
+    expect(prompt).toContain('只读定位')
+    expect(prompt).not.toMatch(/简洁美观/)
+    expect(prompt).toContain('不要编造通用 demo')
+  })
+
+  it('visual node help and desc describe high-fidelity business pages', () => {
+    expect(zhNodes.nodes.visual.desc).toContain('高保真')
+    expect(zhNodes.nodes.visual.desc).toContain('现有业务前端')
+    expect(zhNodes.nodes.visual.help).toContain('高保真')
+    expect(zhNodes.nodes.visual.help).toContain('只读')
+    expect(zhNodes.nodes.visual.help).not.toMatch(/简洁美观/)
+    expect(enNodes.nodes.visual.desc).toMatch(/high-fidelity/i)
+    expect(enNodes.nodes.visual.help).toMatch(/high-fidelity/i)
+    expect(enNodes.nodes.visual.help).not.toMatch(/generic demo as the default/)
+  })
+
   it('implement default prompt references vars.preview_issues', () => {
     const prompt = String(NODE_DEFS.implement.defaults?.prompt || '')
     expect(prompt).toContain('{{vars.preview_issues}}')
