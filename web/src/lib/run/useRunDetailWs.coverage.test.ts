@@ -92,6 +92,7 @@ function harness(over: {
   const fetchSandboxLog = vi.fn()
   const maybePollSandboxForBoot = vi.fn()
   const loadRun = vi.fn()
+  const patchRunChrome = vi.fn()
   const refreshArtifactPreview = vi.fn()
   const clarifyNode = ref(over.clarifyNode === undefined ? 'n1' : over.clarifyNode)
   const api = useRunDetailWs({
@@ -114,6 +115,7 @@ function harness(over: {
     maybePollSandboxForBoot,
     isClarifySessionBusy: () => over.clarifyBusy ?? false,
     loadRun,
+    patchRunChrome,
     refreshArtifactPreview,
   })
   return {
@@ -136,6 +138,7 @@ function harness(over: {
     fetchSandboxLog,
     maybePollSandboxForBoot,
     loadRun,
+    patchRunChrome,
     refreshArtifactPreview,
     clarifyNode,
   }
@@ -330,7 +333,9 @@ describe('useRunDetailWs coverage', () => {
     for (const type of ['trace', 'react', 'artifact_edit'] as const) socket.message({ type })
     socket.message({ type: 'status' })
     expect(normal.loadRun).toHaveBeenCalledTimes(4)
+    expect(normal.loadRun).toHaveBeenCalledWith(false, true)
     expect(normal.liveNode.value).toBeNull()
+    expect(normal.refreshArtifactPreview).toHaveBeenCalledWith(expect.objectContaining({ type: 'artifact_edit' }))
     normal.api.teardownRealtime()
 
     const busy = harness({ clarifyBusy: true })
@@ -341,7 +346,9 @@ describe('useRunDetailWs coverage', () => {
     expect(busy.refreshArtifactPreview).toHaveBeenCalledWith(
       expect.objectContaining({ previewArtifact: 'preview.png' }),
     )
+    expect(busy.patchRunChrome).toHaveBeenCalled()
     expect(busy.loadRun).not.toHaveBeenCalled()
+    expect(busy.loadRun.mock.calls.every((c) => c[0] !== true)).toBe(true)
     busy.api.teardownRealtime()
   })
 
@@ -366,7 +373,7 @@ describe('useRunDetailWs coverage', () => {
 
     h.rehydrateByNode.n1 = 'ready'
     await vi.advanceTimersByTimeAsync(2000)
-    expect(h.loadRun).toHaveBeenCalledWith(false)
+    expect(h.loadRun).toHaveBeenCalledWith(false, true)
     expect(h.fetchNodeEvents).toHaveBeenCalledWith('n1')
     expect(h.fetchSandboxLog).toHaveBeenCalledWith('n1', { intent: 'silent_poll' })
     expect(h.maybePollSandboxForBoot).toHaveBeenCalled()
@@ -408,6 +415,30 @@ describe('useRunDetailWs coverage', () => {
     expect(focused.selected.value).toBe('kept')
     await vi.advanceTimersByTimeAsync(2000)
     expect(focused.loadRun).not.toHaveBeenCalled()
+    expect(focused.patchRunChrome).toHaveBeenCalled()
     focused.api.teardownRealtime()
+  })
+
+  it('polls queued runs, skips hidden ticks, and never hard-loads on the timer (g1.2 / g1.3)', async () => {
+    vi.useFakeTimers()
+    const queued = harness({ status: 'queued' })
+    await queued.api.initAfterLoadSuccess({
+      applyDetailArtifactsDeepLink: () => false,
+      applyOutputDeepLinkFocus: () => true,
+      defaultNode: 'n1',
+      syncAllMcpCallsFromRun: vi.fn(),
+    })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(queued.loadRun).toHaveBeenCalledWith(false, true)
+    expect(queued.loadRun.mock.calls.every((c) => c[0] !== true)).toBe(true)
+
+    queued.loadRun.mockClear()
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(queued.loadRun).not.toHaveBeenCalled()
+    expect(queued.patchRunChrome).not.toHaveBeenCalled()
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false })
+    queued.api.teardownRealtime()
+    vi.useRealTimers()
   })
 })

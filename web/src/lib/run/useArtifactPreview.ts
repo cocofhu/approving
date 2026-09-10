@@ -416,6 +416,8 @@ watch(
     return artifactFingerprint(a)
   },
   (fp, prev) => {
+    // Same content/version fingerprint: skip reload so iframe / StructuredArtifactView stay mounted (g2.2).
+    if (fp && prev && fp === prev) return
     const id = displayArtifact.value?.id
     const sameId = !!prev && !!fp && prev.split(':')[0] === fp.split(':')[0]
     if (!sameId) {

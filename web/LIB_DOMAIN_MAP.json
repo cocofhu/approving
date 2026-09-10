@@ -98,6 +98,7 @@
       "liveLogRehydrate.ts",
       "liveLogSnapshotCache.ts",
       "mergeAcpEvents.ts",
+      "mergeRunChrome.ts",
       "nodeEventsResponse.ts",
       "outputSourceOptions.ts",
       "pendingAcpBuffer.ts",
@@ -182,7 +183,7 @@
     "inbox": 21,
     "pm": 7,
     "project": 4,
-    "run": 53,
+    "run": 54,
     "shared": 37
   }
 }

@@ -21,6 +21,12 @@ import { addClarifyAnnotation, useClarifyDraft } from '@/lib/inbox/useClarifyDra
 import { previewPickLabel, type AppPreviewPickPayload } from '@/lib/shared/previewPickUrl'
 import { resolveNodeDisplayLabelFromNode } from '@/lib/run/resolveNodeDisplayLabel'
 import { applyPreviewArtifactName } from '@/lib/run/reactArtifactPreview'
+import {
+  artifactsListFingerprint,
+  mergeRunChromeFields,
+  runChromeFingerprint,
+  runSnapshotUnchanged,
+} from '@/lib/run/mergeRunChrome'
 import { fmtTime, fmtDuration, formatTrigger } from '@/lib/shared/format'
 import { pickDefaultTimelineNodeId } from '@/lib/run/runStats'
 import { useRunDetailLiveLog } from '@/lib/run/useRunDetailLiveLog'
@@ -350,9 +356,37 @@ async function refreshArtifactPreviewState(frame?: { previewArtifact?: string })
   }
   try {
     const arts = await api.runArtifacts(runId.value)
-    if (Array.isArray(arts)) run.value = { ...run.value, artifacts: arts }
+    if (!Array.isArray(arts)) return
+    if (artifactsListFingerprint(run.value.artifacts) === artifactsListFingerprint(arts)) return
+    run.value = { ...run.value, artifacts: arts }
   } catch {
     /* keep last known artifacts */
+  }
+}
+
+/** Busy-safe REST patch: chrome only, never hard load / dialogue overwrite (g1.1 / g1.3). */
+let chromePatchInflight = false
+async function patchRunChrome() {
+  const id = runId.value
+  if (chromePatchInflight || runLoading.value || loadError.value) return
+  if (isClearlyInvalidRunRouteId(id)) return
+  chromePatchInflight = true
+  try {
+    const snapshot = await api.getRun(id)
+    const prev = run.value
+    const merged = mergeRunChromeFields(prev, snapshot)
+    const artsChanged =
+      artifactsListFingerprint(prev.artifacts) !== artifactsListFingerprint(merged.artifacts)
+    if (runChromeFingerprint(prev) !== runChromeFingerprint(merged)) {
+      run.value = merged
+    }
+    if (artsChanged) {
+      void refreshArtifactPreviewState()
+    }
+  } catch {
+    /* keep last known chrome */
+  } finally {
+    chromePatchInflight = false
   }
 }
 
@@ -375,7 +409,8 @@ const wsApi = useRunDetailWs({
   fetchSandboxLog,
   maybePollSandboxForBoot,
   isClarifySessionBusy,
-  loadRun: (hard = false) => loadRun(hard),
+  loadRun: (hard = false, silent = false) => loadRun(hard, silent),
+  patchRunChrome,
   refreshArtifactPreview: (frame) => {
     void refreshArtifactPreviewState(frame)
   },
@@ -421,6 +456,10 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
   }
   try {
     const r = await api.getRun(id)
+    if (run.value.id === r.id && runSnapshotUnchanged(run.value, r)) {
+      await loadUnknownModelDisplayName(wf.value.projectId)
+      return true
+    }
     run.value = r
     // Prefer the run's own pinned graph so the canvas reflects exactly what
     // executed, even if the live workflow was since edited or deleted. Fall
@@ -451,7 +490,7 @@ async function fetchRunData(): Promise<true | RunLoadErrorKind> {
   }
 }
 
-async function loadRun(hard = false) {
+async function loadRun(hard = false, silent = false) {
   const id = runId.value
   if (hard) {
     runLoading.value = true
@@ -459,7 +498,7 @@ async function loadRun(hard = false) {
     loadErrorKind.value = null
     resetRunState(id)
     teardownRealtime()
-  } else {
+  } else if (!silent) {
     refreshing.value = true
   }
 
@@ -482,7 +521,7 @@ async function loadRun(hard = false) {
     }
   } finally {
     if (hard) runLoading.value = false
-    else refreshing.value = false
+    else if (!silent) refreshing.value = false
   }
 }
 
@@ -497,9 +536,13 @@ onMounted(async () => {
   window.addEventListener('focus', onFocusRefresh)
 })
 function onFocusRefresh() {
-  // Clarify/review mid-turn: skip focus/visibility full reload (keeps stream + input focus).
-  if (isClarifySessionBusy()) return
-  if (!runLoading.value && !loadError.value) loadRun(false)
+  if (runLoading.value || loadError.value) return
+  // Auto / visibility: never hard load (g1.3). Busy → chrome patch only (g1.2).
+  if (isClarifySessionBusy()) {
+    void patchRunChrome()
+    return
+  }
+  void loadRun(false, true)
 }
 function onVisible() {
   if (document.visibilityState === 'visible') onFocusRefresh()
@@ -1269,6 +1312,7 @@ function selectExecution(nodeId: string, idx: number) {
   live,
   isClarifySessionBusy,
   refreshArtifactPreviewState,
+  patchRunChrome,
   wsApi,
   resetRunState,
   classifyRunLoadError,

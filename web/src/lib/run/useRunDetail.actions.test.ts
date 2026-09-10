@@ -780,10 +780,28 @@ describe('useRunDetail actions', () => {
     detail.reviewChatRef.value = { isSessionBusy: () => true }
     expect(detail.isClarifySessionBusy()).toBe(true)
 
+    const sessions = { n1: { busy: true, items: [{ id: 'keep', text: 'stream' }] } }
+    detail.run.value = {
+      ...detail.run.value,
+      reactSessions: sessions,
+    } as unknown as Run
+    const turns = detail.run.value.clarifyByNode?.n1
+
     mocks.getRun.mockClear()
+    mocks.getRun.mockResolvedValueOnce({
+      ...detail.run.value,
+      progress: 0.88,
+      reactSessions: { n1: { busy: false, items: [] } },
+    })
     detail.onFocusRefresh()
     await flushPromises()
-    expect(mocks.getRun).not.toHaveBeenCalled()
+    // Busy focus still patches chrome (g1.2) but must not replace dialogue buffers (g1.1).
+    expect(mocks.getRun).toHaveBeenCalled()
+    expect(detail.run.value.progress).toBe(0.88)
+    expect(detail.run.value.reactSessions?.n1?.busy).toBe(true)
+    expect(detail.run.value.reactSessions?.n1?.items?.[0]?.text).toBe('stream')
+    expect(detail.run.value.clarifyByNode?.n1).toBe(turns)
+    expect(detail.refreshing.value).toBe(false)
 
     detail.reviewChatRef.value = null
     detail.run.value = {
