@@ -173,6 +173,7 @@
       "routePending.ts",
       "serviceCommit.ts",
       "sidebarHidden.ts",
+      "startPath.ts",
       "streamMarkdownPreview.ts",
       "theme.ts",
       "types.ts"
@@ -186,6 +187,6 @@
     "pm": 7,
     "project": 4,
     "run": 54,
-    "shared": 37
+    "shared": 38
   }
 }
