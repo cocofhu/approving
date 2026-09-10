@@ -1,10 +1,26 @@
 import type { BackendId } from '@/lib/shared/regionPolicy'
-import { ACP_BACKENDS, getRegionPolicy } from '@/lib/shared/regionPolicy'
+import { getRegionPolicy } from '@/lib/shared/regionPolicy'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 import type { ThemeName } from '@/lib/shared/theme'
 import { theme } from '@/lib/shared/theme'
 import { DEFAULT_OPENCODE_PROVIDER } from '@/lib/agent/openCodeProvider'
+import {
+  APIKEY_BACKEND,
+  CLI_BACKEND_DEFAULT,
+  CLI_BACKENDS,
+  type StartPath,
+  startPathForBackend,
+  syncStartPathFields,
+} from '@/lib/shared/startPath'
+
+export {
+  APIKEY_BACKEND as ONBOARDING_APIKEY_BACKEND,
+  CLI_BACKEND_DEFAULT as ONBOARDING_CLI_BACKEND_DEFAULT,
+  CLI_BACKENDS as ONBOARDING_CLI_BACKENDS,
+  startPathForBackend,
+  type StartPath as OnboardingStartPath,
+}
 
 /** Matches models.DefaultProjectID — first-install wizard only opens here. */
 export const DEFAULT_PROJECT_ID = 'proj-default'
@@ -38,27 +54,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   { id: 'review', labelKey: 'pages.onboarding.steps.review' },
 ]
 
-/**
- * Two ways to start: bring a model-vendor API key (BYOK, served by the OpenCode
- * backend), or sign in with a coding-CLI vendor account (Cursor / Claude Code /
- * CodeBuddy / Trae). The backend step picks a path first, then its detail.
- */
-export type OnboardingStartPath = 'apiKey' | 'cli'
-
-/** BYOK path is served by a single backend; keep the mapping in one place. */
-export const ONBOARDING_APIKEY_BACKEND: BackendId = 'opencode'
-
-export const ONBOARDING_CLI_BACKEND_DEFAULT: BackendId = 'cursor'
-
-/** CLI-account backends, in ACP_BACKENDS order (BYOK backend excluded). */
-export const ONBOARDING_CLI_BACKENDS = ACP_BACKENDS.filter(
-  (b) => b.id !== ONBOARDING_APIKEY_BACKEND,
-)
-
-export function startPathForBackend(backend: BackendId): OnboardingStartPath {
-  return backend === ONBOARDING_APIKEY_BACKEND ? 'apiKey' : 'cli'
-}
-
 export const ONBOARDING_GIT_TYPES: { id: GitCredentialType; labelKey: string }[] = [
   { id: 'github_https', labelKey: 'pages.agentStudio.git.types.github_https' },
   { id: 'gitlab_https', labelKey: 'pages.agentStudio.git.types.gitlab_https' },
@@ -69,7 +64,7 @@ export type OnboardingDraft = {
   step: number
   language: AppLocale
   theme: ThemeName
-  startPath: OnboardingStartPath
+  startPath: StartPath
   acpBackend: BackendId
   /** Last CLI-path backend, so switching paths back restores the pick. */
   cliBackend: BackendId
@@ -214,9 +209,9 @@ export function freshOnboardingDraft(): OnboardingDraft {
     language: detectSystemLocale(),
     theme: theme.value,
     startPath: 'apiKey',
-    acpBackend: ONBOARDING_APIKEY_BACKEND,
-    cliBackend: ONBOARDING_CLI_BACKEND_DEFAULT,
-    region: getRegionPolicy(ONBOARDING_APIKEY_BACKEND)?.defaultRegion || '',
+    acpBackend: APIKEY_BACKEND,
+    cliBackend: CLI_BACKEND_DEFAULT,
+    region: getRegionPolicy(APIKEY_BACKEND)?.defaultRegion || '',
     apiKey: '',
     gitCredentialType: '',
     githubToken: '',
@@ -241,24 +236,20 @@ export function freshOnboardingDraft(): OnboardingDraft {
  * previous backend (region default, and the key, which is vendor-specific).
  */
 export function applyOnboardingBackend(draft: OnboardingDraft, id: BackendId): void {
-  const path = startPathForBackend(id)
-  draft.startPath = path
-  if (path === 'cli') draft.cliBackend = id
+  syncStartPathFields(draft, id)
   if (draft.acpBackend === id) return
   draft.acpBackend = id
   draft.region = getRegionPolicy(id)?.defaultRegion || ''
   draft.apiKey = ''
-  if (id === ONBOARDING_APIKEY_BACKEND && !draft.openCodeProvider) {
+  if (id === APIKEY_BACKEND && !draft.openCodeProvider) {
     draft.openCodeProvider = DEFAULT_OPENCODE_PROVIDER
   }
 }
 
 /** Switch start path; the CLI path restores the last CLI backend that was picked. */
-export function applyStartPath(draft: OnboardingDraft, path: OnboardingStartPath): void {
+export function applyStartPath(draft: OnboardingDraft, path: StartPath): void {
   const id =
-    path === 'apiKey'
-      ? ONBOARDING_APIKEY_BACKEND
-      : draft.cliBackend || ONBOARDING_CLI_BACKEND_DEFAULT
+    path === 'apiKey' ? APIKEY_BACKEND : draft.cliBackend || CLI_BACKEND_DEFAULT
   applyOnboardingBackend(draft, id)
 }
 

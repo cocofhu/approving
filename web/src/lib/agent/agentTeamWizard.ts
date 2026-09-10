@@ -1,7 +1,10 @@
 import type { MCPServer } from '@/lib/api/api'
 import {
   ACP_BACKENDS,
+  CLI_BACKENDS,
+  START_PATH_OPTIONS,
   applyAcpBackend,
+  applyWizardStartPath,
   configRootFor,
   kvToRec,
   normalizeWizardRegions,
@@ -11,6 +14,7 @@ import {
   type WizardKV,
   type WizardMCP,
   type WizardAuthMode,
+  type StartPath,
   freshDraft,
   parseCustomConfigJson,
   stripAuthKeysFromEnv,
@@ -20,6 +24,7 @@ import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { authGuideFor, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
 import { stripTokenKeysFromKV, stripTokenKeysFromRecord } from '@/lib/agent/tokenEnvKeys'
 import { getRegionPolicy } from '@/lib/shared/regionPolicy'
+import { APIKEY_BACKEND, CLI_BACKEND_DEFAULT } from '@/lib/shared/startPath'
 
 export type TeamWizardStepId = 'team' | 'acp' | 'apiKey' | 'git' | 'mcp' | 'env' | 'review'
 
@@ -53,7 +58,9 @@ export type TeamWizardDraft = {
   rootTouched: boolean
   pipelineTouched: boolean
   pmTouched: boolean
+  startPath: StartPath
   acpBackend: WizardBackendId
+  cliBackend: WizardBackendId
   authMode: WizardAuthMode
   customConfigContent: string
   gitCredentialType?: GitCredentialType
@@ -89,12 +96,14 @@ export function freshTeamDraft(): TeamWizardDraft {
     rootTouched: false,
     pipelineTouched: false,
     pmTouched: false,
-    acpBackend: 'cursor',
+    startPath: 'apiKey',
+    acpBackend: APIKEY_BACKEND,
+    cliBackend: CLI_BACKEND_DEFAULT,
     authMode: 'apiKey',
     customConfigContent: '',
     gitCredentialType: undefined,
     gitUrl: '',
-    configRoot: configRootFor('cursor'),
+    configRoot: configRootFor(APIKEY_BACKEND),
     env: [{ k: 'GIT_REPOS', v: '${vars.repos}' }],
     mcp: [artifactStorePreset()],
     skipped: {},
@@ -122,7 +131,9 @@ export function validateTeamBasics(d: TeamWizardDraft, existingNames: string[]):
 
 function teamDraftAsWizardDraft(d: TeamWizardDraft): WizardDraft {
   const base = freshDraft()
+  base.startPath = d.startPath
   base.acpBackend = d.acpBackend
+  base.cliBackend = d.cliBackend
   base.configRoot = d.configRoot
   base.authMode = d.authMode
   base.customConfigContent = d.customConfigContent
@@ -139,6 +150,18 @@ function teamDraftAsWizardDraft(d: TeamWizardDraft): WizardDraft {
 export function applyTeamAcpBackend(d: TeamWizardDraft, id: WizardBackendId) {
   const w = teamDraftAsWizardDraft(d)
   applyAcpBackend(w, id)
+  d.startPath = w.startPath
+  d.cliBackend = w.cliBackend
+  d.acpBackend = w.acpBackend
+  d.configRoot = w.configRoot
+  d.env = w.env
+}
+
+export function applyTeamStartPath(d: TeamWizardDraft, path: StartPath) {
+  const w = teamDraftAsWizardDraft(d)
+  applyWizardStartPath(w, path)
+  d.startPath = w.startPath
+  d.cliBackend = w.cliBackend
   d.acpBackend = w.acpBackend
   d.configRoot = w.configRoot
   d.env = w.env
@@ -211,7 +234,7 @@ export function assembleTeamBootstrapPayload(d: TeamWizardDraft): TeamBootstrapP
     pipelineGroupName: d.pipelineGroupName.trim() || 'Pipeline(GitHub)',
     pmName: normalizeAgentName(d.pmName),
     background: d.background.trim(),
-    acpBackend: d.acpBackend || 'cursor',
+    acpBackend: d.acpBackend || APIKEY_BACKEND,
     ...(apiKey ? { apiKey } : {}),
     ...(customConfig ? { customConfig } : {}),
     ...(region ? { region } : {}),
@@ -230,5 +253,5 @@ export function teamHasAuth(d: TeamWizardDraft): boolean {
   return hasAuthKeyConfigured(d.env, d.acpBackend)
 }
 
-export { ACP_BACKENDS, recToKV, kvToRec }
-export type { WizardBackendId }
+export { ACP_BACKENDS, CLI_BACKENDS, START_PATH_OPTIONS, recToKV, kvToRec }
+export type { WizardBackendId, StartPath }

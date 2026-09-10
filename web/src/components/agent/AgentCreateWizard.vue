@@ -4,6 +4,7 @@ import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import EnvCredentialHelpModal from '@/components/agent/EnvCredentialHelpModal.vue'
 import WizardApiKeyStepPanel from '@/components/agent/WizardApiKeyStepPanel.vue'
+import WizardAcpStartPathPanel from '@/components/agent/WizardAcpStartPathPanel.vue'
 
 import { kvToRec } from '@/lib/agent/agentCreateWizard'
 import { useAgentCreateWizard } from '@/lib/agent/useAgentCreateWizard'
@@ -42,6 +43,7 @@ const {
   selectRegion,
   markConfigured,
   selectAcp,
+  selectStartPath,
   confirmAcpSwitch,
   cancelAcpSwitch,
   syncApiKeyInput,
@@ -59,7 +61,6 @@ const {
   submitCreate,
   chipClass,
   WIZARD_STEPS,
-  ACP_BACKENDS,
 } = useAgentCreateWizard(props, emit)
 </script>
 
@@ -162,58 +163,20 @@ const {
 
                 <template v-else-if="currentStep.id === 'acp'">
                   <p class="sec-meta">{{ t('pages.agentStudio.wizard.acp.meta') }}</p>
-                  <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-                    <button
-                      v-for="b in ACP_BACKENDS"
-                      :key="b.id"
-                      type="button"
-                      class="rounded-lg border px-3 py-3.5 text-center transition"
-                      :class="
-                        draft.acpBackend === b.id
-                          ? 'border-accent bg-accent-dim'
-                          : 'border-line bg-base hover:border-line-strong'
-                      "
-                      @click="selectAcp(b.id)"
-                    >
-                      <strong class="block text-[13px] font-semibold text-txt">{{ b.label }}</strong>
-                      <span class="mt-1 block font-mono text-[10px] text-txt3">{{ b.configRoot }}</span>
-                    </button>
-                  </div>
-                  <div v-if="currentRegionPolicy" class="mt-5 border-t border-dashed border-line pt-4">
-                    <div class="mb-2 text-[12px] font-medium text-txt2">
-                      {{ t('pages.agentStudio.region.title') }}
-                    </div>
-                    <div
-                      class="grid max-w-lg grid-cols-2 gap-2.5"
-                      role="radiogroup"
-                      :aria-label="t('pages.agentStudio.region.title')"
-                    >
-                      <button
-                        v-for="option in currentRegionPolicy.options"
-                        :key="option.id"
-                        type="button"
-                        role="radio"
-                        :aria-checked="currentRegion === option.id"
-                        :aria-label="`${t(option.labelKey)} (${option.id})`"
-                        class="rounded-lg border px-3 py-3 text-left transition"
-                        :class="
-                          currentRegion === option.id
-                            ? 'border-accent bg-accent-dim'
-                            : 'border-line bg-base hover:border-line-strong'
-                        "
-                        @click="selectRegion(option.id)"
-                      >
-                        <strong class="block text-[13px] font-semibold text-txt">
-                          {{ t(option.labelKey) }}
-                        </strong>
-                        <span class="mt-1 block font-mono text-[10px] text-accent-2">{{ option.id }}</span>
-                        <span class="mt-1 block text-[10px] text-txt3">{{ t(option.hintKey) }}</span>
-                      </button>
-                    </div>
-                  </div>
-                  <p class="mt-3 font-mono text-[11px] text-txt3">
-                    configRoot → <span class="text-accent-2">{{ draft.configRoot }}</span>
-                  </p>
+                  <WizardAcpStartPathPanel
+                    :start-path="draft.startPath"
+                    :acp-backend="draft.acpBackend"
+                    :config-root="draft.configRoot"
+                    :region-policy="currentRegionPolicy"
+                    :current-region="currentRegion"
+                    region-as-radios
+                    show-region-hints
+                    show-config-root
+                    test-id-prefix="agent-wizard"
+                    @select-start-path="selectStartPath"
+                    @select-backend="selectAcp"
+                    @select-region="selectRegion"
+                  />
                 </template>
 
                 <template v-else-if="currentStep.id === 'apiKey'">

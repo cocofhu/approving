@@ -5,12 +5,13 @@ import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentGitGuide from '@/components/agent/AgentGitGuide.vue'
 import WizardApiKeyStepPanel from '@/components/agent/WizardApiKeyStepPanel.vue'
+import WizardAcpStartPathPanel from '@/components/agent/WizardAcpStartPathPanel.vue'
 import { api, type TeamBootstrapSession } from '@/lib/api/api'
 import {
-  ACP_BACKENDS,
   TEAM_ENGINEER_COUNT,
   TEAM_WIZARD_STEPS,
   applyTeamAcpBackend,
+  applyTeamStartPath,
   assembleTeamBootstrapPayload,
   artifactStorePreset,
   freshTeamDraft,
@@ -19,6 +20,7 @@ import {
   validateTeamBasics,
   type TeamWizardDraft,
   type WizardBackendId,
+  type StartPath,
 } from '@/lib/agent/agentTeamWizard'
 import { authGuideFor, defaultSettingsPlaceholder } from '@/lib/agent/backendAuthGuide'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
@@ -121,6 +123,12 @@ function onProjectInput() {
 function selectAcp(id: WizardBackendId) {
   if (id === draft.value.acpBackend) return
   applyTeamAcpBackend(draft.value, id)
+  syncApiKeyInput()
+}
+
+function selectStartPath(path: StartPath) {
+  if (path === draft.value.startPath) return
+  applyTeamStartPath(draft.value, path)
   syncApiKeyInput()
 }
 
@@ -481,34 +489,17 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
 
                 <template v-else-if="currentStep.id === 'acp'">
                   <p class="sec-meta">{{ t('pages.agentStudio.teamWizard.acp.meta') }}</p>
-                  <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-                    <button
-                      v-for="b in ACP_BACKENDS"
-                      :key="b.id"
-                      type="button"
-                      class="rounded-lg border px-3 py-3.5 text-center transition"
-                      :class="draft.acpBackend === b.id ? 'border-accent bg-accent-dim' : 'border-line bg-base hover:border-line-strong'"
-                      @click="selectAcp(b.id)"
-                    >
-                      <strong class="block text-[13px] font-semibold text-txt">{{ b.label }}</strong>
-                      <span class="mt-1 block font-mono text-[10px] text-txt3">{{ b.configRoot }}</span>
-                    </button>
-                  </div>
-                  <div v-if="regionPolicy" class="mt-5 border-t border-dashed border-line pt-4">
-                    <div class="mb-2 text-[12px] font-medium text-txt2">{{ t('pages.agentStudio.region.title') }}</div>
-                    <div class="grid max-w-lg grid-cols-2 gap-2.5">
-                      <button
-                        v-for="option in regionPolicy.options"
-                        :key="option.id"
-                        type="button"
-                        class="rounded-lg border px-3 py-3 text-left transition"
-                        :class="currentRegion === option.id ? 'border-accent bg-accent-dim' : 'border-line bg-base'"
-                        @click="selectRegion(option.id)"
-                      >
-                        <strong class="block text-[13px] text-txt">{{ t(option.labelKey) }}</strong>
-                      </button>
-                    </div>
-                  </div>
+                  <WizardAcpStartPathPanel
+                    :start-path="draft.startPath"
+                    :acp-backend="draft.acpBackend"
+                    :config-root="draft.configRoot"
+                    :region-policy="regionPolicy"
+                    :current-region="currentRegion"
+                    test-id-prefix="team-wizard"
+                    @select-start-path="selectStartPath"
+                    @select-backend="selectAcp"
+                    @select-region="selectRegion"
+                  />
                 </template>
 
                 <template v-else-if="currentStep.id === 'apiKey'">

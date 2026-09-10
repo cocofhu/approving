@@ -6,8 +6,11 @@ import { useI18n } from 'vue-i18n'
 import { api, type Agent } from '@/lib/api/api'
 import {
   ACP_BACKENDS,
+  CLI_BACKENDS,
+  START_PATH_OPTIONS,
   WIZARD_STEPS,
   applyAcpBackend,
+  applyWizardStartPath,
   assembleCreatePayload,
   buildReviewSummary,
   freshDraft,
@@ -16,11 +19,13 @@ import {
   parseCustomConfigJson,
   stripAuthKeysFromEnv,
   validateBasics,
+  type StartPath,
   type WizardAuthMode,
   type WizardBackendId,
   type WizardDraft,
   type WizardStepId,
 } from '@/lib/agent/agentCreateWizard'
+import { backendForStartPath } from '@/lib/shared/startPath'
 import { authGuideFor, defaultSettingsPlaceholder, hasAuthKeyConfigured } from '@/lib/agent/backendAuthGuide'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import { getRegionPolicy, setRegion } from '@/lib/shared/regionPolicy'
@@ -159,6 +164,19 @@ function selectAcp(id: WizardBackendId) {
     return
   }
   applyAcpBackend(draft.value, id)
+  markConfigured('acp')
+  syncApiKeyInput()
+}
+
+function selectStartPath(path: StartPath) {
+  if (path === draft.value.startPath) return
+  const nextId = backendForStartPath(path, draft.value.cliBackend)
+  if (nextId !== draft.value.acpBackend && hasPathDeps(draft.value)) {
+    pendingAcp.value = nextId
+    showAcpConfirm.value = true
+    return
+  }
+  applyWizardStartPath(draft.value, path)
   markConfigured('acp')
   syncApiKeyInput()
 }
@@ -387,6 +405,7 @@ function chipClass(kind: string) {
   selectRegion,
   markConfigured,
   selectAcp,
+  selectStartPath,
   confirmAcpSwitch,
   cancelAcpSwitch,
   syncApiKeyInput,
@@ -405,5 +424,7 @@ function chipClass(kind: string) {
   chipClass,
   WIZARD_STEPS,
   ACP_BACKENDS,
+  CLI_BACKENDS,
+  START_PATH_OPTIONS,
   }
 }

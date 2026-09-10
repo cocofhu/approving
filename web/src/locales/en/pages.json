@@ -46,7 +46,7 @@
     },
     "tokenAnalytics": {
       "title": "Token usage",
-      "subtitle": "View token usage trends and breakdown across projects",
+      "subtitle": "<strong class=\"font-medium text-warn\">See the finest hair</strong>; <em class=\"not-italic text-n-clarify\">see as if by firelight</em>",
       "loading": "Loading…",
       "loadFailed": "Load failed. Please retry.",
       "retry": "Retry",
@@ -225,7 +225,7 @@
     },
     "projectList": {
       "title": "Projects",
-      "subtitle": "Organize workflows and project settings · shared Agent config and project workflow variables",
+      "subtitle": "<strong class=\"font-medium text-warn\">Grasp the main cord</strong>; <em class=\"not-italic text-n-clarify\">each takes its place</em>",
       "newProject": "New project",
       "empty": "No projects yet",
       "workflowCount": "{n} workflows",
@@ -1342,7 +1342,7 @@
     },
     "gatesInbox": {
       "title": "Needs attention",
-      "subtitleHtml": "<strong class=\"font-medium text-warn\">Human gates</strong> + <em class=\"not-italic text-n-clarify\">Clarify</em> inbox · workflows paused for human action",
+      "subtitleHtml": "<strong class=\"font-medium text-warn\">Plot within the tent</strong>, <em class=\"not-italic text-n-clarify\">win a thousand miles away</em>",
       "statusPending": "Updates available · refresh",
       "statusEditing": "Editing · syncing in background",
       "statusIdle": "Idle · syncing in background",
@@ -1524,7 +1524,7 @@
     },
     "artifacts": {
       "title": "Artifacts",
-      "subtitle": "Outputs from agents/clarify nodes are stored automatically (PRD, design, proposals, etc.) without extra setup or git hosting",
+      "subtitle": "<strong class=\"font-medium text-warn\">Store them in the hills</strong>, <em class=\"not-italic text-n-clarify\">pass them to those who will</em>",
       "groupsTitle": "Workflow groups",
       "groupsCount": "· {n} groups",
       "platformArtifacts": "Platform artifacts",
@@ -2403,7 +2403,7 @@
           "backgroundHint": "Like a prompt: injected into the sandbox to generate groups and engineers."
         },
         "acp": {
-          "meta": "Used as the default ACP for the PM and engineers."
+          "meta": "Used as the default ACP for the PM and engineers. Pick a start path first — same as onboarding and New Agent."
         },
         "git": {
           "meta": "Optional. Pick GitHub / GitLab / SSH; skip when a Git Token already exists (including project shared).",
@@ -2490,7 +2490,7 @@
           "descHint": "Optional. When set, it is prepended to the default alwaysApply rule."
         },
         "acp": {
-          "meta": "Pick an Agent Backend. CodeBuddy and Trae also require a China or International site; International is the default.",
+          "meta": "Choose how to start: a model-vendor API key, or a coding-CLI vendor account. CodeBuddy and Trae also require a China or International site; International is the default.",
           "remapTitle": "Switch Backend?",
           "remapBody": "MCP / Skills / Commands / Rules may depend on the current paths. Switching remaps to the new configRoot; cancel keeps the current Backend."
         },
