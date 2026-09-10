@@ -2,11 +2,12 @@
 import { createI18n } from 'vue-i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick, reactive } from 'vue'
 import common from '@/locales/zh-CN/common.json'
 import pages from '@/locales/zh-CN/pages.json'
 import nav from '@/locales/zh-CN/nav.json'
 
-const routeState = { path: '/dashboard', query: {} as Record<string, unknown>, meta: {} as Record<string, unknown> }
+const routeState = reactive({ path: '/dashboard', query: {} as Record<string, unknown>, meta: {} as Record<string, unknown> })
 
 vi.mock('vue-router', () => ({
   useRoute: () => routeState,
@@ -167,7 +168,7 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-to="/dashboard"]').exists()).toBe(true)
     expect(wrapper.find('[data-to="/gates"]').exists()).toBe(true)
     expect(wrapper.find('[data-to="/dashboard"]').text()).toContain('开始')
-    expect(wrapper.find('[data-to="/gates"]').text()).toContain('需要关注')
+    expect(wrapper.find('[data-to="/gates"]').text()).toContain('待办')
     expect(wrapper.find('[data-to="/stats"]').exists()).toBe(false)
     expect(wrapper.find('[data-to="/projects"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
@@ -287,7 +288,8 @@ describe('AppSidebarNav', () => {
     expect(wrapper.text()).toContain('返回首页')
     expect(wrapper.text()).toContain('通用')
     expect(wrapper.text()).toContain('平台规则')
-    expect(wrapper.text()).not.toContain('需要关注')
+    expect(wrapper.find('[data-to="/agents"]').text()).toContain('智能体')
+    expect(wrapper.text()).not.toContain('待办')
     wrapper.unmount()
     vi.useRealTimers()
   })
@@ -331,5 +333,55 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-to="/runs"]').classes()).toContain('active')
     wrapper.unmount()
     vi.useRealTimers()
+  })
+
+  it('switches chrome after navigation and still renders the target (g2.2)', async () => {
+    favMocks.displayItems.value = [
+      {
+        workflowId: 'wf-1',
+        favoritedAt: 1,
+        name: '夜间回归',
+        projectId: 'p1',
+        projectName: 'checkout-service',
+        status: 'published',
+      },
+    ]
+    const wrapper = mountNav()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(true)
+
+    routeState.path = '/agents'
+    await flushPromises()
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(400)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-back-home"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
+    expect(wrapper.find('[data-to="/agents"]').text()).toContain('智能体')
+
+    routeState.path = '/dashboard'
+    await flushPromises()
+    await nextTick()
+    await vi.advanceTimersByTimeAsync(400)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="nav-back-home"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(true)
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it('source includes chrome slide transition and reduced-motion instant swap (g2.2)', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { dirname, join } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'AppSidebarNav.vue'), 'utf8')
+    expect(src).toMatch(/chrome-slide-left/)
+    expect(src).toMatch(/chrome-slide-right/)
+    expect(src).toMatch(/translateX/)
+    expect(src).toMatch(/prefers-reduced-motion:\s*reduce/)
+    expect(src).toMatch(/chromeHasMounted/)
   })
 })

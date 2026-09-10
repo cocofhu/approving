@@ -55,6 +55,7 @@ vi.mock('@/lib/api/api', () => ({
 }))
 
 import { api } from '@/lib/api/api'
+import { setTheme } from '@/lib/shared/theme'
 import { __resetNotificationsPageEntryForTests } from '@/lib/composables/useNotificationsPageEntry'
 import {
   __resetRunTerminalNotificationsForTests,
@@ -128,6 +129,7 @@ function mountChrome(layout: 'bar' | 'sidebar' = 'sidebar') {
 describe('ShellChromeControls notifications (g1.2)', () => {
   beforeEach(() => {
     localStorage.clear()
+    setTheme('dark')
     __resetRunTerminalNotificationsForTests()
     __resetNotificationsPageEntryForTests()
     push.mockReset()
@@ -312,5 +314,55 @@ describe('ShellChromeControls notifications (g1.2)', () => {
     expect(item.text()).toContain('自我迭代 · 已完成')
     expect(item.text()).not.toMatch(/运行中/)
     wrapper.unmount()
+  })
+})
+
+describe('ShellChromeControls theme icon (g2.1)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setTheme('dark')
+    __resetRunTerminalNotificationsForTests()
+    __resetNotificationsPageEntryForTests()
+  })
+
+  it('cross-fades sun and moon on click and updates immediately', async () => {
+    const wrapper = mountChrome('sidebar')
+    await flushPromises()
+    const moon = wrapper.find('[data-testid="shell-theme-icon-moon"]')
+    const sun = wrapper.find('[data-testid="shell-theme-icon-sun"]')
+    expect(sun.classes()).toContain('is-active')
+    expect(moon.classes()).not.toContain('is-active')
+
+    await wrapper.find('[data-testid="shell-theme-toggle"]').trigger('click')
+    await nextTick()
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(moon.classes()).toContain('is-active')
+    expect(sun.classes()).not.toContain('is-active')
+
+    await wrapper.find('[data-testid="shell-theme-toggle"]').trigger('click')
+    await nextTick()
+    expect(document.documentElement.classList.contains('light')).toBe(false)
+    expect(sun.classes()).toContain('is-active')
+    wrapper.unmount()
+  })
+
+  it('applies the same stacked icons in bar layout', async () => {
+    const wrapper = mountChrome('bar')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="shell-theme-icon-moon"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-theme-icon-sun"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shell-theme-toggle"]').classes()).toContain('h-9')
+    wrapper.unmount()
+  })
+
+  it('source includes 280ms rotate fade and prefers-reduced-motion', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { dirname, join } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'ShellChromeControls.vue'), 'utf8')
+    expect(src).toMatch(/280ms/)
+    expect(src).toMatch(/rotate/)
+    expect(src).toMatch(/opacity/)
+    expect(src).toMatch(/prefers-reduced-motion:\s*reduce/)
   })
 })

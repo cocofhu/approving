@@ -1322,7 +1322,7 @@
       }
     },
     "gatesInbox": {
-      "title": "需要关注",
+      "title": "待办",
       "subtitleHtml": "<strong class=\"font-medium text-warn\">门禁审批</strong> + <em class=\"not-italic text-n-clarify\">需求澄清</em> 收件箱 · 工作流在此挂起等待人工处理",
       "statusPending": "有新审批 · 待刷新",
       "statusEditing": "正在填写 · 后台同步中",
@@ -1782,7 +1782,7 @@
       }
     },
     "agentStudio": {
-      "title": "Agent 管理",
+      "title": "智能体",
       "errorPrefix": "出错:",
       "empty": "暂无 Agent。可「创建 Agent 团队」一键拉起项目与流水线角色，或「新建 Agent」创建单个。",
       "emptyTeamTitle": "用一个入口拉起整支团队",

@@ -218,13 +218,28 @@ defineExpose({
       <span v-if="layout === 'sidebar'" class="min-w-0 flex-1" aria-hidden="true" />
       <button
         type="button"
-        class="flex items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
+        class="shell-theme-toggle flex items-center justify-center text-txt2 hover:bg-elevated hover:text-txt"
         :class="layout === 'sidebar' ? 'h-8 w-8' : 'h-9 w-9'"
         :title="themeTitle"
         data-testid="shell-theme-toggle"
         @click="toggleTheme"
       >
-        <Icon :name="theme === 'dark' ? 'sun' : 'moon'" :size="layout === 'sidebar' ? 16 : 18" />
+        <span class="shell-theme-icon-stack" aria-hidden="true">
+          <span
+            class="shell-theme-icon shell-theme-icon-moon"
+            :class="{ 'is-active': theme !== 'dark' }"
+            data-testid="shell-theme-icon-moon"
+          >
+            <Icon name="moon" :size="layout === 'sidebar' ? 16 : 18" />
+          </span>
+          <span
+            class="shell-theme-icon shell-theme-icon-sun"
+            :class="{ 'is-active': theme === 'dark' }"
+            data-testid="shell-theme-icon-sun"
+          >
+            <Icon name="sun" :size="layout === 'sidebar' ? 16 : 18" />
+          </span>
+        </span>
       </button>
       <div ref="bellWrapEl" class="relative">
         <button
@@ -363,3 +378,44 @@ defineExpose({
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+/* g2.1 — moon ↔ sun rotate + cross-fade (~280ms); both sidebar and bar layouts */
+.shell-theme-icon-stack {
+  position: relative;
+  display: inline-flex;
+  width: 1.125rem;
+  height: 1.125rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.shell-theme-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: rotate(-90deg) scale(0.55);
+  transition:
+    opacity 280ms ease,
+    transform 280ms ease;
+  pointer-events: none;
+}
+
+.shell-theme-icon-sun {
+  transform: rotate(90deg) scale(0.55);
+}
+
+.shell-theme-icon.is-active {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-theme-icon {
+    transition: none;
+  }
+}
+</style>
