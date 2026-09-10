@@ -38,6 +38,9 @@ const {
 const filter = ref<ReadFilter>('all')
 const page = ref(1)
 const outputOpen = ref(false)
+
+/** Whole-list fade when filter/page changes (g3.2). */
+const listFadeKey = computed(() => `${filter.value}|${page.value}`)
 const outputRunId = ref<string | null>(null)
 const outputContext = ref('')
 
@@ -229,11 +232,13 @@ defineExpose({
           />
         </div>
         <div v-else>
+          <Transition name="ui-fade" mode="out-in">
+          <div :key="listFadeKey" data-testid="notifications-list-fade">
           <button
             v-for="item in pagedItems"
             :key="item.runId"
             type="button"
-            class="group relative flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-elevated"
+            class="list-card-lift group relative flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 hover:bg-elevated"
             :class="item.unread ? 'bg-accent/5' : ''"
             data-testid="notifications-item"
             :data-run-id="item.runId"
@@ -278,6 +283,8 @@ defineExpose({
               </span>
             </span>
           </button>
+          </div>
+          </Transition>
         </div>
       </div>
 

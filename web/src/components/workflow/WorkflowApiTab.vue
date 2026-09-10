@@ -87,8 +87,8 @@ const codeLang = ref<Record<string, 'curl' | 'python'>>({
 const copied = ref('')
 function copyText(text: string, label = '') {
   navigator.clipboard.writeText(text).then(() => {
+    // In-place button confirm only (g5.1) — avoid toast + label dual channel.
     copied.value = label
-    toast.success(t('pages.workflowApi.copySuccess'))
     setTimeout(() => { copied.value = '' }, 2000)
   }).catch(() => toast.error(t('pages.workflowApi.copyFailed')))
 }

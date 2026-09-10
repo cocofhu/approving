@@ -36,4 +36,30 @@ describe('AppTabs', () => {
     expect(wrapper.emitted('disabled-click')?.[0]).toEqual(['gate'])
     wrapper.unmount()
   })
+
+  it('renders a sliding indicator under the active tab (g2.2)', async () => {
+    const wrapper = mount(AppTabs, {
+      props: { tabs, modelValue: 'a' },
+      attachTo: document.body,
+    })
+    const indicator = wrapper.get('[data-testid="app-tabs-indicator"]')
+    expect(indicator.exists()).toBe(true)
+    await wrapper.setProps({ modelValue: 'b' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-tab-active="true"]').text()).toBe('Tab B')
+    const ghost = mount(AppTabs, {
+      props: {
+        tabs: [
+          { id: 'a', label: 'A' },
+          { id: 'b', label: 'B', ghosted: true },
+        ],
+        modelValue: 'a',
+      },
+    })
+    await ghost.findAll('button')[1]!.trigger('click')
+    expect(ghost.emitted('update:modelValue')).toBeUndefined()
+    expect(ghost.find('[data-tab-active="true"]').text()).toBe('A')
+    wrapper.unmount()
+    ghost.unmount()
+  })
 })

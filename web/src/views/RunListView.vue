@@ -69,6 +69,19 @@ const projectFilterOpen = ref(false)
 const tagFilterOpen = ref(false)
 const { selectedTags } = useTagFilter()
 
+/** Whole-list fade key when filters/page/sort change (g3.2; no per-row stagger). */
+const listFadeKey = computed(() =>
+  [
+    page.value,
+    selectedWf.value || '',
+    selectedProject.value || '',
+    selectedStatuses.value.slice().sort().join(','),
+    selectedTags.value.slice().sort().join(','),
+    String(route.query.sort || ''),
+    String(route.query.order || ''),
+  ].join('|'),
+)
+
 function parseRunSort(
   sortRaw: unknown,
   orderRaw: unknown,
@@ -521,7 +534,8 @@ onUnmounted(() => {
         {{ emptyMessage }}
       </div>
       <div v-else class="card flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2">
+        <Transition name="ui-fade" mode="out-in">
+        <div :key="listFadeKey" class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2" data-testid="run-list-fade">
         <!--
           custom + navigate (not a real <a>): ops @click.stop must not sit inside
           a native link, or stopPropagation blocks Vue Router's preventDefault and
@@ -538,7 +552,7 @@ onUnmounted(() => {
             role="link"
             :data-href="href"
             tabindex="0"
-            class="flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left no-underline transition hover:border-line-strong hover:bg-elevated"
+            class="list-card-lift flex w-full cursor-pointer flex-col gap-2 rounded-lg border border-line bg-surface p-3 text-left no-underline hover:border-line-strong hover:bg-elevated"
             @click="navigate"
             @keydown.enter.prevent="() => navigate()"
             @mouseenter="prefetchRunDetail"
@@ -611,6 +625,7 @@ onUnmounted(() => {
           </div>
         </RouterLink>
         </div>
+        </Transition>
         <Pagination v-if="total > PAGE_SIZE" v-model:page="page" class="shrink-0" :page-size="PAGE_SIZE" :total="total" />
       </div>
     </div>
@@ -641,6 +656,8 @@ onUnmounted(() => {
       :class="{ 'table-loading': showTableLoading }"
     >
       <div class="min-h-0 flex-1 overflow-auto">
+      <Transition name="ui-fade" mode="out-in">
+      <div :key="listFadeKey" data-testid="run-list-fade-desktop">
       <table class="w-full text-sm">
         <thead>
           <tr class="text-left text-[11px] uppercase tracking-wider text-txt3">
@@ -741,7 +758,7 @@ onUnmounted(() => {
                 role="link"
                 :data-href="href"
                 tabindex="0"
-                class="cursor-pointer border-t border-line transition hover:bg-elevated"
+                class="cursor-pointer border-t border-line transition hover:bg-elevated active:bg-overlay"
                 @click="navigate"
                 @keydown.enter.prevent="() => navigate()"
                 @mouseenter="prefetchRunDetail"
@@ -826,6 +843,8 @@ onUnmounted(() => {
           </template>
         </tbody>
       </table>
+      </div>
+      </Transition>
       </div>
       <Pagination v-if="total > PAGE_SIZE" v-model:page="page" class="shrink-0" :page-size="PAGE_SIZE" :total="total" />
     </div>

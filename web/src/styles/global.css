@@ -26,6 +26,11 @@
   --c-info: 96 165 250;
 
   --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.4), 0 1px 3px 0 rgba(0, 0, 0, 0.25);
+  /* Motion tokens (g1.1): press / control / overlay — keep ≤220ms */
+  --dur-press: 90ms;
+  --dur-ui: 160ms;
+  --dur-overlay: 200ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --flow-dot: #1f1f26;
   --flow-mask: rgba(10, 10, 11, 0.72);
   --grad-logo: linear-gradient(90deg, #7B61FF 0%, #818CF8 35%, #6366F1 55%, #7B61FF 75%, #A78BFA 100%);
@@ -497,9 +502,79 @@ html.light .app-sidebar-card {
   .toast-enter-active,
   .toast-leave-active,
   .home-to-gates-enter-active,
-  .home-to-gates-leave-active {
+  .home-to-gates-leave-active,
+  .ui-fade-enter-active,
+  .ui-fade-leave-active,
+  .overlay-pop-enter-active,
+  .overlay-pop-leave-active,
+  .modal-enter-active,
+  .modal-leave-active,
+  .pub-enter-active,
+  .pub-leave-active,
+  .panel-enter-active,
+  .panel-leave-active {
     transition: none !important;
+    animation: none !important;
   }
+
+  .ui-pressable,
+  .list-card-lift,
+  .app-tabs-indicator,
+  .seg-indicator,
+  .app-select-chevron,
+  .tag-filter-chevron {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ---------- Shared micro-interaction utilities (g1–g3) ---------- */
+.ui-fade-enter-active,
+.ui-fade-leave-active {
+  transition: opacity var(--dur-overlay) var(--ease-out-expo);
+}
+.ui-fade-enter-from,
+.ui-fade-leave-to {
+  opacity: 0;
+}
+
+.overlay-pop-enter-active,
+.overlay-pop-leave-active {
+  transition:
+    opacity var(--dur-overlay) var(--ease-out-expo),
+    transform var(--dur-overlay) var(--ease-out-expo);
+}
+.overlay-pop-enter-from,
+.overlay-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
+}
+
+.ui-pressable {
+  transition:
+    transform var(--dur-press) var(--ease-out-expo),
+    background-color var(--dur-ui) ease,
+    border-color var(--dur-ui) ease,
+    color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease,
+    opacity var(--dur-ui) ease;
+}
+.ui-pressable:not(:disabled):active {
+  transform: scale(0.97) translateY(1px);
+}
+
+.list-card-lift {
+  transition:
+    transform var(--dur-ui) var(--ease-out-expo),
+    border-color var(--dur-ui) ease,
+    background-color var(--dur-ui) ease,
+    box-shadow var(--dur-ui) ease;
+}
+.list-card-lift:hover {
+  transform: translateY(-1px);
+}
+.list-card-lift:active {
+  transform: translateY(0) scale(0.995);
 }
 
 .route-view-wrap {

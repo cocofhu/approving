@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
@@ -56,6 +56,40 @@ function toggleCurrentFavorite() {
 
 type EditorTab = 'canvas' | 'runs' | 'api'
 const activeTab = ref<EditorTab>('canvas')
+const editorTabTrack = ref<HTMLElement | null>(null)
+const editorTabIndicator = ref<Record<string, string>>({
+  opacity: '0',
+  transform: 'translateX(0)',
+  width: '0px',
+})
+
+function updateEditorTabIndicator() {
+  const root = editorTabTrack.value
+  if (!root) return
+  const active = root.querySelector<HTMLElement>('[data-editor-tab-active="true"]')
+  if (!active) {
+    editorTabIndicator.value = { opacity: '0', transform: 'translateX(0)', width: '0px' }
+    return
+  }
+  const left = active.offsetLeft + 8
+  const width = Math.max(0, active.offsetWidth - 16)
+  editorTabIndicator.value = {
+    opacity: '1',
+    transform: `translateX(${left}px)`,
+    width: `${width}px`,
+  }
+}
+
+watch(activeTab, () => {
+  void nextTick(updateEditorTabIndicator)
+})
+onMounted(() => {
+  void nextTick(updateEditorTabIndicator)
+  window.addEventListener('resize', updateEditorTabIndicator)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateEditorTabIndicator)
+})
 
 function initialProjectId(): string {
   const q = typeof route.query.projectId === 'string' ? route.query.projectId : ''
@@ -605,36 +639,45 @@ function deleteEdge() {
     </div>
 
     <!-- editor tabs -->
-    <div class="flex shrink-0 gap-1 border-b border-line bg-surface px-4">
+    <div ref="editorTabTrack" class="relative flex shrink-0 gap-1 border-b border-line bg-surface px-4">
       <button
         class="relative px-3.5 py-2.5 text-sm font-medium transition"
         :class="activeTab === 'canvas' ? 'text-txt' : 'text-txt3 hover:text-txt2'"
+        data-testid="workflow-tab-canvas"
+        :data-editor-tab-active="activeTab === 'canvas' ? 'true' : undefined"
         @click="activeTab = 'canvas'"
       >
         编排
-        <span v-if="activeTab === 'canvas'" class="absolute inset-x-2 bottom-0 h-0.5 bg-accent" />
       </button>
       <button
         class="relative px-3.5 py-2.5 text-sm font-medium transition"
         :class="activeTab === 'runs' ? 'text-txt' : 'text-txt3 hover:text-txt2'"
         :disabled="!wf.id"
+        data-testid="workflow-tab-runs"
+        :data-editor-tab-active="activeTab === 'runs' ? 'true' : undefined"
         @click="activeTab = 'runs'"
       >
         运行记录
-        <span v-if="activeTab === 'runs'" class="absolute inset-x-2 bottom-0 h-0.5 bg-accent" />
       </button>
       <button
         class="relative px-3.5 py-2.5 text-sm font-medium transition"
         :class="activeTab === 'api' ? 'text-txt' : 'text-txt3 hover:text-txt2'"
         :disabled="!wf.id"
+        data-testid="workflow-tab-api"
+        :data-editor-tab-active="activeTab === 'api' ? 'true' : undefined"
         @click="activeTab = 'api'"
       >
         访问 API
-        <span v-if="activeTab === 'api'" class="absolute inset-x-2 bottom-0 h-0.5 bg-accent" />
       </button>
+      <span
+        class="app-tabs-indicator pointer-events-none absolute bottom-0 left-0 h-0.5 rounded-full bg-accent"
+        data-testid="workflow-tabs-indicator"
+        :style="editorTabIndicator"
+        aria-hidden="true"
+      />
     </div>
 
-    <!-- canvas tab -->
+    <!-- canvas tab (v-show keeps Vue Flow state; g4.1) -->
     <div v-show="activeTab === 'canvas'" class="flex min-h-0 flex-1">
       <NodePalette />
       <div class="relative min-w-0 flex-1" data-testid="workflow-editor-canvas-host">
@@ -706,11 +749,21 @@ function deleteEdge() {
       </Transition>
     </div>
 
-    <!-- runs tab -->
-    <WorkflowRunHistoryTab v-if="activeTab === 'runs' && wf.id" :workflow-id="wf.id" class="min-h-0 flex-1" />
-
-    <!-- API tab -->
-    <WorkflowApiTab v-if="activeTab === 'api' && wf.id" :workflow="wf" class="min-h-0 flex-1" />
+    <!-- runs / api tabs: short fade (g4.1) -->
+    <Transition name="ui-fade" mode="out-in">
+      <WorkflowRunHistoryTab
+        v-if="activeTab === 'runs' && wf.id"
+        :key="'runs'"
+        :workflow-id="wf.id"
+        class="min-h-0 flex-1"
+      />
+      <WorkflowApiTab
+        v-else-if="activeTab === 'api' && wf.id"
+        :key="'api'"
+        :workflow="wf"
+        class="min-h-0 flex-1"
+      />
+    </Transition>
 
     <AppModal :open="showPublish" :title="t('pages.workflowEditor.publish.title', { name: wf.name })" :width="440" @close="!saving && (showPublish = false)">
       <Transition name="pub" mode="out-in">
@@ -864,9 +917,16 @@ function deleteEdge() {
 </template>
 
 <style scoped>
+.app-tabs-indicator {
+  transition:
+    transform var(--dur-ui) var(--ease-out-expo),
+    width var(--dur-ui) var(--ease-out-expo),
+    opacity var(--dur-ui) ease;
+}
+
 .panel-enter-active,
 .panel-leave-active {
-  transition: width 0.2s ease, opacity 0.2s ease;
+  transition: width var(--dur-overlay) ease, opacity var(--dur-overlay) ease;
   overflow: hidden;
 }
 .panel-enter-from,
@@ -878,7 +938,7 @@ function deleteEdge() {
 /* publish dialog: confirm <-> success crossfade */
 .pub-enter-active,
 .pub-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity var(--dur-ui) ease, transform var(--dur-ui) ease;
 }
 .pub-enter-from {
   opacity: 0;
@@ -891,7 +951,7 @@ function deleteEdge() {
 
 /* success check pop-in */
 .pub-pop {
-  animation: pub-pop 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: pub-pop var(--dur-overlay) cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes pub-pop {
   0% {

@@ -277,80 +277,87 @@ onBeforeUnmount(() => {
       <span class="min-w-0 flex-1 truncate" :class="isPlaceholder ? 'text-txt3' : ''">
         {{ selectedLabel }}
       </span>
-      <Icon name="chevron-down" :size="14" class="shrink-0 text-txt3" />
+      <Icon
+        name="chevron-down"
+        :size="14"
+        class="app-select-chevron shrink-0 text-txt3"
+        :class="{ 'is-open': open }"
+      />
     </button>
 
     <Teleport to="body">
-      <div
-        v-if="open"
-        ref="panel"
-        class="card app-select-panel flex flex-col overflow-hidden"
-        :aria-label="ariaLabel"
-        data-test="app-select-panel"
-        :style="panelStyle"
-        @click.stop
-      >
-        <div v-if="searchable" class="shrink-0 border-b border-line/70 p-2">
-          <input
-            ref="searchInput"
-            v-model="search"
-            type="search"
-            class="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12px] text-txt outline-none transition placeholder:text-txt3 focus:border-accent"
-            :placeholder="searchPlaceholder || t('common.search.optionPlaceholder')"
-            :aria-label="searchPlaceholder || t('common.search.optionPlaceholder')"
-            autocomplete="off"
-            data-test="app-select-search"
-            @click.stop
-            @input="activeIndex = 0"
-            @keydown="handleListKeydown"
-          />
-        </div>
-
+      <Transition name="overlay-pop">
         <div
-          class="scroll-area min-h-0 flex-1 overflow-y-auto p-1"
-          role="listbox"
+          v-if="open"
+          ref="panel"
+          class="card app-select-panel flex flex-col overflow-hidden"
           :aria-label="ariaLabel"
+          data-test="app-select-panel"
+          :style="panelStyle"
+          @click.stop
         >
-          <button
-            v-for="(row, i) in rows"
-            :key="(row.custom ? 'custom:' : 'opt:') + row.value"
-            type="button"
-            role="option"
-            class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition"
-            :class="[
-              size === 'sm' ? 'text-[12px]' : 'text-sm',
-              row.value === modelValue ? 'text-accent-2' : 'text-txt2',
-              i === activeIndex ? 'bg-accent-dim text-txt' : 'hover:bg-elevated',
-            ]"
-            :aria-selected="row.value === modelValue"
-            :data-test="row.custom ? 'app-select-custom' : `app-select-option-${row.value}`"
-            @click.stop="choose(row.value)"
-          >
-            <span v-if="row.custom" class="min-w-0 flex-1 truncate">
-              {{ t('common.search.useTypedValue', { value: row.value }) }}
-            </span>
-            <span v-else class="min-w-0 flex-1 truncate" v-html="highlight(row.label)" />
-            <span
-              v-if="row.hint"
-              class="min-w-0 shrink-0 truncate text-[11px] text-txt3"
-              v-html="highlight(row.hint)"
+          <div v-if="searchable" class="shrink-0 border-b border-line/70 p-2">
+            <input
+              ref="searchInput"
+              v-model="search"
+              type="search"
+              class="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12px] text-txt outline-none transition placeholder:text-txt3 focus:border-accent"
+              :placeholder="searchPlaceholder || t('common.search.optionPlaceholder')"
+              :aria-label="searchPlaceholder || t('common.search.optionPlaceholder')"
+              autocomplete="off"
+              data-test="app-select-search"
+              @click.stop
+              @input="activeIndex = 0"
+              @keydown="handleListKeydown"
             />
-            <Icon
-              v-if="row.value === modelValue"
-              name="check"
-              :size="14"
-              class="shrink-0 text-accent-2"
-            />
-          </button>
-          <p
-            v-if="!rows.length"
-            class="px-2.5 py-4 text-center text-[12px] text-txt3"
-            :data-test="loading ? 'app-select-loading' : 'app-select-empty'"
+          </div>
+
+          <div
+            class="scroll-area min-h-0 flex-1 overflow-y-auto p-1"
+            role="listbox"
+            :aria-label="ariaLabel"
           >
-            {{ loading ? t('common.search.loadingOptions') : t('common.empty.noMatchingOptions') }}
-          </p>
+            <button
+              v-for="(row, i) in rows"
+              :key="(row.custom ? 'custom:' : 'opt:') + row.value"
+              type="button"
+              role="option"
+              class="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition"
+              :class="[
+                size === 'sm' ? 'text-[12px]' : 'text-sm',
+                row.value === modelValue ? 'text-accent-2' : 'text-txt2',
+                i === activeIndex ? 'bg-accent-dim text-txt' : 'hover:bg-elevated',
+              ]"
+              :aria-selected="row.value === modelValue"
+              :data-test="row.custom ? 'app-select-custom' : `app-select-option-${row.value}`"
+              @click.stop="choose(row.value)"
+            >
+              <span v-if="row.custom" class="min-w-0 flex-1 truncate">
+                {{ t('common.search.useTypedValue', { value: row.value }) }}
+              </span>
+              <span v-else class="min-w-0 flex-1 truncate" v-html="highlight(row.label)" />
+              <span
+                v-if="row.hint"
+                class="min-w-0 shrink-0 truncate text-[11px] text-txt3"
+                v-html="highlight(row.hint)"
+              />
+              <Icon
+                v-if="row.value === modelValue"
+                name="check"
+                :size="14"
+                class="shrink-0 text-accent-2"
+              />
+            </button>
+            <p
+              v-if="!rows.length"
+              class="px-2.5 py-4 text-center text-[12px] text-txt3"
+              :data-test="loading ? 'app-select-loading' : 'app-select-empty'"
+            >
+              {{ loading ? t('common.search.loadingOptions') : t('common.empty.noMatchingOptions') }}
+            </p>
+          </div>
         </div>
-      </div>
+      </Transition>
     </Teleport>
   </div>
 </template>
@@ -360,5 +367,11 @@ onBeforeUnmount(() => {
   background: rgb(var(--c-accent) / 0.35);
   color: inherit;
   padding: 0 1px;
+}
+.app-select-chevron {
+  transition: transform var(--dur-ui) var(--ease-out-expo);
+}
+.app-select-chevron.is-open {
+  transform: rotate(180deg);
 }
 </style>

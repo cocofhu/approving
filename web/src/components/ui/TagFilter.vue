@@ -190,9 +190,15 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <Icon name="tag" :size="15" class="text-txt3" />
       <span class="min-w-0 flex-1 truncate text-left md:flex-none">{{ t('common.tagFilter.label') }}</span>
       <span v-if="hasFilter" class="chip" data-testid="tag-filter-count">{{ modelValue.length }}</span>
-      <Icon name="chevron-down" :size="14" class="shrink-0 text-txt3" />
+      <Icon
+        name="chevron-down"
+        :size="14"
+        class="tag-filter-chevron shrink-0 text-txt3"
+        :class="{ 'is-open': open }"
+      />
     </button>
 
+    <Transition name="overlay-pop">
     <div
       v-if="open"
       class="card absolute left-0 right-0 z-30 mt-1.5 overflow-hidden p-2.5 md:left-auto md:right-0 md:w-72"
@@ -302,5 +308,15 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
         </button>
       </div>
     </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.tag-filter-chevron {
+  transition: transform var(--dur-ui) var(--ease-out-expo);
+}
+.tag-filter-chevron.is-open {
+  transform: rotate(180deg);
+}
+</style>
