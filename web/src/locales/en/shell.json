@@ -63,7 +63,8 @@
       "today": "Today's tokens",
       "running": "Running",
       "queued": "Queued",
-      "compactAria": "Platform status summary"
+      "compactAria": "Platform status summary, open statistics",
+      "openStats": "Open statistics"
     }
   }
 }
