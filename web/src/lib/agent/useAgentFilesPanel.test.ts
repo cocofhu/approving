@@ -51,6 +51,7 @@ function withFilesPanel(isMobile = false) {
 
 describe('useAgentFilesPanel', () => {
   beforeEach(() => {
+    localStorage.clear()
     vi.restoreAllMocks()
   })
 
@@ -95,13 +96,16 @@ describe('useAgentFilesPanel', () => {
   it('uses three-column grid when agentName is set on desktop', async () => {
     const { panel, app } = withFilesPanel()
     await nextTick()
-    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toContain('300px')
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toBe('240px 1fr 28px')
     app.unmount()
   })
 
   it('collapses history column to rail width', async () => {
     const { panel, app } = withFilesPanel()
     await nextTick()
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toBe('240px 1fr 28px')
+    panel.toggleHistoryCollapsed()
+    expect(panel.workspaceGridStyle.value.gridTemplateColumns).toContain('300px')
     panel.toggleHistoryCollapsed()
     expect(panel.workspaceGridStyle.value.gridTemplateColumns).toContain('28px')
     expect(panel.workspaceGridStyle.value.gridTemplateColumns).not.toContain('300px')
