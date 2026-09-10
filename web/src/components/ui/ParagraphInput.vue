@@ -9,7 +9,12 @@ import { useChatImagePreview } from '@/lib/composables/useChatImagePreview'
 import { useImageAttachments } from '@/lib/composables/useImageAttachments'
 import { attachmentDisplayName, isImageAttachment } from '@/lib/shared/attachments'
 import type { ClarifyImage } from '@/lib/shared/types'
-import { applyComposerAutoGrow, PARAGRAPH_AUTO_GROW_MAX, PARAGRAPH_AUTO_GROW_MIN } from '@/lib/inbox/composerAutoGrow'
+import {
+  applyComposerAutoGrow,
+  PARAGRAPH_AUTO_GROW_MAX,
+  PARAGRAPH_AUTO_GROW_MIN,
+  PARAGRAPH_AUTO_GROW_MIN_COMPACT,
+} from '@/lib/inbox/composerAutoGrow'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -17,6 +22,13 @@ const props = defineProps<{
   placeholder?: string
   /** When true, hide image paste/upload UI and only expose textarea. */
   textOnly?: boolean
+  /**
+   * ComposerShell host: full-width multiline textarea, no side-by-side attach.
+   * Attach stays in the shell toolbar via pickFiles().
+   */
+  embedded?: boolean
+  /** Height-constrained hosts (mobile gate drawer): start at two lines, still auto-grows. */
+  compact?: boolean
 }>()
 
 const { t } = useI18n()
@@ -34,11 +46,13 @@ const defaultPlaceholder = computed(() =>
   props.textOnly ? t('common.paragraphInput.placeholderTextOnly') : t('common.paragraphInput.placeholderWithImages'),
 )
 
+const autoGrowMin = computed(() => (props.compact ? PARAGRAPH_AUTO_GROW_MIN_COMPACT : PARAGRAPH_AUTO_GROW_MIN))
+
 function autoGrow() {
   const el = textareaRef.value
   if (!el) return
   overflowScroll.value = applyComposerAutoGrow(el, {
-    min: PARAGRAPH_AUTO_GROW_MIN,
+    min: autoGrowMin.value,
     max: PARAGRAPH_AUTO_GROW_MAX,
     emptyHint: props.placeholder || defaultPlaceholder.value,
   })
@@ -84,6 +98,12 @@ onBeforeUnmount(() => {
   composerResizeObserver?.disconnect()
   composerResizeObserver = null
 })
+
+function pickFiles() {
+  fileInput.value?.click()
+}
+
+defineExpose({ pickFiles })
 </script>
 
 <template>
@@ -128,10 +148,10 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
-    <div class="flex min-w-0 items-end gap-2">
+    <div :class="embedded ? 'min-w-0' : 'flex min-w-0 items-end gap-2'">
       <input v-if="!textOnly" ref="fileInput" type="file" multiple class="hidden" @change="onPickFiles" />
       <button
-        v-if="!textOnly"
+        v-if="!textOnly && !embedded"
         type="button"
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line text-txt2 hover:border-line-strong disabled:opacity-50"
         data-testid="paragraph-input-attach"
@@ -145,8 +165,15 @@ onBeforeUnmount(() => {
         ref="textareaRef"
         v-model="text"
         data-testid="paragraph-input"
-        class="input composer-hint-wrap min-h-[72px] min-w-0 flex-1 resize-none disabled:opacity-60"
-        :class="overflowScroll ? 'scroll-area max-h-[320px] overflow-y-auto' : 'overflow-y-hidden'"
+        :rows="compact ? 2 : 3"
+        class="composer-hint-wrap min-w-0 w-full resize-none disabled:opacity-60"
+        :class="[
+          embedded
+            ? 'border-0 bg-transparent p-0 text-sm text-txt shadow-none outline-none focus:ring-0'
+            : 'input flex-1',
+          compact ? 'min-h-[40px]' : 'min-h-[72px]',
+          overflowScroll ? 'scroll-area max-h-[320px] overflow-y-auto' : 'overflow-y-hidden',
+        ]"
         :disabled="disabled"
         :placeholder="placeholder || defaultPlaceholder"
         @input="onTextInput"

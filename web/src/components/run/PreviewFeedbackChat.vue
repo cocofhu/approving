@@ -322,7 +322,7 @@ defineExpose({
       {{ t(copyKey('empty')) }}
     </div>
 
-    <div class="shrink-0 border-t border-line p-3">
+    <div v-if="!hideSubmit" class="shrink-0 border-t border-line p-3">
       <div
         v-if="selector || elementImage"
         class="mb-2 flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-2 py-1"

@@ -164,7 +164,7 @@ const PreviewFeedbackStub = defineComponent({
       :data-fill-sidebar="fillSidebar ? '1' : '0'"
       :data-hide-submit="hideSubmit ? '1' : '0'"
     >
-      <div data-testid="paragraph-input-root" data-text-only="0">
+      <div v-if="!hideSubmit" data-testid="paragraph-input-root" data-text-only="0">
         <button
           type="button"
           data-testid="paragraph-input-attach"
@@ -194,12 +194,30 @@ const PlanStub = defineComponent({
 
 const ParagraphInputStub = defineComponent({
   name: 'ParagraphInput',
-  props: { text: String, images: Array, textOnly: Boolean, placeholder: String },
+  props: {
+    text: String,
+    images: Array,
+    textOnly: Boolean,
+    placeholder: String,
+    embedded: Boolean,
+    compact: Boolean,
+    disabled: Boolean,
+  },
   emits: ['update:text', 'update:images'],
+  setup(props, { emit, expose }) {
+    expose({
+      pickFiles: () => emit('update:images', [{ data: 'abc', mimeType: 'image/png' }]),
+    })
+    return {}
+  },
   template: `
-    <div data-testid="paragraph-input-root" :data-text-only="textOnly ? '1' : '0'">
+    <div
+      data-testid="paragraph-input-root"
+      :data-text-only="textOnly ? '1' : '0'"
+      :data-compact="compact ? '1' : '0'"
+    >
       <button
-        v-if="!textOnly"
+        v-if="!textOnly && !embedded"
         type="button"
         data-testid="paragraph-input-attach"
         @click="$emit('update:images', [{ data: 'abc', mimeType: 'image/png' }])"
@@ -2785,6 +2803,15 @@ describe('GateApproval mobileFillRemaining layout', () => {
     // Narrow hot reject must allow attachments (f9/f10/s7) — not text-only.
     expect(sidebar.find('[data-testid="paragraph-input-root"]').attributes('data-text-only')).toBe('0')
     expect(sidebar.find('[data-testid="paragraph-input-attach"]').exists()).toBe(true)
+    // The composer shell must stay compact and leave the review history a floor,
+    // otherwise the drawer squeezes mobile-fill-feedback to height 0 (g2.2).
+    expect(sidebar.find('[data-testid="composer-shell-toolbar"]').classes()).toContain('h-9')
+    expect(sidebar.find('[data-testid="paragraph-input-root"]').attributes('data-compact')).toBe('1')
+    expect(sidebar.find('[data-testid="mobile-fill-feedback"]').classes()).toEqual(
+      expect.arrayContaining(['min-h-[52px]', 'flex-1']),
+    )
+    // No pins yet → the collapsed comment/artifact panel must not steal drawer rows.
+    expect(sidebar.find('[data-testid="comment-artifact-sidebar"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
