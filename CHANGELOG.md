@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.7-beta — 2026-09-10
+
+- Public beta follow-up on [`v0.3.7-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.7-beta)
+  (relative to `v0.3.6-beta`: PRs #526–#529). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.7-beta` (tag publish does not rewrite these files).
+- Highlights: home pipeline cards show project name; baseline workflow create
+  requires a name; Prompts tab no longer false-dirties Agent Studio; unified
+  embedded composer toolbar.
+
 ## 0.3.6-beta — 2026-09-09
 
 - Public beta follow-up on [`v0.3.6-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.6-beta)
