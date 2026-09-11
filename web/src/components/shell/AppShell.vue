@@ -239,7 +239,7 @@ onUnmounted(() => stopShutdownPolling())
 <style scoped>
 .drawer-fade-enter-active,
 .drawer-fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dur-overlay) var(--ease-out-expo);
 }
 .drawer-fade-enter-from,
 .drawer-fade-leave-to {
@@ -247,7 +247,7 @@ onUnmounted(() => stopShutdownPolling())
 }
 .drawer-slide-enter-active,
 .drawer-slide-leave-active {
-  transition: transform 0.25s ease;
+  transition: transform var(--dur-overlay) var(--ease-out-expo);
 }
 .drawer-slide-enter-from,
 .drawer-slide-leave-to {

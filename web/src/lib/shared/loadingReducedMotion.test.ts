@@ -21,7 +21,7 @@ describe('global loading reduced-motion (g4.4)', () => {
     expect(css).toMatch(/transition:\s*none/)
   })
 
-  it('defines motion tokens and gates new Transition classes (g1.1 / g1.2)', () => {
+  it('defines motion tokens and gates new Transition classes (g1.1 / g1.2 / g3.2)', () => {
     expect(css).toMatch(/--dur-press:\s*90ms/)
     expect(css).toMatch(/--dur-ui:\s*160ms/)
     expect(css).toMatch(/--dur-overlay:\s*200ms/)
@@ -30,5 +30,25 @@ describe('global loading reduced-motion (g4.4)', () => {
     expect(css).toMatch(/\.overlay-pop-enter-active/)
     expect(css).toMatch(/\.ui-pressable/)
     expect(css).toMatch(/\.list-card-lift/)
+    expect(css).toMatch(/\.ui-tip-fade-enter-active/)
+    expect(css).toMatch(/\.ui-fold-chevron/)
+    expect(css).toMatch(/\.ui-fold\b/)
+    expect(css).toMatch(/\.ui-tip-fade-enter-active[\s\S]*transition:\s*none/)
+    expect(css).toMatch(/\.ui-fold-chevron[\s\S]*transition:\s*none/)
+  })
+
+  it('source-contracts: filters / board card / lang select use overlay-pop or list-card-lift (g1.1 / g2.1)', () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), '../..')
+    const read = (rel: string) => readFileSync(join(root, rel), 'utf8')
+    expect(read('components/ui/ProjectFilter.vue')).toMatch(/name="overlay-pop"/)
+    expect(read('components/ui/StatusFilter.vue')).toMatch(/name="overlay-pop"/)
+    expect(read('components/ui/PipelineFilter.vue')).toMatch(/name="overlay-pop"/)
+    expect(read('components/ui/LangSelect.vue')).toMatch(/name="overlay-pop"/)
+    expect(read('components/board/RunBoardCard.vue')).toMatch(/list-card-lift/)
+    expect(read('components/board/RunBoardCard.vue')).not.toMatch(/translateY\(-1px\)/)
+    expect(read('components/ui/AppModal.vue')).toMatch(/var\(--dur-overlay\)/)
+    expect(read('components/ui/AppDrawer.vue')).toMatch(/var\(--dur-overlay\)/)
+    expect(read('components/ui/ToastHost.vue')).toMatch(/var\(--dur-overlay\)/)
+    expect(read('components/shell/AppShell.vue')).toMatch(/var\(--dur-overlay\)/)
   })
 })

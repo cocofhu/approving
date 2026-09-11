@@ -103,7 +103,7 @@ defineExpose({
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
   <div
-    class="min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-[220ms] ease-in-out"
+    class="min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-[var(--dur-ui)] ease-[var(--ease-out-expo)]"
     :class="isMobile ? 'flex flex-col' : 'grid'"
     :style="isMobile ? undefined : workspaceGridStyle"
   >

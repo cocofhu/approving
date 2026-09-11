@@ -104,58 +104,60 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <span v-if="count != null" class="text-xs text-txt3">{{ count }}</span>
       <Icon name="chevron-down" :size="12" class="opacity-60" />
     </button>
-    <div
-      v-if="open"
-      class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-lg border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
-      data-testid="project-filter-panel"
-      @click.stop
-    >
-      <template v-if="loadError">
-        <AppInlineError :title="t('common.projectFilter.loadFailed')" :message="loadError" @retry="loadProjects" />
-      </template>
+    <Transition name="overlay-pop">
       <div
-        v-else-if="loading"
-        class="flex flex-col items-center justify-center gap-2 px-2 py-8 text-[12px] text-txt3"
-        role="status"
-        aria-busy="true"
-        data-testid="project-filter-loading"
+        v-if="open"
+        class="scroll-area absolute left-0 right-0 z-40 mt-1 max-h-72 overflow-auto rounded-lg border border-line-strong bg-surface p-1 shadow-lg md:left-auto md:right-0 md:w-64"
+        data-testid="project-filter-panel"
+        @click.stop
       >
-        <AppSpinner :size="16" class="animate-spin text-accent" />
-        <span>{{ t('common.loading.inProgress') }}</span>
-      </div>
-      <template v-else>
-        <input
-          v-model="search"
-          type="search"
-          class="mb-1 w-full rounded border border-line bg-elevated px-2 py-1.5 text-sm text-txt outline-none focus:border-accent"
-          :placeholder="t('common.projectFilter.searchPlaceholder')"
-        />
-        <button
-          type="button"
-          class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
-          :class="!modelValue ? 'text-accent-2' : 'text-txt2'"
-          @click="choose('')"
+        <template v-if="loadError">
+          <AppInlineError :title="t('common.projectFilter.loadFailed')" :message="loadError" @retry="loadProjects" />
+        </template>
+        <div
+          v-else-if="loading"
+          class="flex flex-col items-center justify-center gap-2 px-2 py-8 text-[12px] text-txt3"
+          role="status"
+          aria-busy="true"
+          data-testid="project-filter-loading"
         >
-          {{ t('common.projectFilter.all') }}
-        </button>
-        <button
-          v-for="p in filtered"
-          :key="p.id"
-          type="button"
-          class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
-          :class="modelValue === p.id ? 'text-accent-2' : 'text-txt2'"
-          @click="choose(p.id)"
-        >
-          <span class="truncate">{{ p.name }}</span>
-        </button>
-        <EmptyState
-          v-if="!projects.length && !search.trim()"
-          :title="t('common.projectFilter.empty')"
-        />
-        <div v-else-if="!filtered.length" class="px-2 py-2 text-xs text-txt3">
-          {{ t('common.projectFilter.noMatch') }}
+          <AppSpinner :size="16" class="animate-spin text-accent" />
+          <span>{{ t('common.loading.inProgress') }}</span>
         </div>
-      </template>
-    </div>
+        <template v-else>
+          <input
+            v-model="search"
+            type="search"
+            class="mb-1 w-full rounded border border-line bg-elevated px-2 py-1.5 text-sm text-txt outline-none focus:border-accent"
+            :placeholder="t('common.projectFilter.searchPlaceholder')"
+          />
+          <button
+            type="button"
+            class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
+            :class="!modelValue ? 'text-accent-2' : 'text-txt2'"
+            @click="choose('')"
+          >
+            {{ t('common.projectFilter.all') }}
+          </button>
+          <button
+            v-for="p in filtered"
+            :key="p.id"
+            type="button"
+            class="flex w-full items-center rounded px-2 py-1.5 text-left text-sm transition hover:bg-elevated"
+            :class="modelValue === p.id ? 'text-accent-2' : 'text-txt2'"
+            @click="choose(p.id)"
+          >
+            <span class="truncate">{{ p.name }}</span>
+          </button>
+          <EmptyState
+            v-if="!projects.length && !search.trim()"
+            :title="t('common.projectFilter.empty')"
+          />
+          <div v-else-if="!filtered.length" class="px-2 py-2 text-xs text-txt3">
+            {{ t('common.projectFilter.noMatch') }}
+          </div>
+        </template>
+      </div>
+    </Transition>
   </div>
 </template>

@@ -35,11 +35,11 @@ const emit = defineEmits<{ (e: 'close'): void }>()
 <style scoped>
 .drawer-enter-active,
 .drawer-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dur-overlay) var(--ease-out-expo);
 }
 .drawer-enter-active > div:last-child,
 .drawer-leave-active > div:last-child {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--dur-overlay) var(--ease-out-expo);
 }
 .drawer-enter-from,
 .drawer-leave-to {

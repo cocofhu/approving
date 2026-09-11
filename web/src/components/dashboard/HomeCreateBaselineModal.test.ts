@@ -209,8 +209,8 @@ describe('HomeCreateBaselineModal motion + regression (plan g3.4 / g4.2)', () =>
     expect(modalSrc).toMatch(/prefers-reduced-motion[\s\S]*animation:\s*none/)
     expect(modalSrc).not.toMatch(/from-scratch|new-workflow-scratch|从零开始/)
     const appModalSrc = readFileSync(join(dir, '../ui/AppModal.vue'), 'utf8')
-    expect(appModalSrc).toMatch(/transition:\s*opacity 0\.2s ease/)
-    expect(appModalSrc).toMatch(/transition:\s*transform 0\.22s/)
+    expect(appModalSrc).toMatch(/transition:\s*opacity var\(--dur-overlay\)/)
+    expect(appModalSrc).toMatch(/transition:\s*transform var\(--dur-overlay\)/)
     expect(appModalSrc).toMatch(/translateY\(12px\) scale\(0\.98\)/)
   })
 
