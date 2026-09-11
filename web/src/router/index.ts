@@ -26,7 +26,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/gates', name: 'gates', component: () => import('@/views/GatesInboxView.vue'), meta: { titleKey: 'route.gates' } },
   { path: '/artifacts', name: 'artifacts', component: () => import('@/views/ArtifactsView.vue'), meta: { titleKey: 'route.artifacts' } },
   { path: '/notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { titleKey: 'route.notifications' } },
-  { path: '/agents', name: 'agents', component: () => import('@/views/AgentsRedirectView.vue'), meta: { titleKey: 'route.agents' } },
+  { path: '/agents', name: 'agents', component: () => import('@/views/AgentStudioView.vue'), meta: { titleKey: 'route.agents' } },
   { path: '/sandboxes', name: 'sandboxes', component: () => import('@/views/SandboxListView.vue'), meta: { titleKey: 'route.sandboxes' } },
   { path: '/sandboxes/:id/console', name: 'sandbox-console', component: () => import('@/views/SandboxConsoleView.vue'), meta: { titleKey: 'route.sandboxConsole', full: true } },
   // plan g1.2 / g1.3: retire standalone pages; redirect old bookmarks into settings

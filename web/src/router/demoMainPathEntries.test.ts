@@ -10,7 +10,7 @@ const routerSrc = readFileSync(join(here, 'index.ts'), 'utf8')
 /** Demo 主路径：三入口（Studio / Run / Gates）路由仍可切换。 */
 describe('Demo main-path three entries (g6.2)', () => {
   it('keeps Agent Studio, Run detail, and Gates inbox routes', () => {
-    expect(routerSrc).toMatch(/path: '\/agents'[\s\S]*AgentsRedirectView/)
+    expect(routerSrc).toMatch(/path: '\/agents'[\s\S]*AgentStudioView/)
     expect(routerSrc).toMatch(/path: '\/runs\/:id'[\s\S]*RunDetailView/)
     expect(routerSrc).toMatch(/path: '\/gates'[\s\S]*GatesInboxView/)
   })

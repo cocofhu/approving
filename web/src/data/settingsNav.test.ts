@@ -13,6 +13,7 @@ describe('settingsNav (plan g2.1 / g2.2 / g2.3)', () => {
       'nav.notifications',
       'nav.stats',
       'nav.artifacts',
+      'nav.agents',
       'nav.sandboxes',
       'nav.general',
       'nav.platformRules',
@@ -23,6 +24,7 @@ describe('settingsNav (plan g2.1 / g2.2 / g2.3)', () => {
       '/notifications',
       '/stats',
       '/artifacts',
+      '/agents',
       '/sandboxes',
       '/settings',
       '/settings/platform-rules',
@@ -36,6 +38,7 @@ describe('settingsNav (plan g2.1 / g2.2 / g2.3)', () => {
     expect(isSettingsChrome('/projects')).toBe(true)
     expect(isSettingsChrome('/projects/abc')).toBe(true)
     expect(isSettingsChrome('/notifications')).toBe(true)
+    expect(isSettingsChrome('/agents')).toBe(true)
     expect(isSettingsChrome('/dashboard')).toBe(false)
     expect(isSettingsChrome('/gates')).toBe(false)
     expect(isSettingsChrome('/runs')).toBe(false)
