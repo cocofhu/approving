@@ -536,37 +536,56 @@ onBeforeUnmount(() => {
           </div>
           <div
             data-testid="run-stats-split"
-            class="relative flex min-h-0 min-w-0 w-full max-w-full flex-1"
-            :class="statsTab === 'single' ? 'flex-col md:flex-row' : 'flex-col'"
+            class="relative flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col"
           >
-            <div
-              v-if="statsTab === 'single'"
-              class="relative min-h-[240px] min-w-0 flex-1 border-b border-line md:min-h-0 md:border-b-0 md:border-r"
-            >
-              <ExecutionTimeline
-                :run="run"
-                :nodes="wf.nodes"
-                :selected-node-id="null"
-                :selected-exec-idx="-1"
-                :interactive="false"
-                :now-ms="nowMs"
-              />
-            </div>
-            <div
-              data-testid="run-stats-panel-wrap"
-              class="flex min-h-[320px] min-w-0 w-full max-w-full shrink-0 flex-col bg-surface md:min-h-0"
-              :class="statsTab === 'single' ? 'md:w-[min(520px,46%)]' : 'min-w-0 flex-1'"
-            >
-              <ExecutionStatsPanel
-                :run="run"
-                :nodes="wf.nodes"
-                :wall-sec="elapsedSec"
-                :now-ms="nowMs"
-                :stats-tab="statsTab"
-                :unknown-model-display-name="unknownModelDisplayName"
-                @update:stats-tab="statsTab = $event"
-              />
-            </div>
+            <Transition name="ui-fade" mode="out-in">
+              <div
+                v-if="statsTab === 'single'"
+                key="stats-single"
+                class="relative flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col md:flex-row"
+              >
+                <div class="relative min-h-[240px] min-w-0 flex-1 border-b border-line md:min-h-0 md:border-b-0 md:border-r">
+                  <ExecutionTimeline
+                    :run="run"
+                    :nodes="wf.nodes"
+                    :selected-node-id="null"
+                    :selected-exec-idx="-1"
+                    :interactive="false"
+                    :now-ms="nowMs"
+                  />
+                </div>
+                <div
+                  data-testid="run-stats-panel-wrap"
+                  class="flex min-h-[320px] min-w-0 w-full max-w-full shrink-0 flex-col bg-surface md:min-h-0 md:w-[min(520px,46%)]"
+                >
+                  <ExecutionStatsPanel
+                    :run="run"
+                    :nodes="wf.nodes"
+                    :wall-sec="elapsedSec"
+                    :now-ms="nowMs"
+                    :stats-tab="statsTab"
+                    :unknown-model-display-name="unknownModelDisplayName"
+                    @update:stats-tab="statsTab = $event"
+                  />
+                </div>
+              </div>
+              <div
+                v-else
+                key="stats-multi"
+                data-testid="run-stats-panel-wrap"
+                class="flex min-h-[320px] min-w-0 w-full max-w-full flex-1 flex-col bg-surface md:min-h-0"
+              >
+                <ExecutionStatsPanel
+                  :run="run"
+                  :nodes="wf.nodes"
+                  :wall-sec="elapsedSec"
+                  :now-ms="nowMs"
+                  :stats-tab="statsTab"
+                  :unknown-model-display-name="unknownModelDisplayName"
+                  @update:stats-tab="statsTab = $event"
+                />
+              </div>
+            </Transition>
           </div>
         </div>
       </template>
@@ -875,17 +894,21 @@ onBeforeUnmount(() => {
       <div class="flex h-full flex-col">
         <div class="px-3 pt-2"><AppTabs :tabs="detailTabs" v-model="detailTab" /></div>
         <div class="min-h-0 flex-1">
-          <StateTracePanel v-if="detailTab === 'trace'" :trace="run.trace || []" />
-          <VariablesPanel v-else-if="detailTab === 'vars'" :vars="run.vars || []" />
-          <RunSandboxEnvPanel
-            v-else-if="detailTab === 'sandboxEnv'"
-            :entries="run.sandboxEnv || []"
-          />
-          <ArtifactPanel
-            v-else-if="detailTab === 'artifacts'"
-            :artifacts="run.artifacts"
-            @deleted="onArtifactDeleted"
-          />
+          <Transition name="ui-fade" mode="out-in">
+            <StateTracePanel v-if="detailTab === 'trace'" key="trace" :trace="run.trace || []" />
+            <VariablesPanel v-else-if="detailTab === 'vars'" key="vars" :vars="run.vars || []" />
+            <RunSandboxEnvPanel
+              v-else-if="detailTab === 'sandboxEnv'"
+              key="sandboxEnv"
+              :entries="run.sandboxEnv || []"
+            />
+            <ArtifactPanel
+              v-else-if="detailTab === 'artifacts'"
+              key="artifacts"
+              :artifacts="run.artifacts"
+              @deleted="onArtifactDeleted"
+            />
+          </Transition>
         </div>
       </div>
     </AppDrawer>

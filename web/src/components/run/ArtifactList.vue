@@ -281,19 +281,20 @@ watch(
             <Icon
               name="chevron-down"
               :size="12"
-              class="shrink-0 text-txt3 transition-transform"
+              class="ui-fold-chevron shrink-0 text-txt3"
               :class="isRunCollapsed(sec.runId) ? '-rotate-90' : ''"
             />
             <span class="min-w-0 flex-1 truncate" :title="runLabel(sec)">{{ runLabel(sec) }}</span>
             <span class="shrink-0 text-[10px] tabular-nums text-txt3">{{ runCountLabel(sec) }}</span>
           </button>
-          <div v-show="!isRunCollapsed(sec.runId)">
+          <div class="ui-fold" :class="{ 'is-open': !isRunCollapsed(sec.runId) }">
+            <div class="ui-fold-inner">
             <button
               v-for="a in sec.items"
               v-show="matchArt(a, runLabel(sec))"
               :key="a.id"
-              class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition"
-              :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:bg-elevated'"
+              class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-[background-color,border-color] duration-[var(--dur-ui)] ease-out"
+              :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:border-line-strong hover:bg-elevated'"
               @click="emit('select', a)"
             >
               <div class="flex h-8 w-8 items-center justify-center rounded-md bg-n-artifact/15 text-n-artifact">
@@ -307,6 +308,7 @@ watch(
               </div>
               <Icon name="chevron-right" :size="14" class="text-txt3" />
             </button>
+            </div>
           </div>
         </div>
       </template>
@@ -315,8 +317,8 @@ watch(
         <button
           v-for="a in plainItems"
           :key="a.id"
-          class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition"
-          :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:bg-elevated'"
+          class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-[background-color,border-color] duration-[var(--dur-ui)] ease-out"
+          :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:border-line-strong hover:bg-elevated'"
           @click="emit('select', a)"
         >
           <div class="flex h-8 w-8 items-center justify-center rounded-md bg-n-artifact/15 text-n-artifact">
@@ -343,18 +345,19 @@ watch(
             <Icon
               name="chevron-down"
               :size="12"
-              class="shrink-0 text-txt3 transition-transform"
+              class="ui-fold-chevron shrink-0 text-txt3"
               :class="feedbackOpen ? '' : '-rotate-90'"
             />
             <span class="min-w-0 flex-1 truncate">{{ t('pages.artifactList.feedbackGroup') }}</span>
             <span class="shrink-0 text-[10px] tabular-nums text-txt3">{{ feedbackItems.length }}</span>
           </button>
-          <div v-show="feedbackOpen" class="mt-1">
+          <div class="ui-fold mt-1" :class="{ 'is-open': feedbackOpen }">
+            <div class="ui-fold-inner">
             <button
               v-for="a in feedbackItems"
               :key="a.id"
-              class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition"
-              :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:bg-elevated'"
+              class="mb-1.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left transition-[background-color,border-color] duration-[var(--dur-ui)] ease-out"
+              :class="activeId === a.id ? 'border-accent/50 bg-accent-dim/40' : 'border-line hover:border-line-strong hover:bg-elevated'"
               @click="emit('select', a)"
             >
               <div class="flex h-8 w-8 items-center justify-center rounded-md bg-n-artifact/15 text-n-artifact">
@@ -366,6 +369,7 @@ watch(
               </div>
               <Icon name="chevron-right" :size="14" class="text-txt3" />
             </button>
+            </div>
           </div>
         </div>
       </template>

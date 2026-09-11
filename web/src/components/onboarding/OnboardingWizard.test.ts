@@ -308,8 +308,8 @@ describe('OnboardingWizard', () => {
     await wrapper.find('[data-testid="onboarding-project-name"]').setValue('支付中台')
     await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
     await nextTick()
-    // language → overview → acp → apiKey
-    for (let i = 0; i < 3; i++) {
+    // overview → acp → apiKey (no language step in createProject)
+    for (let i = 0; i < 2; i++) {
       await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
       await nextTick()
     }
@@ -363,10 +363,28 @@ describe('OnboardingWizard', () => {
     await wrapper.find('[data-testid="onboarding-project-name"]').setValue('支付中台')
     await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
     await nextTick()
-    await wrapper.find('[data-testid="onboarding-next"]').trigger('click')
-    await nextTick()
+    // projectName → overview directly (no language step)
     expect(wrapper.find('[data-testid="onboarding-overview-agents"]').text()).toBe(
       'pages.onboarding.overview.agentsListDerived',
     )
+  })
+
+  it('createProject skips language step and does not overwrite approving-locale (g2.1)', async () => {
+    localStorage.setItem('approving-locale', 'zh-CN')
+    const { locale } = await import('@/lib/shared/locale')
+    locale.value = 'zh-CN'
+    vi.stubGlobal('navigator', { language: 'en-US' })
+
+    const wrapper = await mountWizard({ mode: 'createProject', projectId: '' })
+    expect(wrapper.find('[data-testid="onboarding-language-zh-CN"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="onboarding-project-name"]').exists()).toBe(true)
+    expect(localStorage.getItem('approving-locale')).toBe('zh-CN')
+    expect(locale.value).toBe('zh-CN')
+
+    await wrapper.find('[data-testid="onboarding-later"]').trigger('click')
+    await nextTick()
+    expect(localStorage.getItem('approving-locale')).toBe('zh-CN')
+    expect(locale.value).toBe('zh-CN')
+    vi.unstubAllGlobals()
   })
 })
