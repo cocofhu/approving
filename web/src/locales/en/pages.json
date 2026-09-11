@@ -992,7 +992,7 @@
       "varsEmptyTitle": "No workflow variables yet",
       "varsEmptyDesc": "Add a row to configure project-level defaults.",
       "sharedAgent": {
-        "extendHint": "Project Runs and project-context chat tests extend this shared config first, then the chosen Agent overlays same-named keys (Agent wins). Chat tests start only from this panel.",
+        "extendHint": "Project Runs and Agents → Chat test extend this shared config first, then the chosen Agent overlays same-named keys (Agent wins).",
         "discard": "Discard",
         "defaultProjectId": "Default project ID",
         "defaultProjectIdDesc": "Stored as defaultProjectId; may fill in when an Agent has no home project.",
@@ -1002,6 +1002,11 @@
         "testHint": "Only Agents bound to this project are listed. Starts with the shared baseline, then overlays the selected Agent.",
         "noAgents": "No Agents yet — create one in Agent Studio first.",
         "noProjectAgents": "No Agents are bound to this project yet. Open Agent management and bind this project in the Agent’s meta tab, then try again."
+      },
+      "agents": {
+        "metaTab": "Meta",
+        "testTab": "Chat test",
+        "noAgentForTest": "No Agents are bound to this project yet. Create or bind an Agent under Meta, then open Chat test."
       },
       "varName": "Name",
       "varValue": "Default",
@@ -1697,7 +1702,7 @@
     "sandboxes": {
       "title": "Sandboxes",
       "errorPrefix": "Error:",
-      "empty": "No sandboxes. Created on workflow runs or from Project detail → Shared Agent config → Chat test.",
+      "empty": "No sandboxes. Created on workflow runs or from Project detail → Agents → Chat test.",
       "copyId": "Copy ID",
       "copied": "Copied",
       "destroy": "Destroy",
@@ -3592,7 +3597,7 @@
       "destroy": "End & destroy",
       "acpSession": "ACP session",
       "idleHint": "Start a sandbox bound to “{profile}” (workspace / MCP / env) for multi-turn chat testing.",
-      "missingCreateTest": "Chat test launcher not configured. Open Project shared Agent config.",
+      "missingCreateTest": "Chat test launcher not configured. Open Project detail → Agents → Chat test.",
       "mode": {
         "sectionLabel": "Workspace mode",
         "empty": {

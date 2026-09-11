@@ -96,7 +96,7 @@ describe('ProjectDetailView meta tab keeps existing chrome and save semantics (g
     const shared = detailSrc.slice(sharedStart, variablesStart)
     const variables = detailSrc.slice(variablesStart, auditStart)
 
-    expect(agents).toMatch(/AgentStudioView/)
+    expect(agents).toMatch(/ProjectAgentsPanel/)
     expect(agents).toMatch(/data-testid="project-agents-tab"/)
     expect(agents).toMatch(/class="flex min-h-0 flex-1 flex-col"/)
 

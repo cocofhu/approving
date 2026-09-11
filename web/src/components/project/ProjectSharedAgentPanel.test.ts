@@ -63,77 +63,26 @@ function mountPanel(projectId = 'proj-a') {
   })
 }
 
-describe('ProjectSharedAgentPanel chat test picker', () => {
+describe('ProjectSharedAgentPanel without chat test (g2.1)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.getProjectSharedAgentConfig.mockResolvedValue(sharedCfg)
+    apiMocks.listAgents.mockResolvedValue([{ name: 'mine', projectId: 'proj-a' }])
   })
 
-  it('lists only agents bound to the current project', async () => {
-    apiMocks.listAgents.mockResolvedValue([
-      { name: 'mine', projectId: 'proj-a' },
-      { name: 'other', projectId: 'proj-b' },
-      { name: 'free' },
-    ])
-    const wrapper = mountPanel('proj-a')
-    await flushPromises()
-    await wrapper.get('[data-testid="shared-agent-subtab-test"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="project-agent-select-trigger"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="project-agent-select-option-mine"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="project-agent-select-option-other"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="shared-agent-chat-tester"]').text()).toBe('mine')
-    wrapper.unmount()
-  })
-
-  it('replaces the standalone hint with an accessible help disclosure', async () => {
-    apiMocks.listAgents.mockResolvedValue([])
+  it('keeps config subtabs and removes dialogue-test entry', async () => {
     const wrapper = mountPanel()
     await flushPromises()
-
-    expect(wrapper.find('[data-testid="shared-agent-hint"]').exists()).toBe(false)
-    const help = wrapper.get('[data-testid="shared-agent-help"]')
-    const summary = help.get('summary')
-    expect(summary.text()).toBe('?')
-    expect(summary.attributes('aria-label')).toContain('extend')
-    expect(summary.classes()).toEqual(expect.arrayContaining(['h-[18px]', 'w-[18px]']))
-    expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).toContain('extend')
-    expect(wrapper.get('[data-testid="project-shared-agent-panel"]').classes()).toEqual(
-      expect.arrayContaining(['min-h-0', 'flex-1']),
-    )
-    wrapper.unmount()
-  })
-
-  it('shows empty state when no project-bound agents exist', async () => {
-    apiMocks.listAgents.mockResolvedValue([
-      { name: 'other', projectId: 'proj-b' },
-    ])
-    const wrapper = mountPanel('proj-a')
-    await flushPromises()
-    await wrapper.get('[data-testid="shared-agent-subtab-test"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="shared-agent-test-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shared-agent-subtab-files"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shared-agent-subtab-mcp"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shared-agent-subtab-env"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shared-agent-subtab-prompts"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shared-agent-subtab-meta"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="shared-agent-subtab-test"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="shared-agent-chat-tester"]').exists()).toBe(false)
-    wrapper.unmount()
-  })
-
-  it('filters combobox candidates and drives tester selection', async () => {
-    apiMocks.listAgents.mockResolvedValue([
-      { name: 'alpha', projectId: 'proj-a' },
-      { name: 'beta', projectId: 'proj-a' },
-    ])
-    const wrapper = mountPanel('proj-a')
-    await flushPromises()
-    await wrapper.get('[data-testid="shared-agent-subtab-test"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="project-agent-select-trigger"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="project-agent-select-search"]').setValue('beta')
-    await flushPromises()
-    await wrapper.get('[data-testid="project-agent-select-option-beta"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="shared-agent-chat-tester"]').text()).toBe('beta')
+    expect(wrapper.find('[data-testid="shared-agent-test-pick"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).toContain('智能体 → 对话测试')
+    expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).not.toContain('仅在此入口')
     wrapper.unmount()
   })
 })

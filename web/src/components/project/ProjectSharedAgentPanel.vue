@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import AgentFilesPanel from '@/components/agent/AgentFilesPanel.vue'
 import AgentMcpPanel from '@/components/agent/AgentMcpPanel.vue'
 import AgentEnvPanel from '@/components/agent/AgentEnvPanel.vue'
 import AgentPromptsPanel from '@/components/agent/AgentPromptsPanel.vue'
-import AgentChatTester from '@/components/agent/AgentChatTester.vue'
-import ProjectAgentSelect from '@/components/project/ProjectAgentSelect.vue'
-import { api, type CreateAgentTestPayload, type ProjectSharedAgentConfig, type SandboxView } from '@/lib/api/api'
+import { api, type ProjectSharedAgentConfig } from '@/lib/api/api'
 import {
   DEFAULT_CONFIG_ROOT,
   DEFAULT_WORKSPACE_DIR,
@@ -50,7 +47,7 @@ const { t } = useI18n()
 const toast = useToast()
 const { isMobile } = useBreakpoint()
 
-type SubTab = 'files' | 'mcp' | 'env' | 'prompts' | 'meta' | 'test'
+type SubTab = 'files' | 'mcp' | 'env' | 'prompts' | 'meta'
 
 const loading = ref(true)
 const loadError = ref('')
@@ -61,23 +58,6 @@ const subTab = ref<SubTab>('files')
 const justSaved = ref(false)
 const filesPanelRef = ref<InstanceType<typeof AgentFilesPanel> | null>(null)
 let configRootTouched = false
-
-const agents = ref<{ name: string; projectId?: string }[]>([])
-const testAgentName = ref('')
-
-const projectAgents = computed(() =>
-  agents.value.filter((a) => a.projectId === props.projectId),
-)
-
-function syncTestAgentSelection() {
-  const candidates = projectAgents.value
-  if (!candidates.length) {
-    testAgentName.value = ''
-    return
-  }
-  if (candidates.some((a) => a.name === testAgentName.value)) return
-  testAgentName.value = candidates[0]!.name
-}
 
 const dirty = computed(() => {
   if (!draft.value) return false
@@ -104,7 +84,6 @@ const subTabs = computed(() => {
       l: pc ? t('pages.agentStudio.tabs.promptsCount', { n: pc }) : t('pages.agentStudio.tabs.prompts'),
     },
     { k: 'meta' as const, l: t('pages.agentStudio.tabs.meta') },
-    { k: 'test' as const, l: t('pages.projectDetail.sharedAgent.testTab') },
   ]
 })
 
@@ -197,13 +176,8 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [cfg, agentList] = await Promise.all([
-      api.getProjectSharedAgentConfig(props.projectId),
-      api.listAgents().catch(() => [] as { name: string; projectId?: string }[]),
-    ])
+    const cfg = await api.getProjectSharedAgentConfig(props.projectId)
     applyLoaded(cfg)
-    agents.value = agentList.map((a) => ({ name: a.name, projectId: a.projectId }))
-    syncTestAgentSelection()
   } catch (e: unknown) {
     loadError.value = String((e as { message?: string })?.message || e)
     draft.value = null
@@ -283,29 +257,13 @@ function openSettingsInFiles() {
   })
 }
 
-async function createProjectContextTest(
-  profile: string,
-  payload: CreateAgentTestPayload,
-): Promise<SandboxView> {
-  return api.createProjectSharedAgentTest(props.projectId, {
-    agentName: profile,
-    ...(payload.repos ? { repos: payload.repos } : {}),
-    ...(payload.repoUrl ? { repoUrl: payload.repoUrl } : {}),
-  })
-}
-
 watch(
   () => props.projectId,
   () => {
-    testAgentName.value = ''
     subTab.value = 'files'
     void load()
   },
 )
-
-watch(projectAgents, () => {
-  syncTestAgentSelection()
-})
 
 onMounted(() => {
   void load()
@@ -594,46 +552,6 @@ onMounted(() => {
             </table>
           </div>
         </div>
-      </div>
-
-      <div
-        v-if="subTab === 'test'"
-        class="flex min-h-0 flex-1 flex-col overflow-hidden"
-        data-testid="shared-agent-test"
-      >
-        <div
-          class="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-2 border-b border-line px-3 py-2"
-          data-testid="shared-agent-test-toolbar"
-        >
-          <div class="flex min-w-0 items-center gap-2">
-            <span class="shrink-0 text-[12px] text-txt2">
-              {{ t('pages.projectDetail.sharedAgent.pickAgent') }}
-            </span>
-            <ProjectAgentSelect
-              v-model="testAgentName"
-              :agents="projectAgents"
-              data-testid="shared-agent-test-pick"
-            />
-          </div>
-          <p class="w-full text-[11px] leading-5 text-txt3">
-            {{ t('pages.projectDetail.sharedAgent.testHint') }}
-          </p>
-        </div>
-        <div
-          v-if="!projectAgents.length"
-          class="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center text-[13px] text-txt3"
-          data-testid="shared-agent-test-empty"
-        >
-          <Icon name="robot" :size="20" />
-          <p>{{ t('pages.projectDetail.sharedAgent.noProjectAgents') }}</p>
-        </div>
-        <AgentChatTester
-          v-else-if="testAgentName"
-          :key="testAgentName"
-          :profile="testAgentName"
-          :home-project-id="projectId"
-          :create-test="createProjectContextTest"
-        />
       </div>
     </template>
   </div>

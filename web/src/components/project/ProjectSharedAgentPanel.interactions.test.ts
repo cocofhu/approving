@@ -34,8 +34,6 @@ function mountPanel(projectId = 'p1') {
       AgentFilesPanel: FilesStub, AgentMcpPanel: { template: '<div data-testid="mcp"/>' },
       AgentEnvPanel: { emits: ['open-settings-file'], template: '<button data-testid="env-settings" @click="$emit(\'open-settings-file\')"/>' },
       AgentPromptsPanel: { template: '<div data-testid="prompts"/>' },
-      AgentChatTester: { props: ['profile', 'createTest'], template: '<div data-testid="tester">{{profile}}</div>' },
-      ProjectAgentSelect: { props: ['modelValue'], template: '<div data-testid="picker">{{modelValue}}</div>' },
     } },
   })
 }
@@ -71,7 +69,6 @@ describe('ProjectSharedAgentPanel interactions', () => {
 
   it('surfaces load/save failures and retries/discards', async () => {
     mocks.getConfig.mockRejectedValueOnce(new Error('load failed'))
-    mocks.listAgents.mockRejectedValueOnce(new Error('agents failed'))
     const w = mountPanel()
     await flushPromises()
     const vm = w.vm as any
@@ -94,7 +91,7 @@ describe('ProjectSharedAgentPanel interactions', () => {
     w.unmount()
   })
 
-  it('opens settings via env, synchronizes agent selection and creates project tests', async () => {
+  it('opens settings via env without a dialogue-test subtab', async () => {
     const w = mountPanel()
     await flushPromises()
     const vm = w.vm as any
@@ -102,14 +99,7 @@ describe('ProjectSharedAgentPanel interactions', () => {
     await w.get('[data-testid="env-settings"]').trigger('click')
     await flushPromises()
     expect(vm.subTab).toBe('files')
-    await w.get('[data-testid="shared-agent-subtab-test"]').trigger('click')
-    expect(vm.testAgentName).toBe('a1')
-    const res = await vm.createProjectContextTest('a1', { repos: [{ name: 'r' }], repoUrl: 'https://x' })
-    expect(res.id).toBe('sandbox')
-    expect(mocks.createTest).toHaveBeenCalledWith('p1', { agentName: 'a1', repos: [{ name: 'r' }], repoUrl: 'https://x' })
-    vm.agents = []
-    vm.syncTestAgentSelection()
-    expect(vm.testAgentName).toBe('')
+    expect(w.find('[data-testid="shared-agent-subtab-test"]').exists()).toBe(false)
     w.unmount()
   })
 
@@ -124,11 +114,11 @@ describe('ProjectSharedAgentPanel interactions', () => {
     w.unmount()
   })
 
-  it('renders every subpanel plus special-region and SSH metadata states', async () => {
+  it('renders every remaining subpanel plus special-region and SSH metadata states', async () => {
     mocks.getConfig.mockResolvedValueOnce({ ...cfg, env: { CURSOR_REGION: 'legacy-special' }, gitSshPrivateKey: 'private', gitSshKnownHosts: 'host key' })
     const w = mountPanel(); await flushPromises()
     const vm = w.vm as any
-    for (const tab of ['mcp', 'env', 'prompts', 'meta', 'test']) {
+    for (const tab of ['mcp', 'env', 'prompts', 'meta']) {
       await w.get(`[data-testid="shared-agent-subtab-${tab}"]`).trigger('click')
       await flushPromises()
     }
@@ -137,9 +127,6 @@ describe('ProjectSharedAgentPanel interactions', () => {
     vm.draft.layout.configRoot = ''
     await w.vm.$nextTick()
     expect(vm.derivedPaths[0].path).toContain('mcp.json')
-    vm.testAgentName = 'a1'
-    vm.syncTestAgentSelection()
-    expect(vm.testAgentName).toBe('a1')
     w.unmount()
   })
 })

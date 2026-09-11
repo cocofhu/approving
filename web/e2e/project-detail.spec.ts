@@ -530,7 +530,7 @@ test.describe('ProjectDetailView 共享 Agent / 工作流变量面板布局', ()
     await expect(page.getByTestId('shared-agent-subtab-env')).toBeVisible()
     await expect(page.getByTestId('shared-agent-subtab-prompts')).toBeVisible()
     await expect(page.getByTestId('shared-agent-subtab-meta')).toBeVisible()
-    await expect(page.getByTestId('shared-agent-subtab-test')).toBeVisible()
+    await expect(page.getByTestId('shared-agent-subtab-test')).toHaveCount(0)
     await expect(page.getByTestId('shared-agent-subtab-data')).toHaveCount(0)
 
     await page.getByTestId('shared-agent-subtab-env').click()
