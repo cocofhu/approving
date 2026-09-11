@@ -117,6 +117,29 @@ func TestModelsAndKeyEnvLookup(t *testing.T) {
 	if env := s.KeyEnv(ctx, "my-gateway"); env != "" {
 		t.Fatalf("KeyEnv for unknown provider = %q", env)
 	}
+	if known, readable := s.KnowsProvider(ctx, "DeepSeek"); !known || !readable {
+		t.Fatalf("KnowsProvider(deepseek) = %v, %v", known, readable)
+	}
+	if known, readable := s.KnowsProvider(ctx, "my-gateway"); known || !readable {
+		t.Fatalf("KnowsProvider(my-gateway) = %v, %v", known, readable)
+	}
+	if known, readable := s.KnowsModel(ctx, "deepseek", "deepseek-v4-pro"); !known || !readable {
+		t.Fatalf("KnowsModel(listed) = %v, %v", known, readable)
+	}
+	if known, readable := s.KnowsModel(ctx, "deepseek", "deepseek/r2"); known || !readable {
+		t.Fatalf("KnowsModel(unlisted) = %v, %v", known, readable)
+	}
+}
+
+func TestKnowsProviderAndModelReportUnreadableCatalog(t *testing.T) {
+	s, _ := serve(t, "", http.StatusInternalServerError)
+	ctx := context.Background()
+	if known, readable := s.KnowsProvider(ctx, "deepseek"); known || readable {
+		t.Fatalf("KnowsProvider = %v, %v", known, readable)
+	}
+	if known, readable := s.KnowsModel(ctx, "deepseek", "deepseek-v4-pro"); known || readable {
+		t.Fatalf("KnowsModel = %v, %v", known, readable)
+	}
 }
 
 func TestProviderIDFallsBackToMapKey(t *testing.T) {

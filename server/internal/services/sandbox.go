@@ -9,6 +9,7 @@ import (
 	"github.com/cocofhu/approving/internal/config"
 	"github.com/cocofhu/approving/internal/mcp"
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/runtime"
 	"github.com/cocofhu/approving/internal/sandbox"
 
 	"github.com/google/uuid"
@@ -60,6 +61,8 @@ type SandboxService struct {
 	// testScheduler hooks Register/Restore and Unregister for purpose=test
 	// read-only task-scheduler injection (optional; SetTestSchedulerHooks).
 	testScheduler TestSchedulerHooks
+	// openCodeCatalog resolves whether OpenCode knows a provider id natively.
+	openCodeCatalog runtime.OpenCodeCatalog
 }
 
 // TestSchedulerHooks wires purpose=test scheduler session lifecycle.
@@ -97,6 +100,9 @@ type SandboxOptions struct {
 	Max    int
 	// SharedAgent optional project baseline used by Open / OpenAgentSandbox.
 	SharedAgent *SharedAgentService
+	// OpenCodeCatalog lets a gateway absent from OpenCode's provider catalog be
+	// declared with an adapter in opencode.json. Nil keeps `custom`-only.
+	OpenCodeCatalog runtime.OpenCodeCatalog
 }
 
 // SandboxView is the API shape: the persisted record plus live-derived flags.
@@ -140,6 +146,7 @@ func NewSandboxService(db *gorm.DB, mgr *sandbox.Manager, skills *AgentService, 
 		mcpEndpoint:       opts.MCPEndpoint,
 		env:               opts.Env,
 		chatTimeout:       opts.ChatTimeout,
+		openCodeCatalog:   opts.OpenCodeCatalog,
 		live:              map[uint]*liveSandbox{},
 		runActive:         map[string]bool{},
 	}

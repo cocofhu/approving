@@ -1,4 +1,5 @@
 import type { BackendId } from '@/lib/shared/regionPolicy'
+import { openCodeCatalogKnowsProvider } from '@/lib/agent/openCodeCatalog'
 
 export const OPENCODE_PROVIDER_ENV = 'APPROVING_OPENCODE_PROVIDER'
 export const OPENCODE_BASE_URL_ENV = 'APPROVING_OPENCODE_BASE_URL'
@@ -43,15 +44,44 @@ export function normalizeOpenCodeProvider(raw: string): OpenCodeProviderId {
 }
 
 /**
- * Whether the model belongs to the vendor. OpenCode takes `provider/model`, so a
- * model kept across a vendor switch would name the wrong vendor.
+ * The stored `provider/model` value, with the vendor prefixed when the typed id
+ * does not already carry it.
+ *
+ * A vendor's own id may contain slashes (`anthropic/claude-sonnet-4-5` on
+ * OpenRouter, `deepseek/deepseek-flash` on a TokenHub-style endpoint), so the
+ * prefix is what tells OpenCode where the id ends up — it is never the id's own
+ * first segment. Prefixing is idempotent, which is what makes a picked value and
+ * a hand-typed one land on the same string.
  */
-export function openCodeModelMatchesProvider(model: string, provider: string): boolean {
+export function openCodeModelWithProvider(model: string, provider: string): string {
   const m = model.trim()
-  if (!m) return true
-  // A bare id names no vendor to contradict; the server prefixes it on write.
-  if (!m.includes('/')) return true
-  return m.startsWith(`${normalizeOpenCodeProvider(provider)}/`)
+  if (!m) return ''
+  const id = normalizeOpenCodeProvider(provider)
+  return m.startsWith(`${id}/`) ? m : `${id}/${m}`
+}
+
+/** The vendor's own id, with the `provider/` prefix dropped. */
+export function openCodeModelID(model: string, provider: string): string {
+  const m = model.trim()
+  const prefix = `${normalizeOpenCodeProvider(provider)}/`
+  if (m.startsWith(prefix) && m.length > prefix.length) return m.slice(prefix.length)
+  return m
+}
+
+/**
+ * Whether the model was picked from this vendor's catalog listing, which is what
+ * makes it expire when the vendor changes. A hand-typed id is kept across the
+ * switch: only the endpoint knows whether it serves that id, and retyping a
+ * gateway's id on every switch is the more common annoyance.
+ */
+export function openCodeModelFromCatalog(
+  model: string,
+  provider: string,
+  models: { id: string }[],
+): boolean {
+  const id = openCodeModelID(model, provider)
+  if (!id) return false
+  return models.some((m) => m.id === id)
 }
 
 export type OpenCodeFields = {
@@ -78,6 +108,8 @@ export function applyOpenCodeFields(
     baseURL: fields.baseURL !== undefined ? fields.baseURL.trim() : current.baseURL,
     model: fields.model !== undefined ? fields.model.trim() : current.model,
   }
+  // Stored as `provider/model`, so a hand-typed bare id gains its vendor here.
+  next.model = openCodeModelWithProvider(next.model, next.provider)
   const out = { ...env }
   out[OPENCODE_PROVIDER_ENV] = next.provider
   if (next.baseURL) out[OPENCODE_BASE_URL_ENV] = next.baseURL
@@ -101,7 +133,12 @@ export function switchOpenCodeEnv(
 }
 
 export function openCodeCustomBaseRequired(provider: string, baseURL: string): boolean {
-  return normalizeOpenCodeProvider(provider) === 'custom' && !baseURL.trim()
+  if (baseURL.trim()) return false
+  const id = normalizeOpenCodeProvider(provider)
+  if (id === 'custom') return true
+  // A readable catalog that does not list the typed id means the server must
+  // declare it as an OpenAI-compatible endpoint, which has no default URL.
+  return openCodeCatalogKnowsProvider(id) === false
 }
 
 export function openCodeModelRequired(model: string): boolean {

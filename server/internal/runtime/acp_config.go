@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -40,10 +41,12 @@ func (c *acpProvider) buildConfigHome(req NodeReq, env map[string]string) string
 		IncludeArtifactStore: hasArtifactStore(specs),
 		MCP:                  specs,
 		Settings:             CodeBuddySettingsForEnv(c.backend, env),
-		OpenCodeConfig:       OpenCodeConfigForEnv(c.backend, env),
-		AgentName:            profile,
-		ProfilesRoot:         c.opts.ProfilesRoot,
-		GlobalRulesDir:       c.opts.PlatformRulesRoot,
+		OpenCodeConfig: OpenCodeConfigForEnvWithCatalog(
+			context.Background(), c.backend, env, c.opts.OpenCodeCatalog,
+		),
+		AgentName:      profile,
+		ProfilesRoot:   c.opts.ProfilesRoot,
+		GlobalRulesDir: c.opts.PlatformRulesRoot,
 	})
 	if err != nil {
 		log.Warn().Err(err).Str("node", req.NodeID).Msg("build cursor home failed; running without /root/.cursor mount")

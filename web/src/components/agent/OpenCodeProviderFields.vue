@@ -6,7 +6,8 @@ import { loadOpenCodeModels, loadOpenCodeProviders } from '@/lib/agent/openCodeC
 import {
   OPENCODE_CUSTOM_PROVIDER,
   OPENCODE_FALLBACK_PROVIDERS,
-  openCodeModelMatchesProvider,
+  openCodeModelFromCatalog,
+  openCodeModelWithProvider,
   type OpenCodeProviderId,
 } from '@/lib/agent/openCodeProvider'
 import type { OpenCodeCatalogModel, OpenCodeCatalogProvider } from '@/lib/api/apiTypes'
@@ -61,7 +62,13 @@ const providerOptions = computed(() => {
   return [...fromCatalog, customOption]
 })
 
-/** Models of the picked vendor, as the `provider/model` id OpenCode expects. */
+/**
+ * Models of the picked vendor, as the `provider/model` id OpenCode expects.
+ *
+ * The vendor is prefixed even when the id already starts with the vendor's name:
+ * the catalog really does list `openrouter/auto` under `openrouter`, and dropping
+ * the prefix there would send OpenCode looking for a model called `auto`.
+ */
 const modelOptions = computed(() =>
   models.value.map((m) => ({
     value: `${props.provider}/${m.id}`,
@@ -70,8 +77,11 @@ const modelOptions = computed(() =>
   })),
 )
 
+/** A hand-typed bare id names the same model as the prefixed one. */
+const modelValue = computed(() => openCodeModelWithProvider(props.model, props.provider))
+
 const modelPlaceholder = computed(() =>
-  custom.value
+  ownEndpoint.value
     ? t('pages.agentStudio.openCode.modelPlaceholderCustom')
     : t('pages.agentStudio.openCode.modelPlaceholder'),
 )
@@ -81,14 +91,30 @@ const modelPlaceholder = computed(() =>
  * sandbox: OpenCode resolves it, fails, and `opencode run` exits 1 with no stderr.
  */
 const modelUnknown = computed(() => {
-  const model = props.model.trim()
-  if (!model || custom.value || modelsLoading.value || !modelOptions.value.length) return false
-  return !modelOptions.value.some((o) => o.value === model)
+  if (!modelValue.value || ownEndpoint.value || modelsLoading.value || !modelOptions.value.length) {
+    return false
+  }
+  return !modelOptions.value.some((o) => o.value === modelValue.value)
 })
+
+/**
+ * A vendor the catalog does not list is treated as a self-hosted OpenAI-compatible
+ * endpoint: the server writes the adapter and declares the model, so a typed-in
+ * vendor id works like a picked one. It does need a base URL of its own.
+ */
+const selfHostedVendor = computed(() => {
+  if (custom.value || catalogLoading.value || !catalog.value.length) return false
+  const id = props.provider.trim().toLowerCase()
+  if (!id) return false
+  return !catalog.value.some((p) => p.id.trim().toLowerCase() === id)
+})
+
+/** Vendors whose endpoint and model list are ours to state, not the catalog's. */
+const ownEndpoint = computed(() => custom.value || selfHostedVendor.value)
 
 /** A gateway absent from the catalog has no list to offer; ids are typed in. */
 const modelHint = computed(() =>
-  custom.value || (!modelsLoading.value && !models.value.length)
+  ownEndpoint.value || (!modelsLoading.value && !models.value.length)
     ? t('pages.agentStudio.openCode.modelHintTyped')
     : t('pages.agentStudio.openCode.modelHint'),
 )
@@ -101,8 +127,12 @@ onMounted(async () => {
 watch(
   () => props.provider,
   async (provider, previous) => {
-    // A model names its vendor, so one kept across a switch would name the old one.
-    if (previous !== undefined && props.model && !openCodeModelMatchesProvider(props.model, provider)) {
+    // A model picked from the old vendor's listing does not exist on the new one.
+    if (
+      previous !== undefined &&
+      props.model &&
+      openCodeModelFromCatalog(props.model, previous, models.value)
+    ) {
       emit('update:model', '')
     }
     if (!provider || provider === OPENCODE_CUSTOM_PROVIDER) {
@@ -139,6 +169,9 @@ watch(
         data-test="opencode-provider"
         @update:model-value="emit('update:provider', $event)"
       />
+      <p v-if="selfHostedVendor" class="mt-1 text-[11px] text-txt3" data-test="opencode-provider-self-hosted">
+        {{ t('pages.agentStudio.openCode.providerSelfHosted') }}
+      </p>
     </div>
     <div class="block">
       <span class="mb-1.5 block text-[12px] font-medium text-txt2">
@@ -146,7 +179,7 @@ watch(
         <span class="text-err">*</span>
       </span>
       <AppSelect
-        :model-value="model"
+        :model-value="modelValue"
         :options="modelOptions"
         size="sm"
         searchable
@@ -170,7 +203,7 @@ watch(
     <label class="block">
       <span class="mb-1.5 block text-[12px] font-medium text-txt2">
         {{ t('pages.agentStudio.openCode.baseLabel') }}
-        <span v-if="custom" class="text-err">*</span>
+        <span v-if="ownEndpoint" class="text-err">*</span>
       </span>
       <input
         :value="baseUrl"

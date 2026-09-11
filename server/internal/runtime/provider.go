@@ -81,6 +81,10 @@ type Options struct {
 	RunSandboxEnvForRun func(runID string) []models.EnvEntry
 	// PublicAdvertise is the browser-facing base URL (preview proxy / pick.js).
 	PublicAdvertise string
+	// OpenCodeCatalog tells whether OpenCode resolves a provider id natively, so
+	// a gateway absent from its catalog can be declared with an adapter instead
+	// of failing at run time. Nil keeps the conservative `custom`-only behavior.
+	OpenCodeCatalog OpenCodeCatalog
 }
 
 // SharedAgentView is the runtime-facing slice of project shared Agent config
