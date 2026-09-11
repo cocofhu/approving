@@ -509,10 +509,14 @@ html.light .app-sidebar-card {
   .overlay-pop-leave-active,
   .modal-enter-active,
   .modal-leave-active,
+  .drawer-enter-active,
+  .drawer-leave-active,
   .pub-enter-active,
   .pub-leave-active,
   .panel-enter-active,
-  .panel-leave-active {
+  .panel-leave-active,
+  .ui-tip-fade-enter-active,
+  .ui-tip-fade-leave-active {
     transition: none !important;
     animation: none !important;
   }
@@ -522,7 +526,10 @@ html.light .app-sidebar-card {
   .app-tabs-indicator,
   .seg-indicator,
   .app-select-chevron,
-  .tag-filter-chevron {
+  .tag-filter-chevron,
+  .ui-fold-chevron,
+  .ui-fold,
+  .token-usage-tip {
     transition: none !important;
     transform: none !important;
   }
@@ -575,6 +582,32 @@ html.light .app-sidebar-card {
 }
 .list-card-lift:active {
   transform: translateY(0) scale(0.995);
+}
+
+.ui-tip-fade-enter-active,
+.ui-tip-fade-leave-active {
+  transition: opacity var(--dur-ui) var(--ease-out-expo);
+}
+.ui-tip-fade-enter-from,
+.ui-tip-fade-leave-to {
+  opacity: 0;
+}
+
+.ui-fold-chevron {
+  transition: transform var(--dur-ui) var(--ease-out-expo);
+}
+
+.ui-fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-ui) var(--ease-out-expo);
+}
+.ui-fold.is-open {
+  grid-template-rows: 1fr;
+}
+.ui-fold > .ui-fold-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .route-view-wrap {

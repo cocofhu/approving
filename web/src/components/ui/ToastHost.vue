@@ -33,7 +33,9 @@ const { toasts } = useToast()
 <style scoped>
 .toast-enter-active,
 .toast-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity var(--dur-overlay) var(--ease-out-expo),
+    transform var(--dur-overlay) var(--ease-out-expo);
 }
 .toast-enter-from,
 .toast-leave-to {

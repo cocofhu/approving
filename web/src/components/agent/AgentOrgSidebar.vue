@@ -300,7 +300,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
       <div
         v-for="row in rows"
         :key="row.key"
-        class="group relative flex w-full items-center gap-0.5 py-0.5 pr-1 text-left text-[12px] transition"
+        class="group relative flex w-full items-center gap-0.5 rounded-md py-0.5 pr-1 text-left text-[12px] transition-[background-color,border-color,color] duration-[var(--dur-ui)] ease-out"
         :class="[
           row.kind === 'agent'
             ? activeName === row.name
@@ -333,7 +333,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
               data-org-toggle
               @click.stop="toggleNode(row.id)"
             >
-              <Icon name="chevron-right" :size="12" :class="row.collapsed ? '' : 'rotate-90'" />
+              <Icon name="chevron-right" :size="12" class="ui-fold-chevron" :class="row.collapsed ? '' : 'rotate-90'" />
             </button>
             <div
               class="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 py-0.5 active:cursor-grabbing"
@@ -375,7 +375,7 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
               data-org-toggle
               @click.stop="toggleNode('__ungrouped__')"
             >
-              <Icon name="chevron-right" :size="12" :class="row.collapsed ? '' : 'rotate-90'" />
+              <Icon name="chevron-right" :size="12" class="ui-fold-chevron" :class="row.collapsed ? '' : 'rotate-90'" />
             </button>
             <div
               class="flex min-w-0 flex-1 items-center gap-1.5 py-0.5"
