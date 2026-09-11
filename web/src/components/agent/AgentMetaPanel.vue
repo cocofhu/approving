@@ -297,11 +297,13 @@ const derivedPaths = computed(() => {
           :provider="openCodeFields.provider"
           :base-url="openCodeFields.baseURL"
           :model="openCodeFields.model"
+          :vision="openCodeFields.vision"
           :require-base="openCodeCustomBaseRequired(openCodeFields.provider, openCodeFields.baseURL)"
           :require-model="openCodeModelRequired(openCodeFields.model)"
           @update:provider="onOpenCodeProvider"
           @update:base-url="patchOpenCode({ baseURL: $event })"
           @update:model="patchOpenCode({ model: $event })"
+          @update:vision="patchOpenCode({ vision: $event })"
         />
       </div>
       <label class="block">

@@ -38,6 +38,7 @@ const emit = defineEmits<{
   'update:openCodeProvider': [value: OpenCodeProviderId]
   'update:openCodeBaseUrl': [value: string]
   'update:openCodeModel': [value: string]
+  'update:openCodeVision': [value: boolean]
 }>()
 
 const { t } = useI18n()
@@ -120,11 +121,13 @@ function setMode(mode: WizardAuthMode) {
         :provider="openCode.provider"
         :base-url="openCode.baseURL"
         :model="openCode.model"
+        :vision="openCode.vision"
         :require-base="requireOpenCodeBase"
         :require-model="requireOpenCodeModel"
         @update:provider="emit('update:openCodeProvider', $event)"
         @update:base-url="emit('update:openCodeBaseUrl', $event)"
         @update:model="emit('update:openCodeModel', $event)"
+        @update:vision="emit('update:openCodeVision', $event)"
       />
       <div class="mb-4 rounded-lg border border-line bg-base p-3.5">
         <div class="text-[13px] font-semibold text-txt">

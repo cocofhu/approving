@@ -253,6 +253,11 @@ function onOpenCodeModel(value: string) {
   markConfigured('apiKey')
 }
 
+function onOpenCodeVision(value: boolean) {
+  patchOpenCode({ vision: value })
+  markConfigured('apiKey')
+}
+
 function onApiKeyInput(value: string) {
   apiKeyInput.value = value
   const key = primaryAuthKey.value
@@ -416,6 +421,7 @@ function chipClass(kind: string) {
   onOpenCodeProvider,
   onOpenCodeBaseURL,
   onOpenCodeModel,
+  onOpenCodeVision,
   onGitCredentialType,
   inheritedEnv,
   goPrev,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -314,6 +315,48 @@ func TestOpenCodeConfigForEnv_ListedVendorUnlistedModel(t *testing.T) {
 	}
 	if _, ok := th["name"]; ok {
 		t.Fatalf("catalog vendor must keep its own label: %#v", th)
+	}
+}
+
+// A declared model gets image input, which OpenCode otherwise withholds: it
+// assumes text-only for anything models.dev does not describe, and drops the
+// attachment before the vendor can answer for itself.
+func TestOpenCodeConfigForEnv_DeclaredModelAcceptsImages(t *testing.T) {
+	cat := &stubCatalog{
+		known:    map[string]bool{"tencent-tokenhub": true},
+		models:   map[string][]string{"tencent-tokenhub": {"hy3"}},
+		readable: true,
+	}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider:    "tencent-tokenhub",
+		EnvOpenCodeAPIKey:      "sk-oc",
+		EnvACPBridgeModel:      "deepseek/deepseek-flash",
+		EnvOpenCodeModelVision: "1",
+	}, cat)
+	prov, _ := doc["provider"].(map[string]any)
+	th, _ := prov["tencent-tokenhub"].(map[string]any)
+	models, _ := th["models"].(map[string]any)
+	decl, _ := models["deepseek/deepseek-flash"].(map[string]any)
+	if decl["attachment"] != true {
+		t.Fatalf("attachment=%v", decl["attachment"])
+	}
+	modalities, _ := decl["modalities"].(map[string]any)
+	input, _ := modalities["input"].([]string)
+	if !slices.Contains(input, "image") {
+		t.Fatalf("image input must be declared: %#v", decl)
+	}
+	if !slices.Contains(input, "text") {
+		t.Fatalf("text input must survive: %#v", decl)
+	}
+}
+
+func TestOpenCodeConfigForEnv_DeclaredModelVisionDefaultsOff(t *testing.T) {
+	decl := openCodeModelDecl("text-only", false)
+	if _, ok := decl["attachment"]; ok {
+		t.Fatalf("attachment must require an explicit opt-in: %#v", decl)
+	}
+	if _, ok := decl["modalities"]; ok {
+		t.Fatalf("modalities must require an explicit opt-in: %#v", decl)
 	}
 }
 

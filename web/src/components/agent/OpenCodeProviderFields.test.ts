@@ -177,6 +177,36 @@ describe('OpenCodeProviderFields', () => {
     wrapper.unmount()
   })
 
+  it('offers vision for a catalog vendor when the model is typed in', async () => {
+    const wrapper = mountFields({
+      provider: 'deepseek',
+      model: 'deepseek/deepseek-flash',
+      vision: false,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-model-unknown"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="opencode-model-vision"]').exists()).toBe(true)
+    await wrapper.get('[data-test="opencode-model-vision-input"]').setValue(true)
+    expect(wrapper.emitted('update:vision')?.[0]).toEqual([true])
+
+    await wrapper.setProps({ model: 'deepseek/deepseek-v4-pro', vision: false })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-model-vision"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('keeps vision when a catalog vendor has no model list yet', async () => {
+    openCodeModels.mockResolvedValue({ models: [] })
+    const wrapper = mountFields({
+      provider: 'tencent-tokenhub',
+      model: 'deepseek/deepseek-flash',
+      vision: false,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-model-vision"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('falls back to the shipped shortlist when the catalog is unreachable', async () => {
     openCodeProviders.mockRejectedValue(new Error('offline'))
     const wrapper = mountFields()

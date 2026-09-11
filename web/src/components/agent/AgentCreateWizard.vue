@@ -53,6 +53,7 @@ const {
   onOpenCodeProvider,
   onOpenCodeBaseURL,
   onOpenCodeModel,
+  onOpenCodeVision,
   onGitCredentialType,
   inheritedEnv,
   goPrev,
@@ -199,6 +200,7 @@ const {
                     @update:open-code-provider="onOpenCodeProvider"
                     @update:open-code-base-url="onOpenCodeBaseURL"
                     @update:open-code-model="onOpenCodeModel"
+                    @update:open-code-vision="onOpenCodeVision"
                   />
                 </template>
 

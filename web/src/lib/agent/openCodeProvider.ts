@@ -3,6 +3,7 @@ import { openCodeCatalogKnowsProvider } from '@/lib/agent/openCodeCatalog'
 
 export const OPENCODE_PROVIDER_ENV = 'APPROVING_OPENCODE_PROVIDER'
 export const OPENCODE_BASE_URL_ENV = 'APPROVING_OPENCODE_BASE_URL'
+export const OPENCODE_MODEL_VISION_ENV = 'APPROVING_OPENCODE_MODEL_VISION'
 export const OPENCODE_MODEL_ENV = 'ACP_BRIDGE_MODEL'
 export const DEFAULT_OPENCODE_PROVIDER = 'openai'
 
@@ -88,6 +89,19 @@ export type OpenCodeFields = {
   provider: OpenCodeProviderId
   baseURL: string
   model: string
+  vision: boolean
+}
+
+export function openCodeEnvEnabled(value: string | undefined): boolean {
+  switch ((value || '').trim().toLowerCase()) {
+    case '1':
+    case 'true':
+    case 'yes':
+    case 'on':
+      return true
+    default:
+      return false
+  }
 }
 
 export function openCodeFieldsFromEnv(env: Record<string, string>): OpenCodeFields {
@@ -95,6 +109,7 @@ export function openCodeFieldsFromEnv(env: Record<string, string>): OpenCodeFiel
     provider: normalizeOpenCodeProvider(env[OPENCODE_PROVIDER_ENV] || ''),
     baseURL: (env[OPENCODE_BASE_URL_ENV] || '').trim(),
     model: (env[OPENCODE_MODEL_ENV] || '').trim(),
+    vision: openCodeEnvEnabled(env[OPENCODE_MODEL_VISION_ENV]),
   }
 }
 
@@ -107,6 +122,7 @@ export function applyOpenCodeFields(
     provider: fields.provider ?? current.provider,
     baseURL: fields.baseURL !== undefined ? fields.baseURL.trim() : current.baseURL,
     model: fields.model !== undefined ? fields.model.trim() : current.model,
+    vision: fields.vision ?? current.vision,
   }
   // Stored as `provider/model`, so a hand-typed bare id gains its vendor here.
   next.model = openCodeModelWithProvider(next.model, next.provider)
@@ -116,6 +132,8 @@ export function applyOpenCodeFields(
   else delete out[OPENCODE_BASE_URL_ENV]
   if (next.model) out[OPENCODE_MODEL_ENV] = next.model
   else delete out[OPENCODE_MODEL_ENV]
+  if (next.vision) out[OPENCODE_MODEL_VISION_ENV] = '1'
+  else delete out[OPENCODE_MODEL_VISION_ENV]
   return out
 }
 
@@ -126,6 +144,7 @@ export function switchOpenCodeEnv(
   const out = { ...env }
   delete out[OPENCODE_PROVIDER_ENV]
   delete out[OPENCODE_BASE_URL_ENV]
+  delete out[OPENCODE_MODEL_VISION_ENV]
   if (backend === 'opencode') {
     out[OPENCODE_PROVIDER_ENV] = DEFAULT_OPENCODE_PROVIDER
   }

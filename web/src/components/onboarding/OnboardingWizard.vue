@@ -725,11 +725,13 @@ async function submitBootstrap() {
                     :provider="(draft.openCodeProvider || 'openai') as OpenCodeProviderId"
                     :base-url="draft.openCodeBaseURL"
                     :model="draft.openCodeModel"
+                    :vision="draft.openCodeModelVision"
                     :require-base="openCodeCustomBaseRequired(draft.openCodeProvider, draft.openCodeBaseURL)"
                     :require-model="modelError"
                     @update:provider="draft.openCodeProvider = $event"
                     @update:base-url="draft.openCodeBaseURL = $event"
                     @update:model="selectOpenCodeModel"
+                    @update:vision="draft.openCodeModelVision = $event"
                   />
                   <label class="mt-4 block">
                     <span class="mb-1.5 block text-[12px] font-medium text-txt2">
