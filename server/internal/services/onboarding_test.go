@@ -345,6 +345,28 @@ func TestOnboardingBootstrapWritesOpenCodeEnvToShared(t *testing.T) {
 	if shared.Env["ACP_BRIDGE_MODEL"] != "anthropic/claude-sonnet-4-5" {
 		t.Fatalf("shared model: %+v", shared.Env)
 	}
+	if shared.Env["APPROVING_OPENCODE_MODEL_VISION"] != "" {
+		t.Fatalf("vision must stay off unless opted in: %+v", shared.Env)
+	}
+}
+
+func TestOnboardingBootstrapWritesOpenCodeVisionEnv(t *testing.T) {
+	svc, projectID := newOnboardingHarness(t)
+	vision := true
+	_, err := svc.Bootstrap(projectID, services.OnboardingBootstrapRequest{
+		AcpBackend:          "opencode",
+		APIKey:              "sk-oc",
+		OpenCodeProvider:    "tencent-tokenhub",
+		OpenCodeModel:       "deepseek/deepseek-flash",
+		OpenCodeModelVision: &vision,
+	})
+	if err != nil {
+		t.Fatalf("bootstrap: %v", err)
+	}
+	shared := svc.SharedAgent.Get(projectID)
+	if shared.Env["APPROVING_OPENCODE_MODEL_VISION"] != "1" {
+		t.Fatalf("shared vision: %+v", shared.Env)
+	}
 }
 
 func TestOnboardingBootstrapDefaultsPublicRegionForCodeBuddy(t *testing.T) {

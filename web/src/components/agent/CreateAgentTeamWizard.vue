@@ -193,6 +193,10 @@ function onOpenCodeModel(value: string) {
   patchOpenCode({ model: value })
 }
 
+function onOpenCodeVision(value: boolean) {
+  patchOpenCode({ vision: value })
+}
+
 function onApiKeyInput(value: string) {
   apiKeyInput.value = value
   const key = primaryAuthKey.value
@@ -522,6 +526,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                     @update:open-code-provider="onOpenCodeProvider"
                     @update:open-code-base-url="onOpenCodeBaseURL"
                     @update:open-code-model="onOpenCodeModel"
+                    @update:open-code-vision="onOpenCodeVision"
                   />
                 </template>
 

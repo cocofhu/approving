@@ -171,6 +171,7 @@ Staging 示例:
    - `APPROVING_OPENCODE_API_KEY`(别名 `OPENCODE_API_KEY`)
    - `APPROVING_OPENCODE_PROVIDER`:OpenCode 模型目录(models.dev)里的厂商 id(`openai` / `anthropic` / `deepseek` / `zai` / …);目录里没有的可以直接自己起一个名字(如 `tokenhub`),runtime 会按 OpenAI 兼容端点生成适配器,此时 `APPROVING_OPENCODE_BASE_URL` 必填。`custom` 是这类自定义端点的默认名字,没有特殊含义
    - 可选 `APPROVING_OPENCODE_BASE_URL`(`custom` 必填)
+   - 可选 `APPROVING_OPENCODE_MODEL_VISION=1`:为 models.dev 尚未收录的模型声明图片输入能力。未设置时保持文本模型，避免把图片误发给不支持视觉的端点
    - `ACP_BRIDGE_MODEL`,格式 `provider/model`(如 `deepseek/deepseek-v4-pro`);只填模型 id 也认,缺的厂商前缀由 runtime 补上(已带前缀不会重复补)。模型 id 自身带斜杠的照原样填在前缀后面(聚合网关常见,如 `openrouter/anthropic/claude-sonnet-4-5`);目录里第一段恰好等于厂商名的模型要写满两段(OpenRouter 的 `openrouter/auto` → `openrouter/openrouter/auto`)。模型 id 必须是该端点真有的,否则 `opencode run` 直接以 exit 1 结束。补前缀发生在注入沙箱的 env 上,不只是 `opencode.json`:桥会把这个变量原样交给 `opencode run --model`,而命令行参数优先于配置文件,少了前缀就会路由到第一段同名的厂商
 3. 启动时若配置树里还没有用户自己的 `opencode.json`,runtime 可按厂商/Base/Model 生成一份:有 Key 时把 `apiKey` 写在该厂商名下(`{env:OPENCODE_API_KEY}`),因此目录里的任意厂商都能用,不依赖各家专属环境变量。
    厂商是否在目录里,由同一份 models.dev 快照(`opencodecatalog`,也供 UI 的厂商/模型下拉用)判定:在目录里就保留 OpenCode 自己的 SDK 与模型表;不在目录里(或就是 `custom`)则补 `npm: @ai-sdk/openai-compatible` 并声明所填模型 id,所以自建/聚合网关直接用自己的名字即可。快照拉不到时保守处理——只有 `custom` 补适配器,避免凭猜测覆盖本来能用的厂商。
@@ -182,6 +183,7 @@ Staging 示例:
   "env": {
     "APPROVING_OPENCODE_API_KEY": "sk-xxx",
     "APPROVING_OPENCODE_PROVIDER": "deepseek",
+    "APPROVING_OPENCODE_MODEL_VISION": "1",
     "ACP_BRIDGE_MODEL": "deepseek/deepseek-v4-pro"
   }
 }

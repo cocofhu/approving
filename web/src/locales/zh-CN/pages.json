@@ -2236,6 +2236,8 @@
         "basePlaceholder": "https://api.example.com/v1",
         "baseHint": "留空使用厂商默认端点。代理或自建兼容接口时填写。",
         "baseRequired": "Custom 厂商必须填写 API Base URL。",
+        "visionLabel": "视觉理解",
+        "visionHint": "手填的模型默认按文本处理，目录里的模型沿用目录声明。勾选后才会把图片发给端点。",
         "providers": {
           "openai": "OpenAI",
           "anthropic": "Anthropic",

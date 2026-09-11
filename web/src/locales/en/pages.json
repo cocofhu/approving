@@ -2236,6 +2236,8 @@
         "basePlaceholder": "https://api.example.com/v1",
         "baseHint": "Leave empty for the vendor default. Set this for a proxy or compatible endpoint.",
         "baseRequired": "Custom provider requires an API Base URL.",
+        "visionLabel": "Vision",
+        "visionHint": "A typed-in model is treated as text-only unless this is on. Catalog picks keep the catalog's own capability flags.",
         "providers": {
           "openai": "OpenAI",
           "anthropic": "Anthropic",

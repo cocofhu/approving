@@ -37,22 +37,23 @@ var (
 
 // OnboardingBootstrapRequest is the body for POST .../bootstrap-onboarding.
 type OnboardingBootstrapRequest struct {
-	AcpBackend        string `json:"acpBackend"`
-	APIKey            string `json:"apiKey"`
-	Region            string `json:"region,omitempty"`
-	OpenCodeProvider  string `json:"openCodeProvider,omitempty"`
-	OpenCodeBaseURL   string `json:"openCodeBaseURL,omitempty"`
-	OpenCodeModel     string `json:"openCodeModel,omitempty"`
-	GitCredentialType string `json:"gitCredentialType,omitempty"`
-	GitHubToken       string `json:"githubToken,omitempty"`
-	GitLabToken       string `json:"gitlabToken,omitempty"`
-	GitLabURL         string `json:"gitlabUrl,omitempty"`
-	GitSshPrivateKey  string `json:"gitSshPrivateKey,omitempty"`
-	GitSshKnownHosts  string `json:"gitSshKnownHosts,omitempty"`
-	RepoURL           string `json:"repoUrl,omitempty"`
-	RepoBranch        string `json:"repoBranch,omitempty"`
-	GitUserName       string `json:"gitUserName,omitempty"`
-	GitUserEmail      string `json:"gitUserEmail,omitempty"`
+	AcpBackend          string `json:"acpBackend"`
+	APIKey              string `json:"apiKey"`
+	Region              string `json:"region,omitempty"`
+	OpenCodeProvider    string `json:"openCodeProvider,omitempty"`
+	OpenCodeBaseURL     string `json:"openCodeBaseURL,omitempty"`
+	OpenCodeModel       string `json:"openCodeModel,omitempty"`
+	OpenCodeModelVision *bool  `json:"openCodeModelVision,omitempty"`
+	GitCredentialType   string `json:"gitCredentialType,omitempty"`
+	GitHubToken         string `json:"githubToken,omitempty"`
+	GitLabToken         string `json:"gitlabToken,omitempty"`
+	GitLabURL           string `json:"gitlabUrl,omitempty"`
+	GitSshPrivateKey    string `json:"gitSshPrivateKey,omitempty"`
+	GitSshKnownHosts    string `json:"gitSshKnownHosts,omitempty"`
+	RepoURL             string `json:"repoUrl,omitempty"`
+	RepoBranch          string `json:"repoBranch,omitempty"`
+	GitUserName         string `json:"gitUserName,omitempty"`
+	GitUserEmail        string `json:"gitUserEmail,omitempty"`
 	// VncPreview / BrowserMcp default on when omitted (first-install preview stack).
 	VncPreview *bool `json:"vncPreview"`
 	BrowserMcp *bool `json:"browserMcp"`
@@ -564,5 +565,10 @@ func applyOpenCodeSharedEnv(env map[string]string, req OnboardingBootstrapReques
 	}
 	if v := strings.TrimSpace(req.OpenCodeModel); v != "" {
 		env[runtime.EnvACPBridgeModel] = v
+	}
+	if boolOrDefault(req.OpenCodeModelVision, false) {
+		env[runtime.EnvOpenCodeModelVision] = "1"
+	} else {
+		delete(env, runtime.EnvOpenCodeModelVision)
 	}
 }

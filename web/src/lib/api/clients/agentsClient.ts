@@ -55,6 +55,10 @@ export const agentsClient = {
       gitUserEmail?: string
       vncPreview?: boolean
       browserMcp?: boolean
+      openCodeProvider?: string
+      openCodeBaseURL?: string
+      openCodeModel?: string
+      openCodeModelVision?: boolean
     },
   ) =>
     req<{

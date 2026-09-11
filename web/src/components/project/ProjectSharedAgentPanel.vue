@@ -489,11 +489,13 @@ onMounted(() => {
               :provider="openCodeFields.provider"
               :base-url="openCodeFields.baseURL"
               :model="openCodeFields.model"
+              :vision="openCodeFields.vision"
               :require-base="openCodeCustomBaseRequired(openCodeFields.provider, openCodeFields.baseURL)"
               :require-model="openCodeModelRequired(openCodeFields.model)"
               @update:provider="patchSharedOpenCode({ provider: $event })"
               @update:base-url="patchSharedOpenCode({ baseURL: $event })"
               @update:model="patchSharedOpenCode({ model: $event })"
+              @update:vision="patchSharedOpenCode({ vision: $event })"
             />
           </div>
 

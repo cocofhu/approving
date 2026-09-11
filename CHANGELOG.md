@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.13-beta — 2026-09-11
+
+- OpenCode models that models.dev does not describe can opt into image input
+  with `APPROVING_OPENCODE_MODEL_VISION=1`, so vision models on a gateway are
+  not treated as text-only.
+- Onboarding, Agent create, Agent meta, and shared Agent show a Vision switch
+  for custom vendors and for catalog vendors with a typed-in model.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.13-beta`.
+
 ## 0.3.12-beta — 2026-09-11
 
 - OpenCode's bridge model override now receives the normalized

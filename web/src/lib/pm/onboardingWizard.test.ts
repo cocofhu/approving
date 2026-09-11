@@ -121,10 +121,19 @@ describe('onboardingWizard', () => {
     d.openCodeProvider = 'custom'
     d.openCodeBaseURL = 'https://llm.example/v1'
     d.openCodeModel = 'custom/my-model'
+    d.openCodeModelVision = true
     const body = assembleBootstrapBody(d)
     expect(body.openCodeProvider).toBe('custom')
     expect(body.openCodeBaseURL).toBe('https://llm.example/v1')
     expect(body.openCodeModel).toBe('custom/my-model')
+    expect(body.openCodeModelVision).toBe(true)
+  })
+
+  it('defaults a custom OpenCode model to text-only until vision is opted in', () => {
+    const d = freshOnboardingDraft()
+    expect(d.openCodeModelVision).toBe(false)
+    d.acpBackend = 'opencode'
+    expect(assembleBootstrapBody(d).openCodeModelVision).toBe(false)
   })
 
   it('sends git identity and can turn preview flags off', () => {

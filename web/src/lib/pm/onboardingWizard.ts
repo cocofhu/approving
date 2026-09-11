@@ -116,6 +116,7 @@ export type OnboardingDraft = {
   openCodeProvider: string
   openCodeBaseURL: string
   openCodeModel: string
+  openCodeModelVision: boolean
 }
 
 export type OnboardingBootstrapBody = {
@@ -137,6 +138,7 @@ export type OnboardingBootstrapBody = {
   openCodeProvider?: string
   openCodeBaseURL?: string
   openCodeModel?: string
+  openCodeModelVision?: boolean
 }
 
 export type OnboardingBootstrapResult = {
@@ -293,6 +295,7 @@ export function freshOnboardingDraft(opts?: { inheritAppLocale?: boolean }): Onb
     openCodeProvider: DEFAULT_OPENCODE_PROVIDER,
     openCodeBaseURL: '',
     openCodeModel: '',
+    openCodeModelVision: false,
   }
 }
 
@@ -377,6 +380,7 @@ export function assembleBootstrapBody(draft: OnboardingDraft): OnboardingBootstr
     body.openCodeProvider = draft.openCodeProvider || 'openai'
     if (draft.openCodeBaseURL.trim()) body.openCodeBaseURL = draft.openCodeBaseURL.trim()
     if (draft.openCodeModel.trim()) body.openCodeModel = draft.openCodeModel.trim()
+    body.openCodeModelVision = draft.openCodeModelVision
   }
   return body
 }

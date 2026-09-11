@@ -16,6 +16,7 @@ const props = defineProps<{
   provider: OpenCodeProviderId
   baseUrl: string
   model: string
+  vision?: boolean
   requireBase?: boolean
   requireModel?: boolean
 }>()
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   'update:provider': [value: OpenCodeProviderId]
   'update:baseUrl': [value: string]
   'update:model': [value: string]
+  'update:vision': [value: boolean]
 }>()
 
 const { t } = useI18n()
@@ -111,6 +113,22 @@ const selfHostedVendor = computed(() => {
 
 /** Vendors whose endpoint and model list are ours to state, not the catalog's. */
 const ownEndpoint = computed(() => custom.value || selfHostedVendor.value)
+
+/** A pick from this vendor's catalog listing. Those already declare their own capabilities. */
+const listedModel = computed(
+  () => !!modelValue.value && modelOptions.value.some((o) => o.value === modelValue.value),
+)
+
+/**
+ * Image input is opted in here whenever OpenCode cannot look the model up:
+ * a private gateway, a typed-in vendor, or a catalog vendor with a hand-typed id.
+ * Wait out the vendor's listing so a catalog pick does not flash the switch.
+ */
+const showVision = computed(() => {
+  if (ownEndpoint.value) return true
+  if (modelsLoading.value) return false
+  return !listedModel.value
+})
 
 /** A gateway absent from the catalog has no list to offer; ids are typed in. */
 const modelHint = computed(() =>
@@ -219,6 +237,27 @@ watch(
       <p v-if="requireBase" class="mt-1 text-[11px] text-err" data-test="opencode-base-required">
         {{ t('pages.agentStudio.openCode.baseRequired') }}
       </p>
+    </label>
+    <label
+      v-if="showVision"
+      class="flex items-start gap-2.5 rounded-lg border border-line bg-base px-3 py-2.5"
+      data-test="opencode-model-vision"
+    >
+      <input
+        type="checkbox"
+        class="mt-0.5"
+        :checked="!!vision"
+        data-test="opencode-model-vision-input"
+        @change="emit('update:vision', ($event.target as HTMLInputElement).checked)"
+      />
+      <span>
+        <span class="block text-[12px] font-medium text-txt">
+          {{ t('pages.agentStudio.openCode.visionLabel') }}
+        </span>
+        <span class="mt-0.5 block text-[11px] leading-5 text-txt3">
+          {{ t('pages.agentStudio.openCode.visionHint') }}
+        </span>
+      </span>
     </label>
   </div>
 </template>

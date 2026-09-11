@@ -11,6 +11,7 @@ const (
 	EnvApprovingOpenCodeAPIKey = "APPROVING_OPENCODE_API_KEY"
 	EnvOpenCodeProvider        = "APPROVING_OPENCODE_PROVIDER"
 	EnvOpenCodeBaseURL         = "APPROVING_OPENCODE_BASE_URL"
+	EnvOpenCodeModelVision     = "APPROVING_OPENCODE_MODEL_VISION"
 	EnvACPBridgeModel          = "ACP_BRIDGE_MODEL"
 	DefaultOpenCodeProvider    = "openai"
 	openCodeCompatibleNPM      = "@ai-sdk/openai-compatible"
@@ -166,12 +167,31 @@ func OpenCodeConfigForEnvWithCatalog(
 		}
 	}
 	if declareModel && modelID != "" {
+		vision := env != nil && EnvEnabled(env[EnvOpenCodeModelVision])
 		prov["models"] = map[string]any{
-			modelID: map[string]any{"name": modelID},
+			modelID: openCodeModelDecl(modelID, vision),
 		}
 	}
 	doc["provider"] = map[string]any{provider: prov}
 	return doc
+}
+
+// openCodeModelDecl describes a model the catalog cannot describe for us.
+//
+// OpenCode takes model capabilities from models.dev and falls back to text-only
+// input for anything declared by hand, which makes it drop images before they
+// reach the endpoint. The Agent env explicitly opts such a model into image
+// input because approving cannot infer an unlisted upstream model's capability.
+func openCodeModelDecl(modelID string, vision bool) map[string]any {
+	decl := map[string]any{"name": modelID}
+	if vision {
+		decl["attachment"] = true
+		decl["modalities"] = map[string]any{
+			"input":  []string{"text", "image"},
+			"output": []string{"text"},
+		}
+	}
+	return decl
 }
 
 // openCodeNeedsAdapter reports whether opencode.json must carry the provider's
