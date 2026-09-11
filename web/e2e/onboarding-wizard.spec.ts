@@ -336,8 +336,9 @@ test('新建项目 create 模式：首步项目名 → create+bootstrap', async 
 
   await page.getByTestId('onboarding-project-name').fill('中国象棋')
   await page.getByTestId('onboarding-next').click()
-  await expect(page.getByTestId('onboarding-language-zh-CN')).toBeVisible()
-  await page.getByTestId('onboarding-next').click()
+  // createProject skips language: project name → overview
+  await expect(page.getByTestId('onboarding-language-zh-CN')).toHaveCount(0)
+  await expect(page.getByTestId('onboarding-overview-agents')).toBeVisible()
   await page.getByTestId('onboarding-next').click()
   await page.getByTestId('onboarding-next').click()
   await fillOpenCodeAuth(page, 'sk-create-e2e')
