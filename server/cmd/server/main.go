@@ -163,6 +163,10 @@ func main() {
 	sharedAgentSvc := services.NewSharedAgentService(services.DefaultSharedAgentRoot(cfg.Engine.ProfilesRoot))
 	services.MigrateProjectSandboxEnvOnce(db, projectSvc, sharedAgentSvc)
 	services.MigrateAgentProfilesOnce(db)
+	// One snapshot of OpenCode's provider catalog, shared by the pickers and by
+	// every path that generates opencode.json, so both agree on which vendor ids
+	// OpenCode can resolve without an adapter of our own.
+	openCodeCatalog := opencodecatalog.New(cfg.Sandbox.OpenCodeCatalogURL)
 	provider := runtime.NewProvider(cfg.Engine.ExecProvider, host, runtime.Options{
 		SandboxImage:         cfg.Sandbox.Image,
 		SandboxImages:        cfg.Sandbox.Images,
@@ -218,6 +222,7 @@ func main() {
 			return run.SandboxEnv
 		},
 		PublicAdvertise: cfg.Server.PublicAdvertise,
+		OpenCodeCatalog: openCodeCatalog,
 	})
 	eng := engine.New(db, provider, host, artifactSvc, cfg.Engine.MaxConcurrentRuns)
 	eng.SetBlobStore(blobStore)
@@ -311,6 +316,7 @@ func main() {
 		RunTTL:            cfg.RunSandboxTTL(),
 		Max:               cfg.Sandbox.MaxTestSandboxes,
 		SharedAgent:       sharedAgentSvc,
+		OpenCodeCatalog:   openCodeCatalog,
 	})
 	// Let the exec provider record per-run node sandboxes in the same store so
 	// they show up in the sandbox UI alongside interactive test sandboxes.
@@ -477,7 +483,7 @@ func main() {
 		Blobs:             blobStore,
 		Onboarding:        services.NewOnboardingService(projectSvc, agentSvc, sharedAgentSvc, wfSvc, orgSvc),
 		Team:              services.NewTeamService(projectSvc, agentSvc, orgSvc, pmSvc, sbxSvc),
-		OpenCodeCatalog:   opencodecatalog.New(cfg.Sandbox.OpenCodeCatalogURL),
+		OpenCodeCatalog:   openCodeCatalog,
 	}
 	if h.Team != nil && h.PMMCP != nil {
 		h.PMMCP.SetTeam(h.Team)

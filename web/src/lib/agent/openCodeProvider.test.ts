@@ -5,8 +5,10 @@ import {
   OPENCODE_FALLBACK_PROVIDERS,
   openCodeCustomBaseRequired,
   openCodeFieldsFromEnv,
-  openCodeModelMatchesProvider,
+  openCodeModelFromCatalog,
+  openCodeModelID,
   openCodeModelRequired,
+  openCodeModelWithProvider,
   switchOpenCodeEnv,
 } from './openCodeProvider'
 
@@ -42,14 +44,37 @@ describe('openCodeProvider', () => {
     }
   })
 
-  it('tells whether a model still names the selected vendor', () => {
-    expect(openCodeModelMatchesProvider('deepseek/deepseek-v4-pro', 'deepseek')).toBe(true)
-    expect(openCodeModelMatchesProvider('deepseek/deepseek-v4-pro', 'zai')).toBe(false)
-    // Empty and bare ids name no vendor, so neither contradicts one.
-    expect(openCodeModelMatchesProvider('', 'zai')).toBe(true)
-    expect(openCodeModelMatchesProvider('my-model', 'custom')).toBe(true)
-    // OpenRouter model ids carry their own slash and still belong to the vendor.
-    expect(openCodeModelMatchesProvider('openrouter/qwen/qwen3.7-max', 'openrouter')).toBe(true)
+  it('prefixes the vendor onto a hand-typed id, idempotently', () => {
+    expect(openCodeModelWithProvider('deepseek-v4-pro', 'deepseek')).toBe('deepseek/deepseek-v4-pro')
+    expect(openCodeModelWithProvider('deepseek/deepseek-v4-pro', 'deepseek')).toBe(
+      'deepseek/deepseek-v4-pro',
+    )
+    // A gateway id carries slashes of its own and is prefixed whole.
+    expect(openCodeModelWithProvider('deepseek/deepseek-flash', 'custom')).toBe(
+      'custom/deepseek/deepseek-flash',
+    )
+    expect(openCodeModelWithProvider('', 'zai')).toBe('')
+  })
+
+  it("strips the vendor prefix to recover the vendor's own id", () => {
+    expect(openCodeModelID('deepseek/deepseek-v4-pro', 'deepseek')).toBe('deepseek-v4-pro')
+    expect(openCodeModelID('deepseek-v4-pro', 'deepseek')).toBe('deepseek-v4-pro')
+    expect(openCodeModelID('openrouter/qwen/qwen3.7-max', 'openrouter')).toBe('qwen/qwen3.7-max')
+    expect(openCodeModelID('', 'zai')).toBe('')
+  })
+
+  it('tells whether a model came from the vendor listing', () => {
+    const models = [{ id: 'deepseek-v4-pro' }, { id: 'deepseek-v4-flash' }]
+    expect(openCodeModelFromCatalog('deepseek/deepseek-v4-pro', 'deepseek', models)).toBe(true)
+    expect(openCodeModelFromCatalog('deepseek-v4-pro', 'deepseek', models)).toBe(true)
+    // Hand-typed ids survive a vendor switch.
+    expect(openCodeModelFromCatalog('custom/deepseek/deepseek-flash', 'custom', models)).toBe(false)
+    expect(openCodeModelFromCatalog('', 'deepseek', models)).toBe(false)
+  })
+
+  it('recognizes a self-prefixed catalog id as a listing pick', () => {
+    const models = [{ id: 'openrouter/auto' }]
+    expect(openCodeModelFromCatalog('openrouter/openrouter/auto', 'openrouter', models)).toBe(true)
   })
 
   it('writes and strips managed OpenCode env', () => {
@@ -60,9 +85,10 @@ describe('openCodeProvider', () => {
     expect(openCodeFieldsFromEnv(env)).toEqual({
       provider: 'custom',
       baseURL: 'https://llm.example/v1',
-      model: 'foo',
+      // A bare id gains its vendor on write, so the stored value is complete.
+      model: 'custom/foo',
     })
-    expect(switchOpenCodeEnv(env, 'cursor')).toEqual({ ACP_BRIDGE_MODEL: 'foo' })
+    expect(switchOpenCodeEnv(env, 'cursor')).toEqual({ ACP_BRIDGE_MODEL: 'custom/foo' })
     expect(switchOpenCodeEnv({}, 'opencode').APPROVING_OPENCODE_PROVIDER).toBe('openai')
   })
 })

@@ -11,16 +11,37 @@ import type { OpenCodeCatalogModel, OpenCodeCatalogProvider } from '@/lib/api/ap
  */
 
 let providersOnce: Promise<OpenCodeCatalogProvider[]> | null = null
+let providerIds: Set<string> | null = null
 const modelsOnce = new Map<string, Promise<OpenCodeCatalogModel[]>>()
 
 export function loadOpenCodeProviders(): Promise<OpenCodeCatalogProvider[]> {
   if (!providersOnce) {
     providersOnce = api
       .openCodeProviders()
-      .then((r) => r?.providers || [])
-      .catch(() => [])
+      .then((r) => {
+        if (r?.error) {
+          providerIds = null
+          return []
+        }
+        const providers = r?.providers || []
+        providerIds = new Set(providers.map((p) => p.id.trim().toLowerCase()))
+        return providers
+      })
+      .catch(() => {
+        providerIds = null
+        return []
+      })
   }
   return providersOnce
+}
+
+/**
+ * Reports whether the last readable catalog lists a provider. Undefined means
+ * it has not loaded or could not be read, so callers must stay conservative.
+ */
+export function openCodeCatalogKnowsProvider(provider: string): boolean | undefined {
+  if (!providerIds) return undefined
+  return providerIds.has(provider.trim().toLowerCase())
 }
 
 export function loadOpenCodeModels(provider: string): Promise<OpenCodeCatalogModel[]> {
@@ -39,5 +60,6 @@ export function loadOpenCodeModels(provider: string): Promise<OpenCodeCatalogMod
 /** Drops the memoized answers; tests and a re-login want a clean slate. */
 export function resetOpenCodeCatalog(): void {
   providersOnce = null
+  providerIds = null
   modelsOnce.clear()
 }

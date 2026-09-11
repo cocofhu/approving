@@ -69,6 +69,19 @@ describe('OpenCodeProviderFields', () => {
     wrapper.unmount()
   })
 
+  // The catalog really lists `openrouter/auto` under `openrouter`. Treating that
+  // first segment as the vendor prefix would ask the endpoint for `auto`.
+  it('keeps the vendor prefix on a self-prefixed catalog id', async () => {
+    openCodeModels.mockResolvedValue({ models: [{ id: 'openrouter/auto', name: 'Auto' }] })
+    const wrapper = mountFields({ provider: 'openrouter' })
+    await flushPromises()
+    await openPanel(wrapper, 'opencode-model')
+    const option = wrapper.get('[data-test="app-select-option-openrouter/openrouter/auto"]')
+    await option.trigger('click')
+    expect(wrapper.emitted('update:model')?.[0]).toEqual(['openrouter/openrouter/auto'])
+    wrapper.unmount()
+  })
+
   // The failure this warning prevents is silent: OpenCode exits 1 with no stderr.
   it('warns about a model the catalog does not list', async () => {
     const wrapper = mountFields({ model: 'deepseek/deepseek-reasoner' })
@@ -80,6 +93,45 @@ describe('OpenCodeProviderFields', () => {
     wrapper.unmount()
   })
 
+  // A hand-typed bare id names the same model as the prefixed one.
+  it('accepts a bare id the vendor does list', async () => {
+    const wrapper = mountFields({ model: 'deepseek-v4-pro' })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-model-unknown"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  // A gateway publishes ids with a slash inside; that slash is not a vendor.
+  it('leaves a slashed gateway model id alone', async () => {
+    openCodeModels.mockResolvedValue({ models: [] })
+    const wrapper = mountFields({
+      provider: 'custom',
+      model: 'deepseek/deepseek-flash',
+      baseUrl: 'https://tokenhub.example/v1',
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-model-unknown"]').exists()).toBe(false)
+    await wrapper.setProps({ provider: 'deepseek' })
+    await flushPromises()
+    expect(wrapper.emitted('update:model')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  // Typing a vendor the catalog never heard of is a supported way to name your
+  // own gateway, so it explains the endpoint rather than rejecting the id.
+  it('treats a vendor outside the catalog as a self-hosted endpoint', async () => {
+    const wrapper = mountFields({ provider: 'tokenhub', model: 'deepseek/deepseek-flash' })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-provider-self-hosted"]').exists()).toBe(true)
+    // Its model list is the endpoint's, so no catalog warning applies.
+    expect(wrapper.find('[data-test="opencode-model-unknown"]').exists()).toBe(false)
+
+    await wrapper.setProps({ provider: 'deepseek' })
+    await flushPromises()
+    expect(wrapper.find('[data-test="opencode-provider-self-hosted"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('stays quiet about a custom gateway model', async () => {
     openCodeModels.mockResolvedValue({ models: [] })
     const wrapper = mountFields({ provider: 'custom', model: 'my-model', baseUrl: 'https://llm.example/v1' })
@@ -88,7 +140,7 @@ describe('OpenCodeProviderFields', () => {
     wrapper.unmount()
   })
 
-  it('drops a model that names the vendor left behind', async () => {
+  it('drops a model picked from the vendor left behind', async () => {
     const wrapper = mountFields({ model: 'deepseek/deepseek-v4-pro' })
     await flushPromises()
     await wrapper.setProps({ provider: 'anthropic' })

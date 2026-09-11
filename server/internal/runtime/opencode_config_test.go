@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,6 +127,279 @@ func TestOpenCodeConfigForEnv_CustomRequiresProviderBlock(t *testing.T) {
 	opts, _ := custom["options"].(map[string]any)
 	if opts["baseURL"] != "https://llm.example/v1" {
 		t.Fatalf("baseURL=%v", opts["baseURL"])
+	}
+}
+
+// An aggregating gateway's model id contains a slash of its own. Cutting at
+// that slash would name the wrong vendor, so the whole id keeps its shape and
+// the picked provider is prefixed in front of it.
+func TestOpenCodeConfigForEnv_SlashedModelIDKeepsVendor(t *testing.T) {
+	doc := OpenCodeConfigForEnv(BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "openrouter",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "anthropic/claude-sonnet-4-5",
+	})
+	if doc == nil {
+		t.Fatal("expected config")
+	}
+	if doc["model"] != "openrouter/anthropic/claude-sonnet-4-5" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+}
+
+// Prefixing is idempotent: a saved value already naming its vendor must not
+// grow a second prefix.
+func TestOpenCodeConfigForEnv_PrefixIsIdempotent(t *testing.T) {
+	doc := OpenCodeConfigForEnv(BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "openrouter",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "openrouter/anthropic/claude-sonnet-4-5",
+	})
+	if doc == nil {
+		t.Fatal("expected config")
+	}
+	if doc["model"] != "openrouter/anthropic/claude-sonnet-4-5" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+}
+
+// The catalog lists `openrouter/auto` under `openrouter`, so a value naming that
+// model twice is not a doubled prefix — stripping one leaves `auto`, which the
+// endpoint does not serve. Only the value the picker writes is authoritative.
+func TestOpenCodeConfigForEnv_SelfPrefixedCatalogID(t *testing.T) {
+	doc := OpenCodeConfigForEnv(BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "openrouter",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "openrouter/openrouter/auto",
+	})
+	if doc == nil {
+		t.Fatal("expected config")
+	}
+	if doc["model"] != "openrouter/openrouter/auto" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+}
+
+func TestOpenCodeConfigForEnv_CustomDeclaresSlashedModel(t *testing.T) {
+	doc := OpenCodeConfigForEnv(BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "custom",
+		EnvOpenCodeBaseURL:  "https://tokenhub.example/v1",
+		EnvACPBridgeModel:   "deepseek/deepseek-flash",
+	})
+	if doc == nil {
+		t.Fatal("expected config")
+	}
+	if doc["model"] != "custom/deepseek/deepseek-flash" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+	prov, _ := doc["provider"].(map[string]any)
+	custom, _ := prov["custom"].(map[string]any)
+	models, _ := custom["models"].(map[string]any)
+	if _, ok := models["deepseek/deepseek-flash"]; !ok {
+		t.Fatalf("gateway model must be declared whole: %#v", models)
+	}
+}
+
+func TestOpenCodeConfigForEnv_CustomWithoutModel(t *testing.T) {
+	doc := OpenCodeConfigForEnv(BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "custom",
+		EnvOpenCodeBaseURL:  "https://llm.example/v1",
+	})
+	if doc == nil {
+		t.Fatal("expected config")
+	}
+	if doc["model"] != "custom/default" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+	prov, _ := doc["provider"].(map[string]any)
+	custom, _ := prov["custom"].(map[string]any)
+	models, _ := custom["models"].(map[string]any)
+	if _, ok := models["default"]; !ok {
+		t.Fatalf("models=%#v", models)
+	}
+}
+
+// stubCatalog answers provider lookups without touching models.dev. models maps
+// provider id → the ids that provider lists.
+type stubCatalog struct {
+	known     map[string]bool
+	models    map[string][]string
+	readable  bool
+	lastQuery string
+}
+
+func (s *stubCatalog) KnowsProvider(_ context.Context, id string) (bool, bool) {
+	s.lastQuery = id
+	if !s.readable {
+		return false, false
+	}
+	return s.known[id], true
+}
+
+func (s *stubCatalog) KnowsModel(_ context.Context, provider, model string) (bool, bool) {
+	if !s.readable {
+		return false, false
+	}
+	for _, m := range s.models[provider] {
+		if m == model {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+// Naming your own gateway has to work like picking a vendor from the list: the
+// adapter and the model declaration are generated, not typed by the user.
+func TestOpenCodeConfigForEnv_UnlistedVendorGetsAdapter(t *testing.T) {
+	cat := &stubCatalog{known: map[string]bool{"openai": true}, readable: true}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "tokenhub",
+		EnvOpenCodeBaseURL:  "https://tokenhub.example/v1",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "deepseek/deepseek-flash",
+	}, cat)
+	if doc == nil {
+		t.Fatal("expected config")
+	}
+	if doc["model"] != "tokenhub/deepseek/deepseek-flash" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+	prov, _ := doc["provider"].(map[string]any)
+	th, _ := prov["tokenhub"].(map[string]any)
+	if th == nil {
+		t.Fatalf("provider block must keep the typed-in name: %#v", doc)
+	}
+	if th["npm"] != openCodeCompatibleNPM {
+		t.Fatalf("npm=%v", th["npm"])
+	}
+	if th["name"] != "tokenhub" {
+		t.Fatalf("name=%v", th["name"])
+	}
+	models, _ := th["models"].(map[string]any)
+	if _, ok := models["deepseek/deepseek-flash"]; !ok {
+		t.Fatalf("gateway model must be declared whole: %#v", models)
+	}
+	opts, _ := th["options"].(map[string]any)
+	if opts["baseURL"] != "https://tokenhub.example/v1" {
+		t.Fatalf("baseURL=%v", opts["baseURL"])
+	}
+}
+
+// A vendor the catalog lists can still be missing the model: Tencent TokenHub is
+// in the catalog with three `hy*` ids, while the endpoint serves many more. The
+// vendor keeps its own adapter; only the model is declared.
+func TestOpenCodeConfigForEnv_ListedVendorUnlistedModel(t *testing.T) {
+	cat := &stubCatalog{
+		known:    map[string]bool{"tencent-tokenhub": true},
+		models:   map[string][]string{"tencent-tokenhub": {"hy3", "hy4-preview"}},
+		readable: true,
+	}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "tencent-tokenhub",
+		EnvOpenCodeBaseURL:  "https://tokenhub.example/v1",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "deepseek/deepseek-flash",
+	}, cat)
+	if doc["model"] != "tencent-tokenhub/deepseek/deepseek-flash" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+	prov, _ := doc["provider"].(map[string]any)
+	th, _ := prov["tencent-tokenhub"].(map[string]any)
+	models, _ := th["models"].(map[string]any)
+	if _, ok := models["deepseek/deepseek-flash"]; !ok {
+		t.Fatalf("unlisted model must be declared: %#v", th)
+	}
+	if _, ok := th["npm"]; ok {
+		t.Fatalf("catalog vendor must keep its own adapter: %#v", th)
+	}
+	if _, ok := th["name"]; ok {
+		t.Fatalf("catalog vendor must keep its own label: %#v", th)
+	}
+}
+
+// A model the catalog does list needs nothing written for it.
+func TestOpenCodeConfigForEnv_ListedVendorListedModel(t *testing.T) {
+	cat := &stubCatalog{
+		known:    map[string]bool{"openai": true},
+		models:   map[string][]string{"openai": {"gpt-4.1"}},
+		readable: true,
+	}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "openai",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "gpt-4.1",
+	}, cat)
+	prov, _ := doc["provider"].(map[string]any)
+	openai, _ := prov["openai"].(map[string]any)
+	if _, ok := openai["models"]; ok {
+		t.Fatalf("listed model needs no declaration: %#v", openai)
+	}
+}
+
+// A vendor OpenCode resolves itself must keep its own SDK and model list.
+func TestOpenCodeConfigForEnv_ListedVendorKeepsItsAdapter(t *testing.T) {
+	cat := &stubCatalog{
+		known:    map[string]bool{"openai": true},
+		models:   map[string][]string{"openai": {"gpt-4.1"}},
+		readable: true,
+	}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "openai",
+		EnvOpenCodeBaseURL:  "https://proxy.example/v1",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "gpt-4.1",
+	}, cat)
+	prov, _ := doc["provider"].(map[string]any)
+	openai, _ := prov["openai"].(map[string]any)
+	if openai == nil {
+		t.Fatalf("provider block missing: %#v", doc)
+	}
+	if _, ok := openai["npm"]; ok {
+		t.Fatalf("catalog vendor must keep its own adapter: %#v", openai)
+	}
+	if _, ok := openai["models"]; ok {
+		t.Fatalf("catalog vendor must keep its own model list: %#v", openai)
+	}
+	if doc["model"] != "openai/gpt-4.1" {
+		t.Fatalf("model=%v", doc["model"])
+	}
+}
+
+// An unreadable catalog is not evidence that a vendor is absent, so overriding
+// its adapter on a guess would break vendors that work today.
+func TestOpenCodeConfigForEnv_UnreadableCatalogStaysConservative(t *testing.T) {
+	cat := &stubCatalog{readable: false}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "tokenhub",
+		EnvOpenCodeBaseURL:  "https://tokenhub.example/v1",
+		EnvOpenCodeAPIKey:   "sk-oc",
+		EnvACPBridgeModel:   "deepseek/deepseek-flash",
+	}, cat)
+	prov, _ := doc["provider"].(map[string]any)
+	th, _ := prov["tokenhub"].(map[string]any)
+	if _, ok := th["npm"]; ok {
+		t.Fatalf("must not guess an adapter from an unreadable catalog: %#v", th)
+	}
+}
+
+// The reserved id needs no lookup: it exists precisely to carry an adapter.
+func TestOpenCodeConfigForEnv_CustomSkipsLookup(t *testing.T) {
+	cat := &stubCatalog{readable: true}
+	doc := OpenCodeConfigForEnvWithCatalog(context.Background(), BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "custom",
+		EnvOpenCodeBaseURL:  "https://llm.example/v1",
+		EnvACPBridgeModel:   "my-model",
+	}, cat)
+	if cat.lastQuery != "" {
+		t.Fatalf("custom should not be looked up, queried %q", cat.lastQuery)
+	}
+	prov, _ := doc["provider"].(map[string]any)
+	custom, _ := prov["custom"].(map[string]any)
+	if custom["npm"] != openCodeCompatibleNPM {
+		t.Fatalf("npm=%v", custom["npm"])
+	}
+	if custom["name"] != "Custom" {
+		t.Fatalf("name=%v", custom["name"])
 	}
 }
 

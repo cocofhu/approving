@@ -120,7 +120,7 @@ function setMode(mode: WizardAuthMode) {
         :provider="openCode.provider"
         :base-url="openCode.baseURL"
         :model="openCode.model"
-        :require-base="requireOpenCodeBase && openCode.provider === 'custom'"
+        :require-base="requireOpenCodeBase"
         :require-model="requireOpenCodeModel"
         @update:provider="emit('update:openCodeProvider', $event)"
         @update:base-url="emit('update:openCodeBaseUrl', $event)"

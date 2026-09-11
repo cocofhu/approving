@@ -201,10 +201,12 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		IncludeArtifactStore: hasArtifactStoreSpec(specs),
 		MCP:                  specs,
 		Settings:             runtime.CodeBuddySettingsForEnv(backend, env),
-		OpenCodeConfig:       runtime.OpenCodeConfigForEnv(backend, env),
-		AgentName:            profile,
-		ProfilesRoot:         s.profilesRoot,
-		GlobalRulesDir:       s.platformRulesRoot,
+		OpenCodeConfig: runtime.OpenCodeConfigForEnvWithCatalog(
+			context.Background(), backend, env, s.openCodeCatalog,
+		),
+		AgentName:      profile,
+		ProfilesRoot:   s.profilesRoot,
+		GlobalRulesDir: s.platformRulesRoot,
 	})
 	if err != nil {
 		fail(fmt.Errorf("build cursor home: %w", err))

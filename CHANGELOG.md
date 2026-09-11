@@ -4,6 +4,19 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.11-beta — 2026-09-11
+
+- OpenCode custom providers can be named directly (for example
+  `tencent-tokenhub`) instead of exposing a `custom/` routing prefix to users.
+- Model IDs containing `/` are preserved end to end, so gateway IDs such as
+  `deepseek/deepseek-flash` reach the upstream request unchanged.
+- Provider and model membership use the same models.dev snapshot as the UI.
+  Missing providers receive an OpenAI-compatible adapter; missing models are
+  declared without replacing a catalog provider's native adapter.
+- Catalog-absent providers require an API Base URL in every save flow.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.11-beta`.
+
 ## 0.3.10-beta — 2026-09-11
 
 - Public beta follow-up on [`v0.3.10-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.10-beta)

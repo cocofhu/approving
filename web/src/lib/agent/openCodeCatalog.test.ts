@@ -10,9 +10,13 @@ vi.mock('@/lib/api/api', () => ({
   },
 }))
 
-const { loadOpenCodeModels, loadOpenCodeProviders, resetOpenCodeCatalog } = await import(
-  './openCodeCatalog'
-)
+const {
+  loadOpenCodeModels,
+  loadOpenCodeProviders,
+  openCodeCatalogKnowsProvider,
+  resetOpenCodeCatalog,
+} = await import('./openCodeCatalog')
+const { openCodeCustomBaseRequired } = await import('./openCodeProvider')
 
 describe('openCodeCatalog', () => {
   beforeEach(() => {
@@ -33,6 +37,18 @@ describe('openCodeCatalog', () => {
     expect(openCodeModels).toHaveBeenCalledWith('deepseek')
   })
 
+  it('requires a base URL for a typed vendor absent from a readable catalog', async () => {
+    openCodeProviders.mockResolvedValue({
+      providers: [{ id: 'openai', name: 'OpenAI', models: 1 }],
+    })
+    await loadOpenCodeProviders()
+
+    expect(openCodeCatalogKnowsProvider('OpenAI')).toBe(true)
+    expect(openCodeCatalogKnowsProvider('tokenhub')).toBe(false)
+    expect(openCodeCustomBaseRequired('tokenhub', '')).toBe(true)
+    expect(openCodeCustomBaseRequired('tokenhub', 'https://tokenhub.example/v1')).toBe(false)
+  })
+
   it('asks once per vendor', async () => {
     openCodeProviders.mockResolvedValue({ providers: [] })
     openCodeModels.mockResolvedValue({ models: [] })
@@ -49,6 +65,8 @@ describe('openCodeCatalog', () => {
     openCodeModels.mockRejectedValue(new Error('offline'))
     expect(await loadOpenCodeProviders()).toEqual([])
     expect(await loadOpenCodeModels('deepseek')).toEqual([])
+    expect(openCodeCatalogKnowsProvider('deepseek')).toBeUndefined()
+    expect(openCodeCustomBaseRequired('deepseek', '')).toBe(false)
   })
 
   it('does not ask for an empty vendor', async () => {
