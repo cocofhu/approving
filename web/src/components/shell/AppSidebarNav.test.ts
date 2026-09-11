@@ -288,7 +288,7 @@ describe('AppSidebarNav', () => {
     expect(wrapper.text()).toContain('返回首页')
     expect(wrapper.text()).toContain('通用')
     expect(wrapper.text()).toContain('平台规则')
-    expect(wrapper.find('[data-to="/agents"]').exists()).toBe(false)
+    expect(wrapper.find('[data-to="/agents"]').text()).toContain('智能体')
     expect(wrapper.text()).not.toContain('待办')
     wrapper.unmount()
     vi.useRealTimers()
@@ -351,7 +351,7 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-testid="nav-workspace-chrome"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(true)
 
-    routeState.path = '/sandboxes'
+    routeState.path = '/agents'
     await flushPromises()
     await nextTick()
     await vi.advanceTimersByTimeAsync(400)
@@ -359,8 +359,7 @@ describe('AppSidebarNav', () => {
     expect(wrapper.find('[data-testid="nav-settings-chrome"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-back-home"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="nav-quick-pipelines"]').exists()).toBe(false)
-    expect(wrapper.find('[data-to="/sandboxes"]').exists()).toBe(true)
-    expect(wrapper.find('[data-to="/agents"]').exists()).toBe(false)
+    expect(wrapper.find('[data-to="/agents"]').text()).toContain('智能体')
 
     routeState.path = '/dashboard'
     await flushPromises()
