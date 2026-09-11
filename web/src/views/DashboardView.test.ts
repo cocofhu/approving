@@ -559,13 +559,18 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  it('disables pipeline combobox when no pipelines are available', async () => {
+  // plan g1.3 / g3.2 — empty list: trigger stays openable for create (not disabled)
+  it('keeps pipeline combobox openable when no pipelines are available', async () => {
     mocks.listWorkflows.mockResolvedValue([])
     const wrapper = mountDashboard()
     await flushPromises()
     const triggerEl = wrapper.get('[data-testid="home-pipeline-select-trigger"]').element as HTMLButtonElement
-    expect(triggerEl.disabled).toBe(true)
+    expect(triggerEl.disabled).toBe(false)
     expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').text()).toContain('未选择流水线')
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-select-panel')).toBe(true)
+    expect(teleportedExists('home-pipeline-select-create')).toBe(true)
     wrapper.unmount()
   })
 
@@ -599,7 +604,11 @@ describe('DashboardView home composer', () => {
     const empty = wrapper.get('[data-testid="home-pipelines-empty"]')
     expect(empty.text()).toContain('首页可见')
     expect(empty.text()).not.toContain('丢失')
-    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').element).toHaveProperty('disabled', true)
+    // plan g1.3 — zero visible pipelines: select still openable for create
+    expect(wrapper.get('[data-testid="home-pipeline-select-trigger"]').element).toHaveProperty(
+      'disabled',
+      false,
+    )
     wrapper.unmount()
   })
 
@@ -1053,6 +1062,61 @@ describe('DashboardView home composer', () => {
     expect(wrapper.get('[data-testid="home-create-error"]').text()).toContain('create failed')
     expect(mocks.listWorkflows.mock.calls.length).toBe(callsAfterMount)
     expect(wrapper.find('[data-testid="home-pipeline-card-wf-ap"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  // plan g2.1 / g3.2 — dropdown create opens the same HomeCreateBaselineModal
+  it('opens the baseline modal from the pipeline select create footer', async () => {
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-select-create')).toBe(true)
+    await teleported('home-pipeline-select-create').trigger('click')
+    await flushPromises()
+    expect(teleportedExists('home-pipeline-select-panel')).toBe(false)
+    expect(wrapper.find('[data-testid="home-create-workflow-name"]').exists()).toBe(true)
+    // plan g2.2 — rail card and composer + unchanged
+    expect(wrapper.find('[data-testid="home-new-workflow"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-composer-plus"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  // plan g3.2 — empty list can create from dropdown; composer + still attaches files only
+  it('allows create from dropdown when home pipelines are empty without changing plus', async () => {
+    mocks.listWorkflows.mockResolvedValue([])
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    await teleported('home-pipeline-select-create').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-create-workflow-name"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-composer-plus"]').attributes('title')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  // plan g2.1 / g3.2 — select create success path shares reloadAfterCreate
+  it('selects the new pipeline after create started from the dropdown footer', async () => {
+    const created: Workflow = { ...approveWf, id: 'wf-from-select', name: '下拉新建' }
+    mocks.createWorkflowFromBaseline.mockResolvedValue(created)
+    const wrapper = mountDashboard()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    await teleported('home-pipeline-select-create').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="home-create-workflow-name"]').setValue('下拉新建')
+    const url = wrapper.find('input[placeholder*="https"]')
+    await url.setValue('https://github.com/org/from-select')
+    await flushPromises()
+    mocks.listWorkflows.mockResolvedValue([approveWf, created])
+    await wrapper.get('[data-testid="home-create-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-pipeline-card-wf-from-select"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-pipeline-card-wf-from-select"]').classes()).toContain(
+      'home-shell__card--selected',
+    )
     wrapper.unmount()
   })
 })

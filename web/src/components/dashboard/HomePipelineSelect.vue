@@ -15,6 +15,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: string): void
+  (e: 'create'): void
 }>()
 
 const { t } = useI18n()
@@ -51,6 +52,10 @@ const filtered = computed(() => {
       p.name.toLowerCase().includes(q) || (p.projectName || '').toLowerCase().includes(q),
   )
 })
+
+/** Create footer is the last keyboard target (index === filtered.length). */
+const createIndex = computed(() => filtered.value.length)
+const createActive = computed(() => activeIndex.value >= createIndex.value)
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
@@ -101,11 +106,12 @@ function onScrollOrResize() {
 }
 
 async function openPanel() {
-  if (props.disabled || !props.pipelines.length) return
+  // plan g1.3 — empty pipelines still open (create-only panel); sending disables via prop
+  if (props.disabled) return
   open.value = true
   search.value = ''
   const idx = props.pipelines.findIndex((p) => p.id === props.modelValue)
-  activeIndex.value = Math.max(0, idx)
+  activeIndex.value = props.pipelines.length ? Math.max(0, idx) : createIndex.value
   await nextTick()
   placePanelBelow()
   searchInput.value?.focus()
@@ -118,7 +124,7 @@ function closePanel() {
 
 function togglePanel(e: MouseEvent) {
   e.stopPropagation()
-  if (props.disabled || !props.pipelines.length) return
+  if (props.disabled) return
   if (open.value) closePanel()
   else void openPanel()
 }
@@ -126,6 +132,13 @@ function togglePanel(e: MouseEvent) {
 function choose(id: string) {
   emit('update:modelValue', id)
   closePanel()
+  trigger.value?.focus()
+}
+
+/** plan g2.1 — emit create; close panel so Dashboard can open HomeCreateBaselineModal */
+function emitCreate() {
+  closePanel()
+  emit('create')
   trigger.value?.focus()
 }
 
@@ -137,11 +150,13 @@ function onDocClick(e: MouseEvent) {
 }
 
 function onSearchInput() {
-  activeIndex.value = 0
+  // Prefer first match; if none, land on create footer (plan g1.2 / g1.3)
+  activeIndex.value = filtered.value.length ? 0 : createIndex.value
 }
 
 function onSearchKeydown(e: KeyboardEvent) {
   const items = filtered.value
+  const maxIdx = createIndex.value // create footer
   if (e.key === 'Escape') {
     e.preventDefault()
     closePanel()
@@ -150,25 +165,35 @@ function onSearchKeydown(e: KeyboardEvent) {
   }
   if (e.key === 'ArrowDown') {
     e.preventDefault()
-    if (!items.length) return
-    activeIndex.value = (activeIndex.value + 1) % items.length
+    if (!items.length) {
+      activeIndex.value = maxIdx
+      return
+    }
+    activeIndex.value = Math.min(activeIndex.value + 1, maxIdx)
     return
   }
   if (e.key === 'ArrowUp') {
     e.preventDefault()
-    if (!items.length) return
-    activeIndex.value = (activeIndex.value - 1 + items.length) % items.length
+    if (!items.length) {
+      activeIndex.value = maxIdx
+      return
+    }
+    activeIndex.value = Math.max(0, activeIndex.value - 1)
     return
   }
   if (e.key === 'Enter') {
     e.preventDefault()
-    if (!items.length) return
+    // plan g1.2 — no matches: Enter triggers create; last arrow target is create
+    if (!items.length || activeIndex.value >= items.length) {
+      emitCreate()
+      return
+    }
     choose(items[activeIndex.value].id)
   }
 }
 
 function onTriggerKeydown(e: KeyboardEvent) {
-  if (props.disabled || !props.pipelines.length) return
+  if (props.disabled) return
   if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
     e.preventDefault()
     if (!open.value) void openPanel()
@@ -182,7 +207,8 @@ function onTriggerKeydown(e: KeyboardEvent) {
 watch(
   () => filtered.value.length,
   (len) => {
-    if (activeIndex.value >= len) activeIndex.value = Math.max(0, len - 1)
+    // Allow activeIndex === len (create footer)
+    if (activeIndex.value > len) activeIndex.value = len
   },
 )
 
@@ -211,7 +237,7 @@ onBeforeUnmount(() => {
       type="button"
       class="home-pipeline-select__trigger"
       data-testid="home-pipeline-select-trigger"
-      :disabled="disabled || !pipelines.length"
+      :disabled="disabled"
       aria-haspopup="listbox"
       :aria-expanded="open"
       aria-controls="home-pipeline-select-panel"
@@ -289,6 +315,17 @@ onBeforeUnmount(() => {
             {{ t('common.empty.noMatchingPipelines') }}
           </div>
         </div>
+        <!-- plan g1.1 — sticky create footer; not a selectable pipeline option -->
+        <button
+          type="button"
+          class="home-pipeline-select__create"
+          data-testid="home-pipeline-select-create"
+          :class="{ 'home-pipeline-select__create--active': createActive }"
+          @click.stop="emitCreate"
+        >
+          <span class="home-pipeline-select__create-plus" aria-hidden="true">+</span>
+          <span>{{ t('pages.dashboard.create.addCard') }}</span>
+        </button>
       </div>
     </Teleport>
   </div>
@@ -347,7 +384,8 @@ onBeforeUnmount(() => {
 
 /* plan g1.1 — panel opens below trigger (top), never bottom/upward.
    Teleported panel uses fixed coords from placePanelBelow(); keep top as
-   the documented downward default if styles apply without inline overrides. */
+   the documented downward default if styles apply without inline overrides.
+   Flex column so create footer stays pinned while the list scrolls. */
 .home-pipeline-select__panel {
   position: fixed;
   left: 0;
@@ -359,11 +397,15 @@ onBeforeUnmount(() => {
   background: rgb(var(--c-elevated));
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   z-index: 60;
+  display: flex;
+  flex-direction: column;
+  max-height: min(360px, calc(100vh - 24px));
 }
 
 .home-pipeline-select__search-wrap {
   padding: 8px;
   border-bottom: 1px solid rgb(var(--c-line) / 0.7);
+  flex-shrink: 0;
 }
 
 .home-pipeline-select__search {
@@ -390,6 +432,8 @@ onBeforeUnmount(() => {
   max-height: 220px;
   overflow: auto;
   padding: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .home-pipeline-select__opt {
@@ -443,6 +487,42 @@ onBeforeUnmount(() => {
   text-align: center;
   color: rgb(var(--c-txt3));
   font-size: 12px;
+}
+
+/* plan g1.1 — divider + plus/label; pinned under scrollable list; no aria-selected */
+.home-pipeline-select__create {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+  border: 0;
+  border-top: 1px solid rgb(var(--c-line) / 0.7);
+  background: transparent;
+  color: rgb(var(--c-txt));
+  padding: 10px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.home-pipeline-select__create:hover,
+.home-pipeline-select__create--active {
+  background: rgb(var(--c-accent) / 0.1);
+}
+
+.home-pipeline-select__create-plus {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgb(var(--c-line));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  color: rgb(var(--c-txt2));
+  flex-shrink: 0;
 }
 
 @media (max-width: 520px) {

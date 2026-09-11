@@ -217,6 +217,128 @@ describe('HomePipelineSelect', () => {
     search.dispatchEvent(new Event('input'))
     await flushPromises()
     expect(document.querySelector('[data-testid="home-pipeline-select-empty"]')).toBeTruthy()
+    // plan g1.3 — empty search still shows create footer
+    expect(document.querySelector('[data-testid="home-pipeline-select-create"]')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  // plan g1.1 / g3.1 / g3.3 — sticky create footer with addCard copy
+  it('renders a pinned create footer with 新建工作流 under the option list', async () => {
+    const wrapper = mountSelect({})
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const create = document.querySelector(
+      '[data-testid="home-pipeline-select-create"]',
+    ) as HTMLElement | null
+    expect(create).toBeTruthy()
+    expect(create!.textContent).toContain('新建工作流')
+    expect(create!.getAttribute('aria-selected')).toBeNull()
+    expect(create!.classList.contains('home-pipeline-select__opt--current')).toBe(false)
+    const panel = document.querySelector('[data-testid="home-pipeline-select-panel"]') as HTMLElement
+    expect(panel.lastElementChild).toBe(create)
+    wrapper.unmount()
+  })
+
+  // plan g2.1 / g3.1 — click create emits create and closes panel
+  it('emits create and closes the panel when the footer is clicked', async () => {
+    const wrapper = mountSelect({})
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const create = document.querySelector(
+      '[data-testid="home-pipeline-select-create"]',
+    ) as HTMLButtonElement
+    create.click()
+    await flushPromises()
+    expect(wrapper.emitted('create')).toBeTruthy()
+    expect(wrapper.emitted('create')!.length).toBe(1)
+    expect(document.querySelector('[data-testid="home-pipeline-select-panel"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  // plan g1.3 / g3.1 — zero pipelines: trigger opens create-only panel
+  it('opens a create-only panel when pipelines is empty and not disabled', async () => {
+    const wrapper = mountSelect({ pipelines: [], modelValue: '' })
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="home-pipeline-select-trigger"]')
+    expect((trigger.element as HTMLButtonElement).disabled).toBe(false)
+    await trigger.trigger('click')
+    await flushPromises()
+    expect(document.querySelector('[data-testid="home-pipeline-select-panel"]')).toBeTruthy()
+    expect(document.querySelector('[data-testid="home-pipeline-select-empty"]')).toBeTruthy()
+    expect(document.querySelector('[data-testid="home-pipeline-select-create"]')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('keeps the trigger disabled while disabled prop is true (sending)', async () => {
+    const wrapper = mountSelect({ pipelines: [], modelValue: '', disabled: true })
+    await flushPromises()
+    expect(
+      (wrapper.get('[data-testid="home-pipeline-select-trigger"]').element as HTMLButtonElement)
+        .disabled,
+    ).toBe(true)
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('[data-testid="home-pipeline-select-panel"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  // plan g1.2 / g3.1 — ArrowDown from last option lands on create; Enter emits create
+  it('moves keyboard highlight onto create after the last option and Enter emits create', async () => {
+    const wrapper = mountSelect({})
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = document.querySelector(
+      '[data-testid="home-pipeline-select-search"]',
+    ) as HTMLInputElement
+    // open sets activeIndex to selected (0); ArrowDown → 1 (wf-b); ArrowDown → create
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await flushPromises()
+    const create = document.querySelector(
+      '[data-testid="home-pipeline-select-create"]',
+    ) as HTMLElement
+    expect(create.classList.contains('home-pipeline-select__create--active')).toBe(true)
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.emitted('create')).toBeTruthy()
+    expect(document.querySelector('[data-testid="home-pipeline-select-panel"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  // plan g1.2 — no matches: Enter triggers create
+  it('triggers create on Enter when search has no matches', async () => {
+    const wrapper = mountSelect({})
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = document.querySelector(
+      '[data-testid="home-pipeline-select-search"]',
+    ) as HTMLInputElement
+    search.value = 'zzzz-no-match'
+    search.dispatchEvent(new Event('input'))
+    await flushPromises()
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.emitted('create')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  // plan g1.2 — Escape only closes the panel
+  it('closes the panel on Escape without emitting create', async () => {
+    const wrapper = mountSelect({})
+    await flushPromises()
+    await wrapper.get('[data-testid="home-pipeline-select-trigger"]').trigger('click')
+    await flushPromises()
+    const search = document.querySelector(
+      '[data-testid="home-pipeline-select-search"]',
+    ) as HTMLInputElement
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect(document.querySelector('[data-testid="home-pipeline-select-panel"]')).toBeNull()
+    expect(wrapper.emitted('create')).toBeFalsy()
     wrapper.unmount()
   })
 })

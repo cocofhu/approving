@@ -253,6 +253,11 @@ function openCreateBaseline(e?: Event) {
   createBaselineOpen.value = true
 }
 
+/** plan g2.1 — HomePipelineSelect create footer → same baseline modal as rail card */
+function onCreateFromSelect() {
+  openCreateBaseline()
+}
+
 async function onBaselineCreated(payload?: { id?: string }) {
   createBaselineOpen.value = false
   await reloadAfterCreate(payload?.id)
@@ -595,8 +600,9 @@ onBeforeUnmount(() => {
             <HomePipelineSelect
               :pipelines="pipelines"
               :model-value="selectedId"
-              :disabled="!pipelines.length || sending"
+              :disabled="sending"
               @update:model-value="selectPipeline"
+              @create="onCreateFromSelect"
             />
             <HomePrioritySelect
               :model-value="launchPriority"
