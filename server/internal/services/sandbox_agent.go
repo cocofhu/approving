@@ -231,6 +231,8 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 		WorkDirSrc:           s.skills.WorkDir(profile),
 		IncludeArtifactStore: false,
 		MCP:                  specs,
+		OpenCode:             backend == runtime.BackendOpenCode,
+		BrowserMCP:           runtime.EnvEnabled(env["BROWSER_MCP"]),
 		Settings:             runtime.CodeBuddySettingsForEnv(backend, env),
 		OpenCodeConfig: runtime.OpenCodeConfigForEnvWithCatalog(
 			context.Background(), backend, env, s.openCodeCatalog,
