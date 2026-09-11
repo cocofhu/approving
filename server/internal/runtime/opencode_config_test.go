@@ -422,6 +422,47 @@ func TestMergeAuthEnv_OpenCodeMapsNativeKey(t *testing.T) {
 	}
 }
 
+func TestMergeAuthEnv_OpenCodePrefixesBridgeModel(t *testing.T) {
+	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
+		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvOpenCodeProvider:        "tencent-tokenhub",
+		EnvACPBridgeModel:          "deepseek/deepseek-flash",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[EnvACPBridgeModel] != "tencent-tokenhub/deepseek/deepseek-flash" {
+		t.Fatalf("model=%q", out[EnvACPBridgeModel])
+	}
+}
+
+func TestMergeAuthEnv_OpenCodeBridgeModelPrefixIdempotent(t *testing.T) {
+	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
+		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvOpenCodeProvider:        "openrouter",
+		EnvACPBridgeModel:          "openrouter/openrouter/auto",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[EnvACPBridgeModel] != "openrouter/openrouter/auto" {
+		t.Fatalf("model=%q", out[EnvACPBridgeModel])
+	}
+}
+
+func TestMergeAuthEnv_OpenCodeBridgeModelStaysEmpty(t *testing.T) {
+	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
+		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvOpenCodeProvider:        "openai",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out[EnvACPBridgeModel]; ok {
+		t.Fatalf("should not invent a model: %#v", out)
+	}
+}
+
 func TestPrepareAuthEnv_OpenCodeJSONSkipsKey(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "opencode.json"), []byte(`{"model":"openai/gpt-4.1"}`), 0o644); err != nil {

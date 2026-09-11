@@ -45,6 +45,13 @@ type ConfigHomeSpec struct {
 	// artifact-store entry already resolved to its run-scoped URL+token by the
 	// runtime) written into mcp.json.
 	MCP []MCPServerSpec
+	// OpenCode enables OpenCode-native MCP configuration. OpenCode does not read
+	// mcp.json, so the same servers must also be translated into opencode.json.
+	OpenCode bool
+	// BrowserMCP registers the sandbox's headed Chromium as chrome-devtools.
+	// Putting it in the generated files keeps the later SSH seed from erasing
+	// the startup script's best-effort mcp.json registration.
+	BrowserMCP bool
 	// Settings, when non-nil, is written as settings.json under the config
 	// home (CodeBuddy staging needs envRouteMode+endpoint here; BASE_URL alone
 	// hits the wrong chat path).
@@ -122,8 +129,16 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 		}
 	}
 
+	mcpSpecs := append([]MCPServerSpec(nil), spec.MCP...)
+	if spec.BrowserMCP {
+		mcpSpecs = append(mcpSpecs, MCPServerSpec{
+			Name:    "chrome-devtools",
+			Command: "chrome-devtools-mcp",
+			Args:    []string{"--browser-url=http://127.0.0.1:9222"},
+		})
+	}
 	servers := map[string]any{}
-	for _, m := range spec.MCP {
+	for _, m := range mcpSpecs {
 		if m.Name == "" {
 			continue
 		}
@@ -164,8 +179,15 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 			return "", err
 		}
 	}
-	if len(spec.OpenCodeConfig) > 0 {
-		if err := writeOpenCodeJSONIfAbsent(dir, spec.OpenCodeConfig); err != nil {
+	if spec.OpenCode {
+		openCodeConfig := cloneMap(spec.OpenCodeConfig)
+		if openCodeConfig == nil {
+			openCodeConfig = map[string]any{"$schema": "https://opencode.ai/config.json"}
+		}
+		if mcp := openCodeMCPServers(mcpSpecs); len(mcp) > 0 {
+			openCodeConfig["mcp"] = mcp
+		}
+		if err := writeMergedOpenCodeJSON(dir, openCodeConfig); err != nil {
 			return "", err
 		}
 	}
@@ -193,19 +215,64 @@ func writeMergedSettingsJSON(dir string, platform map[string]any) error {
 	return os.WriteFile(path, b, 0o644)
 }
 
-func writeOpenCodeJSONIfAbsent(dir string, doc map[string]any) error {
+func writeMergedOpenCodeJSON(dir string, doc map[string]any) error {
 	if len(doc) == 0 {
 		return nil
 	}
 	path := filepath.Join(dir, "opencode.json")
-	if _, err := os.Stat(path); err == nil {
-		return nil
+	merged := doc
+	if b, err := os.ReadFile(path); err == nil {
+		var user map[string]any
+		if err := json.Unmarshal(b, &user); err != nil {
+			return fmt.Errorf("decode existing opencode.json: %w", err)
+		}
+		// User-authored values win, while platform MCP entries not mentioned
+		// by the user remain injected.
+		merged = mergeSettingsMaps(doc, user)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read existing opencode.json: %w", err)
 	}
-	b, err := json.MarshalIndent(doc, "", "  ")
+	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal opencode.json: %w", err)
 	}
 	return os.WriteFile(path, b, 0o644)
+}
+
+func openCodeMCPServers(specs []MCPServerSpec) map[string]any {
+	servers := map[string]any{}
+	for _, m := range specs {
+		if m.Name == "" {
+			continue
+		}
+		switch {
+		case m.URL != "":
+			entry := map[string]any{"type": "remote", "url": m.URL, "enabled": true}
+			if len(m.Headers) > 0 {
+				entry["headers"] = m.Headers
+			}
+			servers[m.Name] = entry
+		case m.Command != "":
+			command := append([]string{m.Command}, m.Args...)
+			entry := map[string]any{"type": "local", "command": command, "enabled": true}
+			if len(m.Env) > 0 {
+				entry["environment"] = m.Env
+			}
+			servers[m.Name] = entry
+		}
+	}
+	return servers
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }
 
 func mergeSettingsMaps(platform, user map[string]any) map[string]any {

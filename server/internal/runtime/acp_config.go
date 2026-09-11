@@ -40,6 +40,8 @@ func (c *acpProvider) buildConfigHome(req NodeReq, env map[string]string) string
 		EmbeddedRules:        nodereg.EmbeddedRuleFiles(req.NodeType),
 		IncludeArtifactStore: hasArtifactStore(specs),
 		MCP:                  specs,
+		OpenCode:             c.backend == BackendOpenCode,
+		BrowserMCP:           EnvEnabled(env["BROWSER_MCP"]),
 		Settings:             CodeBuddySettingsForEnv(c.backend, env),
 		OpenCodeConfig: OpenCodeConfigForEnvWithCatalog(
 			context.Background(), c.backend, env, c.opts.OpenCodeCatalog,
@@ -53,6 +55,16 @@ func (c *acpProvider) buildConfigHome(req NodeReq, env map[string]string) string
 		return ""
 	}
 	return home
+}
+
+// EnvEnabled recognizes the boolean spellings accepted by sandbox startup.
+func EnvEnabled(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 const (

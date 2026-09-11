@@ -4,6 +4,19 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.12-beta — 2026-09-11
+
+- OpenCode's bridge model override now receives the normalized
+  `provider/model` value, preventing `--model` from routing slashed upstream
+  model IDs to the wrong provider.
+- Agent, platform, and browser MCP servers are translated into OpenCode's
+  native `opencode.json` `mcp` block; `mcp.json` remains available to the other
+  ACP backends.
+- Existing user-authored OpenCode configuration is merged without replacing
+  user values, and malformed configuration is rejected instead of overwritten.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.12-beta`.
+
 ## 0.3.11-beta — 2026-09-11
 
 - OpenCode custom providers can be named directly (for example

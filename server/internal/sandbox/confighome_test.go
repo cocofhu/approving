@@ -328,6 +328,7 @@ func TestBuildConfigHomeArtifactStoreConditional(t *testing.T) {
 func TestBuildConfigHomeWritesOpenCodeJSON(t *testing.T) {
 	HomeBaseDir = ""
 	dir, err := BuildConfigHome(ConfigHomeSpec{
+		OpenCode:       true,
 		OpenCodeConfig: map[string]any{"model": "openai/gpt-4.1"},
 	})
 	if err != nil {
@@ -347,7 +348,7 @@ func TestBuildConfigHomeWritesOpenCodeJSON(t *testing.T) {
 	}
 }
 
-func TestBuildConfigHomeDoesNotOverwriteOpenCodeJSON(t *testing.T) {
+func TestBuildConfigHomeMergesOpenCodeJSONUserWins(t *testing.T) {
 	HomeBaseDir = ""
 	src := t.TempDir()
 	if err := os.WriteFile(filepath.Join(src, "opencode.json"), []byte(`{"model":"user/model"}`), 0o644); err != nil {
@@ -355,6 +356,7 @@ func TestBuildConfigHomeDoesNotOverwriteOpenCodeJSON(t *testing.T) {
 	}
 	dir, err := BuildConfigHome(ConfigHomeSpec{
 		WorkDirSrc:     src,
+		OpenCode:       true,
 		OpenCodeConfig: map[string]any{"model": "platform/model"},
 	})
 	if err != nil {
@@ -367,5 +369,117 @@ func TestBuildConfigHomeDoesNotOverwriteOpenCodeJSON(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "user/model") {
 		t.Fatalf("user file overwritten: %s", b)
+	}
+}
+
+func TestBuildConfigHomeWritesOpenCodeMCP(t *testing.T) {
+	HomeBaseDir = ""
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		OpenCode: true,
+		MCP: []MCPServerSpec{
+			{
+				Name:    "scheduler",
+				URL:     "http://host/mcp",
+				Headers: map[string]string{"Authorization": "Bearer tok"},
+			},
+			{
+				Name:    "local",
+				Command: "node",
+				Args:    []string{"server.js"},
+				Env:     map[string]string{"K": "V"},
+			},
+		},
+		BrowserMCP: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	b, err := os.ReadFile(filepath.Join(dir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	servers, ok := doc["mcp"].(map[string]any)
+	if !ok || len(servers) != 3 {
+		t.Fatalf("mcp=%v", doc["mcp"])
+	}
+	remote := servers["scheduler"].(map[string]any)
+	if remote["type"] != "remote" || remote["url"] != "http://host/mcp" {
+		t.Fatalf("remote=%v", remote)
+	}
+	local := servers["local"].(map[string]any)
+	command := local["command"].([]any)
+	if local["type"] != "local" || len(command) != 2 || command[1] != "server.js" {
+		t.Fatalf("local=%v", local)
+	}
+	browser := servers["chrome-devtools"].(map[string]any)
+	if browser["type"] != "local" {
+		t.Fatalf("browser=%v", browser)
+	}
+
+	mcpJSON, err := os.ReadFile(filepath.Join(dir, "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mcpJSON), "chrome-devtools") {
+		t.Fatalf("browser missing from mcp.json: %s", mcpJSON)
+	}
+}
+
+func TestBuildConfigHomeOpenCodeMCPMergesUserServers(t *testing.T) {
+	HomeBaseDir = ""
+	src := t.TempDir()
+	user := `{"model":"user/model","mcp":{"user":{"type":"local","command":["user-mcp"]}}}`
+	if err := os.WriteFile(filepath.Join(src, "opencode.json"), []byte(user), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		WorkDirSrc: src,
+		OpenCode:   true,
+		MCP:        []MCPServerSpec{{Name: "platform", URL: "http://host/mcp"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	b, err := os.ReadFile(filepath.Join(dir, "opencode.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		t.Fatal(err)
+	}
+	servers := doc["mcp"].(map[string]any)
+	if servers["user"] == nil || servers["platform"] == nil {
+		t.Fatalf("mcp merge lost a server: %s", b)
+	}
+	if doc["model"] != "user/model" {
+		t.Fatalf("user model lost: %s", b)
+	}
+}
+
+func TestBuildConfigHomeRejectsInvalidUserOpenCodeJSON(t *testing.T) {
+	HomeBaseDir = ""
+	src := t.TempDir()
+	const invalid = `{"model":`
+	if err := os.WriteFile(filepath.Join(src, "opencode.json"), []byte(invalid), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		WorkDirSrc: src,
+		OpenCode:   true,
+		MCP:        []MCPServerSpec{{Name: "platform", URL: "http://host/mcp"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "decode existing opencode.json") {
+		if dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+		t.Fatalf("err=%v", err)
 	}
 }

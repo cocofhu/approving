@@ -25,6 +25,7 @@ type record struct {
 	status    string // gateway vocab: "running"/"stopped"/"pending"/"error"
 	image     string
 	labels    map[string]string
+	env       map[string]string
 	endpoints map[string]string
 	logs      string // canned PID1 stdout/stderr for GET …/logs
 }
@@ -61,6 +62,26 @@ func New(t *testing.T) *FakeGateway {
 // Client returns a gateway client wired to this fake (no auth).
 func (fg *FakeGateway) Client() *sandbox.GatewayClient {
 	return sandbox.NewGatewayClient(fg.Server.URL, "")
+}
+
+// LastCreateEnv returns a copy of the most recently created sandbox env.
+func (fg *FakeGateway) LastCreateEnv() map[string]string {
+	fg.mu.Lock()
+	defer fg.mu.Unlock()
+	var latest *record
+	for _, rec := range fg.recs {
+		if latest == nil || rec.id > latest.id {
+			latest = rec
+		}
+	}
+	if latest == nil {
+		return nil
+	}
+	out := make(map[string]string, len(latest.env))
+	for k, v := range latest.env {
+		out[k] = v
+	}
+	return out
 }
 
 func (fg *FakeGateway) acpPort() int {
@@ -188,6 +209,7 @@ func (fg *FakeGateway) create(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Image  string            `json:"image"`
 		Labels map[string]string `json:"labels"`
+		Env    map[string]string `json:"env"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	fg.mu.Lock()
@@ -197,7 +219,10 @@ func (fg *FakeGateway) create(w http.ResponseWriter, r *http.Request) {
 	for k, v := range req.Labels {
 		labels[k] = v
 	}
-	rec := &record{id: id, status: "running", image: req.Image, labels: labels, endpoints: fg.endpointsFor()}
+	rec := &record{
+		id: id, status: "running", image: req.Image, labels: labels,
+		env: req.Env, endpoints: fg.endpointsFor(),
+	}
 	fg.recs[id] = rec
 	fg.mu.Unlock()
 	writeJSON(w, fg.dto(rec))

@@ -77,6 +77,12 @@ func mergeOpenCodeVendorEnv(env map[string]string) {
 	}
 	provider := NormalizeOpenCodeProvider(env[EnvOpenCodeProvider])
 	env[EnvOpenCodeProvider] = provider
+	// The bridge hands this value to `opencode run --model`, and the flag wins over
+	// opencode.json, so the prefix has to be on the env var too: a bare
+	// `deepseek/deepseek-flash` would route to DeepSeek instead of the vendor.
+	if modelID := openCodeModelID(env[EnvACPBridgeModel], provider); modelID != "" {
+		env[EnvACPBridgeModel] = provider + "/" + modelID
+	}
 	key := strings.TrimSpace(env[EnvOpenCodeAPIKey])
 	if key == "" {
 		return

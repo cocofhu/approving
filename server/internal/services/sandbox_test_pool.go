@@ -185,6 +185,15 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 	for k, v := range agent.Env {
 		env[k] = substTemplate(v, vars)
 	}
+	// Expose run-scoped coordinates as process env. Do this before auth/model
+	// normalization: vars also contains the Agent's original env for template
+	// substitution, so applying it afterwards would restore a bare
+	// ACP_BRIDGE_MODEL and undo the OpenCode provider prefix.
+	for k, v := range vars {
+		if v != "" {
+			env[k] = v
+		}
+	}
 	backend := runtime.NormalizeBackend(agent.AcpBackend)
 	workDir := s.skills.WorkDir(profile)
 	// Align auth gate with BuildConfigHome: shared extend then Agent overlay.
@@ -200,6 +209,8 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		WorkDirSrc:           s.skills.WorkDir(profile),
 		IncludeArtifactStore: hasArtifactStoreSpec(specs),
 		MCP:                  specs,
+		OpenCode:             backend == runtime.BackendOpenCode,
+		BrowserMCP:           runtime.EnvEnabled(env["BROWSER_MCP"]),
 		Settings:             runtime.CodeBuddySettingsForEnv(backend, env),
 		OpenCodeConfig: runtime.OpenCodeConfigForEnvWithCatalog(
 			context.Background(), backend, env, s.openCodeCatalog,
@@ -215,15 +226,6 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 
 	env["ACP_BACKEND"] = string(backend)
 	env["CONFIG_ROOT"] = agent.Layout.ConfigRoot
-	// Expose the run-scoped artifact-store coordinates as process env so the
-	// in-sandbox artifact-upload CLI can reach the store (parity with the
-	// cursor runtime); the token is already provided via mcp.json.
-	for k, v := range vars {
-		if v == "" {
-			continue
-		}
-		env[k] = v
-	}
 	// remote-dev parity: PASSWORD / ROOT_PASSWORD / CURSOR_ACP_PASSWORD so
 	// code-server (8744) and ACP bridge (8765) accept the same secret for
 	// proxied auto-login and direct host:port access.
@@ -419,6 +421,7 @@ func (s *SandboxService) ensureConnected(ctx context.Context, id uint) (*liveSan
 	s.mu.Unlock()
 	return ls, &row, nil
 }
+
 // Stop removes the container but keeps the DB record (status=stopped).
 func (s *SandboxService) Stop(ctx context.Context, id uint) error {
 	row, err := s.Get(id)

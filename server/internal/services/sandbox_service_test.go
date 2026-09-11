@@ -1169,6 +1169,51 @@ func TestSandboxOpenLifecycle(t *testing.T) {
 	}
 }
 
+func TestSandboxOpenWithEffectiveKeepsNormalizedOpenCodeModel(t *testing.T) {
+	db := newTestDB(t)
+	acp, port := fakeACPServer(t)
+	defer acp.Close()
+	ds := &dockerState{acpPort: port}
+	s := newSandboxService(t, db, ds)
+
+	effective := Agent{
+		Name:       "agentA",
+		AcpBackend: "opencode",
+		Env: map[string]string{
+			"APPROVING_OPENCODE_API_KEY":  "sk-test",
+			"APPROVING_OPENCODE_PROVIDER": "tencent-tokenhub",
+			"ACP_BRIDGE_MODEL":            "deepseek/deepseek-flash",
+			"BROWSER_MCP":                 "1",
+		},
+		Layout: AgentLayout{
+			ConfigRoot:   "/root/.config/opencode",
+			WorkspaceDir: "/root/workspace",
+		},
+	}
+	row, err := s.OpenWithEffective(
+		context.Background(), "agentA", "proj-1", nil, effective, t.TempDir(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(6 * time.Second)
+	for time.Now().Before(deadline) {
+		var current models.Sandbox
+		if err := db.First(&current, row.ID).Error; err == nil &&
+			(current.Status == "running" || current.Status == "error") {
+			if current.Status != "running" {
+				t.Fatalf("sandbox status=%s error=%s", current.Status, current.Error)
+			}
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	env := ds.fg.LastCreateEnv()
+	if got := env["ACP_BRIDGE_MODEL"]; got != "tencent-tokenhub/deepseek/deepseek-flash" {
+		t.Fatalf("ACP_BRIDGE_MODEL=%q", got)
+	}
+}
+
 func TestSandboxChatReconnect(t *testing.T) {
 	db := newTestDB(t)
 	acp, port := fakeACPServer(t)
