@@ -99,7 +99,7 @@ test('新建 Agent 五步向导浏览器验收', async ({ page }) => {
   await expect(page.locator('.wiz-rail')).toHaveCount(0)
 })
 
-test('向导能取到项目共享 Git Token 时 Git 步不出现引导（g2.1）', async ({ page }) => {
+test('向导能取到项目共享 Git Token 时 Git 步仍出现三选（plan g3.2）', async ({ page }) => {
   await page.route('**/api/**', async (route) => {
     if (!new URL(route.request().url()).pathname.startsWith('/api/')) {
       await route.continue()
@@ -131,7 +131,16 @@ test('向导能取到项目共享 Git Token 时 Git 步不出现引导（g2.1）
   await page.getByRole('button', { name: /^下一步/ }).click()
   await page.getByRole('button', { name: /^跳过/ }).click()
   await expect(page.locator('.sec-head h3')).toHaveText('Git')
-  await expect(page.locator('[data-test="git-guide"]')).toHaveCount(0)
-  await expect(page.locator('[data-test="git-choice-github_https"]')).toHaveCount(0)
+  await expect(page.locator('[data-test="git-guide"]')).toHaveCount(1)
+  await expect(page.locator('[data-test="git-choice-github_https"]')).toBeVisible()
+  await expect(page.locator('[data-test="git-choice-gitlab_https"]')).toBeVisible()
+  await expect(page.locator('[data-test="git-choice-ssh"]')).toBeVisible()
+  await expect(page.locator('[data-test="git-choice-gitlab_https"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   await expect(page.getByText('调整类型')).toHaveCount(0)
+  await expect(page.getByText(/预选类型/)).toBeVisible()
+  await page.locator('[data-test="git-choice-ssh"]').click()
+  await expect(page.locator('[data-test="git-choice-ssh"]')).toHaveAttribute('aria-pressed', 'true')
 })

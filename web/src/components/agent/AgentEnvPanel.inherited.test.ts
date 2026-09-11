@@ -50,7 +50,7 @@ describe('AgentEnvPanel inherited Git env', () => {
     getProjectSharedAgentConfig.mockReset()
   })
 
-  it('agent 上下文且已绑定项目时读取共享 env，引导因继承 Token 隐藏（g2.1）', async () => {
+  it('agent 上下文且已绑定项目时读取共享 env，引导仍因继承 Token 可见并可预选（plan g3.3）', async () => {
     getProjectSharedAgentConfig.mockResolvedValue({
       projectId: 'proj-1',
       env: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
@@ -63,7 +63,10 @@ describe('AgentEnvPanel inherited Git env', () => {
       expect(getProjectSharedAgentConfig).toHaveBeenCalledWith('proj-1')
     })
     await vi.waitFor(() => {
-      expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(false)
+      expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="git-choice-gitlab_https"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="git-choice-github_https"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="git-choice-ssh"]').exists()).toBe(true)
     })
     wrapper.unmount()
   })

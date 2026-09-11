@@ -2424,7 +2424,7 @@
           "meta": "Used as the default ACP for the PM and engineers. Pick a start path first — same as onboarding and New Agent."
         },
         "git": {
-          "meta": "Optional. Pick GitHub / GitLab / SSH; skip when a Git Token already exists (including project shared).",
+          "meta": "Optional. Pick GitHub / GitLab / SSH; an existing token preselects the type—you can still change it or skip.",
           "url": "Repository URL"
         },
         "mcp": {
@@ -2584,7 +2584,7 @@
           }
         },
         "git": {
-          "meta": "Pick GitHub / GitLab / SSH. Skip if a Git Token already exists locally or in project shared config."
+          "meta": "Pick GitHub / GitLab / SSH. An existing token preselects the type; you can still change it or skip, and configure later in Studio."
         },
         "env": {
           "meta": "Environment variables injected into the sandbox. Region keys are managed by the Agent step; secrets stay in the Agent config."
