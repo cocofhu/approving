@@ -27,6 +27,7 @@ import {
 } from './onboardingWizard'
 import { i18n } from '@/lib/shared/i18n'
 import { loadLocaleMessages } from '@/lib/shared/loadLocaleMessages'
+import { locale } from '@/lib/shared/locale'
 
 beforeAll(async () => {
   const [zh, en] = await Promise.all([loadLocaleMessages('zh-CN'), loadLocaleMessages('en')])
@@ -38,6 +39,7 @@ describe('onboardingWizard', () => {
   beforeEach(() => {
     localStorage.clear()
     i18n.global.locale.value = 'zh-CN'
+    locale.value = 'zh-CN'
   })
 
   it('starts with language and defaults it from the system locale', () => {
@@ -203,7 +205,26 @@ describe('onboardingWizard', () => {
     expect(deriveOnboardingAgentNames(DEFAULT_PROJECT_ID, 'ignored')).toEqual([...ONBOARDING_AGENT_NAMES])
     expect(deriveOnboardingAgentNames('p1', '支付中台')[0]).toBe('支付中台AI技术产品')
     expect(onboardingStepsForMode('createProject')[0]?.id).toBe('projectName')
+    expect(onboardingStepsForMode('createProject').map((s) => s.id)).toEqual([
+      'projectName',
+      'overview',
+      'acp',
+      'apiKey',
+      'git',
+      'review',
+    ])
+    expect(onboardingStepsForMode('createProject').some((s) => s.id === 'language')).toBe(false)
     expect(onboardingStepsForMode('firstInstall')[0]?.id).toBe('language')
+  })
+
+  it('createProject draft inherits app locale, not browser language (g1.2)', () => {
+    locale.value = 'zh-CN'
+    i18n.global.locale.value = 'zh-CN'
+    vi.stubGlobal('navigator', { language: 'en-US' })
+    expect(detectSystemLocale()).toBe('en')
+    expect(freshOnboardingDraft().language).toBe('en')
+    expect(freshOnboardingDraft({ inheritAppLocale: true }).language).toBe('zh-CN')
+    vi.unstubAllGlobals()
   })
 
   it('auto-open keys on the default workflow, not on having been seen', () => {

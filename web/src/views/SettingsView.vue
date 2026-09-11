@@ -237,8 +237,9 @@ onBeforeUnmount(() => {
     data-testid="settings-panel"
     :aria-busy="loading || saving ? 'true' : 'false'"
   >
-    <IntegrationsPanel v-if="showIntegrations" />
-    <template v-else>
+    <Transition name="ui-fade" mode="out-in">
+      <IntegrationsPanel v-if="showIntegrations" key="integrations" />
+      <div v-else key="settings-main" class="flex min-h-0 flex-1 flex-col">
     <div class="mb-5 flex shrink-0 flex-col items-stretch gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h2 class="text-lg font-semibold text-txt">{{ t('pages.settings.title') }}</h2>
@@ -543,7 +544,8 @@ onBeforeUnmount(() => {
       {{ t('pages.settings.priorityNote') }}
     </p>
     </div>
-    </template>
+      </div>
+    </Transition>
   </div>
 </template>
 

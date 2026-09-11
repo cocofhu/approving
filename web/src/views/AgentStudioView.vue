@@ -371,7 +371,7 @@ const {
 
       <div
         v-else
-        class="card grid min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-[220ms] ease-in-out"
+        class="card grid min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-[var(--dur-ui)] ease-[var(--ease-out-expo)]"
         :class="showRefreshProgress ? 'opacity-[0.55]' : ''"
         :style="cardGridStyle"
       >
@@ -562,10 +562,12 @@ const {
         />
 
         <!-- narrow-screen: non-whitelist tabs show desktop-only tip (files+data allowed) -->
-        <div
-          v-if="tab !== 'files' && isMobile && tab !== 'data'"
-          class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8 text-center"
-        >
+        <Transition name="ui-fade" mode="out-in">
+          <div
+            v-if="tab !== 'files' && isMobile && tab !== 'data'"
+            key="mobile-desktop-only"
+            class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8 text-center"
+          >
           <div class="rounded-md flex h-10 w-10 items-center justify-center border border-info/35 bg-info/10 text-info">
             <Icon name="alert" :size="20" />
           </div>
@@ -581,37 +583,41 @@ const {
           >
             {{ t('pages.agentStudio.mobile.backToFiles') }}
           </button>
-        </div>
+          </div>
 
-        <AgentMcpPanel
-          v-if="tab === 'mcp' && draft && !isMobile"
-          :draft="draft"
-          :is-project-bound="isProjectBound"
-          @toast="showToast"
-        />
+          <AgentMcpPanel
+            v-else-if="tab === 'mcp' && draft && !isMobile"
+            key="mcp"
+            :draft="draft"
+            :is-project-bound="isProjectBound"
+            @toast="showToast"
+          />
 
-        <AgentEnvPanel
-          v-if="tab === 'env' && draft && !isMobile"
-          :draft="draft"
-          context="agent"
-          @toast="showToast"
-          @open-settings-file="openSettingsInFiles"
-        />
+          <AgentEnvPanel
+            v-else-if="tab === 'env' && draft && !isMobile"
+            key="env"
+            :draft="draft"
+            context="agent"
+            @toast="showToast"
+            @open-settings-file="openSettingsInFiles"
+          />
 
-        <AgentPromptsPanel
-          v-if="tab === 'prompts' && draft && !isMobile"
-          :draft="draft"
-        />
+          <AgentPromptsPanel
+            v-else-if="tab === 'prompts' && draft && !isMobile"
+            key="prompts"
+            :draft="draft"
+          />
 
-        <AgentPlatformRulesPanel
-          v-if="tab === 'platform-rules' && !isMobile"
-          :agent-name="activeName"
-          :active="tab === 'platform-rules'"
-          @toast="showToast"
-        />
+          <AgentPlatformRulesPanel
+            v-else-if="tab === 'platform-rules' && !isMobile"
+            key="platform-rules"
+            :agent-name="activeName"
+            :active="tab === 'platform-rules'"
+            @toast="showToast"
+          />
 
-        <!-- data: Agent-scoped memory / context / cron-job management (whitelist on mobile) -->
-        <div v-if="tab === 'data' && draft" class="min-h-0 flex-1 overflow-hidden">
+          <!-- data: Agent-scoped memory / context / cron-job management (whitelist on mobile) -->
+          <div v-else-if="tab === 'data' && draft" key="data" class="min-h-0 flex-1 overflow-hidden">
           <div v-if="draftBindingDirty" class="border-b border-warn/30 bg-warn/10 px-4 py-2 text-[12px] text-warn">
             {{ t('pages.agentStudio.data.unsavedBinding') }}
           </div>
@@ -636,19 +642,21 @@ const {
               </button>
             </div>
           </div>
-        </div>
+          </div>
 
-        <AgentMetaPanel
-          v-if="tab === 'meta' && draft && !isMobile"
-          :draft="draft"
-          :org="org"
-          :agent-name="activeName"
-          :agent-names="agentNames"
-          :projects="projects"
-          :is-project-bound="isProjectBound"
-          @update:org="org = $event"
-          @error="(msg) => (error = msg)"
-        />
+          <AgentMetaPanel
+            v-else-if="tab === 'meta' && draft && !isMobile"
+            key="meta"
+            :draft="draft"
+            :org="org"
+            :agent-name="activeName"
+            :agent-names="agentNames"
+            :projects="projects"
+            :is-project-bound="isProjectBound"
+            @update:org="org = $event"
+            @error="(msg) => (error = msg)"
+          />
+        </Transition>
 
       </div>
       <div
@@ -856,7 +864,7 @@ const {
                   :style="orgSheetPadStyle(row.depth)"
                   @click="toggleOrgSheetNode(row.id)"
                 >
-                  <Icon name="chevron-right" :size="12" class="shrink-0 text-txt3" :class="row.collapsed ? '' : 'rotate-90'" />
+                  <Icon name="chevron-right" :size="12" class="ui-fold-chevron shrink-0 text-txt3" :class="row.collapsed ? '' : 'rotate-90'" />
                   <Icon name="folder" :size="14" class="shrink-0 text-warn" />
                   <span class="flex min-w-0 flex-1 items-baseline overflow-hidden" data-org-gname>
                     <span class="min-w-0 truncate font-medium text-txt2">{{ row.name }}</span><span
@@ -875,7 +883,7 @@ const {
                   :style="orgSheetPadStyle(row.depth)"
                   @click="toggleOrgSheetNode(UNGROUPED_ID)"
                 >
-                  <Icon name="chevron-right" :size="12" class="shrink-0 text-txt3" :class="row.collapsed ? '' : 'rotate-90'" />
+                  <Icon name="chevron-right" :size="12" class="ui-fold-chevron shrink-0 text-txt3" :class="row.collapsed ? '' : 'rotate-90'" />
                   <Icon name="folder" :size="14" class="shrink-0 text-txt3" />
                   <span class="truncate font-medium text-txt2">{{ t('pages.agentStudio.org.ungrouped') }}</span>
                   <span class="rounded-md ml-auto inline-flex h-4 min-w-[18px] shrink-0 items-center justify-end border border-line bg-base px-1 text-[10px] font-semibold tabular-nums text-txt3">{{ row.count }}</span>
@@ -885,7 +893,7 @@ const {
                 <button
                   type="button"
                   data-test="org-sheet-agent"
-                  class="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 py-1 text-left hover:bg-elevated"
+                  class="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 text-left transition-[background-color] duration-[var(--dur-ui)] ease-out hover:bg-elevated"
                   :style="orgSheetPadStyle(row.depth)"
                   @click="chooseAgentFromSheet(row.name)"
                 >

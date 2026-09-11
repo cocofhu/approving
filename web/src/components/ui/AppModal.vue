@@ -100,11 +100,11 @@ defineExpose({ scrollAreaEl })
 <style scoped>
 .modal-enter-active,
 .modal-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--dur-overlay) var(--ease-out-expo);
 }
 .modal-enter-active > div:last-child,
 .modal-leave-active > div:last-child {
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--dur-overlay) var(--ease-out-expo);
 }
 .modal-enter-from,
 .modal-leave-to {

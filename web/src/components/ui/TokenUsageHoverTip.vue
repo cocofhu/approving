@@ -84,7 +84,7 @@ const rows = computed(() => {
     :id="tipId"
     role="tooltip"
     data-testid="token-detail-tip"
-    class="pointer-events-none absolute top-[calc(100%+10px)] z-20 w-[min(260px,calc(100vw-24px))] rounded-[10px] bg-[#111827] px-3.5 py-3 text-left text-[#f9fafb] opacity-0 shadow-[0_12px_32px_rgba(15,23,42,0.28)] invisible transition-[opacity,visibility,transform] duration-150 translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 right-0 max-[720px]:right-auto max-[720px]:left-0"
+    class="pointer-events-none absolute top-[calc(100%+10px)] z-20 w-[min(260px,calc(100vw-24px))] rounded-[10px] bg-[#111827] px-3.5 py-3 text-left text-[#f9fafb] opacity-0 shadow-[0_12px_32px_rgba(15,23,42,0.28)] invisible translate-y-1 group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:visible group-focus-within:translate-y-0 right-0 max-[720px]:right-auto max-[720px]:left-0 token-usage-tip"
   >
     <div class="mb-2 text-[11px] font-semibold tracking-wide text-[#9ca3af]">
       {{ t('pages.projectDetail.tokenTipTitle') }}
@@ -128,3 +128,18 @@ const rows = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.token-usage-tip {
+  transition:
+    opacity var(--dur-ui) var(--ease-out-expo),
+    visibility var(--dur-ui) var(--ease-out-expo),
+    transform var(--dur-ui) var(--ease-out-expo);
+}
+@media (prefers-reduced-motion: reduce) {
+  .token-usage-tip {
+    transition: none;
+    transform: none;
+  }
+}
+</style>

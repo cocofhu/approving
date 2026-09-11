@@ -110,18 +110,19 @@ describe('ArtifactList', () => {
     })
     const rowFor = (name: string) =>
       wrapper.findAll('button').find((b) => b.text().includes(name))!
-    const ledgerRows = () => wrapper.get('[data-testid="artifact-feedback-group"] + div')
+    const ledgerFold = () => wrapper.get('[data-testid="artifact-feedback-group"] + div')
 
     expect(rowFor('research.json').isVisible()).toBe(true)
-    expect(ledgerRows().attributes('style')).toContain('display: none')
+    expect(ledgerFold().classes()).toContain('ui-fold')
+    expect(ledgerFold().classes()).not.toContain('is-open')
 
     const group = wrapper.get('[data-testid="artifact-feedback-group"]')
     expect(group.text()).toContain('3')
 
     await group.trigger('click')
-    expect(ledgerRows().attributes('style') || '').not.toContain('display: none')
-    expect(ledgerRows().text()).toContain('feedback_index.json')
-    expect(ledgerRows().text()).toContain('feedback.review.research.i1r2.json')
+    expect(ledgerFold().classes()).toContain('is-open')
+    expect(ledgerFold().text()).toContain('feedback_index.json')
+    expect(ledgerFold().text()).toContain('feedback.review.research.i1r2.json')
 
     await rowFor('feedback_index.json').trigger('click')
     expect((wrapper.emitted('select')![0][0] as Artifact).name).toBe('feedback_index.json')

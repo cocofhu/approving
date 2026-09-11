@@ -152,8 +152,13 @@ watch(
   () => props.open,
   (open) => {
     if (open) {
-      draft.value = freshOnboardingDraft()
-      void setLocale(draft.value.language)
+      const mode = props.mode || 'firstInstall'
+      const inheritAppLocale = mode === 'createProject'
+      draft.value = freshOnboardingDraft({ inheritAppLocale })
+      // createProject must not overwrite the user's saved locale with browser/OS.
+      if (!inheritAppLocale) {
+        void setLocale(draft.value.language)
+      }
       creating.value = false
       createError.value = ''
       phase.value = 'wizard'
