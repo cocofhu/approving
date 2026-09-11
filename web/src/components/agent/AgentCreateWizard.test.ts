@@ -260,7 +260,7 @@ describe('AgentCreateWizard 5-step IA', () => {
     wrapper.unmount()
   })
 
-  it('Git 步在共享 Token 存在时不渲染引导（g2.1）', async () => {
+  it('Git 步在共享 Token 存在时仍渲染三选并可改选（plan g1.2 / g3.2）', async () => {
     getProjectSharedAgentConfig.mockResolvedValue({
       projectId: 'proj-shared',
       env: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
@@ -281,10 +281,26 @@ describe('AgentCreateWizard 5-step IA', () => {
       expect(getProjectSharedAgentConfig).toHaveBeenCalledWith('proj-shared')
     })
     await vi.waitFor(() => {
-      expect(document.body.querySelector('[data-test="git-guide"]')).toBeFalsy()
+      expect(document.body.querySelector('[data-test="git-guide"]')).toBeTruthy()
+      expect(document.body.querySelector('[data-test="git-choice-github_https"]')).toBeTruthy()
+      expect(document.body.querySelector('[data-test="git-choice-gitlab_https"]')).toBeTruthy()
+      expect(document.body.querySelector('[data-test="git-choice-ssh"]')).toBeTruthy()
     })
     expect(document.body.textContent).toContain('Git')
+    expect(document.body.textContent).toContain('预选类型')
+    expect(document.body.textContent).toContain('仍可改选或跳过')
+    expect(document.body.textContent).not.toContain('无需选择')
     expect(document.body.textContent).not.toContain('调整类型')
+
+    const gitlab = document.body.querySelector(
+      '[data-test="git-choice-gitlab_https"]',
+    ) as HTMLButtonElement
+    expect(gitlab.getAttribute('aria-pressed')).toBe('true')
+
+    const ssh = document.body.querySelector('[data-test="git-choice-ssh"]') as HTMLButtonElement
+    ssh.click()
+    await wrapper.vm.$nextTick()
+    expect(ssh.getAttribute('aria-pressed')).toBe('true')
     wrapper.unmount()
   })
 

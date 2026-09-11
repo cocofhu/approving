@@ -43,7 +43,7 @@ function mountGuide(
 }
 
 describe('AgentGitGuide', () => {
-  it('无 Token 时平铺 GitHub / GitLab / SSH，点击立即写入类型（g1.1）', async () => {
+  it('无 Token 时平铺 GitHub / GitLab / SSH，点击立即写入类型（g1.1 / plan g3.1）', async () => {
     const wrapper = mountGuide([])
     expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
     expect(wrapper.get('[data-test="git-choice-github_https"]').text()).toContain('GitHub')
@@ -72,55 +72,66 @@ describe('AgentGitGuide', () => {
     expect(wrapper.emitted('help')).toEqual([['git']])
   })
 
-  it('本地任一 Git Token 隐藏整块引导（g1.2）', () => {
+  it('本地任一 Git Token 仍渲染三选并可改选（plan g1.1 / g1.2 / g3.2）', async () => {
     const wrapper = mountGuide([{ k: 'GITLAB_TOKEN', v: '${vars.gitlab_pat}' }])
-    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('GitHub')
-    expect(wrapper.text()).not.toContain('添加推荐变量')
+    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="git-choice-github_https"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="git-choice-gitlab_https"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="git-choice-ssh"]').exists()).toBe(true)
+    expect(wrapper.emitted('update:credentialType')).toEqual([['gitlab_https']])
+
+    await wrapper.get('[data-test="git-choice-ssh"]').trigger('click')
+    expect(wrapper.emitted('update:credentialType')).toEqual([['gitlab_https'], ['ssh']])
   })
 
-  it('仅继承 Token 时隐藏引导；空本地不覆盖继承（g1.2 / g2.1）', () => {
+  it('仅继承 Token 时仍渲染引导并预选（plan g1.2 / g3.2）', () => {
     const wrapper = mountGuide([], {
       inheritedEnv: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
     })
-    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="git-choice-gitlab_https"]').exists()).toBe(true)
+    expect(wrapper.emitted('update:credentialType')).toEqual([['gitlab_https']])
   })
 
-  it('仅 ACP API Key、没有 Git Token 时仍显示三选（g1.2）', () => {
+  it('仅 ACP API Key、没有 Git Token 时仍显示三选（plan g3.1）', () => {
     const wrapper = mountGuide([
       { k: 'APPROVING_CURSOR_API_KEY', v: 'sk-test' },
       { k: 'CURSOR_API_KEY', v: 'sk-alt' },
     ])
     expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="git-choice-github_https"]').exists()).toBe(true)
-  })
-
-  it('隐藏时仅 GITLAB_TOKEN 且无类型则推断为 GitLab（g1.3）', () => {
-    const wrapper = mountGuide([], {
-      inheritedEnv: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
-    })
-    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(false)
-    expect(wrapper.emitted('update:credentialType')).toEqual([['gitlab_https']])
-  })
-
-  it('隐藏时用户已选类型不被推断覆盖（g1.3）', () => {
-    const wrapper = mountGuide([{ k: 'GITHUB_TOKEN', v: 'ghp-x' }], {
-      credentialType: 'ssh',
-    })
-    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(false)
     expect(wrapper.emitted('update:credentialType')).toBeUndefined()
   })
 
-  it('多类 Git Token 且无已选类型时仍隐藏且不改写（g1.3）', () => {
+  it('仅一种 Token 且无类型则预选对应卡片（plan g1.2）', () => {
+    const wrapper = mountGuide([], {
+      inheritedEnv: { GITLAB_TOKEN: '${vars.gitlab_pat}' },
+    })
+    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
+    expect(wrapper.emitted('update:credentialType')).toEqual([['gitlab_https']])
+  })
+
+  it('用户已选类型不被 Token 推断覆盖（plan g1.2）', () => {
+    const wrapper = mountGuide([{ k: 'GITHUB_TOKEN', v: 'ghp-x' }], {
+      credentialType: 'ssh',
+    })
+    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="git-choice-ssh"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.emitted('update:credentialType')).toBeUndefined()
+  })
+
+  it('多类 Git Token 且无已选类型时仍可见且不擅自预选（plan g1.2）', () => {
     const wrapper = mountGuide([
       { k: 'GITHUB_TOKEN', v: 'ghp-x' },
       { k: 'GITLAB_TOKEN', v: 'glpat-x' },
     ])
-    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="git-choice-github_https"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="git-choice-gitlab_https"]').exists()).toBe(true)
     expect(wrapper.emitted('update:credentialType')).toBeUndefined()
   })
 
-  it('Studio 点选类型不写入 Git Token，也不出现补推荐变量（g1.2 / f5）', async () => {
+  it('Studio 点选类型不写入 Git Token，也不出现补推荐变量（plan g2.1 / g2.2）', async () => {
     const added: string[] = []
     const wrapper = mountGuide([], {
       allowTokenRecommend: false,

@@ -3,7 +3,6 @@ import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppButton from '@/components/ui/AppButton.vue'
 import {
-  hasConfiguredGitToken,
   inferGitCredentialTypeFromTokens,
   type GitCredentialType,
   type GitEnv,
@@ -26,7 +25,7 @@ const props = defineProps<{
   credentialType?: GitCredentialType
   /** When false (Agent Studio / create wizards), skip injecting Git Token keys. Default true for shared config. */
   allowTokenRecommend?: boolean
-  /** Project shared Agent env used only for hide / infer (agent context). */
+  /** Project shared Agent env used only for preselect / infer (agent context). */
   inheritedEnv?: GitEnv
 }>()
 const emit = defineEmits<{
@@ -35,7 +34,6 @@ const emit = defineEmits<{
 }>()
 const { t } = useI18n()
 
-const hasGitToken = computed(() => hasConfiguredGitToken(props.env, props.inheritedEnv))
 const inferredType = computed(() => inferGitCredentialTypeFromTokens(props.env, props.inheritedEnv))
 const allowTokens = computed(() => props.allowTokenRecommend !== false)
 const showRecommend = computed(() => allowTokens.value && !!props.credentialType)
@@ -55,9 +53,10 @@ const recommendations: Record<GitCredentialType, { key: string; value: string }[
 }
 
 watch(
-  [hasGitToken, () => props.credentialType, inferredType],
-  ([hide, selected, inferred]) => {
-    if (!hide || selected || !inferred) return
+  [() => props.credentialType, inferredType],
+  ([selected, inferred]) => {
+    // Preselect only when a single token type can be inferred and the user has not chosen yet.
+    if (selected || !inferred) return
     emit('update:credentialType', inferred)
   },
   { immediate: true },
@@ -87,7 +86,6 @@ defineExpose({ isGitEnvKey })
 
 <template>
   <section
-    v-if="!hasGitToken"
     class="mb-4 overflow-hidden rounded-lg border border-line bg-surface shadow-sm"
     data-test="git-guide"
   >
