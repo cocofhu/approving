@@ -208,22 +208,24 @@ onBeforeUnmount(() => {
     <slot>{{ text }}</slot>
   </span>
   <Teleport to="body">
-    <div
-      v-if="open"
-      :id="tooltipId"
-      ref="tooltip"
-      data-testid="truncated-text-tooltip"
-      role="tooltip"
-      class="fixed z-[100] whitespace-normal rounded-md border border-line-strong bg-elevated px-2.5 py-1.5 text-[12px] leading-relaxed text-txt shadow-lg [overflow-wrap:anywhere]"
-      :style="{
-        left: position.left + 'px',
-        top: position.top + 'px',
-        maxWidth: position.maxWidth + 'px',
-      }"
-      @mouseenter="tooltipHovered = true"
-      @mouseleave="tooltipHovered = false; scheduleHide()"
-    >
-      {{ text }}
-    </div>
+    <Transition name="ui-fade">
+      <div
+        v-if="open"
+        :id="tooltipId"
+        ref="tooltip"
+        data-testid="truncated-text-tooltip"
+        role="tooltip"
+        class="fixed z-[100] whitespace-normal rounded-md border border-line-strong bg-elevated px-2.5 py-1.5 text-[12px] leading-relaxed text-txt shadow-lg [overflow-wrap:anywhere]"
+        :style="{
+          left: position.left + 'px',
+          top: position.top + 'px',
+          maxWidth: position.maxWidth + 'px',
+        }"
+        @mouseenter="tooltipHovered = true"
+        @mouseleave="tooltipHovered = false; scheduleHide()"
+      >
+        {{ text }}
+      </div>
+    </Transition>
   </Teleport>
 </template>

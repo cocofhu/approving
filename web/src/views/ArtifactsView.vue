@@ -390,11 +390,11 @@ onMounted(async () => {
                 v-show="matchWfGroup(g)"
                 :key="g.key"
                 type="button"
-                class="mb-1 flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-[13px] transition"
+                class="mb-1 flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left text-[13px] transition-[background-color,border-color,color] duration-[var(--dur-ui)] ease-out"
                 :class="
                   g.key === activeGroup?.key
                     ? 'border-accent/45 bg-accent-dim/55 text-txt'
-                    : 'border-transparent text-txt2 hover:bg-elevated'
+                    : 'border-transparent text-txt2 hover:border-line hover:bg-elevated'
                 "
                 @click="onSelectGroup(g.key, g.isUnnamed)"
               >
@@ -419,31 +419,37 @@ onMounted(async () => {
               : 'w-[36%] min-w-[200px] shrink-0 border-r border-line'
           "
         >
-          <ArtifactList
-            ref="artifactListRef"
-            :key="activeGroup?.key ?? '__none__'"
-            :artifacts="pageArtifacts"
-            :run-sections="runSections"
-            :active-id="activeArtifact?.id"
-            scope="platform"
-            server-search
-            :search="artSearch"
-            :group-total="activeGroup?.count ?? 0"
-            :match-total="pageTotal"
-            :header-title="activeGroupTitle"
-            :header-subtitle="t('pages.artifacts.headerSubtitle')"
-            :empty-text="listEmptyText"
-            class="min-h-0 flex-1"
-            @select="selectArtifact"
-            @update:search="onSearchUpdate"
-          />
-          <Pagination
-            v-if="pageTotal > PAGE_SIZE"
-            v-model:page="page"
-            :page-size="PAGE_SIZE"
-            :total="pageTotal"
-            class="shrink-0"
-          />
+          <Transition name="ui-fade" mode="out-in">
+            <div
+              :key="activeGroup?.key ?? '__none__'"
+              class="flex min-h-0 flex-1 flex-col"
+            >
+              <ArtifactList
+                ref="artifactListRef"
+                :artifacts="pageArtifacts"
+                :run-sections="runSections"
+                :active-id="activeArtifact?.id"
+                scope="platform"
+                server-search
+                :search="artSearch"
+                :group-total="activeGroup?.count ?? 0"
+                :match-total="pageTotal"
+                :header-title="activeGroupTitle"
+                :header-subtitle="t('pages.artifacts.headerSubtitle')"
+                :empty-text="listEmptyText"
+                class="min-h-0 flex-1"
+                @select="selectArtifact"
+                @update:search="onSearchUpdate"
+              />
+              <Pagination
+                v-if="pageTotal > PAGE_SIZE"
+                v-model:page="page"
+                :page-size="PAGE_SIZE"
+                :total="pageTotal"
+                class="shrink-0"
+              />
+            </div>
+          </Transition>
         </section>
 
         <section

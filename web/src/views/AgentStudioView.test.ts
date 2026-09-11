@@ -2106,11 +2106,12 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
     }
     expect(src).toMatch(/STUDIO_TABS/)
     expect(src).toMatch(/requestStudioTab/)
-    // Demo main path: files kept alive across tabs; other panels gated by tab.
+    // Demo main path: files kept alive across tabs; other panels gated by tab + ui-fade (g3.1).
     expect(src).toMatch(/v-show="tab === 'files'"/)
-    expect(src).toMatch(/v-if="tab === 'mcp'/)
-    expect(src).toMatch(/v-if="tab === 'env'/)
-    expect(src).toMatch(/v-if="tab === 'prompts'/)
+    expect(src).toMatch(/name="ui-fade"/)
+    expect(src).toMatch(/v-else-if="tab === 'mcp'/)
+    expect(src).toMatch(/v-else-if="tab === 'env'/)
+    expect(src).toMatch(/v-else-if="tab === 'prompts'/)
     expect(src).toMatch(/tab === 'platform-rules'/)
     expect(src).not.toMatch(/tab === 'test'/)
     expect(src).toMatch(/tab === 'meta'/)

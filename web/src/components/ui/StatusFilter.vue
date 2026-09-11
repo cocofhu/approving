@@ -102,49 +102,51 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
       <Icon name="chevron-down" :size="14" class="shrink-0 text-txt3" />
     </button>
 
-    <div
-      v-if="open"
-      class="card absolute left-0 right-0 z-30 mt-1.5 overflow-hidden md:left-auto md:right-0 md:w-56"
-    >
-      <div class="scroll-area max-h-72 overflow-y-auto p-1">
-        <button
-          v-for="s in options"
-          :key="s.id || 'all'"
-          type="button"
-          class="flex w-full items-center gap-2 px-2.5 py-2.5 text-left text-sm transition hover:bg-elevated md:py-2"
-          :class="isRowSelected(s.id) ? 'bg-accent-dim text-txt' : 'text-txt2'"
-          @click.stop="toggleStatus(s.id)"
-        >
-          <span
-            class="status-filter-cb flex h-[15px] w-[15px] shrink-0 items-center justify-center border border-line-strong bg-base transition"
-            :class="{ 'status-filter-cb--checked': isChecked(s.id) }"
+    <Transition name="overlay-pop">
+      <div
+        v-if="open"
+        class="card absolute left-0 right-0 z-30 mt-1.5 overflow-hidden md:left-auto md:right-0 md:w-56"
+      >
+        <div class="scroll-area max-h-72 overflow-y-auto p-1">
+          <button
+            v-for="s in options"
+            :key="s.id || 'all'"
+            type="button"
+            class="flex w-full items-center gap-2 px-2.5 py-2.5 text-left text-sm transition hover:bg-elevated md:py-2"
+            :class="isRowSelected(s.id) ? 'bg-accent-dim text-txt' : 'text-txt2'"
+            @click.stop="toggleStatus(s.id)"
           >
-            <svg
-              v-if="isChecked(s.id)"
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              fill="none"
-              aria-hidden="true"
+            <span
+              class="status-filter-cb flex h-[15px] w-[15px] shrink-0 items-center justify-center border border-line-strong bg-base transition"
+              :class="{ 'status-filter-cb--checked': isChecked(s.id) }"
             >
-              <path
-                d="M2 5l2 2.5L8 3"
-                stroke="#fff"
-                stroke-width="1.3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </span>
-          <Icon
-            :name="s.icon"
-            :size="14"
-            :class="[s.cls, s.spin ? 'animate-pulseglow' : '']"
-          />
-          <span class="flex-1 truncate">{{ s.label }}</span>
-        </button>
+              <svg
+                v-if="isChecked(s.id)"
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 5l2 2.5L8 3"
+                  stroke="#fff"
+                  stroke-width="1.3"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <Icon
+              :name="s.icon"
+              :size="14"
+              :class="[s.cls, s.spin ? 'animate-pulseglow' : '']"
+            />
+            <span class="flex-1 truncate">{{ s.label }}</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </Transition>
   </div>
 </template>
 
