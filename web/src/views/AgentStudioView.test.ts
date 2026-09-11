@@ -2115,6 +2115,10 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
     expect(src).toMatch(/tab === 'platform-rules'/)
     expect(src).not.toMatch(/tab === 'test'/)
     expect(src).toMatch(/tab === 'meta'/)
+    // Rejected demo: must not add chat-test as a STUDIO_TABS trailing item (g2.2).
+    expect(src).toMatch(/const STUDIO_TABS[\s\S]*?=\s*\[[^\]]*\]/)
+    expect(src).not.toMatch(/STUDIO_TABS[^\n]*test/)
+    expect(src).not.toMatch(/'test' as StudioTab|StudioTab.*'test'/)
   })
 
   it('switches Demo main-path tabs via tab strip without changing labels', async () => {

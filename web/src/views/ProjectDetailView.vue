@@ -19,9 +19,9 @@ import TokenUsageHoverTip from '@/components/ui/TokenUsageHoverTip.vue'
 import ProjectAuditPanel from '@/components/project/ProjectAuditPanel.vue'
 import ProjectNotifyPanel from '@/components/project/ProjectNotifyPanel.vue'
 import ProjectSharedAgentPanel from '@/components/project/ProjectSharedAgentPanel.vue'
+import ProjectAgentsPanel from '@/components/project/ProjectAgentsPanel.vue'
 import RequirementDraftsPanel from '@/components/project/RequirementDraftsPanel.vue'
 import ProjectExternalMcpPanel from '@/components/project/ProjectExternalMcpPanel.vue'
-import AgentStudioView from '@/views/AgentStudioView.vue'
 import { useProjectDetail } from '@/lib/project/useProjectDetail'
 import { DEFAULT_PROJECT_ID } from '@/lib/pm/onboardingWizard'
 
@@ -957,9 +957,9 @@ const onboardingEmptyDesc = computed(() =>
         </div>
       </div>
 
-      <!-- Agents: embedded Agent Studio (fill remaining main area) -->
+      <!-- Agents: second-level meta | chat test (fill remaining main area) -->
       <div v-else-if="tab === 'agents'" class="flex min-h-0 flex-1 flex-col" data-testid="project-agents-tab">
-        <AgentStudioView :project-id="projectId" embedded />
+        <ProjectAgentsPanel :project-id="projectId" />
       </div>
 
       <!-- Shared Agent config: fill remaining main area -->

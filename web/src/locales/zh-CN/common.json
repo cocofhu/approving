@@ -176,7 +176,7 @@
       "selectWorkflowGroup": "请在左侧选择工作流分组",
       "noMatchingGroups": "无匹配分组",
       "noMatchingOptions": "无匹配项",
-      "noSandboxes": "暂无沙箱。运行工作流时会按需创建节点沙箱，或前往项目详情「共享 Agent 配置 → 对话测试」启动测试沙箱。",
+      "noSandboxes": "暂无沙箱。运行工作流时会按需创建节点沙箱，或前往项目详情「智能体 → 对话测试」启动测试沙箱。",
       "noAgents": "暂无 Agent。点击右上角\"新建 Agent\"创建,或后端首启会落盘默认 Agent。",
       "noPendingGates": "没有待审批项",
       "noPendingGatesForPipeline": "该流水线没有待审批项",
