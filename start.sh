@@ -49,21 +49,20 @@ set +a
 : "${APPROVING_GATEWAY_PORT:=8899}"
 : "${APPROVING_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${APPROVING_GATEWAY_PORT}}"
 : "${APPROVING_DEPLOYMENT_MODE:=local-demo}"
-: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.3.8-beta}"
-: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.3.8-beta}"
+: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.3.10-beta}"
+: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.3.10-beta}"
 : "${SANDBOX_GATEWAY_API_KEY:=approving-local-demo}"
 
 # Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
 # cursor fallback default, so a bare default does not re-force all backends.
 _user_sandbox_image="${SANDBOX_IMAGE-}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.8-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.8-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.8-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.8-beta}"
-: "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.8-beta}"
-# Not published on 0.3.8-beta; leave empty so ./start.sh does not pull a missing tag.
-: "${APPROVING_SANDBOX_IMAGE_OPENCODE:=}"
-: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.8-beta}"
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.10-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.10-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.10-beta}"
+: "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.10-beta}"
+: "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.10-beta}"
+: "${APPROVING_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.3.10-beta}"
+: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.10-beta}"
 # Explicit SANDBOX_IMAGE (or APPROVING_SANDBOX_IMAGE) → global force; default path leaves it empty.
 if [[ -z "${APPROVING_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
   APPROVING_SANDBOX_IMAGE="${_user_sandbox_image}"
@@ -141,11 +140,7 @@ print_release_endpoints() {
   echo "           claude_code ${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
   echo "           codebuddy  ${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
   echo "           trae       ${APPROVING_SANDBOX_IMAGE_TRAE}"
-  if [[ -n "${APPROVING_SANDBOX_IMAGE_OPENCODE:-}" ]]; then
-    echo "           opencode   ${APPROVING_SANDBOX_IMAGE_OPENCODE}"
-  else
-    echo "           opencode   universal-sandbox-opencode:local (GHCR tag after next sandbox publish)"
-  fi
+  echo "           opencode   ${APPROVING_SANDBOX_IMAGE_OPENCODE}"
   if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then
     echo "—— sandbox GLOBAL FORCE  ${APPROVING_SANDBOX_IMAGE}"
   fi
@@ -154,14 +149,14 @@ print_release_endpoints() {
 }
 
 # Sandbox runtime images are NOT compose services — compose pull never fetches them.
-# Pull published GHCR runtimes. OpenCode is omitted until its tag is set.
+# Pull published GHCR runtimes (all five ACP backends).
 ensure_sandbox_runtime_image() {
   local images=(
     "${APPROVING_SANDBOX_IMAGE_CURSOR}"
     "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
     "${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
     "${APPROVING_SANDBOX_IMAGE_TRAE}"
-    "${APPROVING_SANDBOX_IMAGE_OPENCODE:-}"
+    "${APPROVING_SANDBOX_IMAGE_OPENCODE}"
   )
   # Deduplicate while preserving order (global force may equal one backend).
   if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then

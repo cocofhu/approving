@@ -4,6 +4,27 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.10-beta — 2026-09-11
+
+- Public beta follow-up on [`v0.3.10-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.10-beta)
+  (relative to `v0.3.9-beta`: PRs #542–#551). Full notes on the GitHub Release.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  `*:0.3.10-beta`, including `universal-sandbox-opencode` (tag publish does not
+  rewrite these files).
+- Highlights: Agent create wizards align with onboarding start paths; two-tone
+  page slogans; micro-interactions / motion tokens; project Agents onboarding
+  embed; global Agents sidebar + `/agents` Studio; home pipeline create entry;
+  Agent Git step always shows provider choices.
+
+## 0.3.9-beta — 2026-09-10
+
+- Public beta follow-up on [`v0.3.9-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.9-beta)
+  (relative to `v0.3.8-beta`: PRs #538–#541). Full notes on the GitHub Release.
+- Default GHCR pins stayed at `*:0.3.8-beta` until `0.3.10-beta` (OpenCode
+  sandbox image was first published on this tag).
+- Highlights: OpenCode as fifth ACP backend; Visual `page.html` fidelity;
+  from-baseline workflows on home; sidebar ZH copy + chrome motion.
+
 ## 0.3.8-beta — 2026-09-10
 
 - Public beta follow-up on [`v0.3.8-beta`](https://github.com/cocofhu/approving/releases/tag/v0.3.8-beta)
