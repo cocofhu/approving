@@ -3,6 +3,7 @@ import { getRegionPolicy } from '@/lib/shared/regionPolicy'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
 import type { AppLocale } from '@/lib/shared/loadLocaleMessages'
 import type { ThemeName } from '@/lib/shared/theme'
+import { locale } from '@/lib/shared/locale'
 import { theme } from '@/lib/shared/theme'
 import { DEFAULT_OPENCODE_PROVIDER } from '@/lib/agent/openCodeProvider'
 import { normalizeAgentName, validateAgentName } from '@/lib/agent/agentIO'
@@ -74,9 +75,10 @@ export const ONBOARDING_STEPS: OnboardingStep[] = BASE_ONBOARDING_STEPS
 
 export function onboardingStepsForMode(mode: OnboardingMode): OnboardingStep[] {
   if (mode === 'createProject') {
+    // New project is not first-install: skip language/theme; inherit app prefs.
     return [
       { id: 'projectName', labelKey: 'pages.onboarding.steps.projectName' },
-      ...BASE_ONBOARDING_STEPS,
+      ...BASE_ONBOARDING_STEPS.filter((s) => s.id !== 'language'),
     ]
   }
   return BASE_ONBOARDING_STEPS
@@ -261,11 +263,15 @@ export function shouldAutoOpenOnboarding(
   return needsOnboarding(workflows, agents, projectId)
 }
 
-export function freshOnboardingDraft(): OnboardingDraft {
+/**
+ * @param opts.inheritAppLocale — createProject: seed from current app locale
+ *   (not browser/OS). firstInstall/retry keep detectSystemLocale().
+ */
+export function freshOnboardingDraft(opts?: { inheritAppLocale?: boolean }): OnboardingDraft {
   return {
     step: 0,
     projectName: '',
-    language: detectSystemLocale(),
+    language: opts?.inheritAppLocale ? locale.value : detectSystemLocale(),
     theme: theme.value,
     startPath: 'apiKey',
     acpBackend: APIKEY_BACKEND,
