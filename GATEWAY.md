@@ -26,9 +26,10 @@ Two paths, different UI ports:
 | Release (default) | `./start.sh -d` | `:8899` | `:8080` | `:8080` (served with the API) |
 | Dev / source | `./start.sh dev -d` | `:8899` | `:8080` | `:5173` (Vite) |
 
-Release mode pulls GHCR images (including the large sandbox runtime). Dev mode may
-build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox` on first run
-(slow).
+Release mode ensures Approving + Gateway images when missing; sandbox runtimes
+pull on first create (`status=pulling`). Use `./start.sh pull` to warm all five.
+Dev mode may build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox`
+on first run (slow).
 
 ## Minimum compatible API
 
