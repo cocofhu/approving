@@ -110,10 +110,10 @@ watch(launchMode, (mode) => {
   }
 })
 
-// While the sandbox boots we cycle through the real stages (create container →
-// pull image → boot agent → ACP handshake) so the loading panel feels alive and
-// tells the user roughly what's happening instead of a static one-liner.
+// While the sandbox boots we drive stages from real status when known
+// (pulling → create → runtime → ACP), falling back to a timed cycle.
 const STARTING_STEPS = computed(() => [
+  { title: t('pages.agentChatTester.stepPulling.title'), hint: t('pages.agentChatTester.stepPulling.hint') },
   { title: t('pages.agentChatTester.stepSandbox.title'), hint: t('pages.agentChatTester.stepSandbox.hint') },
   { title: t('pages.agentChatTester.stepRuntime.title'), hint: t('pages.agentChatTester.stepRuntime.hint') },
   { title: t('pages.agentChatTester.stepAcp.title'), hint: t('pages.agentChatTester.stepAcp.hint') },
@@ -126,8 +126,12 @@ watch(
   status,
   (s) => {
     if (s === 'starting') {
-      startStep.value = 0
+      startStep.value = sandbox.value?.status === 'pulling' ? 0 : 1
       if (startTimer) clearInterval(startTimer)
+      if (sandbox.value?.status === 'pulling') {
+        startTimer = undefined
+        return
+      }
       startTimer = window.setInterval(() => {
         // Advance but hold on the last step so it doesn't loop back to "准备容器".
         if (startStep.value < STARTING_STEPS.value.length - 1) startStep.value++
@@ -186,7 +190,8 @@ onMounted(() => {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function waitReady(id: number) {
-  const deadline = Date.now() + 5 * 60 * 1000
+  // Align with gateway FinalizeTimeout / create timeout (~20m) for cold pulls (g3.4).
+  const deadline = Date.now() + 20 * 60 * 1000
   while (Date.now() < deadline) {
     // Bail if the user reset/destroyed the session while we were waiting.
     if (status.value !== 'starting') return
@@ -198,6 +203,23 @@ async function waitReady(id: number) {
       continue
     }
     sandbox.value = v
+    if (v.status === 'pulling') {
+      startStep.value = 0
+      if (startTimer) {
+        clearInterval(startTimer)
+        startTimer = undefined
+      }
+      await sleep(2000)
+      continue
+    }
+    if (v.status === 'creating' && startStep.value === 0) {
+      startStep.value = 1
+      if (!startTimer) {
+        startTimer = window.setInterval(() => {
+          if (startStep.value < STARTING_STEPS.value.length - 1) startStep.value++
+        }, 2600)
+      }
+    }
     if (v.status === 'running') {
       openWs(id)
       return

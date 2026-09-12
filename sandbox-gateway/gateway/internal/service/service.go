@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"sandbox-gateway/internal/config"
@@ -57,11 +58,28 @@ type Config struct {
 	OrphanGCMinAge time.Duration
 }
 
+// imageEnsurer is optionally implemented by drivers that can inspect/pull
+// images before Create (docker). Kubernetes leaves pulls to kubelet.
+type imageEnsurer interface {
+	ImagePresent(ctx context.Context, image string) (bool, error)
+	PullImage(ctx context.Context, image string) error
+}
+
 // SandboxService orchestrates the single configured driver and the store.
 type SandboxService struct {
 	drv   driver.Driver
 	store *store.Store
 	cfg   Config
+
+	// imagePullMu + imagePullWait dedupe concurrent pulls of the same image
+	// so multiple Creates share one docker pull (plan g2.2 / f9).
+	imagePullMu   sync.Mutex
+	imagePullWait map[string]*imagePullFlight
+}
+
+type imagePullFlight struct {
+	done chan struct{}
+	err  error
 }
 
 // New builds a SandboxService.
@@ -72,7 +90,12 @@ func New(drv driver.Driver, st *store.Store, cfg Config) *SandboxService {
 	if cfg.FinalizeTimeout == 0 {
 		cfg.FinalizeTimeout = 5 * time.Minute
 	}
-	return &SandboxService{drv: drv, store: st, cfg: cfg}
+	return &SandboxService{
+		drv:           drv,
+		store:         st,
+		cfg:           cfg,
+		imagePullWait: map[string]*imagePullFlight{},
+	}
 }
 
 // CreateRequest is the caller-supplied sandbox creation input.
@@ -183,6 +206,10 @@ func (s *SandboxService) Create(_ context.Context, req CreateRequest) (*models.S
 			Int64("memory_mb", mem).
 			Int64("disk_gi", disk).
 			Msg("sandbox provision starting")
+		if err := s.ensureImageBeforeCreate(bg, id, image); err != nil {
+			s.fail(id, fmt.Sprintf("pull image: %v", err))
+			return
+		}
 		h, err := s.drv.Create(bg, spec)
 		if err != nil {
 			s.fail(id, fmt.Sprintf("create: %v", err))
@@ -203,6 +230,71 @@ func (s *SandboxService) Create(_ context.Context, req CreateRequest) (*models.S
 	}()
 
 	return sb, nil
+}
+
+// ensureImageBeforeCreate pulls the runtime image when missing. Sets store
+// status to pulling for the duration so GET /sandboxes/:id reports a distinct
+// phase. Concurrent Creates for the same image share one pull.
+func (s *SandboxService) ensureImageBeforeCreate(ctx context.Context, sandboxID, image string) error {
+	ensurer, ok := s.drv.(imageEnsurer)
+	if !ok || strings.TrimSpace(image) == "" {
+		return nil
+	}
+	present, err := ensurer.ImagePresent(ctx, image)
+	if err != nil {
+		return err
+	}
+	if present {
+		return nil
+	}
+
+	s.setStatus(sandboxID, models.StatusPulling, "")
+	log.Info().Str("sandbox_id", sandboxID).Str("image", image).Msg("sandbox image pull starting")
+	if err := s.pullImageOnce(ctx, image, ensurer); err != nil {
+		return err
+	}
+	s.setStatus(sandboxID, models.StatusCreating, "")
+	log.Info().Str("sandbox_id", sandboxID).Str("image", image).Msg("sandbox image pull ok")
+	return nil
+}
+
+func (s *SandboxService) pullImageOnce(ctx context.Context, image string, ensurer imageEnsurer) error {
+	s.imagePullMu.Lock()
+	if s.imagePullWait == nil {
+		s.imagePullWait = map[string]*imagePullFlight{}
+	}
+	if f, ok := s.imagePullWait[image]; ok {
+		s.imagePullMu.Unlock()
+		select {
+		case <-f.done:
+			return f.err
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	f := &imagePullFlight{done: make(chan struct{})}
+	s.imagePullWait[image] = f
+	s.imagePullMu.Unlock()
+
+	err := ensurer.PullImage(ctx, image)
+
+	s.imagePullMu.Lock()
+	f.err = err
+	delete(s.imagePullWait, image)
+	close(f.done)
+	s.imagePullMu.Unlock()
+	return err
+}
+
+func (s *SandboxService) setStatus(id, status, errMsg string) {
+	sb, err := s.store.Get(context.Background(), id)
+	if err != nil {
+		log.Error().Err(err).Str("sandbox_id", id).Str("status", status).Msg("setStatus: load failed")
+		return
+	}
+	sb.Status = status
+	sb.Error = errMsg
+	s.persist(sb, "persist "+status+" status")
 }
 
 // finalize waits for the sandbox to become reachable and backfills endpoints.
@@ -391,6 +483,10 @@ func (s *SandboxService) Reinstall(ctx context.Context, id string, preserveData 
 	go func() {
 		bg, cancel := context.WithTimeout(context.Background(), s.cfg.FinalizeTimeout)
 		defer cancel()
+		if err := s.ensureImageBeforeCreate(bg, id, spec.Image); err != nil {
+			s.fail(id, fmt.Sprintf("pull image: %v", err))
+			return
+		}
 		if err := s.drv.Reinstall(bg, spec, preserveData); err != nil {
 			s.fail(id, fmt.Sprintf("reinstall: %v", err))
 			return

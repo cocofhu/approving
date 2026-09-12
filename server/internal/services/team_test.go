@@ -5,10 +5,12 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/approving/internal/sandbox"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -257,5 +259,164 @@ func TestSetOrgMembership_ScopeDenied(t *testing.T) {
 	})
 	if !errors.Is(err, ErrTeamScopeDenied) {
 		t.Fatalf("want project mismatch, got %v", err)
+	}
+}
+
+type fakeTeamSandbox struct {
+	openRow   *models.Sandbox
+	openErr   error
+	views     []SandboxView
+	viewCalls int
+	mu        sync.Mutex
+}
+
+func (f *fakeTeamSandbox) Open(ctx context.Context, profile string, repos []sandbox.RepoSpec, projectID string) (*models.Sandbox, error) {
+	if f.openErr != nil {
+		return nil, f.openErr
+	}
+	return f.openRow, nil
+}
+
+func (f *fakeTeamSandbox) GetView(ctx context.Context, id uint) (*SandboxView, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.viewCalls >= len(f.views) {
+		last := f.views[len(f.views)-1]
+		cp := last
+		return &cp, nil
+	}
+	v := f.views[f.viewCalls]
+	f.viewCalls++
+	cp := v
+	return &cp, nil
+}
+
+func TestFinishBootstrap_WaitsForPullingBeforeReady(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:team_pull_"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(models.AllModels()...); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	skills := NewAgentService(filepath.Join(root, "profiles"))
+	org := NewOrgService(filepath.Join(root, "profiles"), skills)
+	projects := NewProjectService(db)
+	pm := NewPmService(db, skills)
+
+	fake := &fakeTeamSandbox{
+		openRow: &models.Sandbox{ID: 42, Status: "pulling", Name: "sbx-pull"},
+		views: []SandboxView{
+			{Sandbox: models.Sandbox{ID: 42, Status: "pulling"}},
+			{Sandbox: models.Sandbox{ID: 42, Status: "pulling"}},
+			{Sandbox: models.Sandbox{ID: 42, Status: "creating"}},
+			{Sandbox: models.Sandbox{ID: 42, Status: "running"}},
+		},
+	}
+	team := NewTeamService(projects, skills, org, pm, fake)
+
+	sess, err := team.Bootstrap(context.Background(), TeamBootstrapRequest{
+		ProjectName: "PullProj",
+		Prefix:      "Pu",
+		PMName:      "Pu项目经理",
+		Background:  "pull loading coverage for g3.3",
+		AcpBackend:  "cursor",
+		MCP:         DefaultPlatformMCP(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sawPulling := false
+	var cur TeamBootstrapSession
+	for i := 0; i < 200; i++ {
+		cur, err = team.GetSession(sess.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cur.Status == "pulling" || cur.SandboxStatus == "pulling" {
+			sawPulling = true
+		}
+		if cur.Status == "ready" || cur.Status == "failed" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if cur.Status != "ready" {
+		t.Fatalf("status=%s err=%s events=%v", cur.Status, cur.Error, cur.Events)
+	}
+	if !sawPulling {
+		t.Fatalf("expected session to report pulling before ready; events=%v sandboxStatus=%s", cur.Events, cur.SandboxStatus)
+	}
+	if cur.SandboxID != "42" {
+		t.Fatalf("sandboxId=%s", cur.SandboxID)
+	}
+	if cur.SandboxStatus != "running" {
+		t.Fatalf("sandboxStatus=%s want running", cur.SandboxStatus)
+	}
+	hasPullEvent := false
+	for _, ev := range cur.Events {
+		if strings.Contains(ev.Message, "pulling runtime image") {
+			hasPullEvent = true
+			break
+		}
+	}
+	if !hasPullEvent {
+		t.Fatalf("missing pull event: %v", cur.Events)
+	}
+}
+
+func TestFinishBootstrap_SandboxErrorFailsSession(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:team_err_"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(models.AllModels()...); err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	skills := NewAgentService(filepath.Join(root, "profiles"))
+	org := NewOrgService(filepath.Join(root, "profiles"), skills)
+	projects := NewProjectService(db)
+	pm := NewPmService(db, skills)
+
+	fake := &fakeTeamSandbox{
+		openRow: &models.Sandbox{ID: 7, Status: "creating", Name: "sbx-err"},
+		views: []SandboxView{
+			{Sandbox: models.Sandbox{ID: 7, Status: "pulling"}},
+			{Sandbox: models.Sandbox{ID: 7, Status: "error", Error: "pull denied"}},
+		},
+	}
+	team := NewTeamService(projects, skills, org, pm, fake)
+
+	sess, err := team.Bootstrap(context.Background(), TeamBootstrapRequest{
+		ProjectName: "ErrProj",
+		Prefix:      "Er",
+		PMName:      "Er项目经理",
+		Background:  "pull failure should fail bootstrap",
+		AcpBackend:  "cursor",
+		MCP:         DefaultPlatformMCP(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cur TeamBootstrapSession
+	for i := 0; i < 200; i++ {
+		cur, err = team.GetSession(sess.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cur.Status == "ready" || cur.Status == "failed" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if cur.Status != "failed" {
+		t.Fatalf("status=%s want failed; err=%s", cur.Status, cur.Error)
+	}
+	if !strings.Contains(cur.Error, "pull denied") {
+		t.Fatalf("error=%q", cur.Error)
 	}
 }

@@ -31,7 +31,7 @@ func (s *SandboxService) findReusable(ctx context.Context, profile, projectID st
 	var rows []models.Sandbox
 	if err := s.db.
 		Where("purpose = ? AND profile = ? AND repo_url = ? AND project_id = ? AND status IN ?",
-			"test", profile, "", projectID, []string{"running", "creating"}).
+			"test", profile, "", projectID, []string{"running", "creating", "pulling"}).
 		Order("created_at desc").Find(&rows).Error; err != nil {
 		return nil
 	}
@@ -42,7 +42,7 @@ func (s *SandboxService) findReusable(ctx context.Context, profile, projectID st
 		}
 	}
 	for i := range rows {
-		if rows[i].Status == "creating" {
+		if rows[i].Status == "creating" || rows[i].Status == "pulling" {
 			return &rows[i]
 		}
 	}
@@ -149,7 +149,8 @@ func firstTestRepoURL(repos []sandbox.RepoSpec) string {
 // idle sweeper reclaims the dead row). Runs on a detached context since the
 // originating HTTP request has already returned.
 func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID, token string, repos []sandbox.RepoSpec, agent Agent, sharedWorkDir string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Cover on-demand image pull + create (same budget as Manager createTimeout / g2.3).
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
 	fail := func(err error) {
@@ -587,7 +588,7 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 		// Young creating rows still use a placeholder Name; the gateway id is
 		// adopted only after Create succeeds. Keep them and protect the
 		// correlated gateway sandbox from the orphan sweep.
-		if row.Status == "creating" && time.Since(row.CreatedAt) < reconcileCreatingGrace {
+		if (row.Status == "creating" || row.Status == "pulling") && time.Since(row.CreatedAt) < reconcileCreatingGrace {
 			tracked[row.Name] = true
 			protectedCorr[row.Name] = true
 			continue

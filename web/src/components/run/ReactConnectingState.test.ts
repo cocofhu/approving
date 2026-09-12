@@ -55,7 +55,7 @@ describe('ReactConnectingState', () => {
     vi.advanceTimersByTime(2600)
     await nextTick()
     expect(wrapper.text()).toContain(titles.at(-1))
-    expect(wrapper.get('[data-testid="clarify-boot-progress"]').findAll('span')).toHaveLength(4)
+    expect(wrapper.get('[data-testid="clarify-boot-progress"]').findAll('span')).toHaveLength(5)
     const input = wrapper.get('[data-testid="react-connecting-input"]')
     expect(input.attributes('placeholder')).toBe('连接中，暂不可输入')
     expect((input.element as HTMLTextAreaElement).disabled).toBe(true)
@@ -88,9 +88,10 @@ describe('ReactConnectingState', () => {
     expect(wrapper.text()).not.toContain('正在启动 Agent…')
   })
 
-  it('renders a stable artifact-stage skeleton', () => {
+  it('pins pull-image copy when sandboxPhase is pulling (g3.1)', async () => {
+    vi.useFakeTimers()
     const wrapper = mount(ReactConnectingState, {
-      props: { mode: 'stage' },
+      props: { sandboxPhase: 'pulling' },
       global: {
         plugins: [createI18n({
           legacy: false,
@@ -100,7 +101,11 @@ describe('ReactConnectingState', () => {
         stubs: { Icon: true },
       },
     })
-    expect(wrapper.get('[data-testid="react-connecting-stage"]').attributes('aria-busy')).toBe('true')
-    expect(wrapper.text()).toContain('产物区将在会话就绪后填充')
+    expect(wrapper.get('[data-testid="react-connecting-pill"]').text()).toContain('正在拉取镜像')
+    expect(wrapper.text()).toContain('正在拉取镜像…')
+    vi.advanceTimersByTime(10_400)
+    await nextTick()
+    expect(wrapper.text()).toContain('正在拉取镜像…')
+    expect(wrapper.text()).not.toContain('正在启动 Agent…')
   })
 })

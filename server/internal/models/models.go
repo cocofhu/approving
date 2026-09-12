@@ -605,7 +605,7 @@ type Sandbox struct {
 	Name           string `gorm:"uniqueIndex" json:"name"` // docker container name
 	Profile        string `json:"profile"`                 // bound Agent name
 	Purpose        string `json:"purpose"`                 // "test" | "run" | "agent" | "pm"(legacy)
-	Status         string `json:"status"`                  // creating|running|stopped|error
+	Status         string `json:"status"`                  // pulling|creating|running|stopped|error
 	Host           string `json:"-"`
 	ACPPort        int    `json:"-"`
 	CodeServerPort int    `json:"-"`

@@ -144,6 +144,7 @@ const {
   processingLock,
   startFailedActive,
   activeStarting,
+  startingSandboxPhase,
   incomingGhostConfirmInFlight,
   STARTING_POLL_MS,
   STARTING_POLL_MAX_TICKS,
@@ -446,7 +447,11 @@ const listFadeKey = computed(() =>
           :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
         >
           <template #stage>
-            <ReactConnectingState v-if="activeStarting" mode="stage" />
+            <ReactConnectingState
+              v-if="activeStarting"
+              mode="stage"
+              :sandbox-phase="startingSandboxPhase"
+            />
             <ArtifactLoadingPane v-else-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
             <ReactArtifactStage
               v-else
@@ -463,7 +468,11 @@ const listFadeKey = computed(() =>
             />
           </template>
           <template #sidebar>
-            <ReactConnectingState v-if="activeStarting" :show-confirm="composerMode === 'review'" />
+            <ReactConnectingState
+              v-if="activeStarting"
+              :show-confirm="composerMode === 'review'"
+              :sandbox-phase="startingSandboxPhase"
+            />
             <ReviewComposer
               v-else
               ref="reviewChatRef"
@@ -564,7 +573,11 @@ const listFadeKey = computed(() =>
               :storage-key="REVIEW_SHELL_WIDTH_KEY_APPROVAL"
             >
               <template #stage>
-                <ReactConnectingState v-if="activeStarting" mode="stage" />
+                <ReactConnectingState
+              v-if="activeStarting"
+              mode="stage"
+              :sandbox-phase="startingSandboxPhase"
+            />
                 <ArtifactLoadingPane v-else-if="activeRunLoading" message-key="pages.gatesInbox.loadingRun" />
                 <ReactArtifactStage
                   v-else
@@ -581,7 +594,11 @@ const listFadeKey = computed(() =>
                 />
               </template>
               <template #sidebar>
-                <ReactConnectingState v-if="activeStarting" :show-confirm="composerMode === 'review'" />
+                <ReactConnectingState
+              v-if="activeStarting"
+              :show-confirm="composerMode === 'review'"
+              :sandbox-phase="startingSandboxPhase"
+            />
                 <ReviewComposer
                   v-else
                   ref="reviewChatRef"

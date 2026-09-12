@@ -1,6 +1,6 @@
 /** Boot-stage progress for LiveLogPanel empty state (frontend heuristic only). */
 
-export type BootStageId = 'creating' | 'acp_ready' | 'first_event'
+export type BootStageId = 'pulling' | 'creating' | 'acp_ready' | 'first_event'
 export type BootStageState = 'pending' | 'active' | 'done' | 'timeout'
 
 /** Persisted boot dwell state so tab switches (log ↔ sandbox) do not reset timeout. */
@@ -10,9 +10,9 @@ export type LiveLogBootSession = {
   timedOut: boolean
 }
 
-export const BOOT_STAGE_ORDER: BootStageId[] = ['creating', 'acp_ready', 'first_event']
+export const BOOT_STAGE_ORDER: BootStageId[] = ['pulling', 'creating', 'acp_ready', 'first_event']
 
-/** Product wait ceiling (~120s); used for active-stage dwell timeout. */
+/** Product wait ceiling (~120s) for create/ACP stages — not used while pulling (g3.4). */
 export const BOOT_STAGE_TIMEOUT_MS = 120_000
 
 export type SandboxPhaseSignal = {
@@ -30,9 +30,14 @@ export function isContainerReady(containerStatus: string | null | undefined): bo
   return c === 'running' || c === 'up'
 }
 
+/** True while gateway reports image pull in progress (no 120s dwell timeout). */
+export function isPullingSandbox(sandbox: SandboxPhaseSignal): boolean {
+  return norm(sandbox?.status) === 'pulling'
+}
+
 /**
  * Raw phase index from sandbox + timeline emptiness.
- * 0 = creating, 1 = ACP ready, 2 = waiting first event.
+ * 0 = pulling image, 1 = creating, 2 = ACP ready, 3 = waiting first event.
  * Returns null when boot progress should not be shown.
  */
 export function deriveBootPhaseIndex(
@@ -43,10 +48,11 @@ export function deriveBootPhaseIndex(
   if (nodeStatus !== 'running' || hasTimelineContent) return null
 
   const sbStatus = norm(sandbox?.status)
-  if (sbStatus === 'running') return 2
-  if (sbStatus === 'creating' && isContainerReady(sandbox?.containerStatus)) return 1
-  // No row, creating without ready container, or uncertain → stay on stage 1.
-  return 0
+  if (sbStatus === 'running') return 3
+  if (sbStatus === 'creating' && isContainerReady(sandbox?.containerStatus)) return 2
+  if (sbStatus === 'pulling') return 0
+  // No row, creating without ready container, or uncertain → creating stage.
+  return 1
 }
 
 /** Monotonic ratchet: never go backwards while still in boot empty state. */

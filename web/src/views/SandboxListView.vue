@@ -112,6 +112,7 @@ function purposeOf(s: SandboxView): { label: string; cls: string } {
 function statusOf(s: SandboxView): { label: string; cls: string } {
   // "creating" takes precedence over "busy": a run sandbox is marked busy while
   // it provisions, but the user needs to see it is still starting up.
+  if (s.status === 'pulling') return { label: t('pages.sandboxes.status.pulling'), cls: 'border-warn/30 text-warn' }
   if (s.status === 'creating') return { label: t('pages.sandboxes.status.creating'), cls: 'border-warn/30 text-warn' }
   if (s.busy) return { label: t('pages.sandboxes.status.busy'), cls: 'border-accent/40 text-accent-2' }
   if (s.status === 'error') return { label: t('pages.sandboxes.status.error'), cls: 'border-err/30 text-err' }

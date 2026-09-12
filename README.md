@@ -18,7 +18,7 @@ Approving is an open-source, self-hostable platform for turning coding agents in
 [![coverage-server](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-server.json)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![coverage-gateway](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-gateway.json)](https://github.com/cocofhu/approving/actions/workflows/ci-gateway.yml)
 
-> Approving is currently a public beta. It requires a Linux host with Docker Compose, and the first startup pulls a large sandbox runtime image.
+> Approving is currently a public beta. It requires a Linux host with Docker Compose. Default startup only needs Approving + Gateway; sandbox runtimes pull on first use of each Agent backend.
 
 ## Why Approving?
 
@@ -118,7 +118,7 @@ Open:
 - Gateway health: <http://localhost:8899/healthz>
 - Local demo login: `admin` / `demo1234`
 
-> `./start.sh` also pulls the multi-gigabyte sandbox runtime image. Sandbox chat may remain on “starting sandbox…” until the pull completes.
+> Sandbox runtimes are pulled on demand when you first start a given Agent backend (Inbox / run page show pull loading). Warm all five with `./start.sh pull`.
 
 Useful commands:
 

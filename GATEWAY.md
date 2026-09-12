@@ -26,16 +26,17 @@ Two paths, different UI ports:
 | Release (default) | `./start.sh -d` | `:8899` | `:8080` | `:8080` (served with the API) |
 | Dev / source | `./start.sh dev -d` | `:8899` | `:8080` | `:5173` (Vite) |
 
-Release mode pulls GHCR images (including the large sandbox runtime). Dev mode may
-build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox` on first run
-(slow).
+Release mode ensures Approving + Gateway images when missing; sandbox runtimes
+pull on first create (`status=pulling`). Use `./start.sh pull` to warm all five.
+Dev mode may build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox`
+on first run (slow).
 
 ## Minimum compatible API
 
 | Capability | Contract |
 | --- | --- |
 | Health | `GET /healthz` returns 2xx |
-| Create | `POST /api/v1/sandboxes` accepts image, env, labels, ports, resources, config.bundleUrl; response `202`, status often `creating` |
+| Create | `POST /api/v1/sandboxes` accepts image, env, labels, ports, resources, config.bundleUrl; response `202`, status `creating` then optionally `pulling` while the image downloads, then `creating` again during `docker run` / finalize |
 | Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints. Gateway still includes internal `cdp`/`novnc` (container/ClusterIP) for in-cluster Approving. Approving user `GetView` only returns `session`/`ide`/`ssh`. |
 | List | `GET /api/v1/sandboxes?label=key:value` (AND) |
 | Delete | `DELETE /api/v1/sandboxes/{id}` returns 2xx |

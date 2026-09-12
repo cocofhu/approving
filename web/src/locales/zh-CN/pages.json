@@ -901,6 +901,7 @@
         "busyFinalizing": "正在保存本轮回复，请等待完成后再发送下一条。",
         "busyResuming": "正在续接未完成回复，请等待终态后再发送下一条。",
         "busyWaiting": "正在处理本轮（就绪 / 生成），请等待终态后再发送下一条。",
+        "busyPulling": "正在拉取镜像…",
         "busyStreaming": "正在流式输出回复，请等待完成、失败或停止后再发送。",
         "failConnectionTitle": "连接中断",
         "failConnectionDesc": "页面刷新或连接中断导致本轮生成已停止。可点击重试；若有半成品已保留。",
@@ -1723,6 +1724,7 @@
       },
       "status": {
         "busy": "对话中",
+        "pulling": "拉取镜像中",
         "creating": "创建中",
         "error": "启动失败",
         "stopped": "已停止",
@@ -2472,6 +2474,8 @@
           "sub": "自动建团：项目 / Org / 工程师 Agent",
           "starting": "sandbox starting…",
           "running": "sandbox running",
+          "pulling": "正在拉取镜像…",
+          "pullingHint": "正在拉取运行时镜像，请稍候。拉取完成前不会标记为就绪。",
           "ready": "team ready · {n} agents",
           "failed": "failed",
           "waiting": "等待进度…",
@@ -2810,6 +2814,7 @@
       "done": "交互已完成，进入下一步",
       "closed": "该运行已结束，交互已关闭",
       "connecting": "连接中…",
+      "connectingPulling": "正在拉取镜像…",
       "connectingHint": "连接中，稍后即可开始对话",
       "connectingInputPlaceholder": "连接中，暂不可输入",
       "connectingStageHint": "产物区将在会话就绪后填充",
@@ -3109,6 +3114,10 @@
     "clarifyBootLoader": {
       "pending": "节点尚未执行,等待进入澄清…",
       "pendingHint": "上游节点完成后会自动开启本轮需求澄清。",
+      "stepPulling": {
+        "title": "正在拉取镜像…",
+        "hint": "首次使用该 Agent 后端时需下载沙箱运行时，可能较久，请稍候。"
+      },
       "stepSandbox": {
         "title": "正在准备工作环境…",
         "hint": "第一次启动可能需要一会儿，请稍候。"
@@ -3217,6 +3226,10 @@
       },
       "boot": {
         "stages": {
+          "pulling": {
+            "title": "正在拉取镜像",
+            "desc": "首次使用该 Agent 后端时需下载沙箱运行时，可能较久"
+          },
           "creating": {
             "title": "沙箱创建中",
             "desc": "网关与容器创建中"
@@ -3623,6 +3636,10 @@
       "stepSandbox": {
         "title": "正在准备工作环境…",
         "hint": "第一次启动可能需要一会儿，请稍候。"
+      },
+      "stepPulling": {
+        "title": "正在拉取镜像…",
+        "hint": "首次使用该 Agent 后端时需下载沙箱运行时，可能较久，请稍候。"
       },
       "stepRuntime": {
         "title": "正在启动 Agent…",

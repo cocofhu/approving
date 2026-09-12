@@ -111,7 +111,8 @@ function hydrateBrand(brand: BrandSettings) {
 }
 
 function aggregateUsage(list: SandboxView[]) {
-  const active = (s: SandboxView) => s.status === 'creating' || s.status === 'running'
+  const active = (s: SandboxView) =>
+    s.status === 'creating' || s.status === 'pulling' || s.status === 'running'
   let testCount = 0
   let total = 0
   for (const s of list) {

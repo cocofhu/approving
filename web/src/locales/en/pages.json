@@ -901,6 +901,7 @@
         "busyFinalizing": "Saving this reply. Wait for completion before sending another.",
         "busyResuming": "Resuming an in-progress reply. Wait for a terminal state before sending.",
         "busyWaiting": "Processing this turn (ready / generate). Wait for a terminal state before sending another.",
+        "busyPulling": "Pulling image…",
         "busyStreaming": "Streaming a reply. Wait for completion, failure, or stop before sending.",
         "failConnectionTitle": "Connection interrupted",
         "failConnectionDesc": "This turn stopped because the page refreshed or the connection dropped. You can retry; any partial reply is kept when available.",
@@ -1723,6 +1724,7 @@
       },
       "status": {
         "busy": "In chat",
+        "pulling": "Pulling image",
         "creating": "Creating",
         "error": "Start failed",
         "stopped": "Stopped",
@@ -2472,6 +2474,8 @@
           "sub": "Auto-provision: project / org / engineer agents",
           "starting": "sandbox starting…",
           "running": "sandbox running",
+          "pulling": "Pulling image…",
+          "pullingHint": "Pulling the runtime image. Ready is withheld until the pull finishes.",
           "ready": "team ready · {n} agents",
           "failed": "failed",
           "waiting": "Waiting for progress…",
@@ -2810,6 +2814,7 @@
       "done": "Interaction complete — continuing",
       "closed": "Run ended — interaction closed",
       "connecting": "Connecting…",
+      "connectingPulling": "Pulling image…",
       "connectingHint": "Connecting. You can start chatting shortly.",
       "connectingInputPlaceholder": "Connecting — input is temporarily unavailable",
       "connectingStageHint": "Artifacts will appear when the session is ready",
@@ -3109,6 +3114,10 @@
     "clarifyBootLoader": {
       "pending": "Node not started yet; waiting to enter clarify…",
       "pendingHint": "Clarify starts automatically after upstream nodes complete.",
+      "stepPulling": {
+        "title": "Pulling image…",
+        "hint": "First use of this Agent backend downloads the sandbox runtime; this can take a while."
+      },
       "stepSandbox": {
         "title": "Preparing the workspace…",
         "hint": "First-time setup may take a moment."
@@ -3217,6 +3226,10 @@
       },
       "boot": {
         "stages": {
+          "pulling": {
+            "title": "Pulling image",
+            "desc": "First use of this Agent backend downloads the sandbox runtime; this can take a while"
+          },
           "creating": {
             "title": "Creating sandbox",
             "desc": "Gateway & container provisioning"
@@ -3623,6 +3636,10 @@
       "stepSandbox": {
         "title": "Preparing the workspace…",
         "hint": "First-time setup may take a moment."
+      },
+      "stepPulling": {
+        "title": "Pulling image…",
+        "hint": "First use of this Agent backend downloads the sandbox runtime; this can take a while."
       },
       "stepRuntime": {
         "title": "Starting the Agent…",

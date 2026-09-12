@@ -902,3 +902,43 @@ func TestApplyPreviewDirectNilSpec(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestImagePresentAndPull(t *testing.T) {
+	m := newMock()
+	d := New(Options{})
+	d.run = m.run
+
+	m.on("image", "", errors.New("Error: No such image: missing:tag"))
+	present, err := d.ImagePresent(context.Background(), "missing:tag")
+	if err != nil || present {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(m.callsWith("image")) != 1 {
+		t.Fatalf("want image inspect call: %v", m.calls)
+	}
+
+	m.on("image", `[{"Id":"sha256:abc"}]`, nil)
+	present, err = d.ImagePresent(context.Background(), "local:tag")
+	if err != nil || !present {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+
+	m.on("pull", "pulled", nil)
+	if err := d.PullImage(context.Background(), "ghcr.io/x:1"); err != nil {
+		t.Fatal(err)
+	}
+	pulls := m.callsWith("pull")
+	if len(pulls) != 1 || pulls[0][1] != "ghcr.io/x:1" {
+		t.Fatalf("pull calls: %v", pulls)
+	}
+}
+
+func TestPullImageEmpty(t *testing.T) {
+	d := New(Options{})
+	if err := d.PullImage(context.Background(), "  "); err == nil {
+		t.Fatal("want empty image error")
+	}
+	if _, err := d.ImagePresent(context.Background(), ""); err == nil {
+		t.Fatal("want empty image error")
+	}
+}

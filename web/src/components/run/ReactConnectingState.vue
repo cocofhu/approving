@@ -7,10 +7,13 @@ withDefaults(
   defineProps<{
     mode?: 'stage' | 'sidebar'
     showConfirm?: boolean
+    /** Gateway lifecycle while inbox starting (e.g. pulling). */
+    sandboxPhase?: string | null
   }>(),
   {
     mode: 'sidebar',
     showConfirm: true,
+    sandboxPhase: null,
   },
 )
 
@@ -56,11 +59,15 @@ const { t } = useI18n()
         data-testid="react-connecting-pill"
       >
         <i class="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-        {{ t('pages.clarify.connecting') }}
+        {{
+          sandboxPhase === 'pulling'
+            ? t('pages.clarify.connectingPulling')
+            : t('pages.clarify.connecting')
+        }}
       </span>
     </div>
     <div class="min-h-0 flex-1 overflow-hidden">
-      <ClarifyBootLoader phase="starting" />
+      <ClarifyBootLoader phase="starting" :sandbox-phase="sandboxPhase" />
     </div>
     <div class="shrink-0 border-t border-line p-3">
       <textarea

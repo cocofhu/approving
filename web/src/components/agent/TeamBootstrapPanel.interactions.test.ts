@@ -151,4 +151,29 @@ describe('TeamBootstrapPanel interactions', () => {
     expect((w.vm as any).lineClass('mcp')).toBe('mcp-block')
     w.unmount()
   })
+
+  it('shows pulling loading copy while sandboxStatus is pulling (g3.3)', async () => {
+    mocks.get.mockResolvedValueOnce(session('running', {
+      sandboxStatus: 'pulling',
+      events: [{ kind: 'sys', message: 'pulling runtime image…' }],
+      resources: [],
+    }))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.text()).toContain('正在拉取镜像')
+    expect(w.find('[data-testid="team-bootstrap-pulling"]').exists()).toBe(true)
+    expect(w.find('[data-testid="team-bootstrap-pulling"]').text()).toContain('运行时镜像')
+    w.unmount()
+  })
+
+  it('shows pulling badge when session status is pulling', async () => {
+    mocks.get.mockResolvedValueOnce(session('pulling', {
+      events: [{ kind: 'sys', message: 'pulling runtime image…' }],
+    }))
+    const w = mountPanel()
+    await flushPromises()
+    expect(w.text()).toContain('正在拉取镜像…')
+    expect(w.find('[data-testid="team-bootstrap-pulling"]').exists()).toBe(true)
+    w.unmount()
+  })
 })

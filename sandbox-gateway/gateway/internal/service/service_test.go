@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1073,5 +1074,164 @@ func TestPublishPortDriverErrorAndEmptyAddr(t *testing.T) {
 	drv.epErr = fmt.Errorf("endpoints down")
 	if _, err := svc.PublishPort(context.Background(), sb.ID, 3001); err == nil {
 		t.Fatal("want endpoints error")
+	}
+}
+
+// pullGateDriver wraps fake.Driver with ImagePresent/PullImage for on-demand pull tests.
+type pullGateDriver struct {
+	*fake.Driver
+	mu       sync.Mutex
+	present  bool
+	pulls    int
+	pullErr  error
+	pullSlow time.Duration
+}
+
+func (p *pullGateDriver) ImagePresent(ctx context.Context, image string) (bool, error) {
+	_ = ctx
+	_ = image
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.present, nil
+}
+
+func (p *pullGateDriver) PullImage(ctx context.Context, image string) error {
+	_ = image
+	p.mu.Lock()
+	p.pulls++
+	delay := p.pullSlow
+	err := p.pullErr
+	p.mu.Unlock()
+	if delay > 0 {
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if err != nil {
+		return err
+	}
+	p.mu.Lock()
+	p.present = true
+	p.mu.Unlock()
+	return nil
+}
+
+func TestCreatePullsMissingImageAndReportsPulling(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	gate := &pullGateDriver{Driver: base, present: false, pullSlow: 80 * time.Millisecond}
+	svc := New(gate, st, Config{
+		Image: "ghcr.io/cocofhu/universal-sandbox-cursor:test",
+		Ports: []int{8765}, SessionPort: 8765, WorkspaceDir: "/root/workspace",
+		FinalizeTimeout: 3 * time.Second, Resources: testResources(),
+	})
+
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	sawPulling := false
+	for time.Now().Before(deadline) {
+		cur, gerr := svc.Get(sb.ID)
+		if gerr != nil {
+			t.Fatal(gerr)
+		}
+		if cur.Status == models.StatusPulling {
+			sawPulling = true
+			break
+		}
+		if cur.Status == models.StatusRunning || cur.Status == models.StatusError {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !sawPulling {
+		t.Fatal("expected status=pulling while image missing")
+	}
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		cur, _ := svc.Get(sb.ID)
+		if cur != nil && cur.Status == models.StatusRunning {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cur, _ := svc.Get(sb.ID)
+	if cur.Status != models.StatusRunning {
+		t.Fatalf("status=%s want running err=%q", cur.Status, cur.Error)
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.pulls != 1 {
+		t.Fatalf("pulls=%d want 1", gate.pulls)
+	}
+}
+
+func TestCreateSkipsPullWhenImagePresent(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	gate := &pullGateDriver{Driver: base, present: true}
+	svc := New(gate, st, Config{
+		Image: "local:tag", Ports: []int{8765}, SessionPort: 8765,
+		WorkspaceDir: "/root/workspace", FinalizeTimeout: 2 * time.Second, Resources: testResources(),
+	})
+	sb, err := svc.Create(context.Background(), CreateRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		cur, _ := svc.Get(sb.ID)
+		if cur != nil && (cur.Status == models.StatusRunning || cur.Status == models.StatusError) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.pulls != 0 {
+		t.Fatalf("pulls=%d want 0 when image present", gate.pulls)
+	}
+}
+
+func TestConcurrentCreateSharesOnePull(t *testing.T) {
+	st := testDB(t)
+	base := fake.New()
+	if err := base.WithSessionListener(8765); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(base.Close)
+	gate := &pullGateDriver{Driver: base, present: false, pullSlow: 120 * time.Millisecond}
+	svc := New(gate, st, Config{
+		Image: "shared:tag", Ports: []int{8765}, SessionPort: 8765,
+		WorkspaceDir: "/root/workspace", FinalizeTimeout: 5 * time.Second, Resources: testResources(),
+	})
+	var wg sync.WaitGroup
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := svc.Create(context.Background(), CreateRequest{}); err != nil {
+				t.Errorf("create: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	time.Sleep(400 * time.Millisecond)
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.pulls != 1 {
+		t.Fatalf("pulls=%d want 1 for concurrent same image", gate.pulls)
 	}
 }

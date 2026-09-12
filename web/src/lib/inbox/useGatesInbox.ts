@@ -336,6 +336,28 @@ const activeStarting = computed(
   () => !startFailedActive.value && isStartingInboxItem(active.value),
 )
 
+/** Gateway lifecycle while starting (pulling | creating | …) for ClarifyBootLoader. */
+const startingSandboxPhase = ref<string | null>(null)
+
+async function refreshStartingSandboxPhase() {
+  if (!activeStarting.value || !active.value) {
+    startingSandboxPhase.value = null
+    return
+  }
+  const runId = active.value.runId
+  const nodeId = active.value.nodeId
+  if (!runId || !nodeId) {
+    startingSandboxPhase.value = null
+    return
+  }
+  try {
+    const sb = await api.getRunNodeSandbox(runId, nodeId)
+    startingSandboxPhase.value = sb?.status ? String(sb.status) : null
+  } catch {
+    // Keep last known phase; list poll / next tick retries.
+  }
+}
+
 /** Invalidate in-flight loadList writebacks (e.g. after local approve converge). */
 function invalidateListLoads() {
   listLoadGeneration++
@@ -579,12 +601,15 @@ function stopStartingPoll() {
 function startStartingPoll() {
   stopStartingPoll()
   let ticks = 0
+  void refreshStartingSandboxPhase()
   startingPollTimer = window.setInterval(() => {
     if (!activeStarting.value || ++ticks > STARTING_POLL_MAX_TICKS) {
       stopStartingPoll()
+      startingSandboxPhase.value = null
       return
     }
     void loadList()
+    void refreshStartingSandboxPhase()
   }, STARTING_POLL_MS)
 }
 
@@ -2002,6 +2027,7 @@ function itemSecondary(it: InboxItem) {
     processingLock,
     startFailedActive,
     activeStarting,
+    startingSandboxPhase,
     incomingGhostConfirmInFlight,
     STARTING_POLL_MS,
     STARTING_POLL_MAX_TICKS,

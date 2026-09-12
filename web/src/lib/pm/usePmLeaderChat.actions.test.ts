@@ -384,6 +384,27 @@ describe('usePmLeaderChat actions', () => {
     app.unmount()
   })
 
+  it('exposes pulling boot copy while waitReady sees status=pulling (g3.3)', async () => {
+    vi.useFakeTimers()
+    const { chat, app } = withChat()
+    await flushPromises()
+    mocks.getSandbox
+      .mockResolvedValueOnce({ status: 'pulling' })
+      .mockResolvedValueOnce({ status: 'running' })
+    const pending = chat.waitReady(9)
+    await flushPromises()
+    expect(chat.sandboxBootStatus.value).toBe('pulling')
+    expect(chat.isPullingBoot.value).toBe(true)
+    expect(chat.busyHint.value).toContain('正在拉取镜像')
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+    await pending
+    expect(chat.sandboxBootStatus.value).toBe('')
+    expect(chat.isPullingBoot.value).toBe(false)
+    app.unmount()
+    vi.useRealTimers()
+  })
+
   it('copies assistant text and reports clipboard failures', async () => {
     const { chat, app } = withChat()
     await flushPromises()

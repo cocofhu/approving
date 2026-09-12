@@ -62,6 +62,43 @@ func New(o Options) *Driver {
 
 func (d *Driver) Name() string { return "docker" }
 
+// ImagePresent reports whether the image ref exists locally (docker image inspect).
+func (d *Driver) ImagePresent(ctx context.Context, image string) (bool, error) {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return false, fmt.Errorf("empty image")
+	}
+	_, err := d.run(ctx, 15*time.Second, "image", "inspect", image)
+	if err == nil {
+		return true, nil
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "no such image") || strings.Contains(msg, "not found") {
+		return false, nil
+	}
+	return false, err
+}
+
+// PullImage fetches the image ref. Timeout is owned by ctx (FinalizeTimeout);
+// do not squeeze multi-GB pulls into the 90s docker run budget.
+func (d *Driver) PullImage(ctx context.Context, image string) error {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return fmt.Errorf("empty image")
+	}
+	// Use remaining ctx deadline when set; otherwise allow a long cold pull.
+	timeout := 20 * time.Minute
+	if dl, ok := ctx.Deadline(); ok {
+		if rem := time.Until(dl); rem > 0 {
+			timeout = rem
+		}
+	}
+	if _, err := d.run(ctx, timeout, "pull", image); err != nil {
+		return fmt.Errorf("docker pull %s: %w", image, err)
+	}
+	return nil
+}
+
 // containerName derives the docker container name from a gateway id.
 func (d *Driver) containerName(id string) string { return d.namePrefix + id }
 
@@ -131,6 +168,8 @@ func (d *Driver) Create(ctx context.Context, spec driver.Spec) (*driver.Handle, 
 	}
 	args = append(args, spec.Image)
 
+	// docker run stays short: image must already be local (service ensures pull
+	// under FinalizeTimeout with status=pulling before calling Create).
 	if _, err := d.run(ctx, 90*time.Second, args...); err != nil {
 		return nil, fmt.Errorf("docker run: %w", err)
 	}

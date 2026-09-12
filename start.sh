@@ -3,12 +3,12 @@
 # stack for development.
 #
 # Usage:
-#   ./start.sh            foreground (pull GHCR + up)
+#   ./start.sh            foreground (ensure Approving+Gateway if missing + up)
 #   ./start.sh -d          detached
 #   ./start.sh logs        follow logs
 #   ./start.sh down        stop and remove containers
 #   ./start.sh restart     down + up -d
-#   ./start.sh pull        docker compose pull
+#   ./start.sh pull        refresh compose images + all five sandbox runtimes
 #   ./start.sh dev         local source stack (build server/web/gateway)
 #   ./start.sh dev -d      local source stack, detached
 #   ./start.sh sandbox     build universal-sandbox-cursor:local (dev only)
@@ -149,7 +149,8 @@ print_release_endpoints() {
 }
 
 # Sandbox runtime images are NOT compose services — compose pull never fetches them.
-# Pull published GHCR runtimes (all five ACP backends).
+# Pull published GHCR runtimes (all five ACP backends). Used only by `./start.sh pull`
+# for explicit warm-up; default up/-d/restart leave runtimes to on-demand gateway pull.
 ensure_sandbox_runtime_image() {
   local images=(
     "${APPROVING_SANDBOX_IMAGE_CURSOR}"
@@ -173,18 +174,40 @@ ensure_sandbox_runtime_image() {
   done
 }
 
+# Approving + Gateway publish images: pull only when missing locally (g1.2).
+# Does not refresh tags that are already present; use `./start.sh pull` for that.
+ensure_compose_images_if_missing() {
+  local images=("${APPROVING_IMAGE}" "${SANDBOX_GATEWAY_IMAGE}")
+  local -A seen=()
+  local img
+  for img in "${images[@]}"; do
+    [[ -n "$img" ]] || continue
+    [[ -n "${seen[$img]:-}" ]] && continue
+    seen[$img]=1
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      echo "compose image present: ${img}"
+      continue
+    fi
+    echo "pulling missing compose image ${img}..."
+    docker pull "$img"
+  done
+}
+
 up_release() {
   local detach="${1:-}"
   mkdir -p .localdata/gateway .localdata/db .localdata/app-data
-  echo "pulling GHCR images (approving + gateway + sandbox)..."
-  "${COMPOSE[@]}" -f "$RELEASE_COMPOSE_FILE" pull
-  ensure_sandbox_runtime_image
+  # On-demand: only Approving + Gateway when missing. Sandbox runtimes are
+  # pulled later by the gateway on first sandbox create (plan g1.1 / g1.2).
+  echo "ensuring Approving + Gateway images (sandbox runtimes on demand)..."
+  ensure_compose_images_if_missing
   if [[ "$detach" == "1" ]]; then
     "${COMPOSE[@]}" -f "$RELEASE_COMPOSE_FILE" up -d
     wait_for_url "http://127.0.0.1:${APPROVING_GATEWAY_PORT}/healthz" "gateway"
     wait_for_url "http://127.0.0.1:${APPROVING_PORT}/api/health" "api"
     echo "started (GHCR)"
     print_release_endpoints
+    echo "note: sandbox runtimes pull on first use of each Agent backend"
+    echo "      warm all five: ./start.sh pull"
     echo "data: .localdata/{gateway,db,app-data} (bind mounts)"
     echo "wipe: ./start.sh down && rm -rf .localdata"
     echo "logs: ./start.sh logs   stop: ./start.sh down"
