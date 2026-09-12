@@ -8,27 +8,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/grasp/internal/mcp"
 )
 
 // TestCancelAbortsLiveAgent verifies AbortRun tears down an in-flight live
 // sandbox agent so a follow-up RunAgent can admit. Complements the engine
 // cancel/resume unit suite with the real universal-sandbox + Cursor path.
 //
-//	APPROVING_LIVE_CANCEL=1 APPROVING_CURSOR_API_KEY=crsr_… \
-//	APPROVING_SANDBOX_IMAGE=universal-sandbox-cursor:local \
-//	APPROVING_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 \
+//	GRASP_LIVE_CANCEL=1 GRASP_CURSOR_API_KEY=crsr_… \
+//	GRASP_SANDBOX_IMAGE=universal-sandbox-cursor:local \
+//	GRASP_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 \
 //	go test ./internal/runtime/ -run TestCancelAbortsLiveAgent -v -timeout 30m
 func TestCancelAbortsLiveAgent(t *testing.T) {
-	if os.Getenv("APPROVING_LIVE_CANCEL") != "1" {
-		t.Skip("set APPROVING_LIVE_CANCEL=1 (and APPROVING_CURSOR_API_KEY) to run")
+	if os.Getenv("GRASP_LIVE_CANCEL") != "1" {
+		t.Skip("set GRASP_LIVE_CANCEL=1 (and GRASP_CURSOR_API_KEY) to run")
 	}
-	apiKey := os.Getenv("APPROVING_CURSOR_API_KEY")
+	apiKey := os.Getenv("GRASP_CURSOR_API_KEY")
 	if apiKey == "" {
-		t.Fatal("APPROVING_CURSOR_API_KEY required")
+		t.Fatal("GRASP_CURSOR_API_KEY required")
 	}
-	image := getenvOr("APPROVING_SANDBOX_IMAGE", "universal-sandbox-cursor:local")
-	gatewayURL := getenvOr("APPROVING_SANDBOX_GATEWAY_URL", "http://127.0.0.1:8899")
+	image := getenvOr("GRASP_SANDBOX_IMAGE", "universal-sandbox-cursor:local")
+	gatewayURL := getenvOr("GRASP_SANDBOX_GATEWAY_URL", "http://127.0.0.1:8899")
 
 	store := newMemStore()
 	host := mcp.NewHost(store)
@@ -37,7 +37,7 @@ func TestCancelAbortsLiveAgent(t *testing.T) {
 	defer host.UnregisterRun(runID)
 
 	keyJSON, _ := json.Marshal(apiKey)
-	profiles := writeAgent(t, "backend-dev", `{"acpBackend":"cursor","env":{"APPROVING_CURSOR_API_KEY":`+string(keyJSON)+`}}`)
+	profiles := writeAgent(t, "backend-dev", `{"acpBackend":"cursor","env":{"GRASP_CURSOR_API_KEY":`+string(keyJSON)+`}}`)
 	provider := newACPProvider(host, Options{
 		SandboxImage: image,
 		GatewayURL:   gatewayURL,

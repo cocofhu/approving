@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 func TestBuildTestSchedulerMCPSpec(t *testing.T) {
@@ -28,14 +28,14 @@ func TestTestMcpVarsScheduler(t *testing.T) {
 	s := &SandboxService{mcpEndpoint: "http://spa.example.com"}
 
 	vars := s.testMcpVars("run1", "tok", "proj-x", "agent-a")
-	if vars["APPROVING_SCHEDULER_TOKEN"] != "tok" {
-		t.Fatalf("token = %q", vars["APPROVING_SCHEDULER_TOKEN"])
+	if vars["GRASP_SCHEDULER_TOKEN"] != "tok" {
+		t.Fatalf("token = %q", vars["GRASP_SCHEDULER_TOKEN"])
 	}
-	if vars["APPROVING_SCHEDULER_URL"] == "" {
+	if vars["GRASP_SCHEDULER_URL"] == "" {
 		t.Fatalf("scheduler url missing: %+v", vars)
 	}
 	noProj := s.testMcpVars("run1", "tok", "", "agent-a")
-	if _, ok := noProj["APPROVING_SCHEDULER_URL"]; ok {
+	if _, ok := noProj["GRASP_SCHEDULER_URL"]; ok {
 		t.Fatalf("no project should omit scheduler url: %+v", noProj)
 	}
 }

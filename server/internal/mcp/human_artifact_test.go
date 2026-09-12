@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/mcp/structured"
+	"github.com/cocofhu/grasp/internal/mcp/structured"
 )
 
 func TestValidateHumanArtifactContent_research(t *testing.T) {

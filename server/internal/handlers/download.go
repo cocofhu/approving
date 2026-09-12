@@ -5,8 +5,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/mcp/structured"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/mcp/structured"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // decodeArtifactDownloadBody returns response bytes and Content-Type for an artifact

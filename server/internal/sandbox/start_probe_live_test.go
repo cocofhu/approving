@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 func TestLiveStartWithPasswordsAndInject(t *testing.T) {
-	base := strings.TrimSpace(os.Getenv("APPROVING_LIVE_GATEWAY"))
+	base := strings.TrimSpace(os.Getenv("GRASP_LIVE_GATEWAY"))
 	if base == "" {
-		t.Skip("set APPROVING_LIVE_GATEWAY")
+		t.Skip("set GRASP_LIVE_GATEWAY")
 	}
 	store := NewBundleStore()
 	ln, err := net.Listen("tcp", "0.0.0.0:0")
@@ -31,7 +31,7 @@ func TestLiveStartWithPasswordsAndInject(t *testing.T) {
 	go srv.Serve(ln)
 	t.Cleanup(func() { _ = srv.Close() })
 
-	advertise := strings.TrimSpace(os.Getenv("APPROVING_LIVE_INJECT_ADVERTISE"))
+	advertise := strings.TrimSpace(os.Getenv("GRASP_LIVE_INJECT_ADVERTISE"))
 	if advertise == "" {
 		advertise = liveReachableAdvertise(t, ln.Addr().(*net.TCPAddr).Port)
 	}
@@ -45,7 +45,7 @@ func TestLiveStartWithPasswordsAndInject(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{"mcpServers":{}}`), 0644)
 	_ = os.WriteFile(filepath.Join(home, "rules", "base.md"), []byte("x"), 0644)
 
-	m := NewManager(NewGatewayClient(base, os.Getenv("APPROVING_SANDBOX_GATEWAY_API_KEY")), ManagerOptions{
+	m := NewManager(NewGatewayClient(base, os.Getenv("GRASP_SANDBOX_GATEWAY_API_KEY")), ManagerOptions{
 		WorkspaceDir: "/root/workspace", InstallHelpers: true,
 		InjectStore: store, InjectAdvertise: advertise,
 	})

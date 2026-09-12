@@ -13,7 +13,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 var httpClient = &http.Client{Timeout: 20 * time.Second}

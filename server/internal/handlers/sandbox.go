@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

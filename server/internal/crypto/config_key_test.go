@@ -5,12 +5,12 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/crypto"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/crypto"
 )
 
 // Ensures the production wiring path (config: security.secrets_key, not only
-// APPROVING_SECRETS_KEY) is enough for Encrypt/Decrypt to work.
+// GRASP_SECRETS_KEY) is enough for Encrypt/Decrypt to work.
 func TestKeySourceFromConfigYAML(t *testing.T) {
 	t.Setenv(crypto.SecretsKeyEnv, "") // env must NOT be required
 	k := make([]byte, 32)

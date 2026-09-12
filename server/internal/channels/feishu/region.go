@@ -3,7 +3,7 @@ package feishu
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 )
 

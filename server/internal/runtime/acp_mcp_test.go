@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/textutil"
 )
 
 // TestCursorLiveMCP verifies the in-container cursor-agent natively connects
@@ -21,18 +21,18 @@ import (
 // /root/.cursor/mcp.json) and calls write_artifact. No produces contract is
 // set, so harvest does NOT run: an artifact in the store proves the MCP path.
 //
-// Gated by APPROVING_LIVE_MCP=1 (+CURSOR_API_KEY). Needs Docker.
+// Gated by GRASP_LIVE_MCP=1 (+CURSOR_API_KEY). Needs Docker.
 func TestCursorLiveMCP(t *testing.T) {
-	if os.Getenv("APPROVING_LIVE_MCP") != "1" {
-		t.Skip("set APPROVING_LIVE_MCP=1 (+CURSOR_API_KEY) to run")
+	if os.Getenv("GRASP_LIVE_MCP") != "1" {
+		t.Skip("set GRASP_LIVE_MCP=1 (+CURSOR_API_KEY) to run")
 	}
-	apiKey := os.Getenv("APPROVING_CURSOR_API_KEY")
+	apiKey := os.Getenv("GRASP_CURSOR_API_KEY")
 	if apiKey == "" {
-		t.Fatal("APPROVING_CURSOR_API_KEY required")
+		t.Fatal("GRASP_CURSOR_API_KEY required")
 	}
 	// Empty → per-backend universal-sandbox-cursor (do not force legacy monolithic tag).
-	image := os.Getenv("APPROVING_SANDBOX_IMAGE")
-	model := getenvOr("APPROVING_ACP_BRIDGE_MODEL", "cursor-grok-4.5-high-fast")
+	image := os.Getenv("GRASP_SANDBOX_IMAGE")
+	model := getenvOr("GRASP_ACP_BRIDGE_MODEL", "cursor-grok-4.5-high-fast")
 
 	store := newMemStore()
 	host := mcp.NewHost(store)
@@ -74,14 +74,14 @@ func TestCursorLiveMCP(t *testing.T) {
 	go srv.Serve(ln)
 	defer srv.Close()
 
-	gatewayURL := getenvOr("APPROVING_SANDBOX_GATEWAY_URL", "http://127.0.0.1:8899")
+	gatewayURL := getenvOr("GRASP_SANDBOX_GATEWAY_URL", "http://127.0.0.1:8899")
 	agentEnv := map[string]string{
-		"APPROVING_CURSOR_API_KEY": apiKey,
+		"GRASP_CURSOR_API_KEY": apiKey,
 		"CURSOR_API_KEY":           apiKey,
 		"ACP_BRIDGE_MODEL":         model,
 	}
 	envJSON, _ := json.Marshal(agentEnv)
-	agentJSON := `{"acpBackend":"cursor","mcp":[{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":` + string(envJSON) + `}`
+	agentJSON := `{"acpBackend":"cursor","mcp":[{"name":"artifact-store","url":"${GRASP_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${GRASP_ARTIFACT_TOKEN}"}}],"env":` + string(envJSON) + `}`
 	profilesRoot := writeAgent(t, "go-backend", agentJSON)
 	t.Logf("model=%s image=%q mcp=http://host.docker.internal:%d gateway=%s", model, image, port, gatewayURL)
 	provider := newACPProvider(host, Options{

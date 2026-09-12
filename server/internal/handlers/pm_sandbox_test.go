@@ -8,14 +8,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/contextmcp"
-	"github.com/cocofhu/approving/internal/handlers"
-	"github.com/cocofhu/approving/internal/memorymcp"
-	"github.com/cocofhu/approving/internal/platformmcp"
-	"github.com/cocofhu/approving/internal/pmmcp"
-	"github.com/cocofhu/approving/internal/schedulermcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/contextmcp"
+	"github.com/cocofhu/grasp/internal/handlers"
+	"github.com/cocofhu/grasp/internal/memorymcp"
+	"github.com/cocofhu/grasp/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/pmmcp"
+	"github.com/cocofhu/grasp/internal/schedulermcp"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -100,7 +100,7 @@ func TestEnsurePmSandboxUnavailable(t *testing.T) {
 	var proj map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	pid := proj["id"].(string)
-	if err := hn.h.Agents.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"GRASP_CURSOR_API_KEY": "test-key"}}); err != nil {
 		t.Fatal(err)
 	}
 	w = hn.do(http.MethodPut, "/api/projects/"+pid+"/pm-leader", map[string]any{

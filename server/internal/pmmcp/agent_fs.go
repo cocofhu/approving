@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/platformmcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func (h *Host) callAgentFS(projectID, token, name string, args map[string]any) (any, bool) {

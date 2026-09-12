@@ -3,8 +3,8 @@ package pmmcp
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/platformmcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func (h *Host) callTeamTools(sess *Session, skill *services.AgentService, name string, args map[string]any) (any, bool) {

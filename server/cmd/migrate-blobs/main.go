@@ -12,11 +12,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/logging"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/logging"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"

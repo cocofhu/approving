@@ -7,31 +7,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 // TestCompatLiveGatewayCreate verifies create against the deployed gateway:
 // per-backend cursor image, ACP_BRIDGE_PASSWORD, VNC_PREVIEW, BROWSER_MCP.
 //
-//	APPROVING_LIVE_GATEWAY=http://sandbox-gateway.example.com \
-//	APPROVING_CURSOR_API_KEY=crsr_… \
+//	GRASP_LIVE_GATEWAY=http://sandbox-gateway.example.com \
+//	GRASP_CURSOR_API_KEY=crsr_… \
 //	go test ./internal/sandbox/ -run TestCompatLiveGatewayCreate -v -timeout 25m
 func TestCompatLiveGatewayCreate(t *testing.T) {
-	base := strings.TrimSpace(os.Getenv("APPROVING_LIVE_GATEWAY"))
+	base := strings.TrimSpace(os.Getenv("GRASP_LIVE_GATEWAY"))
 	if base == "" {
-		t.Skip("set APPROVING_LIVE_GATEWAY (e.g. http://sandbox-gateway.example.com)")
+		t.Skip("set GRASP_LIVE_GATEWAY (e.g. http://sandbox-gateway.example.com)")
 	}
-	apiKey := strings.TrimSpace(os.Getenv("APPROVING_CURSOR_API_KEY"))
+	apiKey := strings.TrimSpace(os.Getenv("GRASP_CURSOR_API_KEY"))
 	if apiKey == "" {
-		t.Fatal("APPROVING_CURSOR_API_KEY required")
+		t.Fatal("GRASP_CURSOR_API_KEY required")
 	}
-	model := strings.TrimSpace(os.Getenv("APPROVING_ACP_BRIDGE_MODEL"))
+	model := strings.TrimSpace(os.Getenv("GRASP_ACP_BRIDGE_MODEL"))
 	if model == "" {
 		model = "cursor-grok-4.5-high-fast"
 	}
 
 	wantImage := config.DefaultSandboxImage("cursor")
-	gw := NewGatewayClient(base, os.Getenv("APPROVING_SANDBOX_GATEWAY_API_KEY"))
+	gw := NewGatewayClient(base, os.Getenv("GRASP_SANDBOX_GATEWAY_API_KEY"))
 	m := NewManager(gw, ManagerOptions{
 		Image:          wantImage,
 		WorkspaceDir:   "/root/workspace",

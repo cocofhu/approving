@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/gateshare"
 	"github.com/gorilla/websocket"
 )
 

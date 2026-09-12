@@ -41,7 +41,7 @@ Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` �
 运维约束：
 
 - **成对备份**：同一备份集须同时包含 `./.localdata/db` 与 `./.localdata/app-data`（或整棵 `.localdata`）。
-- **成对清理 / 迁移 / 升级**：不要只搬 SQLite 或只删附件目录；自定义 `APPROVING_BLOBS_ROOT` 时，须把该路径与数据库一并纳入同一生命周期。
+- **成对清理 / 迁移 / 升级**：不要只搬 SQLite 或只删附件目录；自定义 `GRASP_BLOBS_ROOT` 时，须把该路径与数据库一并纳入同一生命周期。
 - **历史孤儿**：已损坏的引用不保证可从附件存储找回；界面仅展示永久失败占位。本次交付**不做**孤儿巡检台、批量扫描页或启动/健康检查告警。
 
 ## 常用命令
@@ -54,7 +54,7 @@ Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` �
 ./start.sh dev -d        # 源码栈：go run + Vite HMR
 ```
 
-镜像 tag / digest 可在 `.env` 覆盖 — 见仓库根目录 [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example)。默认按 backend 分流沙箱镜像；仅当显式设置 `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` 时才全局强制。发布与 smoke 见 [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md)。
+镜像 tag / digest 可在 `.env` 覆盖 — 见仓库根目录 [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example)。默认按 backend 分流沙箱镜像；仅当显式设置 `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` 时才全局强制。发布与 smoke 见 [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md)。
 
 ## 下一步
 

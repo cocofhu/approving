@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/envauth"
+	"github.com/cocofhu/grasp/internal/envauth"
 )
 
 // SensitiveKeyHit is one Token-class key found in a group subtree (no values).

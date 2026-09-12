@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // Ordinary ReAct turns are pure narration now, so「确认并流转」is the only round

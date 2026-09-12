@@ -75,8 +75,8 @@ export function artifactStorePreset(): WizardMCP {
   return {
     name: 'artifact-store',
     transport: 'url',
-    url: '${APPROVING_ARTIFACT_URL}',
-    headers: [{ k: 'Authorization', v: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' }],
+    url: '${GRASP_ARTIFACT_URL}',
+    headers: [{ k: 'Authorization', v: 'Bearer ${GRASP_ARTIFACT_TOKEN}' }],
     command: '',
     args: '',
     env: [],

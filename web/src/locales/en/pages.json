@@ -773,7 +773,7 @@
           "recentTargetsEmpty": "No recent channel sessions. Type a scene:conversationId directly.",
           "recentTargetsToggle": "Open or close recent targets",
           "recentTargetsLoadFailed": "Failed to load recent targets; you can still type and save",
-          "secretKeyHint": "Requires an encryption key on the server (config: security.secrets_key, or the APPROVING_SECRETS_KEY env override).",
+          "secretKeyHint": "Requires an encryption key on the server (config: security.secrets_key, or the GRASP_SECRETS_KEY env override).",
           "noPmLeaderWarning": "No Project Management binding yet.",
           "delete": "Delete channel",
           "deleteConfirm": "Delete this channel?",
@@ -1631,7 +1631,7 @@
         "max_test_sandboxes": "Max test sandboxes"
       },
       "settings": {
-        "max_concurrent_runs": "Max workflows in running state. Read-only when locked by APPROVING_MAX_RUNS.",
+        "max_concurrent_runs": "Max workflows in running state. Read-only when locked by GRASP_MAX_RUNS.",
         "run_sandbox_ttl_minutes": "Minutes to keep run sandbox alive after a turn for follow-up artifacts.",
         "test_sandbox_ttl_minutes": "Idle TTL for test sandboxes.",
         "max_test_sandboxes": "Reject new test sandboxes when active count reaches this (min 1)."
@@ -2313,7 +2313,7 @@
         "upstreamHeader": {
           "label": "Upstream artifacts header",
           "hint": "Prepended before artifact file list when upstream artifacts exist.",
-          "placeholder": "\n\n## Upstream artifacts (read-only)\nFiles from upstream nodes are in `.approving/artifacts/`:\n"
+          "placeholder": "\n\n## Upstream artifacts (read-only)\nFiles from upstream nodes are in `.grasp/artifacts/`:\n"
         },
         "producesContract": {
           "label": "Produces contract (agent node)",
@@ -2444,7 +2444,7 @@
           "addHeader": "Add header",
           "add": "Add MCP",
           "restoreArtifact": "Restore artifact-store preset",
-          "runVars": "Run vars: {'${APPROVING_ARTIFACT_URL}'} / {'${APPROVING_ARTIFACT_TOKEN}'}"
+          "runVars": "Run vars: {'${GRASP_ARTIFACT_URL}'} / {'${GRASP_ARTIFACT_TOKEN}'}"
         },
         "env": {
           "meta": "Written to the PM; engineers inherit by default."
@@ -2545,22 +2545,22 @@
             "cursor": {
               "step1": "Open Cursor Dashboard → Settings → API Keys",
               "step2": "Create an API Key and copy it",
-              "step3": "Paste below (or later set APPROVING_CURSOR_API_KEY / CURSOR_API_KEY in Studio Env)"
+              "step3": "Paste below (or later set GRASP_CURSOR_API_KEY / CURSOR_API_KEY in Studio Env)"
             },
             "claude": {
               "step1": "Open Anthropic Console → API Keys (or Claude Platform → Settings → Keys)",
               "step2": "Create a key and copy it",
-              "step3": "Paste below (or set APPROVING_CLAUDE_API_KEY / ANTHROPIC_API_KEY)"
+              "step3": "Paste below (or set GRASP_CLAUDE_API_KEY / ANTHROPIC_API_KEY)"
             },
             "codebuddy": {
               "step1": "Confirm the site selected in the Agent step (International / China / …)",
               "step2": "Open that site's console Profile / API Keys page and create a key",
-              "step3": "Paste below (APPROVING_CODEBUDDY_API_KEY / CODEBUDDY_API_KEY)"
+              "step3": "Paste below (GRASP_CODEBUDDY_API_KEY / CODEBUDDY_API_KEY)"
             },
             "trae": {
               "step1": "In the Trae enterprise console: Profile → Access tokens → CLI login token",
               "step2": "Generate a trae-lt-… token and copy it",
-              "step3": "Paste below (APPROVING_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN)"
+              "step3": "Paste below (GRASP_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN)"
             },
             "opencode": {
               "step1": "Pick a vendor (OpenAI / Anthropic / OpenRouter, or Custom)",

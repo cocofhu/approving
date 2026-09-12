@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestSpecMergesSharedEnvExtendThenAgentOverlay(t *testing.T) {
@@ -129,7 +129,7 @@ func TestSpecSkipsSharedEnvWithoutLookup(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"APPROVING_CURSOR_API_KEY":"k"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"GRASP_CURSOR_API_KEY":"k"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	c := &acpProvider{
@@ -233,7 +233,7 @@ func TestSpecRunSandboxEnvDoesNotOverrideReservedAfterInject(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"APPROVING_CURSOR_API_KEY":"k"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"GRASP_CURSOR_API_KEY":"k"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	c := &acpProvider{
@@ -242,7 +242,7 @@ func TestSpecRunSandboxEnvDoesNotOverrideReservedAfterInject(t *testing.T) {
 			RunSandboxEnvForRun: func(string) []models.EnvEntry {
 				return []models.EnvEntry{
 					{Key: "ACP_BACKEND", Value: "evil"},
-					{Key: "APPROVING_RUN_ID", Value: "evil-run"},
+					{Key: "GRASP_RUN_ID", Value: "evil-run"},
 					{Key: "PASSWORD", Value: "evil-pw"},
 					{Key: "CONFIG_ROOT", Value: "/evil"},
 				}
@@ -272,7 +272,7 @@ func TestResolvedMCPSpecsSubstitutesSharedEnv(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	agentJSON := `{"mcp":[{"name":"server-log","url":"https://logs.example/mcp","headers":{"Authorization":"Bearer ${LOG_CENTER_TOKEN}"}},{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":{"APPROVING_ARTIFACT_TOKEN":"evil-agent","APPROVING_CURSOR_API_KEY":"k"}}`
+	agentJSON := `{"mcp":[{"name":"server-log","url":"https://logs.example/mcp","headers":{"Authorization":"Bearer ${LOG_CENTER_TOKEN}"}},{"name":"artifact-store","url":"${GRASP_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${GRASP_ARTIFACT_TOKEN}"}}],"env":{"GRASP_ARTIFACT_TOKEN":"evil-agent","GRASP_CURSOR_API_KEY":"k"}}`
 	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -353,20 +353,20 @@ func TestResolvedMCPSpecsAgentEnvOverlaysShared(t *testing.T) {
 
 func TestMergeEnvIntoTemplateVarsReservedWinAndSubst(t *testing.T) {
 	base := map[string]string{
-		"APPROVING_ARTIFACT_TOKEN": "tok",
+		"GRASP_ARTIFACT_TOKEN": "tok",
 		"vars.region":              "cn-east",
 	}
 	got := MergeEnvIntoTemplateVars(base, map[string]string{
 		"LOG_CENTER_TOKEN":         "secret",
-		"APPROVING_ARTIFACT_TOKEN": "evil",
+		"GRASP_ARTIFACT_TOKEN": "evil",
 		"TEMPLATED":                "${vars.region}",
 		"":                         "skip",
 	})
 	if got["LOG_CENTER_TOKEN"] != "secret" {
 		t.Fatalf("LOG_CENTER_TOKEN=%q", got["LOG_CENTER_TOKEN"])
 	}
-	if got["APPROVING_ARTIFACT_TOKEN"] != "tok" {
-		t.Fatalf("reserved overwritten: %q", got["APPROVING_ARTIFACT_TOKEN"])
+	if got["GRASP_ARTIFACT_TOKEN"] != "tok" {
+		t.Fatalf("reserved overwritten: %q", got["GRASP_ARTIFACT_TOKEN"])
 	}
 	if got["TEMPLATED"] != "cn-east" {
 		t.Fatalf("TEMPLATED=%q", got["TEMPLATED"])
@@ -379,7 +379,7 @@ func TestSpecSkipsRunEnvWithoutLookup(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"APPROVING_CURSOR_API_KEY":"k"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"GRASP_CURSOR_API_KEY":"k"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	c := &acpProvider{

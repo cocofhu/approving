@@ -1,6 +1,6 @@
 package mcp
 
-import s "github.com/cocofhu/approving/internal/mcp/structured"
+import s "github.com/cocofhu/grasp/internal/mcp/structured"
 
 // Re-export structured product symbols so existing importers keep working.
 

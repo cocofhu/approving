@@ -41,7 +41,7 @@ In the release stack (`compose.release.yaml`), **SQLite** is mounted at `./.loca
 Ops rules:
 
 - **Paired backup**: every backup set must include both `./.localdata/db` and `./.localdata/app-data` (or the whole `.localdata` tree).
-- **Paired cleanup / migration / upgrade**: never move only SQLite or delete only the blobs directory; if you override `APPROVING_BLOBS_ROOT`, include that path in the same lifecycle as the database.
+- **Paired cleanup / migration / upgrade**: never move only SQLite or delete only the blobs directory; if you override `GRASP_BLOBS_ROOT`, include that path in the same lifecycle as the database.
 - **Historical orphans**: broken refs are not guaranteed recoverable; the UI only shows a permanent-failure placeholder. This delivery does **not** add an orphan inspection console, bulk scan page, or startup/health-check alerts.
 
 ## Common commands
@@ -54,7 +54,7 @@ Ops rules:
 ./start.sh dev -d        # source stack: go run + Vite HMR
 ```
 
-Image tags / digests can be overridden in `.env` — see [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example) at the repo root. By default sandbox images follow acpBackend; set `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` only for an optional global force. Publish and smoke checks are covered in [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md).
+Image tags / digests can be overridden in `.env` — see [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example) at the repo root. By default sandbox images follow acpBackend; set `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` only for an optional global force. Publish and smoke checks are covered in [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md).
 
 ## Next steps
 

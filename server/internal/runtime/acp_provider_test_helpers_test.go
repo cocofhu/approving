@@ -1,6 +1,6 @@
 package runtime
 
-import "github.com/cocofhu/approving/internal/mcp"
+import "github.com/cocofhu/grasp/internal/mcp"
 
 // newACPProvider builds a Cursor-backend ACP provider for tests.
 // Production wiring uses NewProviderRegistry → newBaseACPProvider.

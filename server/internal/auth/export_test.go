@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/cocofhu/approving/internal/models"
+import "github.com/cocofhu/grasp/internal/models"
 
 // Test-only helpers (compiled with tests only) so auth_test can mint sessions
 // and inspect the login rate limiter without exporting production API surface.

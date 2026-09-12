@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/textutil"
 
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"

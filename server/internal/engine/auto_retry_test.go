@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // autoRetryGraph is a minimal input → risky(agent) → output graph used by the

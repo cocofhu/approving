@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestRunListPage(t *testing.T) {

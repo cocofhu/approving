@@ -1,6 +1,6 @@
 package channels
 
-import "github.com/cocofhu/approving/internal/models"
+import "github.com/cocofhu/grasp/internal/models"
 
 // ChannelPreamble is a short session preamble injected on the first turn of a
 // channel conversation's sandbox. It orients the PM Leader for IM-style replies

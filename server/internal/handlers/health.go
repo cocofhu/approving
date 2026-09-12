@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/nodereg"
-	"github.com/cocofhu/approving/internal/services"
-	"github.com/cocofhu/approving/internal/version"
+	"github.com/cocofhu/grasp/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/services"
+	"github.com/cocofhu/grasp/internal/version"
 	"github.com/gin-gonic/gin"
 )
 

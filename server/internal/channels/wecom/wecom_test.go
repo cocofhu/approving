@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/channels"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/channels"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestTruncateMarkdown(t *testing.T) {

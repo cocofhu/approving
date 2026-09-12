@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // TestCancelDuringAgentAllowsResume is the regression for run-aaf0f3d4-class

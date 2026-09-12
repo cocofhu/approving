@@ -11,7 +11,7 @@ import (
 	dingclient "github.com/open-dingtalk/dingtalk-stream-sdk-go/client"
 	"github.com/rs/zerolog/log"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 // Adapter is the DingTalk Stream channel adapter.

@@ -23,8 +23,8 @@ func DefaultSandboxImage(backend string) string {
 }
 
 // ResolveSandboxImage picks the sandbox image for an acpBackend:
-//  1. sandbox.image / APPROVING_SANDBOX_IMAGE when non-empty (global force)
-//  2. sandbox.images[backend] / APPROVING_SANDBOX_IMAGE_<BACKEND>
+//  1. sandbox.image / GRASP_SANDBOX_IMAGE when non-empty (global force)
+//  2. sandbox.images[backend] / GRASP_SANDBOX_IMAGE_<BACKEND>
 //  3. DefaultSandboxImage(backend)
 func (c *Config) ResolveSandboxImage(backend string) string {
 	if c != nil {

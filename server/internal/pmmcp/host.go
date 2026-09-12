@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/platformmcp"
-	"github.com/cocofhu/approving/internal/services"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/services"
+	"github.com/cocofhu/grasp/internal/textutil"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

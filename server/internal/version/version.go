@@ -7,7 +7,7 @@ import (
 
 // commit is the VCS revision stamped at link time:
 //
-//	-ldflags "-X github.com/cocofhu/approving/internal/version.commit=<sha>"
+//	-ldflags "-X github.com/cocofhu/grasp/internal/version.commit=<sha>"
 //
 // Empty means "not injected"; ShortSHA then falls back to BuildInfo vcs.revision.
 var commit string

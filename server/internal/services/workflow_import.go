@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"

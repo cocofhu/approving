@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestMaxConcurrentAndSema(t *testing.T) {

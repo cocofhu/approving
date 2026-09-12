@@ -60,9 +60,9 @@ assert data.get("schemaVersion") == 1, f"schemaVersion={data.get('schemaVersion'
 assert "prompts" not in data or data.get("prompts") in (None, {}), "prompts 不得覆盖"
 mcp = data.get("mcp") or []
 assert len(mcp) == 1 and mcp[0].get("name") == "artifact-store", "MCP 须仅为 artifact-store"
-assert mcp[0].get("url") == "${APPROVING_ARTIFACT_URL}", "缺少 APPROVING_ARTIFACT_URL 模板"
+assert mcp[0].get("url") == "${GRASP_ARTIFACT_URL}", "缺少 GRASP_ARTIFACT_URL 模板"
 auth = (mcp[0].get("headers") or {}).get("Authorization", "")
-assert auth == "Bearer ${APPROVING_ARTIFACT_TOKEN}", "缺少 APPROVING_ARTIFACT_TOKEN 模板"
+assert auth == "Bearer ${GRASP_ARTIFACT_TOKEN}", "缺少 GRASP_ARTIFACT_TOKEN 模板"
 raw = agent_json.read_text(encoding="utf-8").lower()
 for bad in ("sk-", "glpat-", "ghp_", "-----begin"):
     assert bad not in raw, f"疑似密钥片段: {bad}"

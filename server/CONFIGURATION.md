@@ -11,41 +11,41 @@ configured on Agent meta env, not in this platform config table.
 
 | Environment variable | YAML path | Type | Default | Property | Description |
 | --- | --- | --- | --- | --- | --- |
-| `APPROVING_PORT` | `server.port` | integer | `8080` | Public | HTTP listen port |
-| `APPROVING_DEPLOYMENT_MODE` | `server.deployment_mode` | string | `development` | Public | Deployment trust boundary; local-demo is loopback-only |
-| `APPROVING_MCP_ADVERTISE` | `server.mcp_advertise` | URL | `derived` | Public | API base URL used by sandboxes for artifact-store MCP |
-| `APPROVING_PUBLIC_ADVERTISE` | `server.public_advertise` | URL | `derived` | Public | Public base URL for browser preview proxy and Run→QQ deep links (not used to mint gate share URLs) |
-| `APPROVING_DB` | `database.path` | path | `approving.db` | Public | SQLite database file |
-| `APPROVING_DB_DRIVER` | `database.driver` | enum | `sqlite` | Public | Database driver: sqlite or mysql |
-| `APPROVING_DB_DSN` | `database.dsn` | string | `Not set` | Sensitive | MySQL DSN |
-| `APPROVING_EXEC_PROVIDER` | `engine.exec_provider` | string | `sandbox` | Deprecated | Deprecated; Agent acpBackend selects the execution backend |
-| `APPROVING_MAX_RUNS` | `engine.max_concurrent_runs` | integer | `5` | Public | Maximum concurrent runs |
-| `APPROVING_PROFILES_ROOT` | `engine.profiles_root` | path | `data/profiles` | Public | Agent profile root |
-| `APPROVING_NODE_AUTO_RETRY` | `engine.node_auto_retry_max` | integer | `3` | Public | Node automatic retry limit |
-| `APPROVING_SANDBOX_IMAGE` | `sandbox.image` | image | `Not set` | Public | Force one sandbox image for every backend (prefer sandbox.images) |
-| `APPROVING_SANDBOX_IMAGE_CURSOR` | `sandbox.images.cursor` | image | `Not set` | Public | Sandbox image for cursor backend; empty uses the built-in default |
-| `APPROVING_SANDBOX_IMAGE_CLAUDE_CODE` | `sandbox.images.claude_code` | image | `Not set` | Public | Sandbox image for claude_code backend; empty uses the built-in default |
-| `APPROVING_SANDBOX_IMAGE_CODEBUDDY` | `sandbox.images.codebuddy` | image | `Not set` | Public | Sandbox image for codebuddy backend; empty uses the built-in default |
-| `APPROVING_SANDBOX_IMAGE_TRAE` | `sandbox.images.trae` | image | `Not set` | Public | Sandbox image for trae backend; empty uses the built-in default |
-| `APPROVING_SANDBOX_IMAGE_OPENCODE` | `sandbox.images.opencode` | image | `Not set` | Public | Sandbox image for opencode backend; empty uses the built-in default |
-| `APPROVING_SANDBOX_GATEWAY_URL` | `sandbox.gateway_url` | URL | `http://127.0.0.1:8899` | Public | sandbox-gateway control-plane URL |
-| `APPROVING_SANDBOX_GATEWAY_API_KEY` | `sandbox.gateway_api_key` | string | `Not set` | Sensitive | Gateway bearer token |
-| `APPROVING_OPENCODE_CATALOG_URL` | `sandbox.opencode_catalog_url` | URL | `https://models.dev/api.json` | Public | OpenCode model catalog URL; point at a mirror when egress is restricted |
-| `APPROVING_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
-| `APPROVING_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
+| `GRASP_PORT` | `server.port` | integer | `8080` | Public | HTTP listen port |
+| `GRASP_DEPLOYMENT_MODE` | `server.deployment_mode` | string | `development` | Public | Deployment trust boundary; local-demo is loopback-only |
+| `GRASP_MCP_ADVERTISE` | `server.mcp_advertise` | URL | `derived` | Public | API base URL used by sandboxes for artifact-store MCP |
+| `GRASP_PUBLIC_ADVERTISE` | `server.public_advertise` | URL | `derived` | Public | Public base URL for browser preview proxy and Run→QQ deep links (not used to mint gate share URLs) |
+| `GRASP_DB` | `database.path` | path | `grasp.db` | Public | SQLite database file |
+| `GRASP_DB_DRIVER` | `database.driver` | enum | `sqlite` | Public | Database driver: sqlite or mysql |
+| `GRASP_DB_DSN` | `database.dsn` | string | `Not set` | Sensitive | MySQL DSN |
+| `GRASP_EXEC_PROVIDER` | `engine.exec_provider` | string | `sandbox` | Deprecated | Deprecated; Agent acpBackend selects the execution backend |
+| `GRASP_MAX_RUNS` | `engine.max_concurrent_runs` | integer | `5` | Public | Maximum concurrent runs |
+| `GRASP_PROFILES_ROOT` | `engine.profiles_root` | path | `data/profiles` | Public | Agent profile root |
+| `GRASP_NODE_AUTO_RETRY` | `engine.node_auto_retry_max` | integer | `3` | Public | Node automatic retry limit |
+| `GRASP_SANDBOX_IMAGE` | `sandbox.image` | image | `Not set` | Public | Force one sandbox image for every backend (prefer sandbox.images) |
+| `GRASP_SANDBOX_IMAGE_CURSOR` | `sandbox.images.cursor` | image | `Not set` | Public | Sandbox image for cursor backend; empty uses the built-in default |
+| `GRASP_SANDBOX_IMAGE_CLAUDE_CODE` | `sandbox.images.claude_code` | image | `Not set` | Public | Sandbox image for claude_code backend; empty uses the built-in default |
+| `GRASP_SANDBOX_IMAGE_CODEBUDDY` | `sandbox.images.codebuddy` | image | `Not set` | Public | Sandbox image for codebuddy backend; empty uses the built-in default |
+| `GRASP_SANDBOX_IMAGE_TRAE` | `sandbox.images.trae` | image | `Not set` | Public | Sandbox image for trae backend; empty uses the built-in default |
+| `GRASP_SANDBOX_IMAGE_OPENCODE` | `sandbox.images.opencode` | image | `Not set` | Public | Sandbox image for opencode backend; empty uses the built-in default |
+| `GRASP_SANDBOX_GATEWAY_URL` | `sandbox.gateway_url` | URL | `http://127.0.0.1:8899` | Public | sandbox-gateway control-plane URL |
+| `GRASP_SANDBOX_GATEWAY_API_KEY` | `sandbox.gateway_api_key` | string | `Not set` | Sensitive | Gateway bearer token |
+| `GRASP_OPENCODE_CATALOG_URL` | `sandbox.opencode_catalog_url` | URL | `https://models.dev/api.json` | Public | OpenCode model catalog URL; point at a mirror when egress is restricted |
+| `GRASP_BROWSER_ENABLED` | `browser.enabled` | boolean | `Not set` | Deprecated | Compatibility field; VNC preview is always available |
+| `GRASP_CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated; use agent env |
 | `CURSOR_API_KEY` | `sandbox.cursor_api_key` | string | `Not set` | Sensitive, Deprecated | Deprecated alias; use agent env |
-| `APPROVING_CURSOR_AUTH` | `sandbox.cursor_auth_path` | path | `Not set` | Sensitive, Deprecated | Deprecated Cursor authentication directory |
-| `APPROVING_SANDBOX_ENV` | `sandbox.env` | key-value list | `Not set` | Sensitive | Generic environment injected into every sandbox |
-| `APPROVING_AGENT_TIMEOUT_SEC` | `sandbox.agent_chat_timeout_seconds` | integer | `600` | Public | Overall timeout for one agent turn in seconds |
-| `APPROVING_CHAT_IDLE_SEC` | `sandbox.chat_idle_timeout_seconds` | integer | `600` | Public | Idle timeout without ACP events in seconds |
-| `APPROVING_SANDBOX_MAX_ATTEMPTS` | `sandbox.sandbox_max_attempts` | integer | `3` | Public | Maximum attempts for retryable sandbox faults |
-| `APPROVING_SANDBOX_RETRY_BACKOFF_SEC` | `sandbox.sandbox_retry_backoff_seconds` | integer | `2` | Public | Base sandbox retry backoff in seconds |
-| `APPROVING_SANDBOX_CREATE_TIMEOUT_SEC` | `sandbox.sandbox_create_timeout_seconds` | integer | `1200` | Public | Timeout waiting for sandbox readiness in seconds |
-| `APPROVING_SANDBOX_WORK_DIR` | `sandbox.work_dir` | path | `Not set` | Public | Host work directory for ConfigHome |
-| `APPROVING_AUTH_MAX_FAILURES` | `auth.max_failures` | integer | `5` | Public | Login failures before IP lock |
-| `APPROVING_AUTH_LOCK_DURATION` | `auth.lock_duration` | duration | `5m` | Public | Login failure lock duration |
-| `APPROVING_AUTH_SESSION_TTL` | `auth.session_ttl` | duration | `168h` | Public | Session lifetime |
-| `APPROVING_AUTH_USERS` | `auth.users` | YAML/JSON | `Not set` | Sensitive | Static user array; required explicitly outside local mode |
-| `APPROVING_SECRETS_KEY` | `security.secrets_key` | string | `Not set` | Sensitive | Master AES key for encrypting channel credentials at rest (base64 32 bytes); treat as a fixed salt, do not rotate |
-| `APPROVING_STORAGE_DRIVER` | `storage.driver` | enum | `local` | Public | Attachment storage driver: local (cos reserved) |
-| `APPROVING_BLOBS_ROOT` | `storage.blobs_root` | path | `data/blobs` | Public | Local attachment blob root directory |
+| `GRASP_CURSOR_AUTH` | `sandbox.cursor_auth_path` | path | `Not set` | Sensitive, Deprecated | Deprecated Cursor authentication directory |
+| `GRASP_SANDBOX_ENV` | `sandbox.env` | key-value list | `Not set` | Sensitive | Generic environment injected into every sandbox |
+| `GRASP_AGENT_TIMEOUT_SEC` | `sandbox.agent_chat_timeout_seconds` | integer | `600` | Public | Overall timeout for one agent turn in seconds |
+| `GRASP_CHAT_IDLE_SEC` | `sandbox.chat_idle_timeout_seconds` | integer | `600` | Public | Idle timeout without ACP events in seconds |
+| `GRASP_SANDBOX_MAX_ATTEMPTS` | `sandbox.sandbox_max_attempts` | integer | `3` | Public | Maximum attempts for retryable sandbox faults |
+| `GRASP_SANDBOX_RETRY_BACKOFF_SEC` | `sandbox.sandbox_retry_backoff_seconds` | integer | `2` | Public | Base sandbox retry backoff in seconds |
+| `GRASP_SANDBOX_CREATE_TIMEOUT_SEC` | `sandbox.sandbox_create_timeout_seconds` | integer | `1200` | Public | Timeout waiting for sandbox readiness in seconds |
+| `GRASP_SANDBOX_WORK_DIR` | `sandbox.work_dir` | path | `Not set` | Public | Host work directory for ConfigHome |
+| `GRASP_AUTH_MAX_FAILURES` | `auth.max_failures` | integer | `5` | Public | Login failures before IP lock |
+| `GRASP_AUTH_LOCK_DURATION` | `auth.lock_duration` | duration | `5m` | Public | Login failure lock duration |
+| `GRASP_AUTH_SESSION_TTL` | `auth.session_ttl` | duration | `168h` | Public | Session lifetime |
+| `GRASP_AUTH_USERS` | `auth.users` | YAML/JSON | `Not set` | Sensitive | Static user array; required explicitly outside local mode |
+| `GRASP_SECRETS_KEY` | `security.secrets_key` | string | `Not set` | Sensitive | Master AES key for encrypting channel credentials at rest (base64 32 bytes); treat as a fixed salt, do not rotate |
+| `GRASP_STORAGE_DRIVER` | `storage.driver` | enum | `local` | Public | Attachment storage driver: local (cos reserved) |
+| `GRASP_BLOBS_ROOT` | `storage.blobs_root` | path | `data/blobs` | Public | Local attachment blob root directory |

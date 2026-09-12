@@ -10,10 +10,10 @@
 兼容期容器内 `acp-gateway` / `cursor-acp` 为指向 `acp-bridge` 的软链(计划 0.2.0 移除)。
 
 **鉴权**:各后端 Key / 站点可配置在 **项目沙箱 env**(流水线底噪)或 **Agent env**(同名覆盖;
-见「ACP 后端怎么用」)。平台级 `APPROVING_CURSOR_API_KEY` / `sandbox.cursor_api_key`
+见「ACP 后端怎么用」)。平台级 `GRASP_CURSOR_API_KEY` / `sandbox.cursor_api_key`
 已废弃且不再注入沙箱;Agent Studio 不继承项目 env。
 
-`APPROVING_EXEC_PROVIDER` 已废弃(读取时 WARN,不影响路由);请改用 Agent `acpBackend`。
+`GRASP_EXEC_PROVIDER` 已废弃(读取时 WARN,不影响路由);请改用 Agent `acpBackend`。
 
 ### 真实沙箱链路(多后端)
 
@@ -25,14 +25,14 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
 - **原生 artifact-store MCP(已落地)**:每个节点的容器都会接入一个 **run 级 HTTP MCP**:
   - 平台在同一 Gin 端口暴露 `POST /mcp/runs/:runId`(Streamable-HTTP JSON-RPC:`initialize` / `tools/list` / `tools/call`),按 run-token 鉴权。
   - 注入方式有两条、互为冗余:ACP `session/new` 的 `mcpServers`(URL+`Authorization: Bearer <token>`)+ 容器内 `{configRoot}/mcp.json`。
-  - 容器经 `host.docker.internal:<APPROVING_PORT>` 回连平台(`--add-host host.docker.internal:host-gateway` 已设)。
+  - 容器经 `host.docker.internal:<GRASP_PORT>` 回连平台(`--add-host host.docker.internal:host-gateway` 已设)。
   - 工具:`write_artifact` / `read_artifact` / `list_artifacts` / `node_complete` 等。Agent **原生调用** `write_artifact` 写回产物,结束前必须 `node_complete` 标记完成(已 live 验证:cursor-agent 完成 initialize→tools/list→tools/call 全链路)。
 - **`{configRoot}` 配置树(对齐 auto-coder)**:每个节点按 Agent profile 的 `acpBackend` 解析 configRoot(Agent 卡片可覆盖),在控制面生成一份配置树后注入沙箱:
   - 默认映射:`cursor`→`/root/.cursor`、`claude_code`→`/root/.claude`、`codebuddy`→`/root/.codebuddy`、`trae`→`/root/.trae`、`opencode`→`/root/.config/opencode`;
   - `rules/base.md`(基础约束,alwaysApply)、`rules/artifact-store.md`(produces 契约 + MCP 用法)、`react` 节点附 `rules/react.md`;
-  - `rules/<profile>.md` 来自平台 `AgentService`(`APPROVING_PROFILES_ROOT`);
+  - `rules/<profile>.md` 来自平台 `AgentService`(`GRASP_PROFILES_ROOT`);
   - 需要 push/MR 的节点可在 Agent 工作目录附 `skills/git/SKILL.md`;
-  - `mcp.json` 写入 artifact-store MCP 配置(含改写后的 `APPROVING_ARTIFACT_URL`);
+  - `mcp.json` 写入 artifact-store MCP 配置(含改写后的 `GRASP_ARTIFACT_URL`);
   - 注入路径:**gateway `config.bundleUrl` 启动前 inject** — 控制面把 ConfigHome 打成 `.tgz`，经 `/sandbox-inject/:id` 短时下载；gateway 设 `SANDBOX_INJECT`，镜像 `startup.sh` 在 acp-bridge/agent 启动**之前**解压到 `{configRoot}`。URL 基址与 `mcp_advertise` 相同(沙箱可达)。Attach 重连仍可 SSH 补种。不使用 `config.hostPath`(远程 K8s 会挂空卷)。
 - **产物契约(produces) + 完成标记**:节点完成时引擎要求已调用 `node_complete`,并校验声明的产物必须存在于平台 store。优先由 Agent 经 MCP `write_artifact` 写入;若只在工作区留了文件,provider 仍会从容器取回该 `produces` 文件并写入 store,**双保险**。默认校验通过后才可能调用业务 RPC 校验;`submit_mr` 不再由平台代验 git 推送/MR/冲突。
 - **上游产物读取**:run 内已有产物名会在 prompt 中列出,Agent 用 MCP `read_artifact` / `list_artifacts` 按名读取(按 run token 隔离)。产物**不**落盘到工作区,以免污染节点的代码变更报告。
@@ -54,23 +54,23 @@ engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建�
 | `opencode` | `opencode run --format json` | `/root/.config/opencode` | 厂商原生 Key(由 `OPENCODE_API_KEY` 映射) |
 
 Agent Studio 的 Env 页会按当前后端提示所需 Key;CodeBuddy / Trae 另有「站点」下拉,
-写入 `APPROVING_*_REGION`(运行时再规范化成官方变量)。OpenCode 另有厂商 / API Base / model
-(`APPROVING_OPENCODE_PROVIDER`、`APPROVING_OPENCODE_BASE_URL`、`ACP_BRIDGE_MODEL`)。
+写入 `GRASP_*_REGION`(运行时再规范化成官方变量)。OpenCode 另有厂商 / API Base / model
+(`GRASP_OPENCODE_PROVIDER`、`GRASP_OPENCODE_BASE_URL`、`ACP_BRIDGE_MODEL`)。
 
 ### Cursor
 
 1. Meta:`acpBackend = cursor`(默认)。
 2. Env 任选其一:
-   - `APPROVING_CURSOR_API_KEY`
+   - `GRASP_CURSOR_API_KEY`
    - `CURSOR_API_KEY`
 3. Key 来自 Cursor Dashboard / CLI 登录后的 API Key。
-4. 可选:宿主设 `APPROVING_CURSOR_AUTH` 指向已登录的 Cursor 配置目录(只读挂载复用登录态)。
+4. 可选:宿主设 `GRASP_CURSOR_AUTH` 指向已登录的 Cursor 配置目录(只读挂载复用登录态)。
 
 ```json
 {
   "acpBackend": "cursor",
   "env": {
-    "APPROVING_CURSOR_API_KEY": "crsr_xxx"
+    "GRASP_CURSOR_API_KEY": "crsr_xxx"
   }
 }
 ```
@@ -81,7 +81,7 @@ Agent Studio 的 Env 页会按当前后端提示所需 Key;CodeBuddy / Trae 另�
 
 1. Meta:`acpBackend = claude_code`。
 2. Env 任选其一:
-   - `APPROVING_CLAUDE_API_KEY`
+   - `GRASP_CLAUDE_API_KEY`
    - `ANTHROPIC_API_KEY`
 3. Key 来自 Anthropic Console。
 4. 可选透传(平台不改写):`ANTHROPIC_BASE_URL` 等 Anthropic/兼容网关变量。
@@ -90,7 +90,7 @@ Agent Studio 的 Env 页会按当前后端提示所需 Key;CodeBuddy / Trae 另�
 {
   "acpBackend": "claude_code",
   "env": {
-    "APPROVING_CLAUDE_API_KEY": "sk-ant-xxx"
+    "GRASP_CLAUDE_API_KEY": "sk-ant-xxx"
   }
 }
 ```
@@ -99,16 +99,16 @@ Agent Studio 的 Env 页会按当前后端提示所需 Key;CodeBuddy / Trae 另�
 
 1. Meta:`acpBackend = codebuddy`。
 2. Env 鉴权任选其一:
-   - `APPROVING_CODEBUDDY_API_KEY`
+   - `GRASP_CODEBUDDY_API_KEY`
    - `CODEBUDDY_API_KEY`
 3. **必须选对站点**(Key 与站点绑定;错站会 401 `not_found`):
 
 | 站点 | Agent env | 运行时效果 | Key 获取 |
 |------|-----------|------------|----------|
-| 国际站(默认) | `APPROVING_CODEBUDDY_REGION=public` 或不写 | `CODEBUDDY_INTERNET_ENVIRONMENT=public` | https://www.codebuddy.ai/profile/keys |
-| 国内站 | `APPROVING_CODEBUDDY_REGION=internal` | `CODEBUDDY_INTERNET_ENVIRONMENT=internal` | https://copilot.tencent.com/profile/ |
-| iOA | `APPROVING_CODEBUDDY_REGION=ioa` | `CODEBUDDY_INTERNET_ENVIRONMENT=ioa` | https://tencent.sso.copilot.tencent.com/profile/keys |
-| Staging | `APPROVING_CODEBUDDY_REGION=staging` | `public` + 写入 `{configRoot}/settings.json`(`envRouteMode=staging`, endpoint=`https://staging-codebuddy.tencent.com`) | https://staging-codebuddy.tencent.com/profile/keys |
+| 国际站(默认) | `GRASP_CODEBUDDY_REGION=public` 或不写 | `CODEBUDDY_INTERNET_ENVIRONMENT=public` | https://www.codebuddy.ai/profile/keys |
+| 国内站 | `GRASP_CODEBUDDY_REGION=internal` | `CODEBUDDY_INTERNET_ENVIRONMENT=internal` | https://copilot.tencent.com/profile/ |
+| iOA | `GRASP_CODEBUDDY_REGION=ioa` | `CODEBUDDY_INTERNET_ENVIRONMENT=ioa` | https://tencent.sso.copilot.tencent.com/profile/keys |
+| Staging | `GRASP_CODEBUDDY_REGION=staging` | `public` + 写入 `{configRoot}/settings.json`(`envRouteMode=staging`, endpoint=`https://staging-codebuddy.tencent.com`) | https://staging-codebuddy.tencent.com/profile/keys |
 
 也可直接写官方变量 `CODEBUDDY_INTERNET_ENVIRONMENT`;**显式官方变量优先于区域别名**。
 不要只设 `CODEBUDDY_BASE_URL` 指向 staging——CLI 会打错 chat 路径;请用 `REGION=staging`
@@ -118,8 +118,8 @@ Agent Studio 的 Env 页会按当前后端提示所需 Key;CodeBuddy / Trae 另�
 {
   "acpBackend": "codebuddy",
   "env": {
-    "APPROVING_CODEBUDDY_API_KEY": "ck_xxx",
-    "APPROVING_CODEBUDDY_REGION": "public"
+    "GRASP_CODEBUDDY_API_KEY": "ck_xxx",
+    "GRASP_CODEBUDDY_REGION": "public"
   }
 }
 ```
@@ -130,8 +130,8 @@ Staging 示例:
 {
   "acpBackend": "codebuddy",
   "env": {
-    "APPROVING_CODEBUDDY_API_KEY": "ck_xxx",
-    "APPROVING_CODEBUDDY_REGION": "staging"
+    "GRASP_CODEBUDDY_API_KEY": "ck_xxx",
+    "GRASP_CODEBUDDY_REGION": "staging"
   }
 }
 ```
@@ -140,7 +140,7 @@ Staging 示例:
 
 1. Meta:`acpBackend = trae`。
 2. Env 鉴权(官方 CLI 登录令牌,须含 `trae-lt-` 前缀)任选其一:
-   - `APPROVING_TRAE_API_KEY`(平台别名)
+   - `GRASP_TRAE_API_KEY`(平台别名)
    - `TRAE_API_KEY`(旧别名)
    - `TRAECLI_PERSONAL_ACCESS_TOKEN`(官方名;注入沙箱时统一写成此名)
 3. 令牌在 Trae 企业控制台 **个人信息 → 访问令牌 → CLI 登录令牌** 生成
@@ -149,8 +149,8 @@ Staging 示例:
 
 | 站点 | Agent env | 运行时效果 |
 |------|-----------|------------|
-| 国内站(默认) | `APPROVING_TRAE_REGION=cn` 或不写 | 不强制 `TRAECLI_HOST`(镜像按 `docs.trae.cn` 安装) |
-| 国际站 | `APPROVING_TRAE_REGION=intl` | `TRAECLI_HOST=https://www.trae.ai` |
+| 国内站(默认) | `GRASP_TRAE_REGION=cn` 或不写 | 不强制 `TRAECLI_HOST`(镜像按 `docs.trae.cn` 安装) |
+| 国际站 | `GRASP_TRAE_REGION=intl` | `TRAECLI_HOST=https://www.trae.ai` |
 
 企业专属域名可直接设 `TRAECLI_HOST=https://your-corp.example`;**显式 host 不会被区域别名覆盖**。
 
@@ -158,8 +158,8 @@ Staging 示例:
 {
   "acpBackend": "trae",
   "env": {
-    "APPROVING_TRAE_API_KEY": "trae-lt-xxx",
-    "APPROVING_TRAE_REGION": "cn"
+    "GRASP_TRAE_API_KEY": "trae-lt-xxx",
+    "GRASP_TRAE_REGION": "cn"
   }
 }
 ```
@@ -168,10 +168,10 @@ Staging 示例:
 
 1. Meta:`acpBackend = opencode`(沙箱镜像 `universal-sandbox-opencode`;CLI 为 `opencode run --format json`,经 ACP 桥包装)。
 2. 共享 Agent env:
-   - `APPROVING_OPENCODE_API_KEY`(别名 `OPENCODE_API_KEY`)
-   - `APPROVING_OPENCODE_PROVIDER`:OpenCode 模型目录(models.dev)里的厂商 id(`openai` / `anthropic` / `deepseek` / `zai` / …);目录里没有的可以直接自己起一个名字(如 `tokenhub`),runtime 会按 OpenAI 兼容端点生成适配器,此时 `APPROVING_OPENCODE_BASE_URL` 必填。`custom` 是这类自定义端点的默认名字,没有特殊含义
-   - 可选 `APPROVING_OPENCODE_BASE_URL`(`custom` 必填)
-   - 可选 `APPROVING_OPENCODE_MODEL_VISION=1`:为 models.dev 尚未收录的模型声明图片输入能力。未设置时保持文本模型，避免把图片误发给不支持视觉的端点
+   - `GRASP_OPENCODE_API_KEY`(别名 `OPENCODE_API_KEY`)
+   - `GRASP_OPENCODE_PROVIDER`:OpenCode 模型目录(models.dev)里的厂商 id(`openai` / `anthropic` / `deepseek` / `zai` / …);目录里没有的可以直接自己起一个名字(如 `tokenhub`),runtime 会按 OpenAI 兼容端点生成适配器,此时 `GRASP_OPENCODE_BASE_URL` 必填。`custom` 是这类自定义端点的默认名字,没有特殊含义
+   - 可选 `GRASP_OPENCODE_BASE_URL`(`custom` 必填)
+   - 可选 `GRASP_OPENCODE_MODEL_VISION=1`:为 models.dev 尚未收录的模型声明图片输入能力。未设置时保持文本模型，避免把图片误发给不支持视觉的端点
    - `ACP_BRIDGE_MODEL`,格式 `provider/model`(如 `deepseek/deepseek-v4-pro`);只填模型 id 也认,缺的厂商前缀由 runtime 补上(已带前缀不会重复补)。模型 id 自身带斜杠的照原样填在前缀后面(聚合网关常见,如 `openrouter/anthropic/claude-sonnet-4-5`);目录里第一段恰好等于厂商名的模型要写满两段(OpenRouter 的 `openrouter/auto` → `openrouter/openrouter/auto`)。模型 id 必须是该端点真有的,否则 `opencode run` 直接以 exit 1 结束。补前缀发生在注入沙箱的 env 上,不只是 `opencode.json`:桥会把这个变量原样交给 `opencode run --model`,而命令行参数优先于配置文件,少了前缀就会路由到第一段同名的厂商
 3. 启动时若配置树里还没有用户自己的 `opencode.json`,runtime 可按厂商/Base/Model 生成一份:有 Key 时把 `apiKey` 写在该厂商名下(`{env:OPENCODE_API_KEY}`),因此目录里的任意厂商都能用,不依赖各家专属环境变量。
    厂商是否在目录里,由同一份 models.dev 快照(`opencodecatalog`,也供 UI 的厂商/模型下拉用)判定:在目录里就保留 OpenCode 自己的 SDK 与模型表;不在目录里(或就是 `custom`)则补 `npm: @ai-sdk/openai-compatible` 并声明所填模型 id,所以自建/聚合网关直接用自己的名字即可。快照拉不到时保守处理——只有 `custom` 补适配器,避免凭猜测覆盖本来能用的厂商。
@@ -181,9 +181,9 @@ Staging 示例:
 {
   "acpBackend": "opencode",
   "env": {
-    "APPROVING_OPENCODE_API_KEY": "sk-xxx",
-    "APPROVING_OPENCODE_PROVIDER": "deepseek",
-    "APPROVING_OPENCODE_MODEL_VISION": "1",
+    "GRASP_OPENCODE_API_KEY": "sk-xxx",
+    "GRASP_OPENCODE_PROVIDER": "deepseek",
+    "GRASP_OPENCODE_MODEL_VISION": "1",
     "ACP_BRIDGE_MODEL": "deepseek/deepseek-v4-pro"
   }
 }
@@ -193,31 +193,31 @@ Staging 示例:
 
 | acpBackend | Agent env(任选其一) | 容器内 CLI 变量 |
 |------------|---------------------|-----------------|
-| `cursor` | `APPROVING_CURSOR_API_KEY` / `CURSOR_API_KEY` | `CURSOR_API_KEY` |
-| `claude_code` | `APPROVING_CLAUDE_API_KEY` / `ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY` |
-| `codebuddy` | `APPROVING_CODEBUDDY_API_KEY` / `CODEBUDDY_API_KEY` | `CODEBUDDY_API_KEY` |
-| `trae` | `APPROVING_TRAE_API_KEY` / `TRAE_API_KEY` / `TRAECLI_PERSONAL_ACCESS_TOKEN` | `TRAECLI_PERSONAL_ACCESS_TOKEN` |
-| `opencode` | `APPROVING_OPENCODE_API_KEY` / `OPENCODE_API_KEY` | 按厂商映射(`OPENAI_API_KEY` 等) + `OPENCODE_API_KEY` |
+| `cursor` | `GRASP_CURSOR_API_KEY` / `CURSOR_API_KEY` | `CURSOR_API_KEY` |
+| `claude_code` | `GRASP_CLAUDE_API_KEY` / `ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY` |
+| `codebuddy` | `GRASP_CODEBUDDY_API_KEY` / `CODEBUDDY_API_KEY` | `CODEBUDDY_API_KEY` |
+| `trae` | `GRASP_TRAE_API_KEY` / `TRAE_API_KEY` / `TRAECLI_PERSONAL_ACCESS_TOKEN` | `TRAECLI_PERSONAL_ACCESS_TOKEN` |
+| `opencode` | `GRASP_OPENCODE_API_KEY` / `OPENCODE_API_KEY` | 按厂商映射(`OPENAI_API_KEY` 等) + `OPENCODE_API_KEY` |
 
-> 平台级 `APPROVING_CURSOR_API_KEY` / `sandbox.cursor_api_key` 已废弃,**不会**注入沙箱。
+> 平台级 `GRASP_CURSOR_API_KEY` / `sandbox.cursor_api_key` 已废弃,**不会**注入沙箱。
 
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `APPROVING_PORT` | `8080` | HTTP 端口 |
-| `APPROVING_DB` | `approving.db` | SQLite 路径(`:memory:` 用于测试) |
-| `APPROVING_EXEC_PROVIDER` | `sandbox` | 沙箱执行后端;`cursor` 为兼容别名,其它值回落 |
-| `APPROVING_MAX_RUNS` | `5` | 并发 run 上限 |
-| `APPROVING_SANDBOX_GATEWAY_URL` | `http://127.0.0.1:8899` | sandbox-gateway 控制面地址(创建/销毁/管理沙箱) |
-| `APPROVING_GATEWAY_API_KEY` | — | 网关可选 Bearer 令牌(网关关鉴权时留空) |
-| `APPROVING_SANDBOX_IMAGE` | — | 每次创建时的镜像覆盖;留空即用网关默认镜像(universal-sandbox) |
-| `APPROVING_SANDBOX_ENV` | — | 通用 `K=V,K2=V2` 环境变量,注入每个沙箱(厂商无关;**不含** ACP API Key) |
-| `APPROVING_CURSOR_AUTH` | — | 可选(cursor 专用):挂载宿主 Cursor 配置目录(只读)复用 CLI 登录 |
-| `APPROVING_AGENT_TIMEOUT_SEC` | `600` | 单轮 agent/react 回合硬超时(全局默认);单节点可在其 Agent 卡片填「超时(分钟)」单独放宽 |
-| `APPROVING_CHAT_IDLE_SEC` | `600` | 回合内多久无事件即判卡死并中断 |
-| `APPROVING_MCP_ADVERTISE` | `http://host.docker.internal:<PORT>` | 沙箱内 agent/MCP 客户端回连 run 级 artifact-store MCP 的 base URL。K8s gateway 须改为沙箱可达且挂载 `/mcp` 的实例基址(如 `http://api.example.com`);勿用仅 SPA/无 `/mcp` 路由的入口域名。若误配 `spa.example.com`,加载配置与注入时会改写为 `api.example.com`(见 `RewriteMisconfiguredMCPAdvertise`) |
-| `APPROVING_PROFILES_ROOT` | `data/profiles` | Agent profile 规则根(挂入 `{configRoot}/rules`) |
+| `GRASP_PORT` | `8080` | HTTP 端口 |
+| `GRASP_DB` | `grasp.db` | SQLite 路径(`:memory:` 用于测试) |
+| `GRASP_EXEC_PROVIDER` | `sandbox` | 沙箱执行后端;`cursor` 为兼容别名,其它值回落 |
+| `GRASP_MAX_RUNS` | `5` | 并发 run 上限 |
+| `GRASP_SANDBOX_GATEWAY_URL` | `http://127.0.0.1:8899` | sandbox-gateway 控制面地址(创建/销毁/管理沙箱) |
+| `GRASP_GATEWAY_API_KEY` | — | 网关可选 Bearer 令牌(网关关鉴权时留空) |
+| `GRASP_SANDBOX_IMAGE` | — | 每次创建时的镜像覆盖;留空即用网关默认镜像(universal-sandbox) |
+| `GRASP_SANDBOX_ENV` | — | 通用 `K=V,K2=V2` 环境变量,注入每个沙箱(厂商无关;**不含** ACP API Key) |
+| `GRASP_CURSOR_AUTH` | — | 可选(cursor 专用):挂载宿主 Cursor 配置目录(只读)复用 CLI 登录 |
+| `GRASP_AGENT_TIMEOUT_SEC` | `600` | 单轮 agent/react 回合硬超时(全局默认);单节点可在其 Agent 卡片填「超时(分钟)」单独放宽 |
+| `GRASP_CHAT_IDLE_SEC` | `600` | 回合内多久无事件即判卡死并中断 |
+| `GRASP_MCP_ADVERTISE` | `http://host.docker.internal:<PORT>` | 沙箱内 agent/MCP 客户端回连 run 级 artifact-store MCP 的 base URL。K8s gateway 须改为沙箱可达且挂载 `/mcp` 的实例基址(如 `http://api.example.com`);勿用仅 SPA/无 `/mcp` 路由的入口域名。若误配 `spa.example.com`,加载配置与注入时会改写为 `api.example.com`(见 `RewriteMisconfiguredMCPAdvertise`) |
+| `GRASP_PROFILES_ROOT` | `data/profiles` | Agent profile 规则根(挂入 `{configRoot}/rules`) |
 
 > **GitLab 不是平台配置**:平台不依赖任何固定的 GitLab 地址或令牌。仓库地址由工作流
 > 全局变量 `repo_url` 提供;凭据(`GITLAB_TOKEN` / `GITLAB_URL` 等)在 **Agent 元信息的
@@ -250,13 +250,13 @@ sandbox: { image, env, cursor_auth_path, agent_chat_timeout_seconds, ... }
 > GitLab/代码托管**不在**这份配置里:仓库地址走工作流全局变量 `repo_url`,凭据走
 > Agent 元信息环境变量,不是平台级配置。
 
-环境变量覆盖(env 优先级最高,上表对应字段):`APPROVING_PORT`、`APPROVING_DB`、
-`APPROVING_EXEC_PROVIDER`、`APPROVING_MAX_RUNS`、`APPROVING_PROFILES_ROOT`、`APPROVING_MCP_ADVERTISE`、
-`APPROVING_SANDBOX_IMAGE`、`APPROVING_AGENT_MODEL`、`APPROVING_AGENT_TIMEOUT_SEC` 等。
+环境变量覆盖(env 优先级最高,上表对应字段):`GRASP_PORT`、`GRASP_DB`、
+`GRASP_EXEC_PROVIDER`、`GRASP_MAX_RUNS`、`GRASP_PROFILES_ROOT`、`GRASP_MCP_ADVERTISE`、
+`GRASP_SANDBOX_IMAGE`、`GRASP_AGENT_MODEL`、`GRASP_AGENT_TIMEOUT_SEC` 等。
 
 > **ACP 鉴权不在平台级配置**:各后端 API Key / 站点通过 **项目沙箱 env**(流水线底噪)或
 > **Agent 元信息 env**(同名覆盖)注入流水线沙箱(见「ACP 后端怎么用」)。
-> `sandbox.cursor_api_key` / `APPROVING_CURSOR_API_KEY` 若仍出现在旧配置中会打 WARN 且**不会**
+> `sandbox.cursor_api_key` / `GRASP_CURSOR_API_KEY` 若仍出现在旧配置中会打 WARN 且**不会**
 > 注入沙箱。Agent Studio 不继承项目 env。
 > Git 托管凭据（`GITLAB_*` / `GITHUB_*` / SSH）同样配在 Agent env，按 run 注入沙箱，
 > 不进平台配置或镜像。
@@ -293,8 +293,8 @@ CDP/noVNC。K8s 存量 LB 在 gateway 启动调和完成前仍可能对外暴露
 
 ```bash
 cd server
-APPROVING_SANDBOX_IMAGE=universal-sandbox-cursor:local \
-APPROVING_PORT=8090 \
+GRASP_SANDBOX_IMAGE=universal-sandbox-cursor:local \
+GRASP_PORT=8090 \
 go run ./cmd/server
 ```
 
@@ -305,7 +305,7 @@ Git 凭据(可引用全局变量)。Cursor 示例:
 {
   "acpBackend": "cursor",
   "env": {
-    "APPROVING_CURSOR_API_KEY": "crsr_xxx",
+    "GRASP_CURSOR_API_KEY": "crsr_xxx",
     "GITLAB_TOKEN": "glpat_xxx",
     "GITLAB_URL": "${vars.repo_url}"
   }
@@ -319,11 +319,11 @@ CodeBuddy 国际站 / Trae 国内站等其它后端的 env 写法见上文「ACP
 
 ```bash
 go test ./...                       # 引擎 FSM + fake-bridge E2E,零凭证,~2s
-# 真实沙箱集成测试(需可达的 sandbox-gateway; key 写在测试 Agent profile env 或 APPROVING_CURSOR_API_KEY):
-APPROVING_LIVE=1 APPROVING_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 APPROVING_CURSOR_API_KEY=crsr_xxx \
+# 真实沙箱集成测试(需可达的 sandbox-gateway; key 写在测试 Agent profile env 或 GRASP_CURSOR_API_KEY):
+GRASP_LIVE=1 GRASP_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 GRASP_CURSOR_API_KEY=crsr_xxx \
   go test ./internal/runtime/ -run TestCursorLiveRunAgent -v
 # 原生 MCP 验证(Agent 真的调用 write_artifact,无 produces/harvest):
-APPROVING_LIVE_MCP=1 APPROVING_CURSOR_API_KEY=crsr_xxx \
+GRASP_LIVE_MCP=1 GRASP_CURSOR_API_KEY=crsr_xxx \
   go test ./internal/runtime/ -run TestCursorLiveMCP -v
 ```
 
@@ -334,7 +334,7 @@ live 测试跑真实沙箱路径:经 sandbox-gateway 起沙箱 → ACP 驱动 cu
 所以默认单测不跑。运行前先起好 sandbox-gateway(见其仓库 `start.sh`),再:
 
 ```bash
-APPROVING_LIVE=1 APPROVING_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 APPROVING_CURSOR_API_KEY=crsr_xxx \
+GRASP_LIVE=1 GRASP_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 GRASP_CURSOR_API_KEY=crsr_xxx \
   go test ./internal/runtime/ -run TestCursorLiveRunAgent -v -timeout 30m
 ```
 
@@ -345,7 +345,7 @@ APPROVING_LIVE=1 APPROVING_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 APPROVING_C
 Git/代码托管由**用户自己配置**,不是平台级设置。仓库地址来自工作流全局变量 `repo_url`;
 凭据在 **Agent 元信息的环境变量**里配置,值支持模板替换:
 
-- `${APPROVING_ARTIFACT_URL}` / `${APPROVING_ARTIFACT_TOKEN}` / `${APPROVING_RUN_ID}` / `${APPROVING_NODE_ID}` — 运行级变量;
+- `${GRASP_ARTIFACT_URL}` / `${GRASP_ARTIFACT_TOKEN}` / `${GRASP_RUN_ID}` / `${GRASP_NODE_ID}` — 运行级变量;
 - `${vars.<全局变量名>}` — 工作流全局变量,如 `${vars.repo_url}`。
 
 ### 托管商支持矩阵

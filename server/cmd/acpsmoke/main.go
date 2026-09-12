@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 func main() {

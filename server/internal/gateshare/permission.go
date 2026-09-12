@@ -3,7 +3,7 @@ package gateshare
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // Public write / preview action kinds checked by Allow.

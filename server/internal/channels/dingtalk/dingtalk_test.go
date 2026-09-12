@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 func TestSceneOf(t *testing.T) {

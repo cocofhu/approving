@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func boolPtr(v bool) *bool { return &v }

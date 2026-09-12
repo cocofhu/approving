@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/engine"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/engine"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/gin-gonic/gin"
 )

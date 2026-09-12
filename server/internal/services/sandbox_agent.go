@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/envauth"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/envauth"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/sandbox"
 
 	"github.com/rs/zerolog/log"
 )
@@ -184,17 +184,17 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 	for _, sp := range platformSpecs {
 		switch sp.Name {
 		case MemoryStoreMCP:
-			vars["APPROVING_MEMORY_URL"] = sp.URL
-			vars["APPROVING_MEMORY_TOKEN"] = sharedToken
+			vars["GRASP_MEMORY_URL"] = sp.URL
+			vars["GRASP_MEMORY_TOKEN"] = sharedToken
 		case ContextStoreMCP:
-			vars["APPROVING_CONTEXT_URL"] = sp.URL
-			vars["APPROVING_CONTEXT_TOKEN"] = sharedToken
+			vars["GRASP_CONTEXT_URL"] = sp.URL
+			vars["GRASP_CONTEXT_TOKEN"] = sharedToken
 		case TaskSchedulerMCP:
-			vars["APPROVING_SCHEDULER_URL"] = sp.URL
-			vars["APPROVING_SCHEDULER_TOKEN"] = sharedToken
+			vars["GRASP_SCHEDULER_URL"] = sp.URL
+			vars["GRASP_SCHEDULER_TOKEN"] = sharedToken
 		case PmProgressMCP, PmWorkflowReadMCP, PmWorkflowWriteMCP, PmMCPName:
-			vars["APPROVING_PM_URL"] = sp.URL
-			vars["APPROVING_PM_TOKEN"] = sharedToken
+			vars["GRASP_PM_URL"] = sp.URL
+			vars["GRASP_PM_TOKEN"] = sharedToken
 		}
 	}
 
@@ -211,7 +211,7 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 		env[k] = v
 	}
 	for k, v := range agent.Env {
-		if strings.Contains(v, "APPROVING_ARTIFACT") {
+		if strings.Contains(v, "GRASP_ARTIFACT") {
 			continue
 		}
 		env[k] = v
@@ -249,9 +249,9 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 
 	env["ACP_BACKEND"] = string(backend)
 	env["CONFIG_ROOT"] = agent.Layout.ConfigRoot
-	env["APPROVING_PROJECT_ID"] = projectID
-	env["APPROVING_THREAD_ID"] = threadID
-	env["APPROVING_RUN_ID"] = runID
+	env["GRASP_PROJECT_ID"] = projectID
+	env["GRASP_THREAD_ID"] = threadID
+	env["GRASP_RUN_ID"] = runID
 	sandbox.ApplyPasswords(env, sharedToken)
 	env["GIT_REPOS"] = sandbox.EncodeRepos(nil)
 

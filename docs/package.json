@@ -1,5 +1,5 @@
 {
-  "name": "approving-docs",
+  "name": "grasp-docs",
   "private": true,
   "version": "0.1.0",
   "description": "Approving project site (static HTML) and help docs (Markdown)",

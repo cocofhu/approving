@@ -1,4 +1,4 @@
-module github.com/cocofhu/approving
+module github.com/cocofhu/grasp
 
 go 1.25.0
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/mcp/mermaidvalidate"
+	"github.com/cocofhu/grasp/internal/mcp/mermaidvalidate"
 )
 
 func TestCheckLegalAndIllegal(t *testing.T) {

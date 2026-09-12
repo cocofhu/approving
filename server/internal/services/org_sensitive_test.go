@@ -9,19 +9,19 @@ func TestScanAndStripGroupSensitiveKeys(t *testing.T) {
 	// setupFolderOrg uses non-token "TOKEN"; overwrite with real token keys.
 	for name, env := range map[string]map[string]string{
 		"alice": {
-			"APPROVING_CURSOR_API_KEY": "a-key",
+			"GRASP_CURSOR_API_KEY": "a-key",
 			"GITLAB_TOKEN":             "a-gl",
 			"FEATURE_FLAG":             "1",
 		},
 		"bob": {
-			"APPROVING_CURSOR_API_KEY": "b-key",
+			"GRASP_CURSOR_API_KEY": "b-key",
 			"LOG_LEVEL":                "info",
 		},
 		"carol": {
 			"GITLAB_TOKEN": "c-gl",
 		},
 		"outside": {
-			"APPROVING_CURSOR_API_KEY": "out-key",
+			"GRASP_CURSOR_API_KEY": "out-key",
 			"GITLAB_TOKEN":             "out-gl",
 		},
 	} {
@@ -43,7 +43,7 @@ func TestScanAndStripGroupSensitiveKeys(t *testing.T) {
 	for _, h := range hits {
 		byKey[h.Key] = h.AgentCount
 	}
-	if byKey["APPROVING_CURSOR_API_KEY"] != 2 || byKey["GITLAB_TOKEN"] != 2 {
+	if byKey["GRASP_CURSOR_API_KEY"] != 2 || byKey["GITLAB_TOKEN"] != 2 {
 		t.Fatalf("hits=%+v", hits)
 	}
 	if _, ok := byKey["FEATURE_FLAG"]; ok {
@@ -61,7 +61,7 @@ func TestScanAndStripGroupSensitiveKeys(t *testing.T) {
 	if _, ok := alice.Env["GITLAB_TOKEN"]; ok {
 		t.Fatalf("alice GITLAB_TOKEN should be gone: %#v", alice.Env)
 	}
-	if alice.Env["APPROVING_CURSOR_API_KEY"] != "a-key" || alice.Env["FEATURE_FLAG"] != "1" {
+	if alice.Env["GRASP_CURSOR_API_KEY"] != "a-key" || alice.Env["FEATURE_FLAG"] != "1" {
 		t.Fatalf("alice should keep unselected / non-token: %#v", alice.Env)
 	}
 	outside, _ := skill.Get("outside")

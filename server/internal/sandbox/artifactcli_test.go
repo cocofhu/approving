@@ -35,7 +35,7 @@ func TestSeedHelperScriptsHaveNoHardcodedSPAHosts(t *testing.T) {
 			name: "profile.d",
 			body: mcpAdvertiseProfileScript,
 			want: []string{
-				"APPROVING_ARTIFACT_URL",
+				"GRASP_ARTIFACT_URL",
 			},
 		},
 		{

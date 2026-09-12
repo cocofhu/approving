@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/mcp/structured"
-	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
+	"github.com/cocofhu/grasp/internal/mcp/structured"
+	gatenode "github.com/cocofhu/grasp/internal/models/nodereg"
 )
 
 // HumanArtifactNormalized is the result of validating human-edited content

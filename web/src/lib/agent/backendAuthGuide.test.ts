@@ -5,7 +5,7 @@ describe('backendAuthGuide', () => {
   it('returns Cursor console path + official entry links', () => {
     const guide = authGuideFor('cursor')
     expect(guide.keys[0]).toMatchObject({
-      key: 'APPROVING_CURSOR_API_KEY',
+      key: 'GRASP_CURSOR_API_KEY',
       alt: 'CURSOR_API_KEY',
     })
     expect(guide.pathStepKeys.length).toBeGreaterThanOrEqual(2)
@@ -41,7 +41,7 @@ describe('backendAuthGuide', () => {
   it('routes OpenCode custom config to opencode.json and provider docs', () => {
     const guide = authGuideFor('opencode')
     expect(guide.keys[0]).toMatchObject({
-      key: 'APPROVING_OPENCODE_API_KEY',
+      key: 'GRASP_OPENCODE_API_KEY',
       alt: 'OPENCODE_API_KEY',
     })
     expect(guide.links.some((l) => l.url.includes('opencode.ai/docs/providers'))).toBe(true)

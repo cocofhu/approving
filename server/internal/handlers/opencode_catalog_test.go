@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/opencodecatalog"
+	"github.com/cocofhu/grasp/internal/opencodecatalog"
 )
 
 const catalogBody = `{

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 
 	"github.com/rs/zerolog/log"
 )

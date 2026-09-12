@@ -90,17 +90,17 @@ describe('openCodeProvider', () => {
       vision: false,
     })
     expect(switchOpenCodeEnv(env, 'cursor')).toEqual({ ACP_BRIDGE_MODEL: 'custom/foo' })
-    expect(switchOpenCodeEnv({}, 'opencode').APPROVING_OPENCODE_PROVIDER).toBe('openai')
+    expect(switchOpenCodeEnv({}, 'opencode').GRASP_OPENCODE_PROVIDER).toBe('openai')
   })
 
   it('opts a typed-in model into image input through env', () => {
     const env = applyOpenCodeFields(
-      { APPROVING_OPENCODE_MODEL_VISION: '1' },
+      { GRASP_OPENCODE_MODEL_VISION: '1' },
       { provider: 'tencent-tokenhub', model: 'deepseek/deepseek-flash' },
     )
     expect(openCodeFieldsFromEnv(env).vision).toBe(true)
-    expect(env.APPROVING_OPENCODE_MODEL_VISION).toBe('1')
-    expect(applyOpenCodeFields(env, { vision: false }).APPROVING_OPENCODE_MODEL_VISION).toBeUndefined()
-    expect(switchOpenCodeEnv(env, 'cursor').APPROVING_OPENCODE_MODEL_VISION).toBeUndefined()
+    expect(env.GRASP_OPENCODE_MODEL_VISION).toBe('1')
+    expect(applyOpenCodeFields(env, { vision: false }).GRASP_OPENCODE_MODEL_VISION).toBeUndefined()
+    expect(switchOpenCodeEnv(env, 'cursor').GRASP_OPENCODE_MODEL_VISION).toBeUndefined()
   })
 })

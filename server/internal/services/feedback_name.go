@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/grasp/internal/mcp"
 )
 
 // Reserved names for the feedback ledger products. Defined in mcp alongside the

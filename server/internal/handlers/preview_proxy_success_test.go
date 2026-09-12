@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 // closeNotifyRecorder wraps httptest.ResponseRecorder so httputil.ReverseProxy

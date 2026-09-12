@@ -4,9 +4,9 @@
   "mcp": [
     {
       "name": "artifact-store",
-      "url": "${APPROVING_ARTIFACT_URL}",
+      "url": "${GRASP_ARTIFACT_URL}",
       "headers": {
-        "Authorization": "Bearer ${APPROVING_ARTIFACT_TOKEN}"
+        "Authorization": "Bearer ${GRASP_ARTIFACT_TOKEN}"
       }
     }
   ],

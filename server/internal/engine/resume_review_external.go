@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
 )
 
 // ResumeReviewExternal consumes a review share link (CAS) then force-confirms

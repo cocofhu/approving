@@ -2,7 +2,7 @@ package schedulermcp
 
 import (
 	"encoding/json"
-	"github.com/cocofhu/approving/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/platformmcp"
 	"strings"
 	"testing"
 )

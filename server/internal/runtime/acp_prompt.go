@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
 )
 
 func (c *acpProvider) buildAgentPrompt(req NodeReq, seeded []string) string {
@@ -143,7 +143,7 @@ func (c *acpProvider) agentPrompts(req NodeReq) *models.AgentPrompts {
 
 // upstreamArtifacts lists this run's existing artifact names so the agent can
 // pull them on demand through the read_artifact MCP tool. It deliberately does
-// NOT write anything into the workspace: seeding files under .approving/artifacts/
+// NOT write anything into the workspace: seeding files under .grasp/artifacts/
 // polluted the node's code-change report (they showed up as untracked changes)
 // and is unnecessary, since the artifact-store MCP is always mounted in-sandbox.
 func (c *acpProvider) upstreamArtifacts(req NodeReq) []string {

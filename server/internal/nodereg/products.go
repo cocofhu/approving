@@ -1,6 +1,6 @@
 package nodereg
 
-import "github.com/cocofhu/approving/internal/mcp"
+import "github.com/cocofhu/grasp/internal/mcp"
 
 // ProductRef describes one deliverable a node type may write.
 type ProductRef struct {

@@ -12,8 +12,8 @@ alwaysApply: true
 - `read_artifact(name)`:读取本次运行内上游节点产出的产物。
 - `list_artifacts()`:列出本次运行已有产物。
 
-若原生 MCP 不可用、需经 HTTP 调用时:优先用环境变量 `APPROVING_ARTIFACT_URL` /
-`APPROVING_ARTIFACT_TOKEN`。该 URL 必须指向实际提供 `/mcp/runs/:id` 的 API 入口
+若原生 MCP 不可用、需经 HTTP 调用时:优先用环境变量 `GRASP_ARTIFACT_URL` /
+`GRASP_ARTIFACT_TOKEN`。该 URL 必须指向实际提供 `/mcp/runs/:id` 的 API 入口
 (本地 Docker 常见为 `host.docker.internal`)。不要改写环境变量中的主机名。
 
 ## 强制产物契约 (produces)

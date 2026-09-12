@@ -3,7 +3,7 @@ package services
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 // ApplyAgentSSHToSpec resolves SSH known_hosts / private key from Agent meta

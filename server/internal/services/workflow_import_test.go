@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func envelopeJSON(env models.ExportEnvelope) []byte {

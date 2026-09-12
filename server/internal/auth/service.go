@@ -7,8 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

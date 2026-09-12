@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestInternalStartRunTriggerDefaultsAndRejects(t *testing.T) {

@@ -1,9 +1,9 @@
 import type { BackendId } from '@/lib/shared/regionPolicy'
 import { openCodeCatalogKnowsProvider } from '@/lib/agent/openCodeCatalog'
 
-export const OPENCODE_PROVIDER_ENV = 'APPROVING_OPENCODE_PROVIDER'
-export const OPENCODE_BASE_URL_ENV = 'APPROVING_OPENCODE_BASE_URL'
-export const OPENCODE_MODEL_VISION_ENV = 'APPROVING_OPENCODE_MODEL_VISION'
+export const OPENCODE_PROVIDER_ENV = 'GRASP_OPENCODE_PROVIDER'
+export const OPENCODE_BASE_URL_ENV = 'GRASP_OPENCODE_BASE_URL'
+export const OPENCODE_MODEL_VISION_ENV = 'GRASP_OPENCODE_MODEL_VISION'
 export const OPENCODE_MODEL_ENV = 'ACP_BRIDGE_MODEL'
 export const DEFAULT_OPENCODE_PROVIDER = 'openai'
 

@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestInterpolateCompositeVar(t *testing.T) {

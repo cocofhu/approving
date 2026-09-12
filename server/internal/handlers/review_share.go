@@ -4,7 +4,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/cocofhu/approving/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/gateshare"
 
 	"github.com/gin-gonic/gin"
 )

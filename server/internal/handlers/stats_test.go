@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func TestGetGlobalTokenStatsOmitsWindowDefaultsAll(t *testing.T) {

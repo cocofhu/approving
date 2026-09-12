@@ -55,9 +55,9 @@ function compileErrors(source: string): number[] {
 }
 
 describe('locale message-compiler scan', () => {
-  it('baseCompile fails on unescaped ${APPROVING_MEMORY_URL/TOKEN} (regression probe)', () => {
+  it('baseCompile fails on unescaped ${GRASP_MEMORY_URL/TOKEN} (regression probe)', () => {
     const bad =
-      '在 Agent Studio 添加 memory-store（${APPROVING_MEMORY_URL/TOKEN}）。项目管理咨询沙箱会自动注入。'
+      '在 Agent Studio 添加 memory-store（${GRASP_MEMORY_URL/TOKEN}）。项目管理咨询沙箱会自动注入。'
     const codes = compileErrors(bad)
     expect(codes.length).toBeGreaterThan(0)
     expect(codes).toContain(7) // UNTERMINATED_CLOSING_BRACE
@@ -82,14 +82,14 @@ describe('locale message-compiler scan', () => {
     expect(failures, JSON.stringify(failures, null, 2)).toEqual([])
   })
 
-  it('memoryStore.convention uses literal interpolation and still displays ${APPROVING_MEMORY_URL/TOKEN}', async () => {
+  it('memoryStore.convention uses literal interpolation and still displays ${GRASP_MEMORY_URL/TOKEN}', async () => {
     const leaves = loadAllLocaleLeaves()
     const conventions = leaves.filter((l) => l.keyPath.includes('memoryStore') && l.keyPath.endsWith('.convention'))
     expect(conventions).toHaveLength(2)
     for (const c of conventions) {
       expect(compileErrors(c.value)).toEqual([])
       // Source uses literal interpolation {'${...}'}
-      expect(c.value).toContain("{'${APPROVING_MEMORY_URL/TOKEN}'}")
+      expect(c.value).toContain("{'${GRASP_MEMORY_URL/TOKEN}'}")
     }
 
     // Runtime render (vue-i18n) must still show the env-var literal, not strip braces.
@@ -104,8 +104,8 @@ describe('locale message-compiler scan', () => {
         en: { mcp: { memoryStore: { convention: en } } },
       },
     })
-    expect(String(i18n.global.t('mcp.memoryStore.convention'))).toContain('${APPROVING_MEMORY_URL/TOKEN}')
+    expect(String(i18n.global.t('mcp.memoryStore.convention'))).toContain('${GRASP_MEMORY_URL/TOKEN}')
     i18n.global.locale.value = 'en'
-    expect(String(i18n.global.t('mcp.memoryStore.convention'))).toContain('${APPROVING_MEMORY_URL/TOKEN}')
+    expect(String(i18n.global.t('mcp.memoryStore.convention'))).toContain('${GRASP_MEMORY_URL/TOKEN}')
   })
 })

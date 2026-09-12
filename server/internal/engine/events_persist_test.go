@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // TestAgentErrPathPersistsEvents asserts that when RunAgent returns an error

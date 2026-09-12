@@ -8,10 +8,10 @@ import { stripNovncSecureContext } from './vite-plugins/stripNovncSecureContext'
 // PreviewProxy transparently re-anchors HTML (injects <base>, rewrites root-
 // absolute asset URLs), so the app needs no base/path awareness of its own.
 export default defineConfig(({ command }) => {
-  // APPROVING_PREVIEW_PORT (the port the agent registers via set_preview) pins the
+  // GRASP_PREVIEW_PORT (the port the agent registers via set_preview) pins the
   // serve port so the platform proxy can reach it; defaults to Vite's usual
   // 5173 (dev) / 4173 (preview).
-  const port = Number(process.env.APPROVING_PREVIEW_PORT) || (command === 'serve' ? 5173 : 4173)
+  const port = Number(process.env.GRASP_PREVIEW_PORT) || (command === 'serve' ? 5173 : 4173)
   return {
     base: '/',
     plugins: [vue(), stripNovncSecureContext()],

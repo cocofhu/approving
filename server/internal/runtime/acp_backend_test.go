@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/envauth"
+	"github.com/cocofhu/grasp/internal/envauth"
 )
 
 func TestNormalizeBackend(t *testing.T) {
@@ -72,7 +72,7 @@ func TestMergeAuthEnv_TraeAliases(t *testing.T) {
 		env  map[string]string
 		want string
 	}{
-		{"APPROVING", map[string]string{"APPROVING_TRAE_API_KEY": "trae-lt-a"}, "trae-lt-a"},
+		{"APPROVING", map[string]string{"GRASP_TRAE_API_KEY": "trae-lt-a"}, "trae-lt-a"},
 		{"legacy TRAE_API_KEY", map[string]string{"TRAE_API_KEY": "trae-lt-b"}, "trae-lt-b"},
 		{"official token", map[string]string{EnvTraeCLIToken: "trae-lt-c"}, "trae-lt-c"},
 	}
@@ -92,7 +92,7 @@ func TestMergeAuthEnv_TraeAliases(t *testing.T) {
 func TestMergeAuthEnv_TraeKeyPreference(t *testing.T) {
 	// agentKeys order: APPROVING → TRAE_API_KEY → TRAECLI token
 	out, err := MergeAuthEnv(BackendTrae, map[string]string{
-		"APPROVING_TRAE_API_KEY": "trae-lt-first",
+		"GRASP_TRAE_API_KEY": "trae-lt-first",
 		"TRAE_API_KEY":           "trae-lt-second",
 		EnvTraeCLIToken:          "trae-lt-third",
 	})
@@ -109,7 +109,7 @@ func TestMergeAuthEnv_CodeBuddyAliases(t *testing.T) {
 		name string
 		env  map[string]string
 	}{
-		{"APPROVING", map[string]string{"APPROVING_CODEBUDDY_API_KEY": "ck_a"}},
+		{"APPROVING", map[string]string{"GRASP_CODEBUDDY_API_KEY": "ck_a"}},
 		{"official", map[string]string{"CODEBUDDY_API_KEY": "ck_b"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -242,7 +242,7 @@ func TestMergeRegionEnv_CodeBuddy(t *testing.T) {
 	})
 	t.Run("staging sets region for settings.json", func(t *testing.T) {
 		out, err := MergeAuthEnv(BackendCodeBuddy, map[string]string{
-			"APPROVING_CODEBUDDY_API_KEY": "ck_x",
+			"GRASP_CODEBUDDY_API_KEY": "ck_x",
 			EnvCodeBuddyRegion:            "staging",
 		})
 		if err != nil {
@@ -356,7 +356,7 @@ func TestMergeRegionEnv_Trae(t *testing.T) {
 	t.Run("intl sets host", func(t *testing.T) {
 		for _, alias := range []string{"intl", "international", "public", "ai"} {
 			out, err := MergeAuthEnv(BackendTrae, map[string]string{
-				"APPROVING_TRAE_API_KEY": "trae-lt-x",
+				"GRASP_TRAE_API_KEY": "trae-lt-x",
 				EnvTraeRegion:            alias,
 			})
 			if err != nil {
@@ -403,7 +403,7 @@ func TestIsPlatformAuthEnvKey(t *testing.T) {
 			t.Fatalf("%s should be platform auth key", k)
 		}
 	}
-	for _, k := range []string{"GITLAB_TOKEN", "APPROVING_CURSOR_API_KEY", "APPROVING_TRAE_API_KEY", EnvCodeBuddyRegion, EnvTraeRegion} {
+	for _, k := range []string{"GITLAB_TOKEN", "GRASP_CURSOR_API_KEY", "GRASP_TRAE_API_KEY", EnvCodeBuddyRegion, EnvTraeRegion} {
 		if envauth.IsPlatformAuthEnvKey(k) {
 			t.Fatalf("%s must not be filtered as platform auth", k)
 		}
@@ -463,7 +463,7 @@ func TestPrepareAuthEnv_NeitherConfigured(t *testing.T) {
 	if !strings.Contains(err.Error(), "项目共享") {
 		t.Fatalf("error should mention 项目共享: %v", err)
 	}
-	if !strings.Contains(err.Error(), "APPROVING_CLAUDE_API_KEY") {
+	if !strings.Contains(err.Error(), "GRASP_CLAUDE_API_KEY") {
 		t.Fatalf("error should mention env keys: %v", err)
 	}
 }

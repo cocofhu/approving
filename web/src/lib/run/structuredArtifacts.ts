@@ -1,6 +1,6 @@
 // Structured-product mappings — generated from server/internal/nodereg (single
 // source of truth). Regenerate: `go run ./server/cmd/gen-nodereg/main.go`
-// from repo root (or set APPROVING_ROOT).
+// from repo root (or set GRASP_ROOT).
 
 import manifest from '@/data/nodeManifest.generated.json'
 

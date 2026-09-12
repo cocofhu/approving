@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func bindTestAgentHome(t *testing.T, s *SandboxService, name, projectID string) {

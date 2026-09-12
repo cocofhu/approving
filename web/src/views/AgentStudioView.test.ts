@@ -81,7 +81,7 @@ function agent(region?: string): Agent {
     acpBackend: 'codebuddy',
     files: [],
     mcp: [],
-    env: region === undefined ? {} : { APPROVING_CODEBUDDY_REGION: region },
+    env: region === undefined ? {} : { GRASP_CODEBUDDY_REGION: region },
     layout: { configRoot: '/root/.codebuddy', workspaceDir: '/root/workspace' },
   }
 }
@@ -193,7 +193,7 @@ describe('AgentStudio region UI', () => {
 
     expect(mocks.saveAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        env: { APPROVING_CODEBUDDY_REGION: 'ioa' },
+        env: { GRASP_CODEBUDDY_REGION: 'ioa' },
         layout: expect.objectContaining({ workspaceDir: '/root/workspace-edited' }),
       }),
     )
@@ -209,7 +209,7 @@ describe('AgentStudio region UI', () => {
     await wrapper.findAll('button').find((item) => item.text() === '保存')!.trigger('click')
     await flushPromises()
     expect(mocks.saveAgent).toHaveBeenCalledWith(
-      expect.objectContaining({ env: { APPROVING_CODEBUDDY_REGION: 'internal' } }),
+      expect.objectContaining({ env: { GRASP_CODEBUDDY_REGION: 'internal' } }),
     )
   })
 
@@ -229,7 +229,7 @@ describe('AgentStudio region UI', () => {
     await flushPromises()
     expect(mocks.saveAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        env: { APPROVING_CODEBUDDY_REGION: 'public' },
+        env: { GRASP_CODEBUDDY_REGION: 'public' },
         layout: expect.objectContaining({ workspaceDir: '/root/workspace-hydrated' }),
       }),
     )
@@ -243,8 +243,8 @@ describe('AgentStudio region UI', () => {
     await wrapper.findAll('button').find((item) => item.text() === '原始 JSON')!.trigger('click')
     await wrapper.get('[data-test="code-editor"]').setValue(
       JSON.stringify({
-        APPROVING_CODEBUDDY_REGION: 'internal',
-        APPROVING_TRAE_REGION: 'cn',
+        GRASP_CODEBUDDY_REGION: 'internal',
+        GRASP_TRAE_REGION: 'cn',
         OTHER: 'ok',
       }),
     )
@@ -253,7 +253,7 @@ describe('AgentStudio region UI', () => {
 
     expect(mocks.saveAgent).toHaveBeenCalledWith(
       expect.objectContaining({
-        env: { APPROVING_CODEBUDDY_REGION: 'public', OTHER: 'ok' },
+        env: { GRASP_CODEBUDDY_REGION: 'public', OTHER: 'ok' },
       }),
     )
   })
@@ -293,8 +293,8 @@ describe('AgentStudio MCP PM leader prefills', () => {
         mcp: [
           {
             name: 'artifact-store',
-            url: '${APPROVING_ARTIFACT_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' },
+            url: '${GRASP_ARTIFACT_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_ARTIFACT_TOKEN}' },
           },
         ],
       },
@@ -304,7 +304,7 @@ describe('AgentStudio MCP PM leader prefills', () => {
     await openMcpTab(wrapper)
 
     expect(wrapper.text()).not.toContain('Agent 通用平台 MCP')
-    expect(wrapper.text()).not.toContain('APPROVING_MEMORY_URL')
+    expect(wrapper.text()).not.toContain('GRASP_MEMORY_URL')
     expect(wrapper.text()).not.toContain('pm-progress')
     expect(wrapper.text()).not.toContain('整份 mcp.json 由你配置')
     expect(wrapper.text()).not.toContain('运行级变量(运行时替换')
@@ -324,8 +324,8 @@ describe('AgentStudio MCP PM leader prefills', () => {
     expect(wrapper.find('[data-mcp-name="memory-store"]').exists()).toBe(true)
     expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-display-name"]').text()).toBe('长期记忆')
     expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-preset-key"]').text()).toBe('memory-store')
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === '${APPROVING_MEMORY_URL}')).toHaveLength(1)
-    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'Bearer ${APPROVING_MEMORY_TOKEN}')).toHaveLength(1)
+    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === '${GRASP_MEMORY_URL}')).toHaveLength(1)
+    expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'Bearer ${GRASP_MEMORY_TOKEN}')).toHaveLength(1)
     expect(wrapper.get('[data-mcp-name="memory-store"] [data-test="mcp-scope-note"]').text()).toContain('长期记忆，归属主项目')
     expect(wrapper.find('[data-mcp-name="artifact-store"]').exists()).toBe(true)
     expect(wrapper.findAll('input').filter((el) => (el.element as HTMLInputElement).value === 'memory-store')).toHaveLength(0)
@@ -339,8 +339,8 @@ describe('AgentStudio MCP PM leader prefills', () => {
         mcp: [
           {
             name: 'memory-store',
-            url: '${APPROVING_MEMORY_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_MEMORY_TOKEN}' },
+            url: '${GRASP_MEMORY_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_MEMORY_TOKEN}' },
           },
         ],
       },
@@ -365,13 +365,13 @@ describe('AgentStudio MCP PM leader prefills', () => {
         mcp: [
           {
             name: 'artifact-store',
-            url: '${APPROVING_ARTIFACT_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' },
+            url: '${GRASP_ARTIFACT_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_ARTIFACT_TOKEN}' },
           },
           {
             name: 'pm-leader',
-            url: '${APPROVING_PM_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_PM_TOKEN}' },
+            url: '${GRASP_PM_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_PM_TOKEN}' },
           },
         ],
       },
@@ -399,8 +399,8 @@ describe('AgentStudio MCP PM leader prefills', () => {
         mcp: [
           {
             name: 'memory-store',
-            url: '${APPROVING_MEMORY_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_MEMORY_TOKEN}' },
+            url: '${GRASP_MEMORY_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_MEMORY_TOKEN}' },
           },
         ],
       },
@@ -418,8 +418,8 @@ describe('AgentStudio MCP PM leader prefills', () => {
       JSON.stringify([
         {
           name: 'memory_store',
-          url: '${APPROVING_MEMORY_URL}',
-          headers: { Authorization: 'Bearer ${APPROVING_MEMORY_TOKEN}' },
+          url: '${GRASP_MEMORY_URL}',
+          headers: { Authorization: 'Bearer ${GRASP_MEMORY_TOKEN}' },
         },
       ]),
     )
@@ -438,13 +438,13 @@ describe('AgentStudio MCP PM leader prefills', () => {
         mcp: [
           {
             name: 'artifact-store',
-            url: '${APPROVING_ARTIFACT_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' },
+            url: '${GRASP_ARTIFACT_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_ARTIFACT_TOKEN}' },
           },
           {
             name: 'memory-store',
-            url: '${APPROVING_MEMORY_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_MEMORY_TOKEN}' },
+            url: '${GRASP_MEMORY_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_MEMORY_TOKEN}' },
           },
         ],
       },
@@ -512,8 +512,8 @@ describe('AgentStudio MCP config help', () => {
         mcp: [
           {
             name: 'artifact-store',
-            url: '${APPROVING_ARTIFACT_URL}',
-            headers: { Authorization: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' },
+            url: '${GRASP_ARTIFACT_URL}',
+            headers: { Authorization: 'Bearer ${GRASP_ARTIFACT_TOKEN}' },
           },
         ],
       },
@@ -525,7 +525,7 @@ describe('AgentStudio MCP config help', () => {
     expect(wrapper.get('[data-test="mcp-help-link"]').text()).toBe('帮助')
     expect(wrapper.text()).not.toContain('整份 mcp.json 由你配置')
     expect(wrapper.text()).not.toContain('Agent 通用平台 MCP')
-    expect(wrapper.text()).not.toContain('APPROVING_MEMORY_URL')
+    expect(wrapper.text()).not.toContain('GRASP_MEMORY_URL')
     expect(wrapper.text()).not.toContain('pm-progress')
 
     await wrapper.get('[data-test="mcp-help-link"]').trigger('click')
@@ -535,7 +535,7 @@ describe('AgentStudio MCP config help', () => {
     expect(modal.text()).toContain('MCP 配置帮助')
     expect(modal.text()).toContain('整份 mcp.json 由你配置')
     expect(modal.text()).toContain('/root/.codebuddy/mcp.json')
-    expect(modal.text()).toContain('APPROVING_ARTIFACT_URL')
+    expect(modal.text()).toContain('GRASP_ARTIFACT_URL')
     expect(wrapper.find('[data-test="mcp-help-run"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="mcp-help-agent"]').exists()).toBe(false)
     expect(wrapper.get('[data-help-chip="run"]').classes().join(' ')).toContain('border-accent')
@@ -544,7 +544,7 @@ describe('AgentStudio MCP config help', () => {
     await flushPromises()
     expect(wrapper.find('[data-test="mcp-help-agent"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="mcp-help-run"]').exists()).toBe(false)
-    expect(wrapper.get('[data-test="help-modal"]').text()).toContain('APPROVING_MEMORY_URL')
+    expect(wrapper.get('[data-test="help-modal"]').text()).toContain('GRASP_MEMORY_URL')
     expect(wrapper.get('[data-test="help-modal"]').text()).toContain('pm-progress')
     expect(wrapper.get('[data-test="help-modal"]').text()).not.toContain('+ 添加长期记忆')
   })
@@ -1866,7 +1866,7 @@ describe('AgentStudio env credential help', () => {
 
     expect(wrapper.get('[data-test="env-help-inject"]').text()).toBe('帮助')
     expect(wrapper.get('[data-test="env-help-acp"]').text()).toBe('帮助')
-    expect(wrapper.text()).toContain('APPROVING_CODEBUDDY_API_KEY')
+    expect(wrapper.text()).toContain('GRASP_CODEBUDDY_API_KEY')
     expect(wrapper.text()).not.toContain('环境变量会注入该 Agent 的沙箱容器')
     expect(wrapper.text()).not.toContain('请在下方添加对应 Key')
     expect(wrapper.text()).not.toContain('保存后写入 agent.json')

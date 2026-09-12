@@ -3,7 +3,7 @@ package pmmcp
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestPmStartRunSchemaHasTriggerEnum(t *testing.T) {

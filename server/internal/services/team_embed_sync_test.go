@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 // TestTeamEmbedMatchesAgentsSource guards agents/ ↔ team_embed/ drift (PM + 9 engineers).

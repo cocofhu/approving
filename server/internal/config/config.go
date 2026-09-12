@@ -15,11 +15,13 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
@@ -192,7 +194,7 @@ type SandboxConfig struct {
 	Env map[string]string `yaml:"env"`
 	// AcpEnv is the vendor-neutral map of ACP backend secrets and options merged
 	// into every sandbox container's environment (after Env). Per-backend keys
-	// keep their vendor semantics (e.g. APPROVING_CURSOR_API_KEY, ANTHROPIC_API_KEY).
+	// keep their vendor semantics (e.g. GRASP_CURSOR_API_KEY, ANTHROPIC_API_KEY).
 	AcpEnv map[string]string `yaml:"acp_env"`
 	// CursorAPIKey is deprecated: use sandbox.acp_env or Agent env instead.
 	// When set, a deprecation warning is logged and the value is NOT injected.
@@ -319,117 +321,154 @@ func parse(path string) (*Config, error) {
 	}
 	applyEnvOverrides(c)
 	setDefaults(c)
+	migrateLegacyDefaults(c)
 	return c, nil
+}
+
+// migrateLegacyDefaults moves approving-era default files onto grasp names.
+// COMPAT(approving→grasp): remove after next minor.
+func migrateLegacyDefaults(c *Config) {
+	if c == nil {
+		return
+	}
+	switch c.Database.Path {
+	case "grasp.db", "approving.db":
+		migrateDefaultDB(c, "approving.db", "grasp.db")
+	case "/data/grasp.db", "/data/approving.db":
+		migrateDefaultDB(c, "/data/approving.db", "/data/grasp.db")
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		oldWS := filepath.Join(cwd, ".approving")
+		newWS := filepath.Join(cwd, ".grasp")
+		if ok, err := envcompat.MigrateLegacyPath(oldWS, newWS); err != nil {
+			log.Warn().Err(err).Msg("COMPAT(approving→grasp): could not migrate .approving")
+		} else if ok {
+			log.Info().Str("from", oldWS).Str("to", newWS).Msg("COMPAT(approving→grasp): renamed workspace dir")
+		}
+	}
+}
+
+func migrateDefaultDB(c *Config, oldPath, newPath string) {
+	ok, err := envcompat.MigrateLegacyPath(oldPath, newPath)
+	if err != nil {
+		log.Warn().Err(err).Str("from", oldPath).Str("to", newPath).Msg("COMPAT(approving→grasp): could not migrate database file")
+		return
+	}
+	if ok || c.Database.Path == oldPath {
+		if _, err := os.Stat(newPath); err == nil {
+			c.Database.Path = newPath
+		}
+	}
 }
 
 // applyEnvOverrides lets explicit env vars win over the file. The cursor_api_key
 // secret is injected here from K8s Secret-backed env.
 func applyEnvOverrides(c *Config) {
 	for _, option := range OptionDescriptors() {
-		if option.Deprecated && env(option.Env) != "" {
+		if option.Deprecated && envcompat.Lookup(option.Env) != "" {
 			log.Warn().Str("env", option.Env).Msg("deprecated configuration option is set")
 		}
 	}
-	if v := envInt("APPROVING_PORT"); v != 0 {
+	if v := envInt("GRASP_PORT"); v != 0 {
 		c.Server.Port = v
 	}
-	if v := env("APPROVING_DEPLOYMENT_MODE"); v != "" {
+	if v := env("GRASP_DEPLOYMENT_MODE"); v != "" {
 		c.Server.DeploymentMode = v
 	}
-	if v := env("APPROVING_MCP_ADVERTISE"); v != "" {
+	if v := env("GRASP_MCP_ADVERTISE"); v != "" {
 		c.Server.MCPAdvertise = v
 	}
-	if v := env("APPROVING_PUBLIC_ADVERTISE"); v != "" {
+	if v := env("GRASP_PUBLIC_ADVERTISE"); v != "" {
 		c.Server.PublicAdvertise = v
 	}
-	if v := env("APPROVING_DB"); v != "" {
+	if v := env("GRASP_DB"); v != "" {
 		c.Database.Path = v
 	}
-	if v := env("APPROVING_DB_DRIVER"); v != "" {
+	if v := env("GRASP_DB_DRIVER"); v != "" {
 		c.Database.Driver = v
 	}
-	if v := env("APPROVING_DB_DSN"); v != "" {
+	if v := env("GRASP_DB_DSN"); v != "" {
 		c.Database.DSN = v
 	}
-	if v := env("APPROVING_EXEC_PROVIDER"); v != "" {
+	if v := env("GRASP_EXEC_PROVIDER"); v != "" {
 		c.Engine.ExecProvider = v
 	}
-	if v := envInt("APPROVING_MAX_RUNS"); v != 0 {
+	if v := envInt("GRASP_MAX_RUNS"); v != 0 {
 		c.Engine.MaxConcurrentRuns = v
 	}
-	if v := env("APPROVING_PROFILES_ROOT"); v != "" {
+	if v := env("GRASP_PROFILES_ROOT"); v != "" {
 		c.Engine.ProfilesRoot = v
 	}
-	if v := envInt("APPROVING_NODE_AUTO_RETRY"); v != 0 {
+	if v := envInt("GRASP_NODE_AUTO_RETRY"); v != 0 {
 		c.Engine.NodeAutoRetryMax = v
 	}
-	if v := env("APPROVING_SANDBOX_IMAGE"); v != "" {
+	if v := env("GRASP_SANDBOX_IMAGE"); v != "" {
 		c.Sandbox.Image = v
 	}
 	applySandboxImageEnv(c)
-	if v := env("APPROVING_SANDBOX_GATEWAY_URL"); v != "" {
+	if v := env("GRASP_SANDBOX_GATEWAY_URL"); v != "" {
 		c.Sandbox.GatewayURL = v
 	}
-	if v := env("APPROVING_SANDBOX_GATEWAY_API_KEY"); v != "" {
+	if v := env("GRASP_SANDBOX_GATEWAY_API_KEY"); v != "" {
 		c.Sandbox.GatewayAPIKey = v
 	}
-	if v := env("APPROVING_OPENCODE_CATALOG_URL"); v != "" {
+	if v := env("GRASP_OPENCODE_CATALOG_URL"); v != "" {
 		c.Sandbox.OpenCodeCatalogURL = v
 	}
-	if v := env("APPROVING_BROWSER_ENABLED"); v != "" {
+	if v := env("GRASP_BROWSER_ENABLED"); v != "" {
 		lv := strings.ToLower(v)
 		c.Browser.Enabled = lv == "1" || lv == "true" || lv == "yes"
 	}
-	// Accept both the APPROVING_-prefixed and bare names for the secrets.
-	if v := first(env("APPROVING_CURSOR_API_KEY"), env("CURSOR_API_KEY")); v != "" {
+	// Accept both the GRASP_-prefixed and bare names for the secrets.
+	if v := first(env("GRASP_CURSOR_API_KEY"), env("CURSOR_API_KEY")); v != "" {
 		c.Sandbox.CursorAPIKey = v
 	}
-	if v := env("APPROVING_CURSOR_AUTH"); v != "" {
+	if v := env("GRASP_CURSOR_AUTH"); v != "" {
 		c.Sandbox.CursorAuthPath = v
 	}
-	if v := env("APPROVING_SANDBOX_ENV"); v != "" {
+	if v := env("GRASP_SANDBOX_ENV"); v != "" {
 		mergeEnvList(c, v)
 	}
-	if v := envInt("APPROVING_AGENT_TIMEOUT_SEC"); v != 0 {
+	if v := envInt("GRASP_AGENT_TIMEOUT_SEC"); v != 0 {
 		c.Sandbox.AgentChatTimeoutSeconds = v
 	}
-	if v := envInt("APPROVING_CHAT_IDLE_SEC"); v != 0 {
+	if v := envInt("GRASP_CHAT_IDLE_SEC"); v != 0 {
 		c.Sandbox.ChatIdleTimeoutSeconds = v
 	}
-	if v := envInt("APPROVING_SANDBOX_MAX_ATTEMPTS"); v != 0 {
+	if v := envInt("GRASP_SANDBOX_MAX_ATTEMPTS"); v != 0 {
 		c.Sandbox.MaxAttempts = v
 	}
-	if v := envInt("APPROVING_SANDBOX_RETRY_BACKOFF_SEC"); v != 0 {
+	if v := envInt("GRASP_SANDBOX_RETRY_BACKOFF_SEC"); v != 0 {
 		c.Sandbox.RetryBackoffSeconds = v
 	}
-	if v := envInt("APPROVING_SANDBOX_CREATE_TIMEOUT_SEC"); v != 0 {
+	if v := envInt("GRASP_SANDBOX_CREATE_TIMEOUT_SEC"); v != 0 {
 		c.Sandbox.CreateTimeoutSeconds = v
 	}
-	if v := env("APPROVING_SANDBOX_WORK_DIR"); v != "" {
+	if v := env("GRASP_SANDBOX_WORK_DIR"); v != "" {
 		c.Sandbox.WorkDir = v
 	}
-	if v := envInt("APPROVING_AUTH_MAX_FAILURES"); v != 0 {
+	if v := envInt("GRASP_AUTH_MAX_FAILURES"); v != 0 {
 		c.Auth.MaxFailures = v
 	}
-	if v := env("APPROVING_AUTH_LOCK_DURATION"); v != "" {
+	if v := env("GRASP_AUTH_LOCK_DURATION"); v != "" {
 		c.Auth.LockDuration = v
 	}
-	if v := env("APPROVING_AUTH_SESSION_TTL"); v != "" {
+	if v := env("GRASP_AUTH_SESSION_TTL"); v != "" {
 		c.Auth.SessionTTL = v
 	}
-	if v := env("APPROVING_AUTH_USERS"); v != "" {
+	if v := env("GRASP_AUTH_USERS"); v != "" {
 		var users []AuthUser
 		if err := yaml.Unmarshal([]byte(v), &users); err == nil && len(users) > 0 {
 			c.Auth.Users = users
 		}
 	}
-	if v := env("APPROVING_SECRETS_KEY"); v != "" {
+	if v := env("GRASP_SECRETS_KEY"); v != "" {
 		c.Security.SecretsKey = v
 	}
-	if v := env("APPROVING_STORAGE_DRIVER"); v != "" {
+	if v := env("GRASP_STORAGE_DRIVER"); v != "" {
 		c.Storage.Driver = v
 	}
-	if v := env("APPROVING_BLOBS_ROOT"); v != "" {
+	if v := env("GRASP_BLOBS_ROOT"); v != "" {
 		c.Storage.BlobsRoot = v
 	}
 }
@@ -455,7 +494,7 @@ func setDefaults(c *Config) {
 		}
 	}
 	if c.Database.Driver == "sqlite" && c.Database.Path == "" {
-		c.Database.Path = "approving.db"
+		c.Database.Path = "grasp.db"
 	}
 	if c.Engine.ExecProvider == "" {
 		c.Engine.ExecProvider = "sandbox"
@@ -481,7 +520,7 @@ func setDefaults(c *Config) {
 		c.Engine.NodeAutoRetryMax = 3
 	}
 	// Image intentionally has no default: empty means per-backend Images /
-	// DefaultSandboxImage. Set sandbox.image / APPROVING_SANDBOX_IMAGE only to
+	// DefaultSandboxImage. Set sandbox.image / GRASP_SANDBOX_IMAGE only to
 	// force one image for every backend.
 	if c.Sandbox.Images == nil {
 		c.Sandbox.Images = map[string]string{}
@@ -490,7 +529,7 @@ func setDefaults(c *Config) {
 		c.Sandbox.GatewayURL = "http://127.0.0.1:8899"
 	}
 	if c.Sandbox.CursorAPIKey != "" {
-		log.Warn().Msg("sandbox.cursor_api_key / APPROVING_CURSOR_API_KEY is deprecated; use sandbox.acp_env or Agent env instead")
+		log.Warn().Msg("sandbox.cursor_api_key / GRASP_CURSOR_API_KEY is deprecated; use sandbox.acp_env or Agent env instead")
 	}
 	if c.Sandbox.CursorAuthPath != "" {
 		log.Warn().Msg("sandbox.cursor_auth_path is deprecated; configure auth per Agent/backend via acp_env")
@@ -561,7 +600,7 @@ func warnUnsafeAuth(c *Config) {
 		log.Warn().
 			Str("deployment_mode", c.Server.DeploymentMode).
 			Str("public_advertise", c.Server.PublicAdvertise).
-			Msg("no auth users configured for a non-local deployment; set APPROVING_AUTH_USERS before exposing Approving")
+			Msg("no auth users configured for a non-local deployment; set GRASP_AUTH_USERS before exposing Approving")
 	}
 }
 
@@ -594,13 +633,13 @@ func ResolveMCPAdvertise(fallback string) string {
 	return strings.TrimRight(RewriteMisconfiguredMCPAdvertise(fallback), "/")
 }
 
-// applySandboxImageEnv merges APPROVING_SANDBOX_IMAGE_<BACKEND> into Images.
+// applySandboxImageEnv merges GRASP_SANDBOX_IMAGE_<BACKEND> into Images.
 func applySandboxImageEnv(c *Config) {
 	if c.Sandbox.Images == nil {
 		c.Sandbox.Images = map[string]string{}
 	}
 	for _, b := range knownSandboxBackends {
-		envKey := "APPROVING_SANDBOX_IMAGE_" + strings.ToUpper(strings.ReplaceAll(b, "-", "_"))
+		envKey := "GRASP_SANDBOX_IMAGE_" + strings.ToUpper(strings.ReplaceAll(b, "-", "_"))
 		if v := env(envKey); v != "" {
 			c.Sandbox.Images[b] = v
 		}
@@ -660,7 +699,7 @@ func mergeEnvList(c *Config, list string) {
 	}
 }
 
-func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+func env(key string) string { return envcompat.Lookup(key) }
 
 func envInt(key string) int {
 	if v := env(key); v != "" {

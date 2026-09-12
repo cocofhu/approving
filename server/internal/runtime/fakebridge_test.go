@@ -11,9 +11,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 
 	"github.com/gorilla/websocket"
 )
@@ -296,7 +296,7 @@ func ensureTestProfiles(t *testing.T, opts Options) Options {
 	if opts.ProfilesRoot != "" {
 		return opts
 	}
-	opts.ProfilesRoot = writeAgent(t, testAgentProfile, `{"env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
+	opts.ProfilesRoot = writeAgent(t, testAgentProfile, `{"env":{"GRASP_CURSOR_API_KEY":"fake","GRASP_CLAUDE_API_KEY":"fake","GRASP_CODEBUDDY_API_KEY":"fake","GRASP_TRAE_API_KEY":"fake"}}`)
 	return opts
 }
 

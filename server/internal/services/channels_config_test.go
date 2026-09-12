@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/crypto"
+	"github.com/cocofhu/grasp/internal/crypto"
 )
 
 func setChannelKey(t *testing.T) {

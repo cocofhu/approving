@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/sandbox"
 	"github.com/rs/zerolog/log"
 )
 
@@ -274,7 +274,7 @@ func mergePromptPtrs(base, overlay *models.AgentPrompts) *models.AgentPrompts {
 // artifact-store MCP. It is NOT special-cased in mcp.json: the whole MCP config
 // is user-authored. The run-scoped endpoint + token are exposed only as
 // template vars (see mcpVars) that the user references inside their config,
-// e.g. url "${APPROVING_ARTIFACT_URL}" + header "Bearer ${APPROVING_ARTIFACT_TOKEN}".
+// e.g. url "${GRASP_ARTIFACT_URL}" + header "Bearer ${GRASP_ARTIFACT_TOKEN}".
 // The name is used only to gate the convention doc rule and as the UI default.
 const reservedArtifactStore = "artifact-store"
 
@@ -315,10 +315,10 @@ func (c *acpProvider) gitLabURL(req NodeReq) string {
 
 func (c *acpProvider) mcpVars(req NodeReq) map[string]string {
 	m := map[string]string{
-		"APPROVING_ARTIFACT_URL":   c.mcpURL(req),
-		"APPROVING_ARTIFACT_TOKEN": req.Token,
-		"APPROVING_RUN_ID":         req.RunID,
-		"APPROVING_NODE_ID":        req.NodeID,
+		"GRASP_ARTIFACT_URL":   c.mcpURL(req),
+		"GRASP_ARTIFACT_TOKEN": req.Token,
+		"GRASP_RUN_ID":         req.RunID,
+		"GRASP_NODE_ID":        req.NodeID,
 	}
 
 	for k, v := range req.Vars {
@@ -334,14 +334,14 @@ func (c *acpProvider) mcpVars(req NodeReq) map[string]string {
 
 // templateVars is the substitution map for user-authored MCP fields: platform
 // mcpVars first, then effective Agent/shared env keys that are not already
-// reserved. Agent env cannot override APPROVING_* / vars.*.
+// reserved. Agent env cannot override GRASP_* / vars.*.
 func (c *acpProvider) templateVars(req NodeReq) map[string]string {
 	return MergeEnvIntoTemplateVars(c.mcpVars(req), c.effectiveAgent(req).Env)
 }
 
 // MergeEnvIntoTemplateVars copies base, then adds env keys that are not already
-// present. Existing base keys (APPROVING_*, vars.*, …) win. Env values are
-// substituted against base only so ${vars.x} / ${APPROVING_*} still resolve.
+// present. Existing base keys (GRASP_*, vars.*, …) win. Env values are
+// substituted against base only so ${vars.x} / ${GRASP_*} still resolve.
 func MergeEnvIntoTemplateVars(base, env map[string]string) map[string]string {
 	// Preallocate from one side only — avoid len(base)+len(env) (CodeQL go/allocation-size-overflow).
 	out := make(map[string]string, len(base))

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func createPublishedWorkflow(t *testing.T, h *harness, name string) (id string, dto map[string]any) {

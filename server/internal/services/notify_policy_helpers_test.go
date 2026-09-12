@@ -1,6 +1,6 @@
 package services
 
-import "github.com/cocofhu/approving/internal/models"
+import "github.com/cocofhu/grasp/internal/models"
 
 // notifyPoliciesEqual compares two project policies for change detection.
 // Test-only helper (production persists via Normalize + field writes).

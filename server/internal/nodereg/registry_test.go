@@ -3,7 +3,7 @@ package nodereg
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/grasp/internal/mcp"
 )
 
 func TestRegistryStructuredProducts(t *testing.T) {

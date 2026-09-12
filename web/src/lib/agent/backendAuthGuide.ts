@@ -23,7 +23,7 @@ export type BackendAuthGuide = {
 
 const CURSOR_GUIDE: BackendAuthGuide = {
   backend: 'cursor',
-  keys: [{ key: 'APPROVING_CURSOR_API_KEY', alt: 'CURSOR_API_KEY' }],
+  keys: [{ key: 'GRASP_CURSOR_API_KEY', alt: 'CURSOR_API_KEY' }],
   pathStepKeys: [
     'pages.agentStudio.wizard.apiKey.paths.cursor.step1',
     'pages.agentStudio.wizard.apiKey.paths.cursor.step2',
@@ -37,7 +37,7 @@ const CURSOR_GUIDE: BackendAuthGuide = {
 
 const CLAUDE_GUIDE: BackendAuthGuide = {
   backend: 'claude_code',
-  keys: [{ key: 'APPROVING_CLAUDE_API_KEY', alt: 'ANTHROPIC_API_KEY' }],
+  keys: [{ key: 'GRASP_CLAUDE_API_KEY', alt: 'ANTHROPIC_API_KEY' }],
   pathStepKeys: [
     'pages.agentStudio.wizard.apiKey.paths.claude.step1',
     'pages.agentStudio.wizard.apiKey.paths.claude.step2',
@@ -61,7 +61,7 @@ const CLAUDE_GUIDE: BackendAuthGuide = {
 
 const CODEBUDDY_BASE: Omit<BackendAuthGuide, 'links'> = {
   backend: 'codebuddy',
-  keys: [{ key: 'APPROVING_CODEBUDDY_API_KEY', alt: 'CODEBUDDY_API_KEY' }],
+  keys: [{ key: 'GRASP_CODEBUDDY_API_KEY', alt: 'CODEBUDDY_API_KEY' }],
   pathStepKeys: [
     'pages.agentStudio.wizard.apiKey.paths.codebuddy.step1',
     'pages.agentStudio.wizard.apiKey.paths.codebuddy.step2',
@@ -72,7 +72,7 @@ const CODEBUDDY_BASE: Omit<BackendAuthGuide, 'links'> = {
 
 const OPENCODE_GUIDE: BackendAuthGuide = {
   backend: 'opencode',
-  keys: [{ key: 'APPROVING_OPENCODE_API_KEY', alt: 'OPENCODE_API_KEY' }],
+  keys: [{ key: 'GRASP_OPENCODE_API_KEY', alt: 'OPENCODE_API_KEY' }],
   pathStepKeys: [
     'pages.agentStudio.wizard.apiKey.paths.opencode.step1',
     'pages.agentStudio.wizard.apiKey.paths.opencode.step2',
@@ -90,7 +90,7 @@ const OPENCODE_GUIDE: BackendAuthGuide = {
 const TRAE_GUIDE: BackendAuthGuide = {
   backend: 'trae',
   keys: [
-    { key: 'APPROVING_TRAE_API_KEY', alt: 'TRAECLI_PERSONAL_ACCESS_TOKEN' },
+    { key: 'GRASP_TRAE_API_KEY', alt: 'TRAECLI_PERSONAL_ACCESS_TOKEN' },
   ],
   pathStepKeys: [
     'pages.agentStudio.wizard.apiKey.paths.trae.step1',
@@ -130,24 +130,24 @@ export const BACKEND_AUTH_HINTS: Record<
   BackendId,
   { key: string; alt?: string; note: string }
 > = {
-  cursor: { key: 'APPROVING_CURSOR_API_KEY', alt: 'CURSOR_API_KEY', note: 'Cursor ACP 鉴权' },
+  cursor: { key: 'GRASP_CURSOR_API_KEY', alt: 'CURSOR_API_KEY', note: 'Cursor ACP 鉴权' },
   claude_code: {
-    key: 'APPROVING_CLAUDE_API_KEY',
+    key: 'GRASP_CLAUDE_API_KEY',
     alt: 'ANTHROPIC_API_KEY',
     note: 'Claude Code ACP 鉴权',
   },
   codebuddy: {
-    key: 'APPROVING_CODEBUDDY_API_KEY',
+    key: 'GRASP_CODEBUDDY_API_KEY',
     alt: 'CODEBUDDY_API_KEY',
     note: 'CodeBuddy ACP 鉴权',
   },
   trae: {
-    key: 'APPROVING_TRAE_API_KEY',
+    key: 'GRASP_TRAE_API_KEY',
     alt: 'TRAECLI_PERSONAL_ACCESS_TOKEN',
     note: 'Trae ACP 鉴权 (CLI 登录令牌)',
   },
   opencode: {
-    key: 'APPROVING_OPENCODE_API_KEY',
+    key: 'GRASP_OPENCODE_API_KEY',
     alt: 'OPENCODE_API_KEY',
     note: 'OpenCode API Key 鉴权',
   },

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/auth/apikey"
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/auth/apikey"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/gin-gonic/gin"
 )

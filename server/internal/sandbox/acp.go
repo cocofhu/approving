@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/textutil"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"

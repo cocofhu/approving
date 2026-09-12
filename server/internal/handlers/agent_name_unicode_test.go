@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func TestCreateAndRenameAgent_unicodeNameAndInvalid400(t *testing.T) {

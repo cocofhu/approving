@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/config"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"

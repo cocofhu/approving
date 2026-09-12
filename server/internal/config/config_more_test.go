@@ -38,7 +38,7 @@ func TestTTLAndDurationGetters(t *testing.T) {
 
 func TestMergeEnvListViaEnv(t *testing.T) {
 	c := &Config{}
-	t.Setenv("APPROVING_SANDBOX_ENV", "A=1, B=2 , =skip, C , D=3")
+	t.Setenv("GRASP_SANDBOX_ENV", "A=1, B=2 , =skip, C , D=3")
 	applyEnvOverrides(c)
 	if c.Sandbox.Env["A"] != "1" || c.Sandbox.Env["B"] != "2" || c.Sandbox.Env["D"] != "3" {
 		t.Fatalf("env merge: %+v", c.Sandbox.Env)
@@ -52,8 +52,8 @@ func TestMergeEnvListViaEnv(t *testing.T) {
 }
 
 func TestEnvIntInvalidAndFirst(t *testing.T) {
-	t.Setenv("APPROVING_PORT", "not-a-number")
-	if v := envInt("APPROVING_PORT"); v != 0 {
+	t.Setenv("GRASP_PORT", "not-a-number")
+	if v := envInt("GRASP_PORT"); v != 0 {
 		t.Errorf("invalid int should be 0, got %d", v)
 	}
 	if first("", "", "x", "y") != "x" {
@@ -66,19 +66,19 @@ func TestEnvIntInvalidAndFirst(t *testing.T) {
 
 func TestApplyAllEnvOverrides(t *testing.T) {
 	c := &Config{}
-	t.Setenv("APPROVING_MCP_ADVERTISE", "http://adv")
-	t.Setenv("APPROVING_DB", "/db")
-	t.Setenv("APPROVING_EXEC_PROVIDER", "cursor")
-	t.Setenv("APPROVING_MAX_RUNS", "7")
-	t.Setenv("APPROVING_PROFILES_ROOT", "/pr")
-	t.Setenv("APPROVING_CURSOR_AUTH", "/auth")
-	t.Setenv("APPROVING_AGENT_TIMEOUT_SEC", "11")
-	t.Setenv("APPROVING_CHAT_IDLE_SEC", "12")
-	t.Setenv("APPROVING_SANDBOX_MAX_ATTEMPTS", "4")
-	t.Setenv("APPROVING_SANDBOX_RETRY_BACKOFF_SEC", "3")
-	t.Setenv("APPROVING_SANDBOX_WORK_DIR", "/wd")
-	t.Setenv("APPROVING_STORAGE_DRIVER", "local")
-	t.Setenv("APPROVING_BLOBS_ROOT", "/blobs")
+	t.Setenv("GRASP_MCP_ADVERTISE", "http://adv")
+	t.Setenv("GRASP_DB", "/db")
+	t.Setenv("GRASP_EXEC_PROVIDER", "cursor")
+	t.Setenv("GRASP_MAX_RUNS", "7")
+	t.Setenv("GRASP_PROFILES_ROOT", "/pr")
+	t.Setenv("GRASP_CURSOR_AUTH", "/auth")
+	t.Setenv("GRASP_AGENT_TIMEOUT_SEC", "11")
+	t.Setenv("GRASP_CHAT_IDLE_SEC", "12")
+	t.Setenv("GRASP_SANDBOX_MAX_ATTEMPTS", "4")
+	t.Setenv("GRASP_SANDBOX_RETRY_BACKOFF_SEC", "3")
+	t.Setenv("GRASP_SANDBOX_WORK_DIR", "/wd")
+	t.Setenv("GRASP_STORAGE_DRIVER", "local")
+	t.Setenv("GRASP_BLOBS_ROOT", "/blobs")
 	applyEnvOverrides(c)
 	if c.Server.MCPAdvertise != "http://adv" || c.Database.Path != "/db" ||
 		c.Engine.ExecProvider != "cursor" || c.Engine.MaxConcurrentRuns != 7 ||

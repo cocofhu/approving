@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/envauth"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/envauth"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/sandbox"
 
 	"github.com/rs/zerolog/log"
 )
@@ -697,10 +697,10 @@ func (s *SandboxService) mcpVars(runID, token string) map[string]string {
 		url = base + "/mcp/runs/" + runID
 	}
 	return map[string]string{
-		"APPROVING_ARTIFACT_URL":   url,
-		"APPROVING_ARTIFACT_TOKEN": token,
-		"APPROVING_RUN_ID":         runID,
-		"APPROVING_NODE_ID":        "test",
+		"GRASP_ARTIFACT_URL":   url,
+		"GRASP_ARTIFACT_TOKEN": token,
+		"GRASP_RUN_ID":         runID,
+		"GRASP_NODE_ID":        "test",
 	}
 }
 
@@ -715,9 +715,9 @@ func (s *SandboxService) testMcpVars(runID, token, projectID, profile string) ma
 	if base == "" {
 		return vars
 	}
-	vars["APPROVING_SCHEDULER_URL"] = config.RewriteMisconfiguredMCPAdvertise(
+	vars["GRASP_SCHEDULER_URL"] = config.RewriteMisconfiguredMCPAdvertise(
 		base + "/mcp/task-scheduler/" + url.PathEscape(profile))
-	vars["APPROVING_SCHEDULER_TOKEN"] = token
+	vars["GRASP_SCHEDULER_TOKEN"] = token
 	return vars
 }
 

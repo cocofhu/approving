@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	gatenode "github.com/cocofhu/grasp/internal/models/nodereg"
 
 	"github.com/rs/zerolog/log"
 )

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func seedHumanGate(t *testing.T, h *harness, runID, nodeID string, actions []models.GateAction) {

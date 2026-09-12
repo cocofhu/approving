@@ -581,7 +581,7 @@ const hasArtifact = computed(() => draft.value.mcp.some((m) => m.name.trim() ===
                       <input
                         v-model="m.url"
                         class="rounded-md mb-2 w-full border border-line bg-base px-2 py-1.5 font-mono text-[11px] text-txt outline-none focus:border-accent"
-                        placeholder="${APPROVING_ARTIFACT_URL}"
+                        placeholder="${GRASP_ARTIFACT_URL}"
                       />
                       <div class="mb-1 flex items-center justify-between text-[11px] text-txt2">
                         <span>{{ t('pages.agentStudio.teamWizard.mcp.headers') }}</span>

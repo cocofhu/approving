@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/textutil"
 )
 
 // gitBaseURL returns the scheme://host origin of an http(s) repo URL, used to

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/pmmcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/pmmcp"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func attachPm(t *testing.T, hn *harness) *services.PmService {
@@ -50,7 +50,7 @@ func TestSaveAgentRejectsPlatformMCPWithoutProject(t *testing.T) {
 	w := hn.do(http.MethodPost, "/api/agents", map[string]any{
 		"name": "no-home",
 		"mcp": []map[string]any{
-			{"name": "memory-store", "url": "${APPROVING_MEMORY_URL}"},
+			{"name": "memory-store", "url": "${GRASP_MEMORY_URL}"},
 		},
 	})
 	if w.Code != http.StatusBadRequest {
@@ -64,7 +64,7 @@ func TestSaveAgentRejectsPlatformMCPWithoutProject(t *testing.T) {
 	w = hn.do(http.MethodPut, "/api/agents/no-home", map[string]any{
 		"name": "no-home",
 		"mcp": []map[string]any{
-			{"name": "context-store", "url": "${APPROVING_CONTEXT_URL}"},
+			{"name": "context-store", "url": "${GRASP_CONTEXT_URL}"},
 		},
 	})
 	if w.Code != http.StatusBadRequest {
@@ -494,7 +494,7 @@ func TestPatchAgentProjectSwitchPurgesAndKeepsWorkspace(t *testing.T) {
 			{"path": "notes.md", "content": "keep\n"},
 		},
 		"mcp": []map[string]any{
-			{"name": "artifact-store", "url": "${APPROVING_ARTIFACT_URL}"},
+			{"name": "artifact-store", "url": "${GRASP_ARTIFACT_URL}"},
 		},
 	})
 	if w.Code != http.StatusCreated {
@@ -573,7 +573,7 @@ func TestPmLeaderBindRejectsWrongHomeProject(t *testing.T) {
 
 	if err := hn.h.Agents.Save(services.Agent{
 		Name: "elsewhere", ProjectID: other["id"].(string),
-		Env: map[string]string{"APPROVING_CURSOR_API_KEY": "k"},
+		Env: map[string]string{"GRASP_CURSOR_API_KEY": "k"},
 	}); err != nil {
 		t.Fatal(err)
 	}

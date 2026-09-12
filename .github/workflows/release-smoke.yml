@@ -4,7 +4,7 @@ name: release-smoke
 # Trigger: workflow_dispatch only (Actions → release-smoke → Run workflow).
 # Intentionally NOT on push tags: beta/v* tags without release secrets would fail.
 # Intentionally NOT on pull_request: pulls multi-GB digest images via secrets
-# APPROVING_IMAGE / SANDBOX_GATEWAY_IMAGE / SANDBOX_IMAGE — do not make this a
+# GRASP_IMAGE / SANDBOX_GATEWAY_IMAGE / SANDBOX_IMAGE — do not make this a
 # per-PR required check. Optional weekly/nightly schedule is a future maintainer
 # choice, not a merge gate.
 # Local: export the three digest refs, then ./release-smoke.sh (see CONTRIBUTING).
@@ -18,14 +18,14 @@ jobs:
       - uses: actions/checkout@v7
       - name: Require digest-pinned images
         env:
-          APPROVING_IMAGE: ${{ secrets.APPROVING_IMAGE }}
+          GRASP_IMAGE: ${{ secrets.GRASP_IMAGE }}
           SANDBOX_GATEWAY_IMAGE: ${{ secrets.SANDBOX_GATEWAY_IMAGE }}
           SANDBOX_IMAGE: ${{ secrets.SANDBOX_IMAGE }}
         run: |
-          test -n "$APPROVING_IMAGE"
+          test -n "$GRASP_IMAGE"
           test -n "$SANDBOX_GATEWAY_IMAGE"
           test -n "$SANDBOX_IMAGE"
-          export APPROVING_IMAGE SANDBOX_GATEWAY_IMAGE SANDBOX_IMAGE
+          export GRASP_IMAGE SANDBOX_GATEWAY_IMAGE SANDBOX_IMAGE
           ./release-smoke.sh
       - uses: actions/upload-artifact@v7
         if: always()

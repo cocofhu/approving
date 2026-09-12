@@ -14,33 +14,34 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/browser"
-	"github.com/cocofhu/approving/internal/channels"
-	"github.com/cocofhu/approving/internal/channels/dingtalk"
-	"github.com/cocofhu/approving/internal/channels/feishu"
-	"github.com/cocofhu/approving/internal/channels/qq"
-	"github.com/cocofhu/approving/internal/channels/wecom"
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/contextmcp"
-	"github.com/cocofhu/approving/internal/crypto"
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/engine"
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/handlers"
-	"github.com/cocofhu/approving/internal/logging"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/memorymcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/opencodecatalog"
-	"github.com/cocofhu/approving/internal/pmmcp"
-	"github.com/cocofhu/approving/internal/router"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/schedulermcp"
-	"github.com/cocofhu/approving/internal/services"
-	"github.com/cocofhu/approving/internal/shutdown"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/browser"
+	"github.com/cocofhu/grasp/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels/dingtalk"
+	"github.com/cocofhu/grasp/internal/channels/feishu"
+	"github.com/cocofhu/grasp/internal/channels/qq"
+	"github.com/cocofhu/grasp/internal/channels/wecom"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/contextmcp"
+	"github.com/cocofhu/grasp/internal/crypto"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/engine"
+	"github.com/cocofhu/grasp/internal/envcompat"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/handlers"
+	"github.com/cocofhu/grasp/internal/logging"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/memorymcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/opencodecatalog"
+	"github.com/cocofhu/grasp/internal/pmmcp"
+	"github.com/cocofhu/grasp/internal/router"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/schedulermcp"
+	"github.com/cocofhu/grasp/internal/services"
+	"github.com/cocofhu/grasp/internal/shutdown"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -48,6 +49,12 @@ import (
 
 func main() {
 	logging.Setup()
+
+	// COMPAT(approving→grasp): remove after next minor.
+	envcompat.RewriteNearbyEnvFiles()
+	if n := envcompat.PromoteProcessEnv(); n > 0 {
+		log.Info().Int("count", n).Msg("COMPAT(approving→grasp): promoted APPROVING_* process env to GRASP_*")
+	}
 
 	// Config: single YAML file (CONFIG_PATH, default "config.yaml"); on K8s
 	// it is typically mounted from a ConfigMap at deploy time.
@@ -64,7 +71,7 @@ func main() {
 	cfg := config.GetConfig()
 
 	// At-rest secret encryption reads its key from the live config (security.
-	// secrets_key, with APPROVING_SECRETS_KEY env override) so channel credentials
+	// secrets_key, with GRASP_SECRETS_KEY env override) so channel credentials
 	// stay encrypted in the DB and the key is managed like any other config value.
 	crypto.SetKeySource(func() string {
 		c := config.GetConfig()
