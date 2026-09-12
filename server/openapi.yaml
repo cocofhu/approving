@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: approving Platform API (partial)
+  title: Grasp Platform API (partial)
   version: 0.1.0
   description: |
     Minimal OpenAPI contract for platform list endpoints. This file is introduced

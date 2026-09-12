@@ -90,7 +90,7 @@ describe('WizardApiKeyStepPanel custom config editor', () => {
       authGuide: guide,
       primaryAuthKey: guide.keys[0].key,
       primaryAuthAlt: guide.keys[0].alt ?? '',
-      env: { APPROVING_OPENCODE_PROVIDER: 'custom' },
+      env: { GRASP_OPENCODE_PROVIDER: 'custom' },
     })
     expect(wrapper.find('[data-test="opencode-provider-fields"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="opencode-base-required"]').exists()).toBe(true)

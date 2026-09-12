@@ -168,12 +168,12 @@ describe('assembleCreatePayload', () => {
     d.name = 'x'
     d.acpBackend = 'trae'
     d.env = [
-      { k: 'APPROVING_CODEBUDDY_REGION', v: 'internal' },
-      { k: 'APPROVING_TRAE_REGION', v: 'bad' },
+      { k: 'GRASP_CODEBUDDY_REGION', v: 'internal' },
+      { k: 'GRASP_TRAE_REGION', v: 'bad' },
       { k: 'OTHER', v: 'ok' },
     ]
     const payload = assembleCreatePayload(d)
-    expect(payload.env).toEqual({ APPROVING_TRAE_REGION: 'intl', OTHER: 'ok' })
+    expect(payload.env).toEqual({ GRASP_TRAE_REGION: 'intl', OTHER: 'ok' })
     expect(payload).not.toHaveProperty('region')
   })
 
@@ -182,7 +182,7 @@ describe('assembleCreatePayload', () => {
     d.name = 'x'
     d.authMode = 'apiKey'
     d.env = [
-      { k: 'APPROVING_CURSOR_API_KEY', v: 'sk-test' },
+      { k: 'GRASP_CURSOR_API_KEY', v: 'sk-test' },
       { k: 'GITLAB_TOKEN', v: 'glpat-x' },
       { k: 'GIT_REPOS', v: 'app|https://gitlab.com/a/b.git' },
       { k: 'FEATURE_FLAG', v: '1' },
@@ -241,7 +241,7 @@ describe('hasPathDeps / buildReviewSummary', () => {
     d.name = 'n'
     d.acpBackend = 'cursor'
     d.startPath = 'cli'
-    d.env = [{ k: 'APPROVING_CURSOR_API_KEY', v: 'crsr_demo' }]
+    d.env = [{ k: 'GRASP_CURSOR_API_KEY', v: 'crsr_demo' }]
     const items = buildReviewSummary(d)
     expect(items.find((i) => i.key === 'apiKey')?.kind).toBe('ok')
     expect(items.find((i) => i.key === 'authReminder')).toBeUndefined()
@@ -253,10 +253,10 @@ describe('hasPathDeps / buildReviewSummary', () => {
     d.acpBackend = 'claude_code'
     d.authMode = 'customConfig'
     d.customConfigContent = JSON.stringify({ env: { ANTHROPIC_API_KEY: 'sk-ant-x' } })
-    d.env = [{ k: 'APPROVING_CLAUDE_API_KEY', v: 'should-strip' }]
+    d.env = [{ k: 'GRASP_CLAUDE_API_KEY', v: 'should-strip' }]
     const payload = assembleCreatePayload(d)
     expect(payload.files?.some((f) => f.path === AGENT_SETTINGS_PATH)).toBe(true)
-    expect(payload.env?.APPROVING_CLAUDE_API_KEY).toBeUndefined()
+    expect(payload.env?.GRASP_CLAUDE_API_KEY).toBeUndefined()
     const items = buildReviewSummary(d)
     expect(items.find((i) => i.key === 'apiKey')?.labelKey).toBe(
       'pages.agentStudio.wizard.review.customConfigWritten',
@@ -269,12 +269,12 @@ describe('hasPathDeps / buildReviewSummary', () => {
     applyAcpBackend(d, 'opencode')
     d.authMode = 'customConfig'
     d.customConfigContent = JSON.stringify({ model: 'openai/gpt-4.1' })
-    d.env.push({ k: 'APPROVING_OPENCODE_API_KEY', v: 'should-strip' })
+    d.env.push({ k: 'GRASP_OPENCODE_API_KEY', v: 'should-strip' })
     const payload = assembleCreatePayload(d)
     expect(payload.files?.some((f) => f.path === AGENT_OPENCODE_CONFIG_REL_PATH)).toBe(true)
     expect(payload.files?.some((f) => f.path === AGENT_SETTINGS_PATH)).toBe(false)
-    expect(payload.env?.APPROVING_OPENCODE_API_KEY).toBeUndefined()
-    expect(payload.env?.APPROVING_OPENCODE_PROVIDER).toBe('openai')
+    expect(payload.env?.GRASP_OPENCODE_API_KEY).toBeUndefined()
+    expect(payload.env?.GRASP_OPENCODE_PROVIDER).toBe('openai')
   })
 
   it('rejects invalid custom config json', () => {
@@ -286,14 +286,14 @@ describe('hasPathDeps / buildReviewSummary', () => {
     const d = freshDraft()
     applyAcpBackend(d, 'opencode')
     expect(d.configRoot).toBe('/root/.config/opencode')
-    expect(d.env).toContainEqual({ k: 'APPROVING_OPENCODE_PROVIDER', v: 'openai' })
+    expect(d.env).toContainEqual({ k: 'GRASP_OPENCODE_PROVIDER', v: 'openai' })
     applyAcpBackend(d, 'codebuddy')
-    expect(d.env).toContainEqual({ k: 'APPROVING_CODEBUDDY_REGION', v: 'public' })
+    expect(d.env).toContainEqual({ k: 'GRASP_CODEBUDDY_REGION', v: 'public' })
     d.env.push({ k: 'CUSTOM', v: '1' })
     applyAcpBackend(d, 'trae')
     expect(d.env).toEqual([
       { k: 'CUSTOM', v: '1' },
-      { k: 'APPROVING_TRAE_REGION', v: 'intl' },
+      { k: 'GRASP_TRAE_REGION', v: 'intl' },
     ])
     expect(envConfiguredCount(d)).toBe(1)
     expect(buildReviewSummary(d).find((item) => item.key === 'region')).toMatchObject({

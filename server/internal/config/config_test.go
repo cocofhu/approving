@@ -14,8 +14,8 @@ func TestSetDefaults(t *testing.T) {
 	if c.Server.Port != 8080 {
 		t.Errorf("default port = %d, want 8080", c.Server.Port)
 	}
-	if c.Database.Path != "approving.db" {
-		t.Errorf("default db = %q, want approving.db", c.Database.Path)
+	if c.Database.Path != "grasp.db" {
+		t.Errorf("default db = %q, want grasp.db", c.Database.Path)
 	}
 	if c.Engine.ExecProvider != "sandbox" {
 		t.Errorf("default exec_provider = %q, want sandbox", c.Engine.ExecProvider)
@@ -106,19 +106,78 @@ func TestResolveMCPAdvertiseFallsBack(t *testing.T) {
 
 func TestApplyEnvOverrides(t *testing.T) {
 	c := &Config{}
-	t.Setenv("APPROVING_PORT", "7000")
-	t.Setenv("APPROVING_CURSOR_API_KEY", "crsr_env")
-	t.Setenv("APPROVING_SANDBOX_IMAGE", "env/img:1")
+	t.Setenv("GRASP_PORT", "7000")
+	t.Setenv("GRASP_CURSOR_API_KEY", "crsr_env")
+	t.Setenv("GRASP_SANDBOX_IMAGE", "env/img:1")
 	applyEnvOverrides(c)
 
 	if c.Server.Port != 7000 {
-		t.Errorf("APPROVING_PORT not applied: %d", c.Server.Port)
+		t.Errorf("GRASP_PORT not applied: %d", c.Server.Port)
 	}
 	if c.Sandbox.CursorAPIKey != "crsr_env" {
-		t.Errorf("APPROVING_CURSOR_API_KEY not applied: %q", c.Sandbox.CursorAPIKey)
+		t.Errorf("GRASP_CURSOR_API_KEY not applied: %q", c.Sandbox.CursorAPIKey)
 	}
 	if c.Sandbox.Image != "env/img:1" {
-		t.Errorf("APPROVING_SANDBOX_IMAGE not applied: %q", c.Sandbox.Image)
+		t.Errorf("GRASP_SANDBOX_IMAGE not applied: %q", c.Sandbox.Image)
+	}
+}
+
+func TestApplyEnvOverridesLegacyApproving(t *testing.T) {
+	c := &Config{}
+	t.Setenv("GRASP_PORT", "")
+	t.Setenv("APPROVING_PORT", "7001")
+	applyEnvOverrides(c)
+	if c.Server.Port != 7001 {
+		t.Errorf("legacy APPROVING_PORT not applied: %d", c.Server.Port)
+	}
+}
+
+func TestApplyEnvOverridesGraspWinsOverApproving(t *testing.T) {
+	c := &Config{}
+	t.Setenv("GRASP_PORT", "8111")
+	t.Setenv("APPROVING_PORT", "7001")
+	applyEnvOverrides(c)
+	if c.Server.Port != 8111 {
+		t.Errorf("GRASP_PORT should win: %d", c.Server.Port)
+	}
+}
+
+func TestMigrateLegacyDefaultsRenamesDB(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("approving.db", []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Config{Database: DatabaseConfig{Path: "grasp.db"}}
+	migrateLegacyDefaults(c)
+	if c.Database.Path != "grasp.db" {
+		t.Fatalf("path = %q", c.Database.Path)
+	}
+	if _, err := os.Stat("grasp.db"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat("approving.db"); !os.IsNotExist(err) {
+		t.Fatal("old db should be gone")
+	}
+}
+
+func TestMigrateLegacyDefaultsDoesNotClobber(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("approving.db", []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("grasp.db", []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Config{Database: DatabaseConfig{Path: "grasp.db"}}
+	migrateLegacyDefaults(c)
+	data, err := os.ReadFile("grasp.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Fatalf("clobbered grasp.db: %q", data)
 	}
 }
 
@@ -133,7 +192,7 @@ func TestApplyEnvOverridesBareSecretName(t *testing.T) {
 
 func TestApplyEnvOverridesEmptyDoesNotOverwrite(t *testing.T) {
 	c := &Config{Sandbox: SandboxConfig{CursorAPIKey: "keep"}}
-	t.Setenv("APPROVING_CURSOR_API_KEY", "")
+	t.Setenv("GRASP_CURSOR_API_KEY", "")
 	t.Setenv("CURSOR_API_KEY", "")
 	applyEnvOverrides(c)
 	if c.Sandbox.CursorAPIKey != "keep" {
@@ -161,8 +220,8 @@ sandbox:
 		t.Fatal(err)
 	}
 	// env wins over file for port + the cursor secret.
-	t.Setenv("APPROVING_PORT", "7777")
-	t.Setenv("APPROVING_CURSOR_API_KEY", "env_key")
+	t.Setenv("GRASP_PORT", "7777")
+	t.Setenv("GRASP_CURSOR_API_KEY", "env_key")
 
 	if err := Load(path); err != nil {
 		t.Fatalf("Load: %v", err)

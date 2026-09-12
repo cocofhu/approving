@@ -3,7 +3,7 @@ package nodereg
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestGatePrimaryUpstreamNodeID(t *testing.T) {

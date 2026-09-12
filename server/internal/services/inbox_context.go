@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 var gateBodyNodeRef = regexp.MustCompile(`\{\{\s*nodes\.([^.}\s]+)\.outputs\.`)

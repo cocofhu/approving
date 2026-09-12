@@ -14,19 +14,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/engine"
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/handlers"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/router"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/sandbox/sandboxtest"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/engine"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/handlers"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/router"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox/sandboxtest"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -1792,7 +1792,7 @@ func TestNodeEventsLiveReadFailureReturnsSoftFail(t *testing.T) {
 }
 
 func TestDoctorArtifactSessionIsLoopbackAndTokenProtected(t *testing.T) {
-	t.Setenv("APPROVING_DOCTOR_TOKEN", "doctor-secret")
+	t.Setenv("GRASP_DOCTOR_TOKEN", "doctor-secret")
 	h := newHarness(t)
 
 	request := func(method, path string, headers map[string]string, remoteAddr string) *httptest.ResponseRecorder {

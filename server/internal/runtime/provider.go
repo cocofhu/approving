@@ -9,10 +9,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 // Options configures the execution providers (mainly the sandbox backend).
@@ -351,7 +351,7 @@ type SandboxRegistrar interface {
 }
 
 // NewProvider builds the multi-backend ProviderRegistry. The name argument is
-// kept for backward compatibility; APPROVING_EXEC_PROVIDER is deprecated and
+// kept for backward compatibility; GRASP_EXEC_PROVIDER is deprecated and
 // routing is driven by each Agent's acpBackend field.
 func NewProvider(name string, host *mcp.Host, opts Options) ExecProvider {
 	WarnDeprecatedExecProvider(name)

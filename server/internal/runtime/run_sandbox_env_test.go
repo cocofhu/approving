@@ -6,12 +6,12 @@ func TestIsDeniedRunSandboxEnvKey(t *testing.T) {
 	denied := []string{
 		"CURSOR_API_KEY", "ANTHROPIC_API_KEY", "CODEBUDDY_API_KEY", "TRAE_API_KEY",
 		EnvTraeCLIToken,
-		"APPROVING_CURSOR_API_KEY", "APPROVING_CLAUDE_API_KEY",
-		"APPROVING_CODEBUDDY_API_KEY", "APPROVING_TRAE_API_KEY",
-		"APPROVING_OPENCODE_API_KEY", "OPENCODE_API_KEY",
+		"GRASP_CURSOR_API_KEY", "GRASP_CLAUDE_API_KEY",
+		"GRASP_CODEBUDDY_API_KEY", "GRASP_TRAE_API_KEY",
+		"GRASP_OPENCODE_API_KEY", "OPENCODE_API_KEY",
 		"PASSWORD", "ROOT_PASSWORD", "ACP_BRIDGE_PASSWORD", "CURSOR_ACP_PASSWORD",
-		"APPROVING_ARTIFACT_URL", "APPROVING_ARTIFACT_TOKEN", "APPROVING_ARTIFACT_FOO",
-		"APPROVING_RUN_ID", "APPROVING_NODE_ID",
+		"GRASP_ARTIFACT_URL", "GRASP_ARTIFACT_TOKEN", "GRASP_ARTIFACT_FOO",
+		"GRASP_RUN_ID", "GRASP_NODE_ID",
 		"ACP_BACKEND", "CONFIG_ROOT", "SSH_KEY", "GIT_REPOS",
 	}
 	for _, k := range denied {
@@ -19,7 +19,7 @@ func TestIsDeniedRunSandboxEnvKey(t *testing.T) {
 			t.Fatalf("expected denied: %s", k)
 		}
 	}
-	allowed := []string{"LOG_LEVEL", "FEATURE_FLAG", "DB_PASSWORD", "MY_APPROVING_CUSTOM", ""}
+	allowed := []string{"LOG_LEVEL", "FEATURE_FLAG", "DB_PASSWORD", "MY_GRASP_CUSTOM", ""}
 	for _, k := range allowed {
 		if IsDeniedRunSandboxEnvKey(k) {
 			t.Fatalf("expected allowed: %q", k)

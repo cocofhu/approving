@@ -3,7 +3,7 @@ package runtime
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // artifactKind infers an artifact kind from its file name.

@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/gorilla/websocket"
 )

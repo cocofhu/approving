@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

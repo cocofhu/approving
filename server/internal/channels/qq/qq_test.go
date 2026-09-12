@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 func TestIsImageAttachment(t *testing.T) {

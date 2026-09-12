@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
 	"gorm.io/driver/mysql"

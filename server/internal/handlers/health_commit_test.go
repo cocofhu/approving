@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/version"
+	"github.com/cocofhu/grasp/internal/version"
 )
 
 func TestHealthCommitOptional(t *testing.T) {

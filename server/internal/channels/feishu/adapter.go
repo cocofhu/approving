@@ -15,7 +15,7 @@ import (
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 	"github.com/rs/zerolog/log"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 // Adapter is the Feishu/Lark long-connection channel adapter.

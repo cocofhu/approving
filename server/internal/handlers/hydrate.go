@@ -3,7 +3,7 @@ package handlers
 import (
 	"fmt"
 
-	"github.com/cocofhu/approving/internal/mcp/structured"
+	"github.com/cocofhu/grasp/internal/mcp/structured"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"

@@ -8,7 +8,7 @@
 #   server/scripts/gen-auth-hash.sh                    # prompt for password
 #
 # Output: bcrypt hash, plus an auth.users YAML snippet ready to paste into
-# config.yaml or APPROVING_AUTH_USERS.
+# config.yaml or GRASP_AUTH_USERS.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

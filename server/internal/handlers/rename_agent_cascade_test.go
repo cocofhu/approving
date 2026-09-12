@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func TestRenameAgent_cascadesWorkflowAndReturnsCount(t *testing.T) {

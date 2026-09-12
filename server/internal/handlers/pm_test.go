@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/pmmcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/pmmcp"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func TestPmLeaderBindingMemoryAndThreadGate(t *testing.T) {
@@ -852,7 +852,7 @@ func setupPmEnabledHarness(t *testing.T) (*harness, string, string) {
 	_ = json.Unmarshal(w.Body.Bytes(), &proj)
 	pid := proj["id"].(string)
 	// A PM Leader must have this project as its home project (Agent↔project binding).
-	if err := hn.h.Agents.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}}); err != nil {
+	if err := hn.h.Agents.Save(services.Agent{Name: "pm-agent", ProjectID: pid, Env: map[string]string{"GRASP_CURSOR_API_KEY": "test-key"}}); err != nil {
 		t.Fatal(err)
 	}
 	w = hn.do(http.MethodPut, "/api/projects/"+pid+"/pm-leader", map[string]any{

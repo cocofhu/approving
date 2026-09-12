@@ -4,6 +4,21 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- **Breaking:** rename the public package, image, and env prefix from Approving
+  / `APPROVING_*` to Grasp / `GRASP_*`. Go module is now
+  `github.com/cocofhu/grasp`; the app image is `ghcr.io/cocofhu/grasp`; compose
+  service / binaries are `grasp` / `/app/grasp` / `/app/grasp-server`; default
+  SQLite file is `grasp.db`.
+- This release auto-migrates old config: the control-plane server rewrites
+  `APPROVING_*` keys in nearby `.env` files on boot and still reads
+  `APPROVING_*` (GRASP wins when both are set). `./start.sh` only exports
+  aliases for compose interpolation. Default `approving.db` / `.approving`
+  are renamed when the new path is free. The local-demo gateway key is
+  `grasp-local-demo` and still accepts `approving-local-demo`.
+- **Next release removes this compatibility.** Update compose, agent env
+  templates, and secrets to `GRASP_*` now. Custom agent env that still
+  injects `APPROVING_*` will not be dual-emitted into sandboxes.
+
 ## 0.3.13-beta — 2026-09-11
 
 - OpenCode models that models.dev does not describe can opt into image input

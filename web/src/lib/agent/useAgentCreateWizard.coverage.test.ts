@@ -125,7 +125,7 @@ describe('useAgentCreateWizard coverage', () => {
     wizard.selectAcp('cursor')
     wizard.selectAcp('claude_code')
     expect(wizard.draft.value.acpBackend).toBe('claude_code')
-    expect(wizard.primaryAuthKey.value).toBe('APPROVING_CLAUDE_API_KEY')
+    expect(wizard.primaryAuthKey.value).toBe('GRASP_CLAUDE_API_KEY')
     wizard.draft.value.skills.push({ name: 'skill', content: '' })
     wizard.selectAcp('trae')
     expect(wizard.draft.value.acpBackend).toBe('claude_code')

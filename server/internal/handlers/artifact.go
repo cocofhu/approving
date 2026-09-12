@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/cocofhu/approving/internal/engine"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/engine"
+	"github.com/cocofhu/grasp/internal/services"
 	"github.com/gin-gonic/gin"
 )
 

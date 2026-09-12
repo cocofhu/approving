@@ -88,7 +88,7 @@ func TestParseOptionsRejectsUnexpectedArguments(t *testing.T) {
 }
 
 func TestParseOptionsRequiresDoctorTokenForDemo(t *testing.T) {
-	t.Setenv("APPROVING_DOCTOR_TOKEN", "")
+	t.Setenv("GRASP_DOCTOR_TOKEN", "")
 	if _, err := parseOptions([]string{"doctor", "--run-demo"}); err == nil {
 		t.Fatal("expected missing doctor token error")
 	}

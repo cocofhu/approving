@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/database"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/database"
 )
 
 type fakeConc struct {
@@ -77,7 +77,7 @@ func TestSettingsServiceEnvLocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.StoreConfig(&config.Config{Engine: config.EngineConfig{MaxConcurrentRuns: 5}})
-	t.Setenv("APPROVING_MAX_RUNS", "9")
+	t.Setenv("GRASP_MAX_RUNS", "9")
 	conc := &fakeConc{}
 	svc := NewSettingsService(db, conc, nil)
 	items := svc.Effective()
@@ -99,7 +99,7 @@ func TestSettingsServiceEnvLocked(t *testing.T) {
 	if conc.max != 0 && conc.max != items[0].Value {
 		// apply uses effective env value
 	}
-	os.Unsetenv("APPROVING_MAX_RUNS")
+	os.Unsetenv("GRASP_MAX_RUNS")
 }
 
 func TestSettingsServiceDBOverride(t *testing.T) {

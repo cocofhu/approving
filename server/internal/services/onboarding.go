@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/sandbox"
 
 	"github.com/google/uuid"
 )
@@ -390,15 +390,15 @@ func boolOrDefault(p *bool, def bool) bool {
 func primaryAuthEnvKey(backend string) string {
 	switch NormalizeAcpBackend(backend) {
 	case AcpBackendClaudeCode:
-		return "APPROVING_CLAUDE_API_KEY"
+		return "GRASP_CLAUDE_API_KEY"
 	case AcpBackendCodeBuddy:
-		return "APPROVING_CODEBUDDY_API_KEY"
+		return "GRASP_CODEBUDDY_API_KEY"
 	case AcpBackendTrae:
-		return "APPROVING_TRAE_API_KEY"
+		return "GRASP_TRAE_API_KEY"
 	case AcpBackendOpenCode:
-		return "APPROVING_OPENCODE_API_KEY"
+		return "GRASP_OPENCODE_API_KEY"
 	default:
-		return "APPROVING_CURSOR_API_KEY"
+		return "GRASP_CURSOR_API_KEY"
 	}
 }
 

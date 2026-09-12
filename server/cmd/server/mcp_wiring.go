@@ -3,14 +3,14 @@ package main
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/channels"
-	"github.com/cocofhu/approving/internal/contextmcp"
-	"github.com/cocofhu/approving/internal/memorymcp"
-	"github.com/cocofhu/approving/internal/platformmcp"
-	"github.com/cocofhu/approving/internal/pmmcp"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/schedulermcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/channels"
+	"github.com/cocofhu/grasp/internal/contextmcp"
+	"github.com/cocofhu/grasp/internal/memorymcp"
+	"github.com/cocofhu/grasp/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/pmmcp"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/schedulermcp"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/rs/zerolog/log"
 )

@@ -16,7 +16,7 @@
 server:
   port: 8080
   # 本文件仅用于 loopback 本地演示。非本地部署改为 production，并通过
-  # APPROVING_AUTH_USERS 注入自有账号哈希。
+  # GRASP_AUTH_USERS 注入自有账号哈希。
   deployment_mode: local-demo
   # 沙箱内 agent / MCP 客户端回连宿主 run 级 artifact-store MCP 的 base URL。
   # 留空默认 http://host.docker.internal:<port>(本地 Docker / DinD 预览可用)。
@@ -31,8 +31,8 @@ server:
   mcp_advertise: ""
 
 database:
-  # SQLite 路径(":memory:" 用于测试)。容器内通常用 /data/approving.db(挂持久卷)。
-  path: "approving.db"
+  # SQLite 路径(":memory:" 用于测试)。容器内通常用 /data/grasp.db(挂持久卷)。
+  path: "grasp.db"
 
 engine:
   # exec_provider 默认中性的 "sandbox"(代码内 "cursor" 为兼容别名);只有一个
@@ -51,11 +51,11 @@ sandbox:
   # 默认 SKIP_INNER_DOCKER=0(启用 DinD);设为 "1" 则不启动内层 dockerd。
   env: {}
   # ACP 后端密钥与选项(厂商中立入口):合并进沙箱 Env。各键保持后端语义,例如:
-  #   APPROVING_CURSOR_API_KEY — Cursor 后端
+  #   GRASP_CURSOR_API_KEY — Cursor 后端
   #   ANTHROPIC_API_KEY       — Claude Code 后端
   #   CODEBUDDY_API_KEY       — CodeBuddy 后端
   acp_env: {}
-  # deprecated: 请改用 acp_env.APPROVING_CURSOR_API_KEY;计划 0.2.0 移除。
+  # deprecated: 请改用 acp_env.GRASP_CURSOR_API_KEY;计划 0.2.0 移除。
   cursor_api_key: ""
   # deprecated: 参考实现 cursor CLI 登录复用;计划 0.2.0 移除。
   cursor_auth_path: ""
@@ -95,9 +95,9 @@ browser:
   container_idle_ttl_seconds: 600
 
 # 静态账号登录（鉴权始终启用，无 auth.enabled 开关）。下列账号只允许 loopback
-# 本地 demo；任何共享、远程或生产部署都必须通过 APPROVING_AUTH_USERS 显式替换。
+# 本地 demo；任何共享、远程或生产部署都必须通过 GRASP_AUTH_USERS 显式替换。
 # username 可放 ConfigMap；password_hash 必须经 K8s Secret 注入环境变量
-# APPROVING_AUTH_USERS（JSON 数组），禁止明文密码进 git / 配置中心。
+# GRASP_AUTH_USERS（JSON 数组），禁止明文密码进 git / 配置中心。
 # 账号变更后需重启 Pod 生效（config 热加载不刷新内存账号表）。
 auth:
   session_ttl: 168h
@@ -109,7 +109,7 @@ auth:
 # 至此静态安全项。secrets_key 是存储加密主密钥(AES-256),用于加密外部渠道
 # (QQ 等)在 DB 里的 app_secret。视作固定盐:设一次后保持不变,轮换会导致已存
 # 密文无法解密。生成:`head -c 32 /dev/urandom | base64`。生产建议经 K8s Secret
-# 注入环境变量 APPROVING_SECRETS_KEY 覆盖本值,不要把真实密钥提交进 git。
+# 注入环境变量 GRASP_SECRETS_KEY 覆盖本值,不要把真实密钥提交进 git。
 # 留空则无法在 WebUI 保存渠道 app_secret。
 security:
   secrets_key: ""

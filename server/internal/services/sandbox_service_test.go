@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/sandbox/sandboxtest"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/runtime"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox/sandboxtest"
 
 	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
@@ -57,7 +57,7 @@ func newSandboxService(t *testing.T, db *gorm.DB, ds *dockerState) *SandboxServi
 	skillsRoot := t.TempDir()
 	skills := NewAgentService(skillsRoot)
 	// Create an agent so Open can resolve a profile.
-	if err := skills.Save(Agent{Name: "agentA", AcpBackend: AcpBackendCursor, Env: map[string]string{"APPROVING_CURSOR_API_KEY": "test-key"}, Files: []AgentFile{{Path: "rules/a.md", Content: "# a"}}}); err != nil {
+	if err := skills.Save(Agent{Name: "agentA", AcpBackend: AcpBackendCursor, Env: map[string]string{"GRASP_CURSOR_API_KEY": "test-key"}, Files: []AgentFile{{Path: "rules/a.md", Content: "# a"}}}); err != nil {
 		t.Fatal(err)
 	}
 	host := mcp.NewHost(NewArtifactService(db))
@@ -888,7 +888,7 @@ func TestBuildTestSandboxSpecsSchedulerInject(t *testing.T) {
 		},
 	})
 	agent := Agent{
-		MCP: []MCPServer{{Name: "task-scheduler", URL: "${APPROVING_SCHEDULER_URL}"}},
+		MCP: []MCPServer{{Name: "task-scheduler", URL: "${GRASP_SCHEDULER_URL}"}},
 	}
 	vars := s.testMcpVars("run1", "tok", "proj-x", "agentA")
 	specs := s.buildTestSandboxSpecs("proj-x", "agentA", "run1", "tok", agent, vars)
@@ -898,7 +898,7 @@ func TestBuildTestSandboxSpecsSchedulerInject(t *testing.T) {
 	if len(specs) != 1 || specs[0].Name != TaskSchedulerMCP {
 		t.Fatalf("specs = %+v", specs)
 	}
-	if vars["APPROVING_SCHEDULER_URL"] == "" || vars["APPROVING_SCHEDULER_TOKEN"] != "tok" {
+	if vars["GRASP_SCHEDULER_URL"] == "" || vars["GRASP_SCHEDULER_TOKEN"] != "tok" {
 		t.Fatalf("vars = %+v", vars)
 	}
 	s.unregisterTestScheduler("proj-x", "tok")
@@ -1032,11 +1032,11 @@ func TestSandboxMcpVars(t *testing.T) {
 	ds := &dockerState{}
 	s := newSandboxService(t, db, ds)
 	vars := s.mcpVars("run1", "tok")
-	if vars["APPROVING_RUN_ID"] != "run1" || vars["APPROVING_ARTIFACT_TOKEN"] != "tok" {
+	if vars["GRASP_RUN_ID"] != "run1" || vars["GRASP_ARTIFACT_TOKEN"] != "tok" {
 		t.Fatalf("mcpVars: %+v", vars)
 	}
-	if !strings.Contains(vars["APPROVING_ARTIFACT_URL"], "run1") {
-		t.Fatalf("artifact url: %s", vars["APPROVING_ARTIFACT_URL"])
+	if !strings.Contains(vars["GRASP_ARTIFACT_URL"], "run1") {
+		t.Fatalf("artifact url: %s", vars["GRASP_ARTIFACT_URL"])
 	}
 }
 
@@ -1050,8 +1050,8 @@ func TestSandboxMcpVarsUsesLiveConfigPassthrough(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	vars := s.mcpVars("run-spa", "tok")
 	want := "http://api.example.com/mcp/runs/run-spa"
-	if vars["APPROVING_ARTIFACT_URL"] != want {
-		t.Fatalf("APPROVING_ARTIFACT_URL = %q, want %q", vars["APPROVING_ARTIFACT_URL"], want)
+	if vars["GRASP_ARTIFACT_URL"] != want {
+		t.Fatalf("GRASP_ARTIFACT_URL = %q, want %q", vars["GRASP_ARTIFACT_URL"], want)
 	}
 }
 
@@ -1066,8 +1066,8 @@ func TestSandboxMcpVarsUsesOptionsFallbackPassthrough(t *testing.T) {
 	s.mcpEndpoint = "http://api.example.com"
 	vars := s.mcpVars("run-opt", "tok")
 	want := "http://api.example.com/mcp/runs/run-opt"
-	if vars["APPROVING_ARTIFACT_URL"] != want {
-		t.Fatalf("APPROVING_ARTIFACT_URL = %q, want %q", vars["APPROVING_ARTIFACT_URL"], want)
+	if vars["GRASP_ARTIFACT_URL"] != want {
+		t.Fatalf("GRASP_ARTIFACT_URL = %q, want %q", vars["GRASP_ARTIFACT_URL"], want)
 	}
 }
 
@@ -1180,8 +1180,8 @@ func TestSandboxOpenWithEffectiveKeepsNormalizedOpenCodeModel(t *testing.T) {
 		Name:       "agentA",
 		AcpBackend: "opencode",
 		Env: map[string]string{
-			"APPROVING_OPENCODE_API_KEY":  "sk-test",
-			"APPROVING_OPENCODE_PROVIDER": "tencent-tokenhub",
+			"GRASP_OPENCODE_API_KEY":  "sk-test",
+			"GRASP_OPENCODE_PROVIDER": "tencent-tokenhub",
 			"ACP_BRIDGE_MODEL":            "deepseek/deepseek-flash",
 			"BROWSER_MCP":                 "1",
 		},
@@ -1325,16 +1325,16 @@ func TestSandboxHelpers(t *testing.T) {
 
 func TestResolveAgentMCPSubstitutesMergedEnv(t *testing.T) {
 	base := map[string]string{
-		"APPROVING_ARTIFACT_URL":   "http://art",
-		"APPROVING_ARTIFACT_TOKEN": "tok",
+		"GRASP_ARTIFACT_URL":   "http://art",
+		"GRASP_ARTIFACT_TOKEN": "tok",
 	}
 	vars := runtime.MergeEnvIntoTemplateVars(base, map[string]string{
 		"LOG_CENTER_TOKEN":         "secret-from-shared",
-		"APPROVING_ARTIFACT_TOKEN": "evil",
+		"GRASP_ARTIFACT_TOKEN": "evil",
 	})
 	specs := resolveAgentMCP([]MCPServer{
 		{Name: "server-log", URL: "https://logs.example/mcp", Headers: map[string]string{"Authorization": "Bearer ${LOG_CENTER_TOKEN}"}},
-		{Name: "artifact-store", URL: "${APPROVING_ARTIFACT_URL}", Headers: map[string]string{"Authorization": "Bearer ${APPROVING_ARTIFACT_TOKEN}"}},
+		{Name: "artifact-store", URL: "${GRASP_ARTIFACT_URL}", Headers: map[string]string{"Authorization": "Bearer ${GRASP_ARTIFACT_TOKEN}"}},
 	}, vars)
 	if len(specs) != 2 {
 		t.Fatalf("specs=%d", len(specs))

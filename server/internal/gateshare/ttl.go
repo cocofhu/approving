@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // ParseTTLTier returns the duration for a product TTL tier. Empty → 24h default.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"

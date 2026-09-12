@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/channels"
 
 	"github.com/rs/zerolog/log"
 )

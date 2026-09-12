@@ -3,7 +3,7 @@ package runtime
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 // ResolveReposFromVars returns the clone list derived from vars.repos, using

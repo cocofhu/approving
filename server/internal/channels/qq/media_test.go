@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 func TestHostNeedsQQBotAuth(t *testing.T) {

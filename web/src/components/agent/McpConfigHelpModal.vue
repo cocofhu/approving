@@ -77,9 +77,9 @@ function onChip(id: McpHelpSection) {
         <span class="rounded-md border border-info/35 px-1.5 py-px text-[10px] font-medium text-info">{{ t('pages.agentStudio.mcp.runScopeTag') }}</span>
       </h3>
       <div class="grid gap-2 font-mono text-[12px] text-txt3">
-        <div><code class="text-accent-2">${APPROVING_ARTIFACT_URL}</code> — {{ t('pages.agentStudio.mcp.artifactUrl') }}</div>
-        <div><code class="text-accent-2">${APPROVING_ARTIFACT_TOKEN}</code> — {{ t('pages.agentStudio.mcp.artifactToken') }}</div>
-        <div><code class="text-accent-2">${APPROVING_RUN_ID}</code> · <code class="text-accent-2">${APPROVING_NODE_ID}</code></div>
+        <div><code class="text-accent-2">${GRASP_ARTIFACT_URL}</code> — {{ t('pages.agentStudio.mcp.artifactUrl') }}</div>
+        <div><code class="text-accent-2">${GRASP_ARTIFACT_TOKEN}</code> — {{ t('pages.agentStudio.mcp.artifactToken') }}</div>
+        <div><code class="text-accent-2">${GRASP_RUN_ID}</code> · <code class="text-accent-2">${GRASP_NODE_ID}</code></div>
         <div><code class="text-accent-2">${vars.&lt;name&gt;}</code> — {{ t('pages.agentStudio.mcp.globalVar') }}</div>
       </div>
     </section>
@@ -90,9 +90,9 @@ function onChip(id: McpHelpSection) {
         <span class="rounded-md border border-ok/35 px-1.5 py-px text-[10px] font-medium text-ok">{{ t('pages.agentStudio.mcp.agentScopeTag') }}</span>
       </h3>
       <div class="grid gap-2 font-mono text-[12px] text-txt3">
-        <div><code class="text-accent-2">${APPROVING_MEMORY_URL}</code> / <code class="text-accent-2">${APPROVING_MEMORY_TOKEN}</code> — {{ t('pages.agentStudio.mcp.memoryVars') }}</div>
-        <div><code class="text-accent-2">${APPROVING_CONTEXT_URL}</code> / <code class="text-accent-2">${APPROVING_CONTEXT_TOKEN}</code> — {{ t('pages.agentStudio.mcp.contextVars') }}</div>
-        <div><code class="text-accent-2">${APPROVING_SCHEDULER_URL}</code> / <code class="text-accent-2">${APPROVING_SCHEDULER_TOKEN}</code> — {{ t('pages.agentStudio.mcp.schedulerVars') }}</div>
+        <div><code class="text-accent-2">${GRASP_MEMORY_URL}</code> / <code class="text-accent-2">${GRASP_MEMORY_TOKEN}</code> — {{ t('pages.agentStudio.mcp.memoryVars') }}</div>
+        <div><code class="text-accent-2">${GRASP_CONTEXT_URL}</code> / <code class="text-accent-2">${GRASP_CONTEXT_TOKEN}</code> — {{ t('pages.agentStudio.mcp.contextVars') }}</div>
+        <div><code class="text-accent-2">${GRASP_SCHEDULER_URL}</code> / <code class="text-accent-2">${GRASP_SCHEDULER_TOKEN}</code> — {{ t('pages.agentStudio.mcp.schedulerVars') }}</div>
       </div>
       <p class="mt-3 mb-0 text-[12px] leading-[1.7] text-txt3" data-test="mcp-help-agent-scope-note">
         {{ t('pages.agentStudio.mcp.agentScopeNote') }}

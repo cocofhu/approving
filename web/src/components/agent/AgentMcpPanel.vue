@@ -49,8 +49,8 @@ function addArtifactStore() {
   props.draft.mcp.unshift({
     name: ARTIFACT_STORE,
     transport: 'url',
-    url: '${APPROVING_ARTIFACT_URL}',
-    headers: [{ k: 'Authorization', v: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' }],
+    url: '${GRASP_ARTIFACT_URL}',
+    headers: [{ k: 'Authorization', v: 'Bearer ${GRASP_ARTIFACT_TOKEN}' }],
     command: '',
     args: '',
     env: [],

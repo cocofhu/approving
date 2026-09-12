@@ -12,7 +12,7 @@ database:
 
 image:
   # Built from sandbox/Dockerfile in this repo (see sandbox-gateway/README.md).
-  # Override with SBGW_IMAGE / APPROVING_GATEWAY_SANDBOX_IMAGE in the root .env.
+  # Override with SBGW_IMAGE / GRASP_GATEWAY_SANDBOX_IMAGE in the root .env.
   ref: universal-sandbox-cursor:local
   ports:
     session: 8765

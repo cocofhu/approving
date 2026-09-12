@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/platformmcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/platformmcp"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

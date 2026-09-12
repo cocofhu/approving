@@ -3,7 +3,7 @@ package engine
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
 )

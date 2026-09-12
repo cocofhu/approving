@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/runtime"
 
 	"gorm.io/gorm"
 )

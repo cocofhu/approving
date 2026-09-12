@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 // acpTimelineEntry is the platform-side in-memory ACP timeline snapshot for one

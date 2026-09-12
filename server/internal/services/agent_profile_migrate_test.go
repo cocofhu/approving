@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestMigrateAgentProfileInGraph_legacyOnly(t *testing.T) {

@@ -25,7 +25,7 @@ export const ACP_BACKENDS: { id: BackendId; label: string; configRoot: string }[
 
 const REGION_POLICIES: Partial<Record<BackendId, RegionPolicy>> = {
   codebuddy: {
-    regionEnvKey: 'APPROVING_CODEBUDDY_REGION',
+    regionEnvKey: 'GRASP_CODEBUDDY_REGION',
     defaultRegion: 'public',
     options: [
       {
@@ -43,7 +43,7 @@ const REGION_POLICIES: Partial<Record<BackendId, RegionPolicy>> = {
     ],
   },
   trae: {
-    regionEnvKey: 'APPROVING_TRAE_REGION',
+    regionEnvKey: 'GRASP_TRAE_REGION',
     defaultRegion: 'intl',
     options: [
       {

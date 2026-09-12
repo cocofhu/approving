@@ -2,13 +2,13 @@ package services
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/envcompat"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"gorm.io/gorm"
 )
@@ -85,7 +85,7 @@ type knob struct {
 
 func knobs() []knob {
 	return []knob{
-		{KeyMaxConcurrentRuns, "最大并发运行数", "", 1, "APPROVING_MAX_RUNS",
+		{KeyMaxConcurrentRuns, "最大并发运行数", "", 1, "GRASP_MAX_RUNS",
 			func(c *config.Config) int { return c.Engine.MaxConcurrentRuns }},
 		{KeyRunSandboxTTLMin, "运行沙箱保留时长", "分钟", 1, "",
 			func(c *config.Config) int { return c.Sandbox.RunSandboxTTLMinutes }},
@@ -93,7 +93,7 @@ func knobs() []knob {
 			func(c *config.Config) int { return c.Sandbox.TestSandboxTTLMinutes }},
 		{KeyMaxTestSandboxes, "最大测试沙箱数", "", 1, "",
 			func(c *config.Config) int { return c.Sandbox.MaxTestSandboxes }},
-		{KeyNodeAutoRetryMax, "节点自动重试次数", "次", 0, "APPROVING_NODE_AUTO_RETRY",
+		{KeyNodeAutoRetryMax, "节点自动重试次数", "次", 0, "GRASP_NODE_AUTO_RETRY",
 			func(c *config.Config) int { return c.Engine.NodeAutoRetryMax }},
 	}
 }
@@ -137,7 +137,7 @@ func (s *SettingsService) Brand() BrandSettings {
 // is env-locked its config value is exactly the env value.
 func (s *SettingsService) resolve(k knob, cfg *config.Config) (value int, source string, locked bool) {
 	cfgVal := k.fromCfg(cfg)
-	if k.envVar != "" && strings.TrimSpace(os.Getenv(k.envVar)) != "" {
+	if k.envVar != "" && envcompat.Lookup(k.envVar) != "" {
 		return cfgVal, "env", true
 	}
 	if v, ok := s.dbInt(k.key); ok {
@@ -171,7 +171,7 @@ func (s *SettingsService) UpdateWithBrand(patch map[string]int, brand BrandPatch
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		for _, k := range knobs() {
 			v, ok := patch[k.key]
-			if !ok || (k.envVar != "" && strings.TrimSpace(os.Getenv(k.envVar)) != "") {
+			if !ok || (k.envVar != "" && envcompat.Lookup(k.envVar) != "") {
 				continue
 			}
 			if err := setSetting(tx, k.key, strconv.Itoa(v)); err != nil {

@@ -3,7 +3,7 @@ package engine
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // hasRemainingHumanGate reports whether a node with Type=="human_gate" is

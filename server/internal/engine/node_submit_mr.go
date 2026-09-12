@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
-	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/runtime"
 )
 
 // setRunBranch records the run's working branch in both the in-memory execCtx

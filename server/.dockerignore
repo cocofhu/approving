@@ -1,7 +1,7 @@
 # 仅构建业务二进制需要的内容进构建上下文。
 *.db
 data/
-approving-server
+grasp-server
 **/*_test.go
 .git
 .gitignore

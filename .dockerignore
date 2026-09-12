@@ -12,8 +12,8 @@ server/.cache/
 # 运行期数据 / 二进制
 *.db
 server/data/
-approving-server
-server/approving-server
+grasp-server
+server/grasp-server
 
 # 网关与沙箱源码(由 sandbox-gateway/Dockerfile 单独构建)
 sandbox-gateway/

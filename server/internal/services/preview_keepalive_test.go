@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/sandbox/sandboxtest"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox/sandboxtest"
 )
 
 func TestParseKeepalivePID(t *testing.T) {

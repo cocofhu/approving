@@ -1,7 +1,7 @@
 // Package nodereg holds graph-config helpers for human_gate body_template
 // primary-upstream resolution (GatePrimaryUpstreamNodeID).
 //
-// It is unrelated to the node-type registry in github.com/cocofhu/approving/internal/nodereg.
+// It is unrelated to the node-type registry in github.com/cocofhu/grasp/internal/nodereg.
 // Callers that already import internal/nodereg (e.g. engine) should use an
 // import alias such as gatenode to avoid the name clash.
 package nodereg
@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // Captures node id + output key from {{nodes.<id>.outputs.<key>}}.

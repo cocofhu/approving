@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/gin-gonic/gin"
 )

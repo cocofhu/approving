@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // TestClarifySessionQueueAndCancelKeepNext: clarify Cancel keeps pending FIFO

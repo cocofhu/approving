@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 const (

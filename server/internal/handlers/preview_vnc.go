@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/browser"
+	"github.com/cocofhu/grasp/internal/browser"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

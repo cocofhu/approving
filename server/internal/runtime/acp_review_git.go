@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 	"github.com/rs/zerolog/log"
 )
 

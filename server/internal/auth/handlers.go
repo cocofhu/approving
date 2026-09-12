@@ -3,7 +3,7 @@ package auth
 import (
 	"net/http"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"

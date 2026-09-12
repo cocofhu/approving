@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestValidateRunSandboxEnvOK(t *testing.T) {
@@ -62,8 +62,8 @@ func TestValidateRunSandboxEnvRejects(t *testing.T) {
 		},
 		{
 			name: "alias",
-			in:   []models.EnvEntry{{Key: "APPROVING_CURSOR_API_KEY", Value: "k"}},
-			want: "APPROVING_CURSOR_API_KEY",
+			in:   []models.EnvEntry{{Key: "GRASP_CURSOR_API_KEY", Value: "k"}},
+			want: "GRASP_CURSOR_API_KEY",
 		},
 	}
 	for _, tc := range cases {

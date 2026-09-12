@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/textutil"
 
 	"github.com/gorilla/websocket"
 )

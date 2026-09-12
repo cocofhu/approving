@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // plan g1.1 / g1.4 — new rows and AutoMigrate zero-value read as false.

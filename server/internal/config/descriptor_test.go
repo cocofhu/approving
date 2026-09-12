@@ -22,13 +22,24 @@ func TestOptionDescriptorsCoverRuntimeEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	re := regexp.MustCompile(`env(?:Int)?\("(APPROVING_[A-Z0-9_]+|CURSOR_API_KEY)"\)`)
+	re := regexp.MustCompile(`env(?:Int)?\("(GRASP_[A-Z0-9_]+|CURSOR_API_KEY)"\)`)
 	for _, match := range re.FindAllStringSubmatch(string(source), -1) {
 		if !known[match[1]] {
 			t.Errorf("runtime environment %s has no option descriptor", match[1])
 		}
 	}
-	if known["APPROVING_GATEWAY_URL"] {
-		t.Fatal("deprecated APPROVING_GATEWAY_URL must not be documented")
+	if known["GRASP_GATEWAY_URL"] {
+		t.Fatal("deprecated GRASP_GATEWAY_URL must not be documented")
+	}
+}
+
+func TestOptionDescriptorsUseGraspPrefix(t *testing.T) {
+	for _, option := range OptionDescriptors() {
+		if option.Env == "CURSOR_API_KEY" {
+			continue
+		}
+		if !regexp.MustCompile(`^GRASP_[A-Z0-9_]+$`).MatchString(option.Env) {
+			t.Errorf("descriptor env %s is not GRASP_*", option.Env)
+		}
 	}
 }

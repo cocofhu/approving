@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // Token-stats window presets and errors.

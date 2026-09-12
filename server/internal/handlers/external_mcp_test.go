@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/pmmcp"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/pmmcp"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func setupExternalMcpHarness(t *testing.T) (*harness, string) {

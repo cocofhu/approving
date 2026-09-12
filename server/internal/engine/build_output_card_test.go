@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func mustBuildCard(t *testing.T, e *Engine, c *execCtx, tmpl string) map[string]any {

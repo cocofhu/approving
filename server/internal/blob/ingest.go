@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // IngestPromptImages externalizes any image with inline Data into store,

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // The TestRunAgent* / TestReact* cases below are the fake end-to-end suite: they
@@ -42,7 +42,7 @@ func setupProviderBackend(t *testing.T, backend AcpBackend, chatFor func(attempt
 	runID, nodeID := "run-1", "node-1"
 	tok := host.RegisterRun(runID)
 	t.Cleanup(func() { host.UnregisterRun(runID) })
-	profiles := writeAgent(t, "test-agent", `{"acpBackend":"`+string(backend)+`","env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
+	profiles := writeAgent(t, "test-agent", `{"acpBackend":"`+string(backend)+`","env":{"GRASP_CURSOR_API_KEY":"fake","GRASP_CLAUDE_API_KEY":"fake","GRASP_CODEBUDDY_API_KEY":"fake","GRASP_TRAE_API_KEY":"fake"}}`)
 	mgr := newFakeManager(t, host, runID, nodeID, tok, chatFor)
 	opts := testOpts()
 	opts.ProfilesRoot = profiles
@@ -175,7 +175,7 @@ func reactSetupBackend(t *testing.T, backend AcpBackend, chatFor func(attempt in
 	runID, nodeID := "run-r", "node-r"
 	tok := host.RegisterRun(runID)
 	t.Cleanup(func() { host.UnregisterRun(runID) })
-	profiles := writeAgent(t, "react-agent", `{"acpBackend":"`+string(backend)+`","env":{"APPROVING_CURSOR_API_KEY":"fake","APPROVING_CLAUDE_API_KEY":"fake","APPROVING_CODEBUDDY_API_KEY":"fake","APPROVING_TRAE_API_KEY":"fake"}}`)
+	profiles := writeAgent(t, "react-agent", `{"acpBackend":"`+string(backend)+`","env":{"GRASP_CURSOR_API_KEY":"fake","GRASP_CLAUDE_API_KEY":"fake","GRASP_CODEBUDDY_API_KEY":"fake","GRASP_TRAE_API_KEY":"fake"}}`)
 	mgr := newFakeManager(t, host, runID, nodeID, tok, chatFor)
 	opts := testOpts()
 	opts.ProfilesRoot = profiles

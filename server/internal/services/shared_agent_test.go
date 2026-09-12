@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestExtendOverlay_AgentWinsSameKeys(t *testing.T) {
@@ -79,20 +79,20 @@ func TestExtendOverlay_AgentWinsSameKeys(t *testing.T) {
 func TestExtendOverlay_TokenSharedPriority(t *testing.T) {
 	shared := SharedAgentConfig{
 		Env: map[string]string{
-			"APPROVING_CURSOR_API_KEY": "shared-key",
+			"GRASP_CURSOR_API_KEY": "shared-key",
 			"FEATURE_FLAG":             "shared-flag",
 		},
 	}
 	agent := Agent{
 		Name: "demo",
 		Env: map[string]string{
-			"APPROVING_CURSOR_API_KEY": "agent-key",
+			"GRASP_CURSOR_API_KEY": "agent-key",
 			"GITLAB_TOKEN":             "agent-gl",
 			"FEATURE_FLAG":             "agent-flag",
 		},
 	}
 	got := ExtendOverlay(shared, agent)
-	if got.Env["APPROVING_CURSOR_API_KEY"] != "shared-key" {
+	if got.Env["GRASP_CURSOR_API_KEY"] != "shared-key" {
 		t.Fatalf("token both present → shared wins: %#v", got.Env)
 	}
 	if got.Env["GITLAB_TOKEN"] != "agent-gl" {
@@ -123,7 +123,7 @@ func TestSharedAgentService_SaveGetRoundTrip(t *testing.T) {
 		AcpBackend: AcpBackendCursor,
 		Env:        map[string]string{"K1": "v1"},
 		Files:      []AgentFile{{Path: "AGENTS.md", Content: "hello"}},
-		MCP:        []MCPServer{{Name: "artifact-store", URL: "${APPROVING_ARTIFACT_URL}"}},
+		MCP:        []MCPServer{{Name: "artifact-store", URL: "${GRASP_ARTIFACT_URL}"}},
 	}
 	if err := svc.Save(cfg); err != nil {
 		t.Fatal(err)

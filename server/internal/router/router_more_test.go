@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/handlers"
-	"github.com/cocofhu/approving/internal/shutdown"
+	"github.com/cocofhu/grasp/internal/handlers"
+	"github.com/cocofhu/grasp/internal/shutdown"
 
 	"github.com/gin-gonic/gin"
 )

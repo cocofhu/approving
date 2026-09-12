@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/blob"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/blob"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/services"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"

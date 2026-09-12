@@ -4,9 +4,9 @@ import { isDeniedRunSandboxEnvKey, validateRunSandboxEnvRows } from './runSandbo
 describe('runSandboxEnv', () => {
   it('denies reserved and auth keys', () => {
     expect(isDeniedRunSandboxEnvKey('OPENCODE_API_KEY')).toBe(true)
-    expect(isDeniedRunSandboxEnvKey('APPROVING_OPENCODE_API_KEY')).toBe(true)
+    expect(isDeniedRunSandboxEnvKey('GRASP_OPENCODE_API_KEY')).toBe(true)
     expect(isDeniedRunSandboxEnvKey('PASSWORD')).toBe(true)
-    expect(isDeniedRunSandboxEnvKey('APPROVING_ARTIFACT_X')).toBe(true)
+    expect(isDeniedRunSandboxEnvKey('GRASP_ARTIFACT_X')).toBe(true)
     expect(isDeniedRunSandboxEnvKey('LOG_LEVEL')).toBe(false)
   })
 

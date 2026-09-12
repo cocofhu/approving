@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"golang.org/x/crypto/bcrypt"
 )

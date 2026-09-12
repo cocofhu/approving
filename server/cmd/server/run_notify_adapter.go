@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/cocofhu/approving/internal/engine"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/engine"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 // runNotifyEngineAdapter bridges engine.RunNotifier → RunNotifyService.

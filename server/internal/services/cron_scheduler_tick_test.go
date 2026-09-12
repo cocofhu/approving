@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 func TestCronSchedulerTickClaimsDueJob(t *testing.T) {

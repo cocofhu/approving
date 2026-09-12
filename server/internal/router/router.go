@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth/apikey"
-	"github.com/cocofhu/approving/internal/handlers"
+	"github.com/cocofhu/grasp/internal/auth/apikey"
+	"github.com/cocofhu/grasp/internal/handlers"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"

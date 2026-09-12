@@ -4,7 +4,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/handlers"
+	"github.com/cocofhu/grasp/internal/handlers"
 
 	"github.com/gin-gonic/gin"
 )

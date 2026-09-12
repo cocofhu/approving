@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	gatenode "github.com/cocofhu/approving/internal/models/nodereg"
-	"github.com/cocofhu/approving/internal/nodereg"
-	"github.com/cocofhu/approving/internal/runtime"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	gatenode "github.com/cocofhu/grasp/internal/models/nodereg"
+	"github.com/cocofhu/grasp/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/runtime"
 
 	"github.com/rs/zerolog/log"
 )

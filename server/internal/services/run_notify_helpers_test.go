@@ -1,6 +1,6 @@
 package services
 
-import "github.com/cocofhu/approving/internal/models"
+import "github.com/cocofhu/grasp/internal/models"
 
 // FormatRunDeepLinkForTest exposes runDeepLink for unit tests.
 func FormatRunDeepLinkForTest(base, runID string) string {

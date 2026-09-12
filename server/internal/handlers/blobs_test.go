@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/blob"
+	"github.com/cocofhu/grasp/internal/blob"
 
 	"github.com/gin-gonic/gin"
 )

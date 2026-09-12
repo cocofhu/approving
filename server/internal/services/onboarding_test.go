@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/services"
 )
 
 func TestOnboardingBootstrapRequiresAPIKey(t *testing.T) {
@@ -124,7 +124,7 @@ func TestOnboardingBootstrapCreatesTeamAndDefaultWorkflow(t *testing.T) {
 	}
 
 	shared := svc.SharedAgent.Get(projectID)
-	if shared.Env["APPROVING_CURSOR_API_KEY"] != "test-key-cursor" {
+	if shared.Env["GRASP_CURSOR_API_KEY"] != "test-key-cursor" {
 		t.Fatalf("shared env missing auth key: %+v", shared.Env)
 	}
 	if shared.Env["GITHUB_TOKEN"] != "ghp_test" {
@@ -292,7 +292,7 @@ func TestOnboardingBootstrapWritesCodeBuddyRegionToSharedOnly(t *testing.T) {
 		if a.AcpBackend != "codebuddy" {
 			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
 		}
-		if got := a.Env["APPROVING_CODEBUDDY_REGION"]; got != "" {
+		if got := a.Env["GRASP_CODEBUDDY_REGION"]; got != "" {
 			t.Fatalf("agent %s must not copy region, got %q", name, got)
 		}
 		if a.Layout.ConfigRoot != "/root/.codebuddy" {
@@ -300,7 +300,7 @@ func TestOnboardingBootstrapWritesCodeBuddyRegionToSharedOnly(t *testing.T) {
 		}
 	}
 	shared := svc.SharedAgent.Get(projectID)
-	if shared.Env["APPROVING_CODEBUDDY_REGION"] != "internal" {
+	if shared.Env["GRASP_CODEBUDDY_REGION"] != "internal" {
 		t.Fatalf("shared env missing region: %+v", shared.Env)
 	}
 }
@@ -325,7 +325,7 @@ func TestOnboardingBootstrapWritesOpenCodeEnvToShared(t *testing.T) {
 		if a.AcpBackend != "opencode" {
 			t.Fatalf("agent %s backend = %q", name, a.AcpBackend)
 		}
-		if a.Env["APPROVING_OPENCODE_API_KEY"] != "" {
+		if a.Env["GRASP_OPENCODE_API_KEY"] != "" {
 			t.Fatalf("agent %s must not copy API key", name)
 		}
 		if a.Layout.ConfigRoot != "/root/.config/opencode" {
@@ -333,19 +333,19 @@ func TestOnboardingBootstrapWritesOpenCodeEnvToShared(t *testing.T) {
 		}
 	}
 	shared := svc.SharedAgent.Get(projectID)
-	if shared.Env["APPROVING_OPENCODE_API_KEY"] != "sk-oc" {
+	if shared.Env["GRASP_OPENCODE_API_KEY"] != "sk-oc" {
 		t.Fatalf("shared key: %+v", shared.Env)
 	}
-	if shared.Env["APPROVING_OPENCODE_PROVIDER"] != "anthropic" {
+	if shared.Env["GRASP_OPENCODE_PROVIDER"] != "anthropic" {
 		t.Fatalf("shared provider: %+v", shared.Env)
 	}
-	if shared.Env["APPROVING_OPENCODE_BASE_URL"] != "https://proxy.example/v1" {
+	if shared.Env["GRASP_OPENCODE_BASE_URL"] != "https://proxy.example/v1" {
 		t.Fatalf("shared base: %+v", shared.Env)
 	}
 	if shared.Env["ACP_BRIDGE_MODEL"] != "anthropic/claude-sonnet-4-5" {
 		t.Fatalf("shared model: %+v", shared.Env)
 	}
-	if shared.Env["APPROVING_OPENCODE_MODEL_VISION"] != "" {
+	if shared.Env["GRASP_OPENCODE_MODEL_VISION"] != "" {
 		t.Fatalf("vision must stay off unless opted in: %+v", shared.Env)
 	}
 }
@@ -364,7 +364,7 @@ func TestOnboardingBootstrapWritesOpenCodeVisionEnv(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	shared := svc.SharedAgent.Get(projectID)
-	if shared.Env["APPROVING_OPENCODE_MODEL_VISION"] != "1" {
+	if shared.Env["GRASP_OPENCODE_MODEL_VISION"] != "1" {
 		t.Fatalf("shared vision: %+v", shared.Env)
 	}
 }
@@ -379,7 +379,7 @@ func TestOnboardingBootstrapDefaultsPublicRegionForCodeBuddy(t *testing.T) {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	shared := svc.SharedAgent.Get(projectID)
-	if got := shared.Env["APPROVING_CODEBUDDY_REGION"]; got != "public" {
+	if got := shared.Env["GRASP_CODEBUDDY_REGION"]; got != "public" {
 		t.Fatalf("default region = %q, want public", got)
 	}
 }
@@ -409,7 +409,7 @@ func TestOnboardingBootstrapIdempotent(t *testing.T) {
 		t.Fatalf("workflows doubled: %d", n)
 	}
 	shared := svc.SharedAgent.Get(projectID)
-	if shared.Env["APPROVING_CURSOR_API_KEY"] != "k2-rotated" {
+	if shared.Env["GRASP_CURSOR_API_KEY"] != "k2-rotated" {
 		t.Fatalf("auth not updated: %+v", shared.Env)
 	}
 	wf, ok := svc.WF.Get(r2.WorkflowID)

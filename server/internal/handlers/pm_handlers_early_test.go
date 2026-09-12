@@ -5,12 +5,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/database"
-	"github.com/cocofhu/approving/internal/handlers"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/services"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/database"
+	"github.com/cocofhu/grasp/internal/handlers"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/services"
 
 	"github.com/gin-gonic/gin"
 )

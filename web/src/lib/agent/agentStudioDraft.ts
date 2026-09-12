@@ -48,18 +48,18 @@ export const TASK_SCHEDULER = 'task-scheduler'
 export const AGENT_PLATFORM_MCPS = [
   {
     name: MEMORY_STORE,
-    url: '${APPROVING_MEMORY_URL}',
-    token: '${APPROVING_MEMORY_TOKEN}',
+    url: '${GRASP_MEMORY_URL}',
+    token: '${GRASP_MEMORY_TOKEN}',
   },
   {
     name: CONTEXT_STORE,
-    url: '${APPROVING_CONTEXT_URL}',
-    token: '${APPROVING_CONTEXT_TOKEN}',
+    url: '${GRASP_CONTEXT_URL}',
+    token: '${GRASP_CONTEXT_TOKEN}',
   },
   {
     name: TASK_SCHEDULER,
-    url: '${APPROVING_SCHEDULER_URL}',
-    token: '${APPROVING_SCHEDULER_TOKEN}',
+    url: '${GRASP_SCHEDULER_URL}',
+    token: '${GRASP_SCHEDULER_TOKEN}',
   },
 ] as const
 

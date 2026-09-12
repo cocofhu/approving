@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 // RateLimiter tracks per-IP login failures in process memory.

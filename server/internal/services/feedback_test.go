@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // nameShape mirrors pmArtifactNameRe: every ledger name must satisfy the

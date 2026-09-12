@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // ErrUnauthorized is returned when a token does not match the run scope.

@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/textutil"
 )
 
 func TestNormalizeKindString(t *testing.T) {

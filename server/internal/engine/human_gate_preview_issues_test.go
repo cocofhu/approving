@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // TestHumanGateResumeSnapshotsPreviewIssues: Fail/resume on human_gate (HtmlPreview

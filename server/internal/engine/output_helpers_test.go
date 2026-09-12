@@ -3,7 +3,7 @@ package engine
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/nodereg"
 )
 
 func TestIsKnownStructuredArtifact(t *testing.T) {

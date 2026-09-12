@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 func TestFilterAgentPlatformMCPAndDedupe(t *testing.T) {

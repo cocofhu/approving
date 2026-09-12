@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func extractShareToken(t *testing.T, url string) string {

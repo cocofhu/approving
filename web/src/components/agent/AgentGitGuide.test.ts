@@ -95,7 +95,7 @@ describe('AgentGitGuide', () => {
 
   it('仅 ACP API Key、没有 Git Token 时仍显示三选（plan g3.1）', () => {
     const wrapper = mountGuide([
-      { k: 'APPROVING_CURSOR_API_KEY', v: 'sk-test' },
+      { k: 'GRASP_CURSOR_API_KEY', v: 'sk-test' },
       { k: 'CURSOR_API_KEY', v: 'sk-alt' },
     ])
     expect(wrapper.find('[data-test="git-guide"]').exists()).toBe(true)

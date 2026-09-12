@@ -9,11 +9,11 @@ import {
 
 describe('tokenEnvKeys', () => {
   it('recognizes ACP + Git token keys', () => {
-    expect(isTokenEnvKey('APPROVING_CURSOR_API_KEY')).toBe(true)
+    expect(isTokenEnvKey('GRASP_CURSOR_API_KEY')).toBe(true)
     expect(isTokenEnvKey('CURSOR_API_KEY')).toBe(true)
     expect(isTokenEnvKey('GITLAB_TOKEN')).toBe(true)
     expect(isTokenEnvKey('GIT_SSH_PRIVATE_KEY')).toBe(true)
-    expect(isTokenEnvKey('APPROVING_OPENCODE_API_KEY')).toBe(true)
+    expect(isTokenEnvKey('GRASP_OPENCODE_API_KEY')).toBe(true)
     expect(isTokenEnvKey('OPENCODE_API_KEY')).toBe(true)
     expect(TOKEN_ENV_KEYS.length).toBeGreaterThanOrEqual(12)
   })
@@ -22,13 +22,13 @@ describe('tokenEnvKeys', () => {
     expect(isTokenEnvKey('GIT_REPOS')).toBe(false)
     expect(isTokenEnvKey('GITHUB_URL')).toBe(false)
     expect(isTokenEnvKey('GIT_SSH_KNOWN_HOSTS')).toBe(false)
-    expect(isTokenEnvKey('APPROVING_CODEBUDDY_REGION')).toBe(false)
+    expect(isTokenEnvKey('GRASP_CODEBUDDY_REGION')).toBe(false)
   })
 
   it('strips only token keys', () => {
     expect(
       stripTokenKeysFromRecord({
-        APPROVING_CURSOR_API_KEY: 'x',
+        GRASP_CURSOR_API_KEY: 'x',
         GIT_REPOS: 'a|https://x',
         FEATURE_FLAG: '1',
       }),

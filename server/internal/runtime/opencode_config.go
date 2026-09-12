@@ -8,10 +8,10 @@ import (
 
 const (
 	EnvOpenCodeAPIKey          = "OPENCODE_API_KEY"
-	EnvApprovingOpenCodeAPIKey = "APPROVING_OPENCODE_API_KEY"
-	EnvOpenCodeProvider        = "APPROVING_OPENCODE_PROVIDER"
-	EnvOpenCodeBaseURL         = "APPROVING_OPENCODE_BASE_URL"
-	EnvOpenCodeModelVision     = "APPROVING_OPENCODE_MODEL_VISION"
+	EnvApprovingOpenCodeAPIKey = "GRASP_OPENCODE_API_KEY"
+	EnvOpenCodeProvider        = "GRASP_OPENCODE_PROVIDER"
+	EnvOpenCodeBaseURL         = "GRASP_OPENCODE_BASE_URL"
+	EnvOpenCodeModelVision     = "GRASP_OPENCODE_MODEL_VISION"
 	EnvACPBridgeModel          = "ACP_BRIDGE_MODEL"
 	DefaultOpenCodeProvider    = "openai"
 	openCodeCompatibleNPM      = "@ai-sdk/openai-compatible"

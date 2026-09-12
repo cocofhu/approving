@@ -4,8 +4,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // ExternalResumeResult is returned after an external share-link decision.

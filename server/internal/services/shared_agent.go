@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cocofhu/approving/internal/envauth"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/envauth"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
 )
@@ -44,7 +44,7 @@ func NewAgentService(root string) *AgentService {
 // ArtifactStoreMCP is the conventional name for the platform's run-scoped
 // artifact-store. The whole MCP config is user-authored; an Agent wires the
 // artifact-store by referencing the run-scoped template vars
-// (${APPROVING_ARTIFACT_URL} / ${APPROVING_ARTIFACT_TOKEN}) in its url/headers.
+// (${GRASP_ARTIFACT_URL} / ${GRASP_ARTIFACT_TOKEN}) in its url/headers.
 const ArtifactStoreMCP = "artifact-store"
 
 // WorkDirName is the subfolder under each agent that holds its working-dir tree.
@@ -219,8 +219,8 @@ type agentConfig struct {
 func DefaultPlatformMCP() []MCPServer {
 	return []MCPServer{{
 		Name:    ArtifactStoreMCP,
-		URL:     "${APPROVING_ARTIFACT_URL}",
-		Headers: map[string]string{"Authorization": "Bearer ${APPROVING_ARTIFACT_TOKEN}"},
+		URL:     "${GRASP_ARTIFACT_URL}",
+		Headers: map[string]string{"Authorization": "Bearer ${GRASP_ARTIFACT_TOKEN}"},
 	}}
 }
 

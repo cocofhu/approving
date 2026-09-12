@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/browser"
+	"github.com/cocofhu/grasp/internal/browser"
 )
 
 type vncRecPage struct {

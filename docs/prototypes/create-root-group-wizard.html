@@ -449,8 +449,8 @@
         {
           name: 'artifact-store',
           transport: 'url',
-          url: '${APPROVING_ARTIFACT_URL}',
-          headers: [{ k: 'Authorization', v: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' }],
+          url: '${GRASP_ARTIFACT_URL}',
+          headers: [{ k: 'Authorization', v: 'Bearer ${GRASP_ARTIFACT_TOKEN}' }],
           preset: true,
         },
       ],
@@ -585,7 +585,7 @@
             </label>
             ${m.transport === 'url' ? `
               <label class="row"><span>URL</span>
-                <input class="mcp-url" data-i="${i}" value="${esc(m.url)}" placeholder="\${APPROVING_ARTIFACT_URL}" />
+                <input class="mcp-url" data-i="${i}" value="${esc(m.url)}" placeholder="\${GRASP_ARTIFACT_URL}" />
               </label>
               <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:12px;color:var(--txt2)">请求头</span>
@@ -613,7 +613,7 @@
             <button type="button" class="btn ghost" id="btnAddContext">＋ context-store</button>
           </div>
           <div class="help" style="margin-top:12px;font-size:11px;color:var(--txt3);line-height:1.5">
-            运行变量：<code>\${APPROVING_ARTIFACT_URL}</code> / <code>\${APPROVING_ARTIFACT_TOKEN}</code>
+            运行变量：<code>\${GRASP_ARTIFACT_URL}</code> / <code>\${GRASP_ARTIFACT_TOKEN}</code>
           </div>
         `;
       }
@@ -787,8 +787,8 @@
         state.mcps.unshift({
           name: 'artifact-store',
           transport: 'url',
-          url: '${APPROVING_ARTIFACT_URL}',
-          headers: [{ k: 'Authorization', v: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' }],
+          url: '${GRASP_ARTIFACT_URL}',
+          headers: [{ k: 'Authorization', v: 'Bearer ${GRASP_ARTIFACT_TOKEN}' }],
           preset: true,
         });
         render();

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 const platformRulesSubdir = "platform-rules"

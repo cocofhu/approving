@@ -1,4 +1,4 @@
-# approving 镜像(构建上下文 = 仓库根,因为要把 web/ 前端一起打进来)。
+# grasp 镜像(构建上下文 = 仓库根,因为要把 web/ 前端一起打进来)。
 #
 # 硬性约定(deployment docs):**配置不打进镜像**。这里只构建并
 # 承载业务二进制 + 前端静态产物;运行时配置由环境变量 + ConfigMap 挂载的
@@ -36,9 +36,9 @@ ARG GIT_COMMIT=""
 ARG GITHUB_SHA=""
 RUN COMMIT_SHA="${GIT_COMMIT:-$GITHUB_SHA}" && \
     CGO_ENABLED=1 go build -trimpath \
-      -ldflags="-s -w -X github.com/cocofhu/approving/internal/version.commit=${COMMIT_SHA}" \
-      -o /out/approving-server ./cmd/server
-RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/approving ./cmd/doctor
+      -ldflags="-s -w -X github.com/cocofhu/grasp/internal/version.commit=${COMMIT_SHA}" \
+      -o /out/grasp-server ./cmd/server
+RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/grasp ./cmd/doctor
 
 # --- 运行 ---
 # 使用 node bookworm-slim 作为运行底包,使 set_plan 的 Mermaid 11.x 语法校验
@@ -48,13 +48,13 @@ FROM node:20-bookworm-slim
 # 因此运行镜像无需 docker CLI / dockerd,只需 CA 证书(HTTPS 连网关 / git)。
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 WORKDIR /app
-COPY --from=build /out/approving-server /app/approving-server
-COPY --from=build /out/approving /app/approving
+COPY --from=build /out/grasp-server /app/grasp-server
+COPY --from=build /out/grasp /app/grasp
 COPY --from=build /src/web/dist /app/web/dist
 
 # 数据落 SQLite,挂到持久卷;端口与默认 DB 路径可被部署的 env 覆盖。
-ENV APPROVING_PORT=8080 \
-    APPROVING_DB=/data/approving.db
+ENV GRASP_PORT=8080 \
+    GRASP_DB=/data/grasp.db
 VOLUME ["/data"]
 EXPOSE 8080
-ENTRYPOINT ["/app/approving-server"]
+ENTRYPOINT ["/app/grasp-server"]

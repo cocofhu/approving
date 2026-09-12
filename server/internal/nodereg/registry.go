@@ -4,8 +4,8 @@
 package nodereg
 
 import (
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // ExecKind selects the engine executor for a node type.

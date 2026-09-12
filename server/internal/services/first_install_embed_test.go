@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestFirstInstallEmbedFSHasWorkspaceMarkdown(t *testing.T) {
@@ -71,7 +71,7 @@ func looksLikeSecretLiteral(s string) bool {
 	if strings.Contains(s, "BEGIN ") && strings.Contains(s, "PRIVATE KEY") {
 		return true
 	}
-	for _, key := range []string{"GITHUB_TOKEN", "GITLAB_TOKEN", "APPROVING_CURSOR_API_KEY", "APPROVING_CODEBUDDY_API_KEY"} {
+	for _, key := range []string{"GITHUB_TOKEN", "GITLAB_TOKEN", "GRASP_CURSOR_API_KEY", "GRASP_CODEBUDDY_API_KEY"} {
 		if i := strings.Index(s, key); i >= 0 {
 			rest := strings.TrimSpace(s[i+len(key):])
 			if strings.HasPrefix(rest, "=") || strings.HasPrefix(rest, ":") || strings.HasPrefix(rest, "\":") {

@@ -120,7 +120,7 @@ describe('AgentCreateWizard 5-step IA', () => {
     buttonByText('下一步').click()
     await wrapper.vm.$nextTick()
 
-    expect(document.body.textContent).toContain('APPROVING_CURSOR_API_KEY')
+    expect(document.body.textContent).toContain('GRASP_CURSOR_API_KEY')
     expect(document.body.textContent).toContain('CURSOR_API_KEY')
     expect(document.body.textContent).toContain('Cursor Dashboard')
     const dash = Array.from(document.body.querySelectorAll('a')).find((a) =>

@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // CurrentNodeLabels returns current node display labels for active runs

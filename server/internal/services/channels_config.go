@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/crypto"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/crypto"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -24,8 +24,8 @@ var (
 	ErrChannelProjectRequired       = errors.New("必须绑定项目")
 	ErrChannelAppIDRequired         = errors.New("必须填写 AppID")
 	ErrChannelSecretRequired        = errors.New("必须填写 AppSecret")
-	ErrChannelSecretKeyMissing      = errors.New("未配置加密主密钥，无法加密保存渠道凭据（config: security.secrets_key 或 APPROVING_SECRETS_KEY）")
-	ErrChannelSecretKeyInvalid      = errors.New("加密主密钥无效，无法加密保存渠道凭据（需 base64 编码的 32 字节；config: security.secrets_key 或 APPROVING_SECRETS_KEY）")
+	ErrChannelSecretKeyMissing      = errors.New("未配置加密主密钥，无法加密保存渠道凭据（config: security.secrets_key 或 GRASP_SECRETS_KEY）")
+	ErrChannelSecretKeyInvalid      = errors.New("加密主密钥无效，无法加密保存渠道凭据（需 base64 编码的 32 字节；config: security.secrets_key 或 GRASP_SECRETS_KEY）")
 	ErrChannelTypeUnsupported       = errors.New("不支持的渠道类型")
 	ErrChannelNameRequired          = errors.New("必须填写显示名称")
 	ErrChannelCronTargetRequired    = errors.New("开启定时投递时必须填写投递目标（c2c:/group:/guild:）")

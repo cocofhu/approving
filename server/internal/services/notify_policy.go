@@ -3,7 +3,7 @@ package services
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // ResolveNotifyEvents returns the effective event set for a workflow under a

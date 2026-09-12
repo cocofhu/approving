@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/textutil"
 
 	"github.com/gorilla/websocket"
 )
@@ -109,7 +109,7 @@ func TestMcpServersFromAgentConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentJSON := `{"mcp":[
-		{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}},
+		{"name":"artifact-store","url":"${GRASP_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${GRASP_ARTIFACT_TOKEN}"}},
 		{"name":"cmd","command":"run","args":["a"],"env":{"K":"v"}},
 		{"name":"","url":"x"},
 		{"name":"empty"}

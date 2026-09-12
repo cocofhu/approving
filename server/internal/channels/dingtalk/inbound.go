@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/channels"
+	"github.com/cocofhu/grasp/internal/channels"
 )
 
 const (

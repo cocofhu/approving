@@ -18,20 +18,20 @@ require_digest() {
   esac
 }
 
-require_digest APPROVING_IMAGE
+require_digest GRASP_IMAGE
 require_digest SANDBOX_GATEWAY_IMAGE
 require_digest SANDBOX_IMAGE
 
 # Smoke keeps digest-pinned global force (doctor demo uses a single sandbox image).
-export APPROVING_SANDBOX_IMAGE="${APPROVING_SANDBOX_IMAGE:-$SANDBOX_IMAGE}"
+export GRASP_SANDBOX_IMAGE="${GRASP_SANDBOX_IMAGE:-$SANDBOX_IMAGE}"
 
 # Internal, short-lived authentication for the loopback doctor control plane.
 # It is generated automatically and deliberately omitted from smoke evidence.
-APPROVING_DOCTOR_TOKEN="${APPROVING_DOCTOR_TOKEN:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
-export APPROVING_DOCTOR_TOKEN
-SANDBOX_GATEWAY_API_KEY="${SANDBOX_GATEWAY_API_KEY:-approving-local-demo}"
+GRASP_DOCTOR_TOKEN="${GRASP_DOCTOR_TOKEN:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
+export GRASP_DOCTOR_TOKEN
+SANDBOX_GATEWAY_API_KEY="${SANDBOX_GATEWAY_API_KEY:-grasp-local-demo}"
 export SANDBOX_GATEWAY_API_KEY
-export APPROVING_SANDBOX_GATEWAY_API_KEY="${APPROVING_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
+export GRASP_SANDBOX_GATEWAY_API_KEY="${GRASP_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
 export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
 
 cleanup() {
@@ -46,7 +46,7 @@ trap cleanup EXIT INT TERM
   printf 'kernel=%s\n' "$(uname -srmo)"
   docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
   docker compose version
-  printf 'approving_image=%s\n' "$APPROVING_IMAGE"
+  printf 'grasp_image=%s\n' "$GRASP_IMAGE"
   printf 'gateway_image=%s\n' "$SANDBOX_GATEWAY_IMAGE"
   printf 'sandbox_image=%s\n' "$SANDBOX_IMAGE"
 } >"$LOG"
@@ -54,8 +54,8 @@ trap cleanup EXIT INT TERM
 docker compose -f "$COMPOSE_FILE" config --quiet >>"$LOG" 2>&1
 docker compose -f "$COMPOSE_FILE" pull >>"$LOG" 2>&1
 docker compose -f "$COMPOSE_FILE" up -d --wait >>"$LOG" 2>&1
-docker compose -f "$COMPOSE_FILE" exec -T approving \
-  /app/approving doctor --run-demo --timeout 5m >>"$LOG" 2>&1
+docker compose -f "$COMPOSE_FILE" exec -T grasp \
+  /app/grasp doctor --run-demo --timeout 5m >>"$LOG" 2>&1
 docker compose -f "$COMPOSE_FILE" ps >>"$LOG" 2>&1
 
 printf 'completed_utc=%s\nresult=passed\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$LOG"

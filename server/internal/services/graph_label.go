@@ -3,7 +3,7 @@ package services
 import (
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 // GraphNodeLabel returns a node's display label from a pinned graph snapshot.

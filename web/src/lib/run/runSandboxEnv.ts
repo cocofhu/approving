@@ -12,20 +12,20 @@ const DENIED_EXACT = new Set([
   'CODEBUDDY_API_KEY',
   'TRAE_API_KEY',
   'TRAECLI_PERSONAL_ACCESS_TOKEN',
-  'APPROVING_CURSOR_API_KEY',
-  'APPROVING_CLAUDE_API_KEY',
-  'APPROVING_CODEBUDDY_API_KEY',
-  'APPROVING_TRAE_API_KEY',
-  'APPROVING_OPENCODE_API_KEY',
+  'GRASP_CURSOR_API_KEY',
+  'GRASP_CLAUDE_API_KEY',
+  'GRASP_CODEBUDDY_API_KEY',
+  'GRASP_TRAE_API_KEY',
+  'GRASP_OPENCODE_API_KEY',
   'OPENCODE_API_KEY',
   'PASSWORD',
   'ROOT_PASSWORD',
   'ACP_BRIDGE_PASSWORD',
   'CURSOR_ACP_PASSWORD',
-  'APPROVING_ARTIFACT_URL',
-  'APPROVING_ARTIFACT_TOKEN',
-  'APPROVING_RUN_ID',
-  'APPROVING_NODE_ID',
+  'GRASP_ARTIFACT_URL',
+  'GRASP_ARTIFACT_TOKEN',
+  'GRASP_RUN_ID',
+  'GRASP_NODE_ID',
   'ACP_BACKEND',
   'CONFIG_ROOT',
   'SSH_KEY',
@@ -36,7 +36,7 @@ export function isDeniedRunSandboxEnvKey(key: string): boolean {
   const k = key.trim()
   if (!k) return false
   if (DENIED_EXACT.has(k)) return true
-  return k.startsWith('APPROVING_ARTIFACT_')
+  return k.startsWith('GRASP_ARTIFACT_')
 }
 
 /** Collect effective rows (skip double-empty) and list validation problems. */

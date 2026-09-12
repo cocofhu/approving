@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func reviewEvent(node string, iter, round int, text, artifact string) models.FeedbackEvent {

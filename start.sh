@@ -44,52 +44,68 @@ set -a
 source .env
 set +a
 
+# COMPAT(approving→grasp): map old keys for compose interpolation only.
+# The control-plane server rewrites `.env` on boot; do not mutate the file here.
+promoted=0
+while IFS= read -r var; do
+  [[ -n "$var" ]] || continue
+  grasp="GRASP_${var#APPROVING_}"
+  if [[ -z "${!grasp:-}" ]]; then
+    export "${grasp}=${!var}"
+    promoted=1
+  fi
+done < <(compgen -v APPROVING_ || true)
+if [[ "$promoted" -eq 1 ]]; then
+  echo "COMPAT(approving→grasp): exported APPROVING_* as GRASP_* for compose (server rewrites .env on boot)"
+fi
+
 # Defaults so a bare clone can start without editing .env.
-: "${APPROVING_PORT:=8080}"
-: "${APPROVING_GATEWAY_PORT:=8899}"
-: "${APPROVING_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${APPROVING_GATEWAY_PORT}}"
-: "${APPROVING_DEPLOYMENT_MODE:=local-demo}"
-: "${APPROVING_IMAGE:=ghcr.io/cocofhu/approving:0.3.13-beta}"
+: "${GRASP_PORT:=8080}"
+: "${GRASP_GATEWAY_PORT:=8899}"
+: "${GRASP_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${GRASP_GATEWAY_PORT}}"
+: "${GRASP_DEPLOYMENT_MODE:=local-demo}"
+: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.3.13-beta}"
 : "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.3.13-beta}"
-: "${SANDBOX_GATEWAY_API_KEY:=approving-local-demo}"
+: "${SANDBOX_GATEWAY_API_KEY:=grasp-local-demo}"
 
 # Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
 # cursor fallback default, so a bare default does not re-force all backends.
 _user_sandbox_image="${SANDBOX_IMAGE-}"
 : "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.13-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.13-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.13-beta}"
-: "${APPROVING_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.13-beta}"
-: "${APPROVING_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.13-beta}"
-: "${APPROVING_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.3.13-beta}"
+: "${GRASP_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.13-beta}"
+: "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.13-beta}"
+: "${GRASP_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.13-beta}"
+: "${GRASP_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.13-beta}"
+: "${GRASP_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.3.13-beta}"
 : "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.13-beta}"
-# Explicit SANDBOX_IMAGE (or APPROVING_SANDBOX_IMAGE) → global force; default path leaves it empty.
-if [[ -z "${APPROVING_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
-  APPROVING_SANDBOX_IMAGE="${_user_sandbox_image}"
+# Explicit SANDBOX_IMAGE (or GRASP_SANDBOX_IMAGE) → global force; default path leaves it empty.
+if [[ -z "${GRASP_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
+  GRASP_SANDBOX_IMAGE="${_user_sandbox_image}"
 fi
 
 # Demo account (admin / demo1234). Set outside the .env file so `$` in the
 # bcrypt hash is not eaten by shell/compose env parsing.
-if [[ -z "${APPROVING_AUTH_USERS:-}" ]]; then
-  APPROVING_AUTH_USERS='[{"username":"admin","password_hash":"$2a$10$EY.SdHq0p6drMz6U9JVrz.Kq0jNkg7TWmsVUFLtB1dL1yIelDkITi","is_admin":true}]'
+if [[ -z "${GRASP_AUTH_USERS:-}" ]]; then
+  GRASP_AUTH_USERS='[{"username":"admin","password_hash":"$2a$10$EY.SdHq0p6drMz6U9JVrz.Kq0jNkg7TWmsVUFLtB1dL1yIelDkITi","is_admin":true}]'
 fi
 
-if [[ -z "${APPROVING_DOCTOR_TOKEN:-}" ]]; then
-  APPROVING_DOCTOR_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+if [[ -z "${GRASP_DOCTOR_TOKEN:-}" ]]; then
+  GRASP_DOCTOR_TOKEN="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
 fi
 
-export APPROVING_PORT APPROVING_GATEWAY_PORT APPROVING_SANDBOX_GATEWAY_URL
-export APPROVING_DEPLOYMENT_MODE APPROVING_IMAGE SANDBOX_GATEWAY_IMAGE
-export SANDBOX_IMAGE SANDBOX_GATEWAY_API_KEY APPROVING_AUTH_USERS APPROVING_DOCTOR_TOKEN
-export APPROVING_SANDBOX_IMAGE_CURSOR APPROVING_SANDBOX_IMAGE_CLAUDE_CODE
-export APPROVING_SANDBOX_IMAGE_CODEBUDDY APPROVING_SANDBOX_IMAGE_TRAE
-export APPROVING_SANDBOX_IMAGE_OPENCODE
+export GRASP_PORT GRASP_GATEWAY_PORT GRASP_SANDBOX_GATEWAY_URL
+export GRASP_DEPLOYMENT_MODE GRASP_IMAGE SANDBOX_GATEWAY_IMAGE
+export SANDBOX_IMAGE SANDBOX_GATEWAY_API_KEY GRASP_AUTH_USERS GRASP_DOCTOR_TOKEN
+export GRASP_SANDBOX_IMAGE_CURSOR GRASP_SANDBOX_IMAGE_CLAUDE_CODE
+export GRASP_SANDBOX_IMAGE_CODEBUDDY GRASP_SANDBOX_IMAGE_TRAE
+export GRASP_SANDBOX_IMAGE_OPENCODE
 export SBGW_IMAGE_TEMPLATE
-# May be empty (no global force). Export so compose substitutes ${APPROVING_SANDBOX_IMAGE:-}.
-export APPROVING_SANDBOX_IMAGE="${APPROVING_SANDBOX_IMAGE:-}"
+# May be empty (no global force). Export so compose substitutes ${GRASP_SANDBOX_IMAGE:-}.
+export GRASP_SANDBOX_IMAGE="${GRASP_SANDBOX_IMAGE:-}"
 # Approving client uses the dedicated env name; keep it in sync with the gateway.
-export APPROVING_SANDBOX_GATEWAY_API_KEY="${APPROVING_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
-export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
+export GRASP_SANDBOX_GATEWAY_API_KEY="${GRASP_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
+# COMPAT(approving→grasp): keep approving-local-demo accepted this version.
+export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY,approving-local-demo}"
 
 # Optional stamp for the source stack (`go run` + Dockerfile.dev ldflags).
 # Unset / failed rev-parse → empty; overview badge stays hidden (allowed).
@@ -128,21 +144,21 @@ wait_for_url() {
 }
 
 print_release_endpoints() {
-  echo "—— UI/API  http://localhost:${APPROVING_PORT}"
-  echo "—— health  http://localhost:${APPROVING_PORT}/api/health"
-  echo "—— gateway http://127.0.0.1:${APPROVING_GATEWAY_PORT}/healthz"
+  echo "—— UI/API  http://localhost:${GRASP_PORT}"
+  echo "—— health  http://localhost:${GRASP_PORT}/api/health"
+  echo "—— gateway http://127.0.0.1:${GRASP_GATEWAY_PORT}/healthz"
   echo "—— login   admin / demo1234  (local-demo)"
   echo "—— gateway token  ${SANDBOX_GATEWAY_API_KEY}"
-  echo "—— images  ${APPROVING_IMAGE}"
+  echo "—— images  ${GRASP_IMAGE}"
   echo "           ${SANDBOX_GATEWAY_IMAGE}"
   echo "—— sandbox (per backend)"
-  echo "           cursor     ${APPROVING_SANDBOX_IMAGE_CURSOR}"
-  echo "           claude_code ${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
-  echo "           codebuddy  ${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
-  echo "           trae       ${APPROVING_SANDBOX_IMAGE_TRAE}"
-  echo "           opencode   ${APPROVING_SANDBOX_IMAGE_OPENCODE}"
-  if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then
-    echo "—— sandbox GLOBAL FORCE  ${APPROVING_SANDBOX_IMAGE}"
+  echo "           cursor     ${GRASP_SANDBOX_IMAGE_CURSOR}"
+  echo "           claude_code ${GRASP_SANDBOX_IMAGE_CLAUDE_CODE}"
+  echo "           codebuddy  ${GRASP_SANDBOX_IMAGE_CODEBUDDY}"
+  echo "           trae       ${GRASP_SANDBOX_IMAGE_TRAE}"
+  echo "           opencode   ${GRASP_SANDBOX_IMAGE_OPENCODE}"
+  if [[ -n "${GRASP_SANDBOX_IMAGE:-}" ]]; then
+    echo "—— sandbox GLOBAL FORCE  ${GRASP_SANDBOX_IMAGE}"
   fi
   echo "—— gateway template  ${SBGW_IMAGE_TEMPLATE}"
   echo "—— gateway fallback  ${SANDBOX_IMAGE}"
@@ -153,15 +169,15 @@ print_release_endpoints() {
 # for explicit warm-up; default up/-d/restart leave runtimes to on-demand gateway pull.
 ensure_sandbox_runtime_image() {
   local images=(
-    "${APPROVING_SANDBOX_IMAGE_CURSOR}"
-    "${APPROVING_SANDBOX_IMAGE_CLAUDE_CODE}"
-    "${APPROVING_SANDBOX_IMAGE_CODEBUDDY}"
-    "${APPROVING_SANDBOX_IMAGE_TRAE}"
-    "${APPROVING_SANDBOX_IMAGE_OPENCODE}"
+    "${GRASP_SANDBOX_IMAGE_CURSOR}"
+    "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE}"
+    "${GRASP_SANDBOX_IMAGE_CODEBUDDY}"
+    "${GRASP_SANDBOX_IMAGE_TRAE}"
+    "${GRASP_SANDBOX_IMAGE_OPENCODE}"
   )
   # Deduplicate while preserving order (global force may equal one backend).
-  if [[ -n "${APPROVING_SANDBOX_IMAGE:-}" ]]; then
-    images+=("${APPROVING_SANDBOX_IMAGE}")
+  if [[ -n "${GRASP_SANDBOX_IMAGE:-}" ]]; then
+    images+=("${GRASP_SANDBOX_IMAGE}")
   fi
   local -A seen=()
   local img
@@ -177,7 +193,7 @@ ensure_sandbox_runtime_image() {
 # Approving + Gateway publish images: pull only when missing locally (g1.2).
 # Does not refresh tags that are already present; use `./start.sh pull` for that.
 ensure_compose_images_if_missing() {
-  local images=("${APPROVING_IMAGE}" "${SANDBOX_GATEWAY_IMAGE}")
+  local images=("${GRASP_IMAGE}" "${SANDBOX_GATEWAY_IMAGE}")
   local -A seen=()
   local img
   for img in "${images[@]}"; do
@@ -202,8 +218,8 @@ up_release() {
   ensure_compose_images_if_missing
   if [[ "$detach" == "1" ]]; then
     "${COMPOSE[@]}" -f "$RELEASE_COMPOSE_FILE" up -d
-    wait_for_url "http://127.0.0.1:${APPROVING_GATEWAY_PORT}/healthz" "gateway"
-    wait_for_url "http://127.0.0.1:${APPROVING_PORT}/api/health" "api"
+    wait_for_url "http://127.0.0.1:${GRASP_GATEWAY_PORT}/healthz" "gateway"
+    wait_for_url "http://127.0.0.1:${GRASP_PORT}/api/health" "api"
     echo "started (GHCR)"
     print_release_endpoints
     echo "note: sandbox runtimes pull on first use of each Agent backend"
@@ -212,13 +228,13 @@ up_release() {
     echo "wipe: ./start.sh down && rm -rf .localdata"
     echo "logs: ./start.sh logs   stop: ./start.sh down"
   else
-    echo "starting (foreground) — UI http://localhost:${APPROVING_PORT}"
+    echo "starting (foreground) — UI http://localhost:${GRASP_PORT}"
     "${COMPOSE[@]}" -f "$RELEASE_COMPOSE_FILE" up
   fi
 }
 
 ensure_dev_sandbox_image() {
-  local sandbox_image="${APPROVING_GATEWAY_SANDBOX_IMAGE:-universal-sandbox-cursor:local}"
+  local sandbox_image="${GRASP_GATEWAY_SANDBOX_IMAGE:-universal-sandbox-cursor:local}"
   local gateway_dir="${SANDBOX_GATEWAY_DIR:-./sandbox-gateway}"
   if docker image inspect "$sandbox_image" >/dev/null 2>&1; then
     return 0
@@ -242,14 +258,14 @@ up_dev() {
     echo "created server/config.yaml from config.example.yaml"
   fi
   mkdir -p .devdata/db .devdata/sandbox-home
-  export APPROVING_SANDBOX_GATEWAY_URL="http://127.0.0.1:${APPROVING_GATEWAY_PORT}"
+  export GRASP_SANDBOX_GATEWAY_URL="http://127.0.0.1:${GRASP_GATEWAY_PORT}"
   ensure_dev_sandbox_image
   if [[ "$detach" == "1" ]]; then
     "${COMPOSE[@]}" -f "$DEV_COMPOSE_FILE" up --build -d
-    wait_for_url "http://127.0.0.1:${APPROVING_GATEWAY_PORT}/healthz" "gateway"
+    wait_for_url "http://127.0.0.1:${GRASP_GATEWAY_PORT}/healthz" "gateway"
     echo "started (dev/source)"
-    echo "—— API http://localhost:${APPROVING_PORT}/api/health  UI http://localhost:5173"
-    echo "—— gateway http://127.0.0.1:${APPROVING_GATEWAY_PORT}/healthz"
+    echo "—— API http://localhost:${GRASP_PORT}/api/health  UI http://localhost:5173"
+    echo "—— gateway http://127.0.0.1:${GRASP_GATEWAY_PORT}/healthz"
   else
     echo "starting dev stack (foreground) — UI http://localhost:5173"
     "${COMPOSE[@]}" -f "$DEV_COMPOSE_FILE" up --build
@@ -304,7 +320,7 @@ case "$cmd" in
     ;;
   sandbox)
     gateway_dir="${SANDBOX_GATEWAY_DIR:-./sandbox-gateway}"
-    sandbox_image="${APPROVING_GATEWAY_SANDBOX_IMAGE:-universal-sandbox-cursor:local}"
+    sandbox_image="${GRASP_GATEWAY_SANDBOX_IMAGE:-universal-sandbox-cursor:local}"
     docker build --network=host \
       -t "$sandbox_image" \
       --build-arg AGENT_PROVIDER=cursor \

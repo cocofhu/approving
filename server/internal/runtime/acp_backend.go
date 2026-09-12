@@ -23,8 +23,8 @@ const (
 
 // Region / site env keys written by Agent Studio or set manually.
 const (
-	EnvCodeBuddyRegion = "APPROVING_CODEBUDDY_REGION"
-	EnvTraeRegion      = "APPROVING_TRAE_REGION"
+	EnvCodeBuddyRegion = "GRASP_CODEBUDDY_REGION"
+	EnvTraeRegion      = "GRASP_TRAE_REGION"
 
 	EnvCodeBuddyInternet = "CODEBUDDY_INTERNET_ENVIRONMENT"
 	EnvCodeBuddyBaseURL  = "CODEBUDDY_BASE_URL"
@@ -96,7 +96,7 @@ func ResolveConfigRoot(backend AcpBackend, layoutConfigRoot string) string {
 
 // authSpec describes how agent env keys map to in-container CLI env.
 type authSpec struct {
-	agentKeys []string // APPROVING_* aliases accepted in agent.json env
+	agentKeys []string // GRASP_* aliases accepted in agent.json env
 	cliKey    string   // env var the bridge CLI reads
 }
 
@@ -104,20 +104,20 @@ func authSpecFor(b AcpBackend) authSpec {
 	switch b {
 	case BackendClaudeCode:
 		return authSpec{
-			agentKeys: []string{"APPROVING_CLAUDE_API_KEY", "ANTHROPIC_API_KEY"},
+			agentKeys: []string{"GRASP_CLAUDE_API_KEY", "ANTHROPIC_API_KEY"},
 			cliKey:    "ANTHROPIC_API_KEY",
 		}
 	case BackendCodeBuddy:
 		return authSpec{
-			agentKeys: []string{"APPROVING_CODEBUDDY_API_KEY", "CODEBUDDY_API_KEY"},
+			agentKeys: []string{"GRASP_CODEBUDDY_API_KEY", "CODEBUDDY_API_KEY"},
 			cliKey:    "CODEBUDDY_API_KEY",
 		}
 	case BackendTrae:
 		// Official traecli headless auth uses TRAECLI_PERSONAL_ACCESS_TOKEN;
-		// keep legacy TRAE_API_KEY / APPROVING_TRAE_API_KEY as aliases.
+		// keep legacy TRAE_API_KEY / GRASP_TRAE_API_KEY as aliases.
 		return authSpec{
 			agentKeys: []string{
-				"APPROVING_TRAE_API_KEY",
+				"GRASP_TRAE_API_KEY",
 				"TRAE_API_KEY",
 				EnvTraeCLIToken,
 			},
@@ -130,7 +130,7 @@ func authSpecFor(b AcpBackend) authSpec {
 		}
 	default:
 		return authSpec{
-			agentKeys: []string{"APPROVING_CURSOR_API_KEY", "CURSOR_API_KEY"},
+			agentKeys: []string{"GRASP_CURSOR_API_KEY", "CURSOR_API_KEY"},
 			cliKey:    "CURSOR_API_KEY",
 		}
 	}
@@ -418,10 +418,10 @@ func AgentRuntimeLabel(b AcpBackend) string {
 	}
 }
 
-// WarnDeprecatedExecProvider logs when APPROVING_EXEC_PROVIDER is set but ignored.
+// WarnDeprecatedExecProvider logs when GRASP_EXEC_PROVIDER is set but ignored.
 func WarnDeprecatedExecProvider(name string) {
 	if n := strings.TrimSpace(name); n != "" && n != "sandbox" && n != "cursor" {
-		log.Warn().Str("APPROVING_EXEC_PROVIDER", n).
-			Msg("APPROVING_EXEC_PROVIDER is deprecated and ignored; route agents via agent_profile acpBackend")
+		log.Warn().Str("GRASP_EXEC_PROVIDER", n).
+			Msg("GRASP_EXEC_PROVIDER is deprecated and ignored; route agents via agent_profile acpBackend")
 	}
 }

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 func TestParseReposVar(t *testing.T) {

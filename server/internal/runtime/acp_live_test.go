@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/mcp"
+	"github.com/cocofhu/grasp/internal/mcp"
 )
 
 // memStore is an in-memory mcp.Store for the live test.
@@ -77,15 +77,15 @@ func (s *memStore) List(runID string) []mcp.ArtifactInfo {
 // launch a container, drive cursor-agent over ACP, harvest the declared
 // produces file and write it through the run-scoped MCP host.
 //
-// Gated by APPROVING_LIVE=1 (needs Docker + APPROVING_CURSOR_API_KEY); the
+// Gated by GRASP_LIVE=1 (needs Docker + GRASP_CURSOR_API_KEY); the
 // default test run stays credential-free on the mock provider.
 func TestCursorLiveRunAgent(t *testing.T) {
-	if os.Getenv("APPROVING_LIVE") != "1" {
-		t.Skip("set APPROVING_LIVE=1 (and APPROVING_CURSOR_API_KEY) to run the live sandbox test")
+	if os.Getenv("GRASP_LIVE") != "1" {
+		t.Skip("set GRASP_LIVE=1 (and GRASP_CURSOR_API_KEY) to run the live sandbox test")
 	}
-	apiKey := os.Getenv("APPROVING_CURSOR_API_KEY")
+	apiKey := os.Getenv("GRASP_CURSOR_API_KEY")
 	if apiKey == "" {
-		t.Fatal("APPROVING_CURSOR_API_KEY required for live test")
+		t.Fatal("GRASP_CURSOR_API_KEY required for live test")
 	}
 
 	store := newMemStore()
@@ -94,13 +94,13 @@ func TestCursorLiveRunAgent(t *testing.T) {
 	token := host.RegisterRun(runID)
 	defer host.UnregisterRun(runID)
 
-	image := os.Getenv("APPROVING_SANDBOX_IMAGE")
-	gatewayURL := os.Getenv("APPROVING_SANDBOX_GATEWAY_URL")
+	image := os.Getenv("GRASP_SANDBOX_IMAGE")
+	gatewayURL := os.Getenv("GRASP_SANDBOX_GATEWAY_URL")
 	if gatewayURL == "" {
 		gatewayURL = "http://127.0.0.1:8899"
 	}
 	// Auth keys must come from Agent env (platform opts.Env skips CURSOR_API_KEY).
-	model := os.Getenv("APPROVING_ACP_BRIDGE_MODEL")
+	model := os.Getenv("GRASP_ACP_BRIDGE_MODEL")
 	if model == "" {
 		model = "cursor-grok-4.5-high-fast"
 	}
@@ -138,12 +138,12 @@ func TestCursorLiveRunAgent(t *testing.T) {
 	defer srv.Close()
 
 	agentEnv := map[string]string{
-		"APPROVING_CURSOR_API_KEY": apiKey,
+		"GRASP_CURSOR_API_KEY": apiKey,
 		"CURSOR_API_KEY":           apiKey,
 		"ACP_BRIDGE_MODEL":         model,
 	}
 	envJSON, _ := json.Marshal(agentEnv)
-	profiles := writeAgent(t, "backend-dev", `{"acpBackend":"cursor","mcp":[{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":`+string(envJSON)+`}`)
+	profiles := writeAgent(t, "backend-dev", `{"acpBackend":"cursor","mcp":[{"name":"artifact-store","url":"${GRASP_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${GRASP_ARTIFACT_TOKEN}"}}],"env":`+string(envJSON)+`}`)
 	provider := newACPProvider(host, Options{
 		SandboxImage: image, // empty → per-backend universal-sandbox-cursor
 		GatewayURL:   gatewayURL,

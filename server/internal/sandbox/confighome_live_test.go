@@ -11,17 +11,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 // Live smoke: gateway config.bundleUrl inject before start.
-// Requires APPROVING_LIVE_GATEWAY (e.g. http://sandbox-gateway.example.com).
+// Requires GRASP_LIVE_GATEWAY (e.g. http://sandbox-gateway.example.com).
 // Serves /sandbox-inject on a host IP reachable from the sandbox (or
-// APPROVING_LIVE_INJECT_ADVERTISE).
+// GRASP_LIVE_INJECT_ADVERTISE).
 func TestLiveGatewayConfigHomeInject(t *testing.T) {
-	base := strings.TrimSpace(os.Getenv("APPROVING_LIVE_GATEWAY"))
+	base := strings.TrimSpace(os.Getenv("GRASP_LIVE_GATEWAY"))
 	if base == "" {
-		t.Skip("set APPROVING_LIVE_GATEWAY to run live gateway inject test")
+		t.Skip("set GRASP_LIVE_GATEWAY to run live gateway inject test")
 	}
 
 	home := t.TempDir()
@@ -49,7 +49,7 @@ func TestLiveGatewayConfigHomeInject(t *testing.T) {
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 
-	advertise := strings.TrimSpace(os.Getenv("APPROVING_LIVE_INJECT_ADVERTISE"))
+	advertise := strings.TrimSpace(os.Getenv("GRASP_LIVE_INJECT_ADVERTISE"))
 	if advertise == "" {
 		advertise = liveReachableAdvertise(t, ln.Addr().(*net.TCPAddr).Port)
 	}
@@ -59,7 +59,7 @@ func TestLiveGatewayConfigHomeInject(t *testing.T) {
 	t.Cleanup(func() { config.StoreConfig(prev) })
 	config.StoreConfig(&config.Config{Server: config.ServerConfig{MCPAdvertise: advertise}})
 
-	gw := NewGatewayClient(base, os.Getenv("APPROVING_SANDBOX_GATEWAY_API_KEY"))
+	gw := NewGatewayClient(base, os.Getenv("GRASP_SANDBOX_GATEWAY_API_KEY"))
 	m := NewManager(gw, ManagerOptions{
 		WorkspaceDir:    "/root/workspace",
 		InstallHelpers:  true,
@@ -74,9 +74,9 @@ func TestLiveGatewayConfigHomeInject(t *testing.T) {
 		ConfigHome: home,
 		ConfigRoot: "/root/.cursor",
 		Env: map[string]string{
-			"APPROVING_ARTIFACT_URL":   "http://api.example.com/mcp/runs/live-inject-test",
-			"APPROVING_ARTIFACT_TOKEN": "live-tok",
-			"APPROVING_RUN_ID":         "live-inject-test",
+			"GRASP_ARTIFACT_URL":   "http://api.example.com/mcp/runs/live-inject-test",
+			"GRASP_ARTIFACT_TOKEN": "live-tok",
+			"GRASP_RUN_ID":         "live-inject-test",
 			"SKIP_INNER_DOCKER":       "1",
 		},
 	})
@@ -159,6 +159,6 @@ func liveReachableAdvertise(t *testing.T, port int) string {
 			return fmt.Sprintf("http://%s:%d", ip.String(), port)
 		}
 	}
-	t.Fatal("cannot derive APPROVING_LIVE_INJECT_ADVERTISE host IP")
+	t.Fatal("cannot derive GRASP_LIVE_INJECT_ADVERTISE host IP")
 	return ""
 }

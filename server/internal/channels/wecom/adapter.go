@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cocofhu/approving/internal/channels"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/channels"
+	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"

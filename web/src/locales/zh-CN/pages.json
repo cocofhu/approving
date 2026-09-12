@@ -773,7 +773,7 @@
           "recentTargetsEmpty": "暂无最近渠道会话，请直接输入 scene:conversationId",
           "recentTargetsToggle": "打开/关闭最近目标列表",
           "recentTargetsLoadFailed": "最近目标加载失败，仍可手输保存",
-          "secretKeyHint": "需要在服务端配置加密密钥才能保存凭据（config: security.secrets_key，或用 APPROVING_SECRETS_KEY 环境变量覆盖）。",
+          "secretKeyHint": "需要在服务端配置加密密钥才能保存凭据（config: security.secrets_key，或用 GRASP_SECRETS_KEY 环境变量覆盖）。",
           "noPmLeaderWarning": "本项目未启用项目管理，启用前渠道回合会失败。",
           "delete": "删除渠道",
           "deleteConfirm": "确认删除此 Channel？",
@@ -1631,7 +1631,7 @@
         "max_test_sandboxes": "最大测试沙箱数"
       },
       "settings": {
-        "max_concurrent_runs": "同时处于 running 状态的 workflow 运行数上限。由 APPROVING_MAX_RUNS 环境变量锁定时页面只读。",
+        "max_concurrent_runs": "同时处于 running 状态的 workflow 运行数上限。由 GRASP_MAX_RUNS 环境变量锁定时页面只读。",
         "run_sandbox_ttl_minutes": "workflow 回合结束后，运行沙箱继续保活的分钟数，便于 agent 继续写产物。",
         "test_sandbox_ttl_minutes": "测试沙箱在无活动后的空闲销毁时间，避免长期占用资源。",
         "max_test_sandboxes": "活跃测试沙箱数达到此上限时，新建测试沙箱请求将被后端拒绝（最小值 ≥ 1，不设最大值上限）。"
@@ -2313,7 +2313,7 @@
         "upstreamHeader": {
           "label": "上游产物说明头",
           "hint": "存在上游产物时,拼在产物文件清单之前。",
-          "placeholder": "\n\n## 上游产物(只读输入)\n以下文件由上游节点产出,已放置在 `.approving/artifacts/` 供你读取:\n"
+          "placeholder": "\n\n## 上游产物(只读输入)\n以下文件由上游节点产出,已放置在 `.grasp/artifacts/` 供你读取:\n"
         },
         "producesContract": {
           "label": "产物契约(agent 节点)",
@@ -2444,7 +2444,7 @@
           "addHeader": "添加 Header",
           "add": "添加 MCP",
           "restoreArtifact": "恢复 artifact-store 预设",
-          "runVars": "运行变量：{'${APPROVING_ARTIFACT_URL}'} / {'${APPROVING_ARTIFACT_TOKEN}'}"
+          "runVars": "运行变量：{'${GRASP_ARTIFACT_URL}'} / {'${GRASP_ARTIFACT_TOKEN}'}"
         },
         "env": {
           "meta": "写入 PM；工程师创建时默认继承。"
@@ -2545,22 +2545,22 @@
             "cursor": {
               "step1": "打开 Cursor Dashboard → Settings → API Keys",
               "step2": "创建 API Key 并复制",
-              "step3": "将 Key 粘贴到下方（或稍后在 Studio Env 填写 APPROVING_CURSOR_API_KEY / CURSOR_API_KEY）"
+              "step3": "将 Key 粘贴到下方（或稍后在 Studio Env 填写 GRASP_CURSOR_API_KEY / CURSOR_API_KEY）"
             },
             "claude": {
               "step1": "打开 Anthropic Console → API Keys（或 Claude Platform → Settings → Keys）",
               "step2": "Create Key 并复制",
-              "step3": "将 Key 粘贴到下方（或填写 APPROVING_CLAUDE_API_KEY / ANTHROPIC_API_KEY）"
+              "step3": "将 Key 粘贴到下方（或填写 GRASP_CLAUDE_API_KEY / ANTHROPIC_API_KEY）"
             },
             "codebuddy": {
               "step1": "确认 Agent 步所选站点（国际站 / 国内站等）",
               "step2": "打开对应站点控制台的 API Key / Profile Keys 页面并创建 Key",
-              "step3": "将 Key 粘贴到下方（APPROVING_CODEBUDDY_API_KEY / CODEBUDDY_API_KEY）"
+              "step3": "将 Key 粘贴到下方（GRASP_CODEBUDDY_API_KEY / CODEBUDDY_API_KEY）"
             },
             "trae": {
               "step1": "打开 Trae 企业控制台：个人信息 → 访问令牌 → CLI 登录令牌",
               "step2": "生成含 trae-lt- 前缀的登录令牌并复制",
-              "step3": "将令牌粘贴到下方（APPROVING_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN）"
+              "step3": "将令牌粘贴到下方（GRASP_TRAE_API_KEY / TRAECLI_PERSONAL_ACCESS_TOKEN）"
             },
             "opencode": {
               "step1": "选择模型厂商（OpenAI / Anthropic / OpenRouter 等，或 Custom）",

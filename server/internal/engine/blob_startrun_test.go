@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestStartRunExternalizesCompositeImages(t *testing.T) {

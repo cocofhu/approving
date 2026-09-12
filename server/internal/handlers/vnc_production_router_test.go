@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/auth"
-	"github.com/cocofhu/approving/internal/router"
+	"github.com/cocofhu/grasp/internal/auth"
+	"github.com/cocofhu/grasp/internal/router"
 )
 
 // g4.1: production paths registered by router.New(), not the legacy

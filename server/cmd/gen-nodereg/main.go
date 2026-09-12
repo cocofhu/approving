@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/envcompat"
+	"github.com/cocofhu/grasp/internal/nodereg"
 )
 
 func workspaceRoot() string {
-	if root := os.Getenv("APPROVING_ROOT"); root != "" {
+	if root := envcompat.Lookup("GRASP_ROOT"); root != "" {
 		return root
 	}
 	wd, err := os.Getwd()

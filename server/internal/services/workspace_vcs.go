@@ -566,7 +566,7 @@ func (v *WorkspaceVcsService) CommitStudioSave(agent string, before, after []Age
 }
 
 // PlaceholderFileName is used to track empty directories in git.
-const PlaceholderFileName = ".approving-dir-placeholder"
+const PlaceholderFileName = ".grasp-dir-placeholder"
 
 // EnsureDirTracked adds a placeholder so mkdir can be versioned.
 func EnsureDirTracked(agent, rel string) error {

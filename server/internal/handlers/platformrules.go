@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/grasp/internal/auth"
 
 	"github.com/gin-gonic/gin"
 )

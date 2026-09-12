@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/auth"
+	"github.com/cocofhu/grasp/internal/auth"
 
 	"github.com/gin-gonic/gin"
 )

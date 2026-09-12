@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func seedInboxReview(t *testing.T, h *harness, runID, nodeID string, withArtifact bool) {

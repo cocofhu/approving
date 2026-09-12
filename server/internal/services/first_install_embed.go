@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 //go:embed all:first_install_embed

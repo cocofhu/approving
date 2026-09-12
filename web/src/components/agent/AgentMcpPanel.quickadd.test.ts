@@ -109,7 +109,7 @@ describe('AgentMcpPanel', () => {
     await w.get('[data-test="mcp-add-scheduler"]').trigger('click')
     await flushPromises()
     expect(d.mcp.map((m) => m.name)).toEqual(['memory-store', 'context-store', 'task-scheduler'])
-    expect(d.mcp[0].url).toBe('${APPROVING_MEMORY_URL}')
+    expect(d.mcp[0].url).toBe('${GRASP_MEMORY_URL}')
 
     await w.get('[data-test="mcp-add-memory"]').trigger('click')
     await flushPromises()

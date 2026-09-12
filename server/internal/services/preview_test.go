@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/browser"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/sandbox/sandboxtest"
+	"github.com/cocofhu/grasp/internal/browser"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox/sandboxtest"
 )
 
 func TestPreviewServiceCRUD(t *testing.T) {

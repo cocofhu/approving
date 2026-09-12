@@ -13,11 +13,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
-	"github.com/cocofhu/approving/internal/sandbox"
-	"github.com/cocofhu/approving/internal/textutil"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/textutil"
 
 	"github.com/gorilla/websocket"
 )
@@ -464,7 +464,7 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	}
 	off := map[string]string{"VNC_PREVIEW": "0"}
 	applyAppPreviewEnv(off, "approve", nil, "http://app.example")
-	if off["VNC_PREVIEW"] != "0" || off["APPROVING_VNC_PREVIEW"] != "" {
+	if off["VNC_PREVIEW"] != "0" || off["GRASP_VNC_PREVIEW"] != "" {
 		t.Fatalf("explicit off must stick: %v", off)
 	}
 	other := map[string]string{}
@@ -658,7 +658,7 @@ func writeAgent(t *testing.T, profile, agentJSON string) string {
 }
 
 func TestAgentConfigAndMCP(t *testing.T) {
-	root := writeAgent(t, "dev", `{"mcp":[{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}],"env":{"GITLAB_TOKEN":"tok-${APPROVING_RUN_ID}","APPROVING_CURSOR_API_KEY":"test-key"}}`)
+	root := writeAgent(t, "dev", `{"mcp":[{"name":"artifact-store","url":"${GRASP_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${GRASP_ARTIFACT_TOKEN}"}}],"env":{"GITLAB_TOKEN":"tok-${GRASP_RUN_ID}","GRASP_CURSOR_API_KEY":"test-key"}}`)
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{ProfilesRoot: root, MCPEndpoint: "http://host.docker.internal:9099"}).(*acpProvider)
 	req := NodeReq{RunID: "run9", NodeID: "n", Token: "tkn", NodeType: "agent",
@@ -693,7 +693,7 @@ func TestAgentConfigAndMCP(t *testing.T) {
 }
 
 func TestSpecDoesNotDeriveGitLabURLFromGitHubRepo(t *testing.T) {
-	root := writeAgent(t, "dev", `{"env":{"GITHUB_TOKEN":"gh","GITLAB_TOKEN":"gl","APPROVING_CURSOR_API_KEY":"test-key"}}`)
+	root := writeAgent(t, "dev", `{"env":{"GITHUB_TOKEN":"gh","GITLAB_TOKEN":"gl","GRASP_CURSOR_API_KEY":"test-key"}}`)
 	host := mcp.NewHost(newMemStore())
 	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
 	req := NodeReq{RunID: "run-gh", NodeID: "n", Token: "tkn", NodeType: "agent",

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/models"
+	"github.com/cocofhu/grasp/internal/models"
 )
 
 func TestProjectCRUDAndErrors(t *testing.T) {

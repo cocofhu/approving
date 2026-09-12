@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/gateshare"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/nodereg"
+	"github.com/cocofhu/grasp/internal/gateshare"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/nodereg"
 
 	"github.com/gin-gonic/gin"
 )

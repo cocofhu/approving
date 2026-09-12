@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 func TestPmThreadDeleteAndLookupHelpers(t *testing.T) {

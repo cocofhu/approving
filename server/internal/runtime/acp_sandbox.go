@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/approving/internal/envauth"
-	"github.com/cocofhu/approving/internal/mcp"
-	"github.com/cocofhu/approving/internal/models"
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/envauth"
+	"github.com/cocofhu/grasp/internal/mcp"
+	"github.com/cocofhu/grasp/internal/models"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 // registerLive records a node's sandbox so its event log can be read straight
@@ -411,11 +411,11 @@ func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]a
 	}
 	// Shared / Agent env can explicitly turn the stack off (first-install wizard).
 	if envFlagOff(env["VNC_PREVIEW"]) {
-		delete(env, "APPROVING_VNC_PREVIEW")
+		delete(env, "GRASP_VNC_PREVIEW")
 		return
 	}
 	env["VNC_PREVIEW"] = "1"
-	env["APPROVING_VNC_PREVIEW"] = "1"
+	env["GRASP_VNC_PREVIEW"] = "1"
 }
 
 func envFlagOff(v string) bool {

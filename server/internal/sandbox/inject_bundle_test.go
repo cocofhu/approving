@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cocofhu/approving/internal/config"
+	"github.com/cocofhu/grasp/internal/config"
 )
 
 func TestPackConfigHomeTarGz(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cocofhu/approving/internal/sandbox"
+	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
 // TestIsRetryableSandboxErr covers the classifier that decides whether a node

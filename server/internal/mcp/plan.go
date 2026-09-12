@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cocofhu/approving/internal/mcp/mermaidvalidate"
+	"github.com/cocofhu/grasp/internal/mcp/mermaidvalidate"
 )
 
 // mermaidSyntaxCheck validates a mermaid diagram source. Tests may override.

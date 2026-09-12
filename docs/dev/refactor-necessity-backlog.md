@@ -66,7 +66,7 @@
 ### 兼容旁路（必须保留）
 
 - `CURSOR_ACP_PASSWORD` 等密码别名
-- `APPROVING_EXEC_PROVIDER`
+- `GRASP_EXEC_PROVIDER`
 - 旧软链 / legacy gate / routing / 字段 fallback
 - `SandboxPurposePM` / `purpose=pm` legacy 沙箱用途
 - 其它文档标明计划 0.2.0 移除但仍可用的入口

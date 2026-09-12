@@ -266,10 +266,10 @@ describe('hasConfiguredGitToken / inferGitCredentialTypeFromTokens', () => {
   })
 
   it('ACP API Key 不计入 Git Token', () => {
-    expect(hasConfiguredGitToken({ APPROVING_CURSOR_API_KEY: 'sk-x', CURSOR_API_KEY: 'sk-y' })).toBe(
+    expect(hasConfiguredGitToken({ GRASP_CURSOR_API_KEY: 'sk-x', CURSOR_API_KEY: 'sk-y' })).toBe(
       false,
     )
-    expect(inferGitCredentialTypeFromTokens({ APPROVING_CURSOR_API_KEY: 'sk-x' })).toBeUndefined()
+    expect(inferGitCredentialTypeFromTokens({ GRASP_CURSOR_API_KEY: 'sk-x' })).toBeUndefined()
   })
 
   it('本地或继承任一有值即视为已配置（空本地不覆盖继承）', () => {

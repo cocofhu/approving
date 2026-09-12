@@ -139,7 +139,7 @@ when Secret `PAGES_DEPLOY_KEY` is configured.
 
 Pushing a `v*` tag runs:
 
-- `publish-image` → `ghcr.io/cocofhu/approving`
+- `publish-image` → `ghcr.io/cocofhu/grasp`
 - `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
 - `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}`
 
@@ -154,10 +154,10 @@ set them Public under GitHub → Packages if anonymous pulls are required.
 
 Default tags used by `./start.sh` (overridable in `.env`):
 
-- `ghcr.io/cocofhu/approving:0.3.13-beta`
+- `ghcr.io/cocofhu/grasp:0.3.13-beta`
 - `ghcr.io/cocofhu/sandbox-gateway:0.3.13-beta`
 - `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}:0.3.13-beta`
-  (per `acpBackend`; optional `SANDBOX_IMAGE` / `APPROVING_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke).
+  (per `acpBackend`; optional `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke).
 
 ### release-smoke (manual; not a PR required check)
 
@@ -169,7 +169,7 @@ Workflow: `.github/workflows/release-smoke.yml`.
 | `v*` / other tags | **Not** wired on purpose — beta tags without release secrets would fail red noise |
 | Pull requests | **Not** triggered — do not add as a per-PR required check |
 
-The job needs repository secrets `APPROVING_IMAGE`, `SANDBOX_GATEWAY_IMAGE`,
+The job needs repository secrets `GRASP_IMAGE`, `SANDBOX_GATEWAY_IMAGE`,
 and `SANDBOX_IMAGE` (each a digest-pinned reference such as
 `ghcr.io/...@sha256:...`). It pulls multi-GB images, runs `./release-smoke.sh`,
 and uploads `release-evidence/`. That cost is why smoke stays manual: do **not**
@@ -178,10 +178,10 @@ run full image pulls on every PR unless a future lightweight mode exists.
 Local equivalent after images are available:
 
 ```bash
-export APPROVING_IMAGE='ghcr.io/cocofhu/approving@sha256:...'
+export GRASP_IMAGE='ghcr.io/cocofhu/grasp@sha256:...'
 export SANDBOX_GATEWAY_IMAGE='ghcr.io/cocofhu/sandbox-gateway@sha256:...'
 export SANDBOX_IMAGE='ghcr.io/cocofhu/universal-sandbox-cursor@sha256:...'
-# release-smoke.sh exports APPROVING_SANDBOX_IMAGE=$SANDBOX_IMAGE for global force.
+# release-smoke.sh exports GRASP_SANDBOX_IMAGE=$SANDBOX_IMAGE for global force.
 ./release-smoke.sh
 ```
 
