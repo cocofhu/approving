@@ -8,10 +8,10 @@
 #   ./start.sh logs        follow logs
 #   ./start.sh down        stop and remove containers
 #   ./start.sh restart     down + up -d
-#   ./start.sh pull        refresh compose images + all five sandbox runtimes
+#   ./start.sh pull        refresh compose images + the sandbox runtime
 #   ./start.sh dev         local source stack (build server/web/gateway)
 #   ./start.sh dev -d      local source stack, detached
-#   ./start.sh sandbox     build universal-sandbox-cursor:local (dev only)
+#   ./start.sh sandbox     build universal-sandbox:local (dev only)
 #   ./start.sh gateway     rebuild local sandbox-gateway image (dev only)
 #
 # Requires Docker Compose on a Linux host (services use network_mode: host).
@@ -49,23 +49,16 @@ set +a
 : "${GRASP_GATEWAY_PORT:=8899}"
 : "${GRASP_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${GRASP_GATEWAY_PORT}}"
 : "${GRASP_DEPLOYMENT_MODE:=local-demo}"
-: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.4.0}"
-: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.4.0}"
+: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.5.0}"
+: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.5.0}"
 : "${SANDBOX_GATEWAY_API_KEY:=grasp-local-demo}"
 
-# Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
-# cursor fallback default, so a bare default does not re-force all backends.
-_user_sandbox_image="${SANDBOX_IMAGE-}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.4.0}"
-: "${GRASP_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.4.0}"
-: "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.4.0}"
-: "${GRASP_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.4.0}"
-: "${GRASP_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.4.0}"
-: "${GRASP_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.4.0}"
-: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.4.0}"
-# Explicit SANDBOX_IMAGE (or GRASP_SANDBOX_IMAGE) → global force; default path leaves it empty.
-if [[ -z "${GRASP_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
-  GRASP_SANDBOX_IMAGE="${_user_sandbox_image}"
+# One published sandbox image (five CLIs inside; runtime AGENT_PROVIDER picks).
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox:0.5.0}"
+# Release compose must pin Grasp to GHCR; empty would fall through to
+# universal-sandbox:local inside the container.
+if [[ -z "${GRASP_SANDBOX_IMAGE:-}" ]]; then
+  GRASP_SANDBOX_IMAGE="${SANDBOX_IMAGE}"
 fi
 
 # Demo account (admin / demo1234). Set outside the .env file so `$` in the
@@ -81,12 +74,7 @@ fi
 export GRASP_PORT GRASP_GATEWAY_PORT GRASP_SANDBOX_GATEWAY_URL
 export GRASP_DEPLOYMENT_MODE GRASP_IMAGE SANDBOX_GATEWAY_IMAGE
 export SANDBOX_IMAGE SANDBOX_GATEWAY_API_KEY GRASP_AUTH_USERS GRASP_DOCTOR_TOKEN
-export GRASP_SANDBOX_IMAGE_CURSOR GRASP_SANDBOX_IMAGE_CLAUDE_CODE
-export GRASP_SANDBOX_IMAGE_CODEBUDDY GRASP_SANDBOX_IMAGE_TRAE
-export GRASP_SANDBOX_IMAGE_OPENCODE
-export SBGW_IMAGE_TEMPLATE
-# May be empty (no global force). Export so compose substitutes ${GRASP_SANDBOX_IMAGE:-}.
-export GRASP_SANDBOX_IMAGE="${GRASP_SANDBOX_IMAGE:-}"
+export GRASP_SANDBOX_IMAGE
 # Grasp client uses the dedicated env name; keep it in sync with the gateway.
 export GRASP_SANDBOX_GATEWAY_API_KEY="${GRASP_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
 export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
@@ -135,43 +123,17 @@ print_release_endpoints() {
   echo "—— gateway token  ${SANDBOX_GATEWAY_API_KEY}"
   echo "—— images  ${GRASP_IMAGE}"
   echo "           ${SANDBOX_GATEWAY_IMAGE}"
-  echo "—— sandbox (per backend)"
-  echo "           cursor     ${GRASP_SANDBOX_IMAGE_CURSOR}"
-  echo "           claude_code ${GRASP_SANDBOX_IMAGE_CLAUDE_CODE}"
-  echo "           codebuddy  ${GRASP_SANDBOX_IMAGE_CODEBUDDY}"
-  echo "           trae       ${GRASP_SANDBOX_IMAGE_TRAE}"
-  echo "           opencode   ${GRASP_SANDBOX_IMAGE_OPENCODE}"
-  if [[ -n "${GRASP_SANDBOX_IMAGE:-}" ]]; then
-    echo "—— sandbox GLOBAL FORCE  ${GRASP_SANDBOX_IMAGE}"
-  fi
-  echo "—— gateway template  ${SBGW_IMAGE_TEMPLATE}"
-  echo "—— gateway fallback  ${SANDBOX_IMAGE}"
+  echo "—— sandbox ${GRASP_SANDBOX_IMAGE}"
 }
 
 # Sandbox runtime images are NOT compose services — compose pull never fetches them.
-# Pull published GHCR runtimes (all five ACP backends). Used only by `./start.sh pull`
-# for explicit warm-up; default up/-d/restart leave runtimes to on-demand gateway pull.
+# Used only by `./start.sh pull`; default up/-d/restart leave the runtime to
+# on-demand gateway pull.
 ensure_sandbox_runtime_image() {
-  local images=(
-    "${GRASP_SANDBOX_IMAGE_CURSOR}"
-    "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE}"
-    "${GRASP_SANDBOX_IMAGE_CODEBUDDY}"
-    "${GRASP_SANDBOX_IMAGE_TRAE}"
-    "${GRASP_SANDBOX_IMAGE_OPENCODE}"
-  )
-  # Deduplicate while preserving order (global force may equal one backend).
-  if [[ -n "${GRASP_SANDBOX_IMAGE:-}" ]]; then
-    images+=("${GRASP_SANDBOX_IMAGE}")
-  fi
-  local -A seen=()
-  local img
-  for img in "${images[@]}"; do
-    [[ -n "$img" ]] || continue
-    [[ -n "${seen[$img]:-}" ]] && continue
-    seen[$img]=1
-    echo "pulling sandbox runtime image ${img} (GHCR, several GB)..."
-    docker pull "$img"
-  done
+  local img="${GRASP_SANDBOX_IMAGE:-$SANDBOX_IMAGE}"
+  [[ -n "$img" ]] || return 0
+  echo "pulling sandbox runtime image ${img} (GHCR, several GB)..."
+  docker pull "$img"
 }
 
 # Approving + Gateway publish images: pull only when missing locally (g1.2).
@@ -206,8 +168,8 @@ up_release() {
     wait_for_url "http://127.0.0.1:${GRASP_PORT}/api/health" "api"
     echo "started (GHCR)"
     print_release_endpoints
-    echo "note: sandbox runtimes pull on first use of each Agent backend"
-    echo "      warm all five: ./start.sh pull"
+    echo "note: sandbox runtime pulls on first Agent use"
+    echo "      warm it now: ./start.sh pull"
     echo "data: .localdata/{gateway,db,app-data} (bind mounts)"
     echo "wipe: ./start.sh down && rm -rf .localdata"
     echo "logs: ./start.sh logs   stop: ./start.sh down"
@@ -218,7 +180,7 @@ up_release() {
 }
 
 ensure_dev_sandbox_image() {
-  local sandbox_image="${GRASP_GATEWAY_SANDBOX_IMAGE:-universal-sandbox-cursor:local}"
+  local sandbox_image="${GRASP_GATEWAY_SANDBOX_IMAGE:-universal-sandbox:local}"
   local gateway_dir="${SANDBOX_GATEWAY_DIR:-./sandbox-gateway}"
   if docker image inspect "$sandbox_image" >/dev/null 2>&1; then
     return 0
@@ -230,7 +192,7 @@ ensure_dev_sandbox_image() {
   echo "building local sandbox image ${sandbox_image} (first run is slow)..."
   docker build --network=host \
     -t "$sandbox_image" \
-    --build-arg AGENT_PROVIDER=cursor \
+    --build-arg AGENT_PROVIDERS="${AGENT_PROVIDERS:-cursor,claude_code,codebuddy,trae,opencode}" \
     -f "${gateway_dir}/sandbox/Dockerfile" \
     "${gateway_dir}/sandbox"
 }
@@ -304,10 +266,10 @@ case "$cmd" in
     ;;
   sandbox)
     gateway_dir="${SANDBOX_GATEWAY_DIR:-./sandbox-gateway}"
-    sandbox_image="${GRASP_GATEWAY_SANDBOX_IMAGE:-universal-sandbox-cursor:local}"
+    sandbox_image="${GRASP_GATEWAY_SANDBOX_IMAGE:-universal-sandbox:local}"
     docker build --network=host \
       -t "$sandbox_image" \
-      --build-arg AGENT_PROVIDER=cursor \
+      --build-arg AGENT_PROVIDERS="${AGENT_PROVIDERS:-cursor,claude_code,codebuddy,trae,opencode}" \
       -f "${gateway_dir}/sandbox/Dockerfile" \
       "${gateway_dir}/sandbox"
     echo "built ${sandbox_image}"

@@ -1127,7 +1127,7 @@ func TestCreatePullsMissingImageAndReportsPulling(t *testing.T) {
 	t.Cleanup(base.Close)
 	gate := &pullGateDriver{Driver: base, present: false, pullSlow: 80 * time.Millisecond}
 	svc := New(gate, st, Config{
-		Image: "ghcr.io/cocofhu/universal-sandbox-cursor:test",
+		Image: "ghcr.io/cocofhu/universal-sandbox:test",
 		Ports: []int{8765}, SessionPort: 8765, WorkspaceDir: "/root/workspace",
 		FinalizeTimeout: 3 * time.Second, Resources: testResources(),
 	})

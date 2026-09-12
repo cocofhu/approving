@@ -26,9 +26,9 @@ Two paths, different UI ports:
 | Release (default) | `./start.sh -d` | `:8899` | `:8080` | `:8080` (served with the API) |
 | Dev / source | `./start.sh dev -d` | `:8899` | `:8080` | `:5173` (Vite) |
 
-Release mode ensures Grasp + Gateway images when missing; sandbox runtimes
-pull on first create (`status=pulling`). Use `./start.sh pull` to warm all five.
-Dev mode may build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox`
+Release mode ensures Grasp + Gateway images when missing; the sandbox runtime
+pulls on first create (`status=pulling`). Use `./start.sh pull` to warm it.
+Dev mode may build `universal-sandbox:local` from `sandbox-gateway/sandbox`
 on first run (slow).
 
 ## Minimum compatible API
@@ -42,7 +42,7 @@ on first run (slow).
 | Delete | `DELETE /api/v1/sandboxes/{id}` returns 2xx |
 | Logs | `GET /api/v1/sandboxes/{id}/logs?tail=` returns `{content}` (PID1 stdout/stderr, non-follow). Docker (`docker logs --tail`) and kubernetes (pod `sandbox` container via client-go GetLogs) both supported. Cluster RBAC must allow `get` on `pods/log` in the sandbox namespace; the incremental Role+RoleBinding is shipped in `sandbox-gateway/deploy/k8s/` (apply alongside existing Roles — do not replace a full production Role). Drivers that still omit Logs → `501` |
 | Ready | status `running` with a `session` endpoint |
-| Images | per Agent `acpBackend`: `universal-sandbox-{cursor\|claude_code\|codebuddy\|trae\|opencode}` |
+| Images | one image `universal-sandbox` (five CLIs); runtime `AGENT_PROVIDER` / `ACP_BACKEND` selects the live CLI |
 | Data plane | SSH / session / ide may connect directly (each has its own auth). CDP `:9222` and noVNC `:6080` are **not** external data-plane: they stay on the container/cluster network. Users use `/sandbox-vnc/:id/ws` and `/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on; Session validity only, no sandbox/run ownership check). Grasp outside the cluster/Docker net cannot dial CDP/noVNC. Docker already-running `-p` needs TTL/Reinstall. K8s inventory `*-lb` is healed on gateway startup reconcile / Start / Reinstall; until then 9222/6080 may still be on the LB. |
 | Auth | Bearer token: gateway `SBGW_API_KEYS` / client `GRASP_SANDBOX_GATEWAY_API_KEY` (compose default `grasp-local-demo` via `SANDBOX_GATEWAY_API_KEY`) |
 

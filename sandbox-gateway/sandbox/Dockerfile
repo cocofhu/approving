@@ -1,17 +1,13 @@
 # 统一通用沙箱镜像：多语言 + 容器内 DinD（docker / docker compose）+ SSH + code-server + backend 网关
 #
-# 镜像策略：共享 base + 每 agent 一层薄镜像。除 backend 网关与全套工具链外，构建期仅安装
-#   `--build-arg AGENT_PROVIDER=<provider>` 选中的那一个 Agent CLI（默认 cursor）。base 层跨
-#   不同 agent tag 复用同一缓存，差异层只是"装哪个 CLI"。
-# 构建示例：
-#   docker build --build-arg AGENT_PROVIDER=gemini -t sandbox:gemini .
-#   docker build --build-arg AGENT_PROVIDER=codex  -t sandbox:codex  .
-#   # 未内置安装方式的 provider：自带安装命令
-#   docker build --build-arg AGENT_PROVIDER=grok --build-arg AGENT_INSTALL_CMD='npm i -g <pkg>' -t sandbox:grok .
+# 镜像策略：一张图预装五个对外 CLI（cursor / claude_code / codebuddy / trae / opencode）。
+# 运行时 AGENT_PROVIDER / ACP_BACKEND 单活。本地打薄镜像：
+#   docker build --build-arg AGENT_PROVIDERS=cursor -t universal-sandbox:local .
+#   docker build --build-arg AGENT_PROVIDERS=gemini -t sandbox:gemini .
+#   docker build --build-arg AGENT_INSTALL_CMD='npm i -g <pkg>' -t sandbox:custom .
 # 运行示例：docker run --privileged -e CODE_SERVER_PORT=8744 -p 8744:8744 -p 22:22 -p 8765:8765 <image>
 # backend 默认监听 0.0.0.0:8765（容器内需 -p 映射方可从宿主机访问），可用 -e ACP_BRIDGE_PORT=<端口> 覆盖；
-#   可选 -e ACP_BRIDGE_PASSWORD=<口令> 启用登录页；cwd 为 WORKSPACE_DIR。镜像已按 AGENT_PROVIDER 固定 agent，
-#   运行时该值与构建期一致（如需换 agent 请换对应 tag 的镜像）。
+#   可选 -e ACP_BRIDGE_PASSWORD=<口令> 启用登录页；cwd 为 WORKSPACE_DIR。
 # 不需要内置 Docker：docker run -e SKIP_INNER_DOCKER=1 ...
 
 # 22.04：glibc ≥ 2.34，满足新版 code-server 内置 argon2 原生模块要求（20.04 会报 GLIBC_2.34 not found）
@@ -147,7 +143,7 @@ ENV PATH=$PATH:/usr/local/mongocli/bin
 
 # Agent CLI 运行路径（cursor-agent 等下载型 CLI 装到 /root/.local/bin）。PATH 提前声明，
 # 便于 Cursor Server / SSH 等非 entrypoint 进程也能找到命令。具体 CLI 由末尾的 agent 安装层
-# 按 AGENT_PROVIDER 装入（见 scripts/install-agent.sh）。
+# 按 AGENT_PROVIDERS 装入（见 scripts/install-agent.sh）。
 RUN mkdir -p /root/.local/bin && \
     echo 'export PATH="/root/.local/bin:$PATH"' > /etc/profile.d/agent-path.sh
 ENV PATH=/root/.local/bin:$PATH
@@ -318,15 +314,17 @@ RUN chmod +x /usr/local/bin/preview-inject.sh
 COPY scripts/startup.sh /startup.sh
 RUN chmod +x /startup.sh
 
-# ── Agent 安装层（每 agent 薄镜像的唯一差异层）───────────────────────────────
-# ARG 刻意放在最后：其上所有层（工具链 / code-server / backend 网关 / 脚本）在不同
-# AGENT_PROVIDER 之间完全一致，可跨 tag 复用同一缓存；仅此层随所选 agent 变化。
-# ENV AGENT_PROVIDER 使运行时默认选中构建期安装的那个 agent（与镜像内 CLI 一致）。
-ARG AGENT_PROVIDER=cursor
+# ── Agent 安装层 ──────────────────────────────────────────────────────────
+# 默认预装五个对外 CLI；运行时 AGENT_PROVIDER / ACP_BACKEND 单活。
+# 本地打薄镜像：--build-arg AGENT_PROVIDERS=cursor
+ARG AGENT_PROVIDERS=cursor,claude_code,codebuddy,trae,opencode
+ARG AGENT_OPTIONAL_PROVIDERS=trae
 ARG AGENT_INSTALL_CMD=
-ENV AGENT_PROVIDER=${AGENT_PROVIDER}
+ENV AGENT_PROVIDER=cursor
 COPY scripts/install-agent.sh /usr/local/bin/install-agent.sh
 RUN chmod +x /usr/local/bin/install-agent.sh && \
-    AGENT_INSTALL_CMD="${AGENT_INSTALL_CMD}" /usr/local/bin/install-agent.sh "${AGENT_PROVIDER}"
+    AGENT_INSTALL_CMD="${AGENT_INSTALL_CMD}" \
+    AGENT_OPTIONAL_PROVIDERS="${AGENT_OPTIONAL_PROVIDERS}" \
+    /usr/local/bin/install-agent.sh "${AGENT_PROVIDERS}"
 
 ENTRYPOINT ["/startup.sh"]

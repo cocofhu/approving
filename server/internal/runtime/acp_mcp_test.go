@@ -30,7 +30,7 @@ func TestCursorLiveMCP(t *testing.T) {
 	if apiKey == "" {
 		t.Fatal("GRASP_CURSOR_API_KEY required")
 	}
-	// Empty → per-backend universal-sandbox-cursor (do not force legacy monolithic tag).
+	// Empty → DefaultSandboxImage (universal-sandbox:local).
 	image := os.Getenv("GRASP_SANDBOX_IMAGE")
 	model := getenvOr("GRASP_ACP_BRIDGE_MODEL", "cursor-grok-4.5-high-fast")
 

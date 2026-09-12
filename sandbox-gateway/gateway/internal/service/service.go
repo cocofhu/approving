@@ -108,7 +108,7 @@ type CreateRequest struct {
 	Config       *driver.ConfigInject
 	Image        string // override image (optional; wins over provider mapping)
 	// Provider selects the agent CLI. When set (and Image is empty) the gateway
-	// resolves it to a per-agent image, and injects AGENT_PROVIDER/ACP_BACKEND
+	// may resolve a custom per-provider image, and injects AGENT_PROVIDER/ACP_BACKEND
 	// into the sandbox env when the caller did not set them.
 	Provider string
 	// Resources are optional per-sandbox limits; zeros use gateway defaults.

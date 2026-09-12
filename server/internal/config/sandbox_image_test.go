@@ -6,13 +6,13 @@ func TestDefaultSandboxImage(t *testing.T) {
 	cases := []struct {
 		backend, want string
 	}{
-		{"cursor", "universal-sandbox-cursor:local"},
-		{"claude_code", "universal-sandbox-claude_code:local"},
-		{"codebuddy", "universal-sandbox-codebuddy:local"},
-		{"trae", "universal-sandbox-trae:local"},
-		{"opencode", "universal-sandbox-opencode:local"},
-		{"", "universal-sandbox-cursor:local"},
-		{"nope", "universal-sandbox-cursor:local"},
+		{"cursor", "universal-sandbox:local"},
+		{"claude_code", "universal-sandbox:local"},
+		{"codebuddy", "universal-sandbox:local"},
+		{"trae", "universal-sandbox:local"},
+		{"opencode", "universal-sandbox:local"},
+		{"", "universal-sandbox:local"},
+		{"nope", "universal-sandbox:local"},
 	}
 	for _, tc := range cases {
 		if got := DefaultSandboxImage(tc.backend); got != tc.want {

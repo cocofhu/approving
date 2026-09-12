@@ -145,7 +145,7 @@ func TestCursorLiveRunAgent(t *testing.T) {
 	envJSON, _ := json.Marshal(agentEnv)
 	profiles := writeAgent(t, "backend-dev", `{"acpBackend":"cursor","mcp":[{"name":"artifact-store","url":"${GRASP_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${GRASP_ARTIFACT_TOKEN}"}}],"env":`+string(envJSON)+`}`)
 	provider := newACPProvider(host, Options{
-		SandboxImage: image, // empty → per-backend universal-sandbox-cursor
+		SandboxImage: image, // empty → universal-sandbox:local
 		GatewayURL:   gatewayURL,
 		ProfilesRoot: profiles,
 		ChatTimeout:  8 * time.Minute,

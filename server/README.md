@@ -166,7 +166,7 @@ Staging 示例:
 
 ### OpenCode
 
-1. Meta:`acpBackend = opencode`(沙箱镜像 `universal-sandbox-opencode`;CLI 为 `opencode run --format json`,经 ACP 桥包装)。
+1. Meta:`acpBackend = opencode`(沙箱镜像 `universal-sandbox`;CLI 为 `opencode run --format json`,经 ACP 桥包装)。
 2. 共享 Agent env:
    - `GRASP_OPENCODE_API_KEY`(别名 `OPENCODE_API_KEY`)
    - `GRASP_OPENCODE_PROVIDER`:OpenCode 模型目录(models.dev)里的厂商 id(`openai` / `anthropic` / `deepseek` / `zai` / …);目录里没有的可以直接自己起一个名字(如 `tokenhub`),runtime 会按 OpenAI 兼容端点生成适配器,此时 `GRASP_OPENCODE_BASE_URL` 必填。`custom` 是这类自定义端点的默认名字,没有特殊含义
@@ -293,7 +293,7 @@ CDP/noVNC。K8s 存量 LB 在 gateway 启动调和完成前仍可能对外暴露
 
 ```bash
 cd server
-GRASP_SANDBOX_IMAGE=universal-sandbox-cursor:local \
+GRASP_SANDBOX_IMAGE=universal-sandbox:local \
 GRASP_PORT=8090 \
 go run ./cmd/server
 ```

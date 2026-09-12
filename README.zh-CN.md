@@ -106,7 +106,7 @@ cd approving
 - Gateway 健康检查：<http://localhost:8899/healthz>
 - 本地演示账号：`admin` / `demo1234`
 
-> 沙箱 runtime 在首次启动某 Agent 后端时按需拉取（待办 / 运行页会显示拉取 loading）。可用 `./start.sh pull` 一次性预热全部五个。
+> 沙箱 runtime 在首次创建沙箱时按需拉取（待办 / 运行页会显示拉取 loading）。可用 `./start.sh pull` 提前预热。
 
 常用命令：
 

@@ -30,7 +30,7 @@ cd approving
 - Gateway health：http://localhost:8899/healthz
 - 默认登录：`admin` / `demo1234`（local-demo）
 
-默认 `./start.sh` / `-d` / `restart` **不会**预拉五个 sandbox runtime：首次使用某个 Agent 后端创建沙箱时，Gateway 再按需拉取该镜像（可能数 GB），待办 starting / 运行页会显示「正在拉取镜像」。需要一次性预热全部 runtime 时用 `./start.sh pull`。
+默认 `./start.sh` / `-d` / `restart` **不会**预拉 sandbox runtime：首次创建沙箱时 Gateway 再按需拉取（可能数 GB），待办 starting / 运行页会显示「正在拉取镜像」。需要提前预热用 `./start.sh pull`。
 
 Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` 宿主机目录（bind mount：`gateway` / `db` / `app-data`）。`./start.sh restart` 与 `./start.sh down` 会保留该目录。清空数据：`./start.sh down && rm -rf .localdata`。
 
@@ -49,12 +49,12 @@ Agent / workspace / platform-rules 与 SQLite 持久在仓库根 `.localdata` �
 ```bash
 ./start.sh logs
 ./start.sh down
-./start.sh pull          # 刷新 compose 镜像并预热五个 sandbox runtime
+./start.sh pull          # 刷新 compose 镜像并预热 sandbox runtime
 ./start.sh restart       # down + up -d（保留 .localdata）
 ./start.sh dev -d        # 源码栈：go run + Vite HMR
 ```
 
-镜像 tag / digest 可在 `.env` 覆盖 — 见仓库根目录 [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example)。默认按 backend 分流沙箱镜像；仅当显式设置 `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` 时才全局强制。发布与 smoke 见 [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md)。
+镜像 tag / digest 可在 `.env` 覆盖 — 见仓库根目录 [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example)。默认一张 `universal-sandbox`（五个 CLI 预装，运行时按 Agent 后端切换）。发布与 smoke 见 [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md)。
 
 ## 下一步
 

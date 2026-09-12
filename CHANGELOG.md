@@ -4,6 +4,18 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.5.0 — 2026-09-12
+
+- **Breaking:** publish one sandbox image `ghcr.io/cocofhu/universal-sandbox`
+  instead of per-backend `universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}`.
+  The image preinstalls the five CLIs; runtime `AGENT_PROVIDER` / `ACP_BACKEND`
+  selects the live backend. Upgrade pins in `.env` / compose from the old
+  per-provider tags to `universal-sandbox:<tag>`. Existing `0.4.0` split tags
+  stay on GHCR. `GRASP_SANDBOX_IMAGE_*` remains an optional per-backend
+  override.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.5.0`.
+
 ## 0.4.0 — 2026-09-12
 
 - **Breaking:** remove the approving → grasp compatibility window. The

@@ -74,7 +74,7 @@ services:
       SBGW_DRIVER: docker
       # 监听端口与后端错开;config.local.yaml 默认 :8080,这里用 SBGW_LISTEN 覆盖。
       SBGW_LISTEN: ":${GRASP_GATEWAY_PORT:-8899}"
-      # 留空则用 config.local.yaml 的 image.ref(universal-sandbox-cursor:local)。
+      # 留空则用 config.local.yaml 的 image.ref(universal-sandbox:local)。
       SBGW_IMAGE: ${GRASP_GATEWAY_SANDBOX_IMAGE:-}
       # Default local-demo Bearer; overrides empty auth.apiKeys in config.local.yaml.
       SBGW_API_KEYS: ${SBGW_API_KEYS:-grasp-local-demo}

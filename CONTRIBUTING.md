@@ -141,23 +141,21 @@ Pushing a `v*` tag runs:
 
 - `publish-image` → `ghcr.io/cocofhu/grasp`
 - `publish-gateway` → `ghcr.io/cocofhu/sandbox-gateway`
-- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}`
+- `publish-sandbox` → `ghcr.io/cocofhu/universal-sandbox`
 
-A release is complete only when all three workflows succeed, and
-`publish-sandbox` is green for every matrix provider
-(`cursor`, `claude_code`, `codebuddy`, `trae`, `opencode`). If any job fails, re-run the
-failed workflow via **Actions → workflow_dispatch** (e.g. re-run
-`publish-sandbox` for an existing `v*` tag such as `v0.3.13-beta`).
+A release is complete only when all three workflows succeed. If any job fails,
+re-run the failed workflow via **Actions → workflow_dispatch** (e.g. re-run
+`publish-sandbox` for an existing `v*` tag).
 
 Sandbox builds are large (often 30–90+ minutes). Packages may start private;
 set them Public under GitHub → Packages if anonymous pulls are required.
 
 Default tags used by `./start.sh` (overridable in `.env`):
 
-- `ghcr.io/cocofhu/grasp:0.3.13-beta`
-- `ghcr.io/cocofhu/sandbox-gateway:0.3.13-beta`
-- `ghcr.io/cocofhu/universal-sandbox-{cursor,claude_code,codebuddy,trae,opencode}:0.3.13-beta`
-  (per `acpBackend`; optional `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` forces one image for all backends — used by release-smoke).
+- `ghcr.io/cocofhu/grasp:0.5.0`
+- `ghcr.io/cocofhu/sandbox-gateway:0.5.0`
+- `ghcr.io/cocofhu/universal-sandbox:0.5.0`
+  (one image for every `acpBackend`; `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` pin or override it — used by release-smoke).
 
 ### release-smoke (manual; not a PR required check)
 
@@ -180,8 +178,8 @@ Local equivalent after images are available:
 ```bash
 export GRASP_IMAGE='ghcr.io/cocofhu/grasp@sha256:...'
 export SANDBOX_GATEWAY_IMAGE='ghcr.io/cocofhu/sandbox-gateway@sha256:...'
-export SANDBOX_IMAGE='ghcr.io/cocofhu/universal-sandbox-cursor@sha256:...'
-# release-smoke.sh exports GRASP_SANDBOX_IMAGE=$SANDBOX_IMAGE for global force.
+export SANDBOX_IMAGE='ghcr.io/cocofhu/universal-sandbox@sha256:...'
+# release-smoke.sh exports GRASP_SANDBOX_IMAGE=$SANDBOX_IMAGE.
 ./release-smoke.sh
 ```
 
@@ -191,7 +189,7 @@ merge quality gates today.
 Dev-only local sandbox image:
 
 ```bash
-./start.sh sandbox       # build universal-sandbox-cursor:local
+./start.sh sandbox       # build universal-sandbox:local
 ```
 
 ## Security scans (CodeQL and friends)

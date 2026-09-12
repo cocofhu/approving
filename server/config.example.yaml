@@ -41,11 +41,10 @@ engine:
   profiles_root: "data/profiles"
 
 sandbox:
-  # 留空：按 Agent acpBackend 选用 images / 内置默认
-  # universal-sandbox-{cursor|claude_code|codebuddy|trae|opencode}:latest
-  # 非空则强制所有后端用同一镜像（不推荐）。
+  # 推荐设为发布的 universal-sandbox（一张图预装五个 CLI）。
+  # 留空则走 images[backend] / 内置默认 universal-sandbox:local。
   image: ""
-  # 按需覆盖某后端镜像；留空走内置默认。
+  # 可选：只覆盖某一个 acpBackend 的镜像。
   images: {}
   # 通用环境变量透传(厂商无关):逐条注入沙箱容器。
   # 默认 SKIP_INNER_DOCKER=0(启用 DinD);设为 "1" 则不启动内层 dockerd。

@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# install-agent.sh — 按 AGENT_PROVIDER 只安装选中那一个 Agent CLI。
+# install-agent.sh — 构建期安装一个或多个 Agent CLI。
 #
-# 由 Dockerfile 在构建期调用（`--build-arg AGENT_PROVIDER=xxx`），配合"共享 base +
-# 每 agent 薄镜像"策略：base 层跨 tag 复用缓存，本脚本产出的差异层只含所需 CLI。
+# 由 Dockerfile 调用。默认装齐五个对外后端（cursor / claude_code / codebuddy /
+# trae / opencode）；运行时仍由 AGENT_PROVIDER / ACP_BACKEND 单活选后端。
+# 本地打薄镜像：--build-arg AGENT_PROVIDERS=cursor
 #
 # 约定：
-#   $1 / $AGENT_PROVIDER  选择要安装的 provider（默认 cursor）。
-#   $AGENT_INSTALL_CMD    可选：任意 provider 的安装命令覆盖；给出时完全接管安装
-#                         （用于未内置安装方式的 provider，或临时改用私有源/镜像）。
-#
-# 退出码非 0 会让该 tag 的构建失败——这是刻意的：固定 agent 的镜像若缺了它自己的 CLI
-# 属于致命错误，应在构建期暴露，而不是运行时才 LookPath 失败。
+#   $1 / $AGENT_PROVIDERS          逗号列表或 all（默认 all）。
+#   $AGENT_OPTIONAL_PROVIDERS      失败只告警的 provider（默认 trae）。
+#   $AGENT_INSTALL_CMD             可选：完全接管安装（用于未内置方式或私有源）。
 set -euo pipefail
 
-provider="${1:-${AGENT_PROVIDER:-cursor}}"
+DEFAULT_PROVIDERS="cursor,claude_code,codebuddy,trae,opencode"
+raw="${1:-${AGENT_PROVIDERS:-all}}"
 custom_cmd="${AGENT_INSTALL_CMD:-}"
+optional_raw="${AGENT_OPTIONAL_PROVIDERS:-trae}"
 
 log() { echo "[install-agent] $*"; }
 
@@ -65,40 +65,87 @@ install_trae() {
   command -v traecli >/dev/null 2>&1 && traecli --version || log "traecli 已安装（版本探测跳过）"
 }
 
+install_one() {
+  local provider="$1"
+  log "安装 provider=$provider"
+  case "$provider" in
+    cursor|cursor_acp)
+      install_cursor ;;                                      # 同一 cursor-agent 二进制（stream-json / ACP 两用）
+    claude_code|claude_stream_json)
+      install_claude_native ;;                               # 原生 claude CLI（stream-json，默认）
+    claude_code_acp)
+      install_claude_native && npm_global @zed-industries/claude-code-acp ;;
+    codebuddy|codebuddy_acp)
+      npm_global @tencent-ai/codebuddy-code ;;               # 同一 codebuddy 二进制（stream-json / ACP 两用）
+    trae)
+      install_trae ;;
+    opencode)
+      npm_global opencode-ai && opencode --version ;;
+    codex)
+      npm_global @openai/codex && codex --version ;;
+    gemini)
+      npm_global @google/gemini-cli && gemini --version ;;
+    copilot)
+      npm_global @github/copilot && copilot --version ;;
+    kiro|qoder|grok|kimi|hermes|deveco|openclaw|antigravity|pi)
+      log "错误：provider=$provider 暂无内置安装方式。"
+      log "请通过 --build-arg AGENT_INSTALL_CMD='<安装命令>' 提供其官方安装步骤后再构建。"
+      return 1 ;;
+    *)
+      log "错误：未知 provider=$provider（且未提供 AGENT_INSTALL_CMD）。"
+      return 1 ;;
+  esac
+}
+
 # 完全覆盖：给了 AGENT_INSTALL_CMD 就以它为准（适用于未内置安装方式的 provider）。
 if [ -n "$custom_cmd" ]; then
-  log "provider=$provider 使用 AGENT_INSTALL_CMD 覆盖安装"
+  log "使用 AGENT_INSTALL_CMD 覆盖安装（providers=$raw）"
   eval "$custom_cmd"
   exit 0
 fi
 
-log "安装 provider=$provider"
-case "$provider" in
-  cursor|cursor_acp)
-    install_cursor ;;                                      # 同一 cursor-agent 二进制（stream-json / ACP 两用）
-  claude_code|claude_stream_json)
-    install_claude_native ;;                               # 原生 claude CLI（stream-json，默认）
-  claude_code_acp)
-    install_claude_native && npm_global @zed-industries/claude-code-acp ;;  # 原生 claude + ACP 适配器
-  codebuddy|codebuddy_acp)
-    npm_global @tencent-ai/codebuddy-code ;;               # 同一 codebuddy 二进制（stream-json / ACP 两用）
-  trae)
-    install_trae ;;
-  codex)
-    npm_global @openai/codex && codex --version ;;
-  gemini)
-    npm_global @google/gemini-cli && gemini --version ;;
-  copilot)
-    npm_global @github/copilot && copilot --version ;;
-  opencode)
-    npm_global opencode-ai && opencode --version ;;
-  kiro|qoder|grok|kimi|hermes|deveco|openclaw|antigravity|pi)
-    log "错误：provider=$provider 暂无内置安装方式。"
-    log "请通过 --build-arg AGENT_INSTALL_CMD='<安装命令>' 提供其官方安装步骤后再构建该 tag。"
-    exit 1 ;;
-  *)
-    log "错误：未知 provider=$provider（且未提供 AGENT_INSTALL_CMD）。"
-    exit 1 ;;
-esac
+if [ "$raw" = "all" ]; then
+  raw="$DEFAULT_PROVIDERS"
+fi
 
-log "provider=$provider 安装完成"
+# shellcheck disable=SC2206
+optional=(${optional_raw//,/ })
+is_optional() {
+  local p="$1" o
+  for o in "${optional[@]}"; do
+    [ "$o" = "$p" ] && return 0
+  done
+  return 1
+}
+
+# shellcheck disable=SC2206
+providers=(${raw//,/ })
+if [ "${#providers[@]}" -eq 0 ]; then
+  log "错误：AGENT_PROVIDERS 为空"
+  exit 1
+fi
+
+failed_required=()
+failed_optional=()
+for provider in "${providers[@]}"; do
+  provider="$(echo "$provider" | tr -d '[:space:]')"
+  [ -n "$provider" ] || continue
+  if install_one "$provider"; then
+    log "provider=$provider 安装完成"
+  elif is_optional "$provider"; then
+    log "警告：可选 provider=$provider 安装失败，继续（AGENT_OPTIONAL_PROVIDERS=$optional_raw）"
+    failed_optional+=("$provider")
+  else
+    log "错误：必需 provider=$provider 安装失败"
+    failed_required+=("$provider")
+  fi
+done
+
+if [ "${#failed_required[@]}" -gt 0 ]; then
+  log "错误：必需 provider 安装失败：${failed_required[*]}"
+  exit 1
+fi
+if [ "${#failed_optional[@]}" -gt 0 ]; then
+  log "可选 provider 未装上（镜像仍可用）：${failed_optional[*]}"
+fi
+log "安装结束 providers=$raw"
