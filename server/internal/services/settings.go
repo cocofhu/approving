@@ -124,13 +124,9 @@ func (s *SettingsService) Effective() []SettingItem {
 }
 
 // Brand returns normalized instance-level brand overrides. Empty values mean
-// callers should use their built-in, locale-aware defaults. The pre-rename
-// product name "Approving" is treated as unset so upgrades pick up Grasp.
+// callers should use their built-in, locale-aware defaults.
 func (s *SettingsService) Brand() BrandSettings {
 	name := strings.TrimSpace(s.dbString(KeyBrandProductName))
-	if strings.EqualFold(name, "Approving") {
-		name = ""
-	}
 	return BrandSettings{
 		ProductName:  name,
 		HomeSubtitle: s.dbString(KeyBrandHomeSubtitle),

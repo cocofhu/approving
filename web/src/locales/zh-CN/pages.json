@@ -1144,7 +1144,7 @@
         "nodeName": "节点名称",
         "noAgents": "暂无 Agent,请先在「Agent 管理」创建",
         "emptyAgent": "（空 · 不指定 Agent）",
-        "skillProfileHint": "列表已按工作流所属项目过滤；未绑定与他项目不展示。空配置允许。",
+        "agentProfileHint": "列表已按工作流所属项目过滤；未绑定与他项目不展示。空配置允许。",
         "staleBannerTitle": "stale 引用",
         "staleBannerBody": "当前 Agent 配置「{name}」为{reason}。请改选同项目 Agent 后再保存。",
         "staleReasons": {
@@ -2771,7 +2771,7 @@
       },
       "import": {
         "success": "导入成功，正在跳转到「{name}」编辑器",
-        "missingSkillProfiles": "导入成功，但检测到缺失或非本项目 Agent 引用：{list}。请在编辑器中修复后再保存。",
+        "missingAgentProfiles": "导入成功，但检测到缺失或非本项目 Agent 引用：{list}。请在编辑器中修复后再保存。",
         "issueMissing": "缺失",
         "issueForeign": "非本项目",
         "discardTitle": "未保存改动将丢失",

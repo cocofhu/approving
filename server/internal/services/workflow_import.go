@@ -120,7 +120,6 @@ func (s *WorkflowService) Import(raw []byte, projectID string) (models.WorkflowD
 		}
 		LiftInputVariables(&graph)
 		MigrateOutputNodes(&graph)
-		MigrateAgentProfileInGraph(&graph)
 		now := time.Now()
 		newWF = models.WorkflowDef{
 			ID:          "wf-" + uuid.NewString()[:8],

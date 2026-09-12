@@ -204,9 +204,12 @@ func writeMergedSettingsJSON(dir string, platform map[string]any) error {
 	merged := platform
 	if b, err := os.ReadFile(path); err == nil {
 		var user map[string]any
-		if err := json.Unmarshal(b, &user); err == nil {
-			merged = mergeSettingsMaps(platform, user)
+		if err := json.Unmarshal(b, &user); err != nil {
+			return fmt.Errorf("decode existing settings.json: %w", err)
 		}
+		merged = mergeSettingsMaps(platform, user)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("read existing settings.json: %w", err)
 	}
 	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {

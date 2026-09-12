@@ -53,8 +53,6 @@ func main() {
 
 	svc := service.New(drv, st, service.Config{
 		Image:            cfg.Image.Ref,
-		ProviderImages:   cfg.Image.ByProvider,
-		ImageTemplate:    cfg.Image.Template,
 		Ports:            cfg.Image.Ports.Public(),
 		InternalPorts:    cfg.Image.Ports.Internal(),
 		SessionPort:      cfg.Image.Ports.Session,

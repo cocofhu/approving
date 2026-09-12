@@ -11,7 +11,7 @@ var knownSandboxBackends = []string{"cursor", "claude_code", "codebuddy", "trae"
 
 // DefaultSandboxImage is the local tag built from sandbox-gateway/sandbox
 // (see ./start.sh sandbox). backend is ignored: one image serves every
-// acpBackend; runtime AGENT_PROVIDER / ACP_BACKEND selects the live CLI.
+// acpBackend; runtime AGENT_PROVIDER selects the live CLI.
 func DefaultSandboxImage(backend string) string {
 	_ = backend
 	return "universal-sandbox:local"

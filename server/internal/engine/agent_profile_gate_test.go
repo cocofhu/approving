@@ -83,10 +83,4 @@ func TestCheckAgentProfileProject(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy skill_profile alone still resolves", func(t *testing.T) {
-		n := &models.Node{ID: "n", Label: "N", Config: map[string]any{"skill_profile": "ok"}}
-		if err := eng.checkAgentProfileProject(c, n); err != nil {
-			t.Fatalf("legacy key should dual-read: %v", err)
-		}
-	})
 }

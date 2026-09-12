@@ -152,14 +152,6 @@ func TestSettingsServiceBrandUpdateFallbackAndValidation(t *testing.T) {
 		t.Fatalf("blank product name should mean fallback, got %q", got)
 	}
 
-	legacy := "Approving"
-	if _, err := svc.UpdateWithBrand(nil, BrandPatch{ProductName: &legacy}); err != nil {
-		t.Fatal(err)
-	}
-	if got := svc.Brand().ProductName; got != "" {
-		t.Fatalf("legacy Approving product name should mean fallback, got %q", got)
-	}
-
 	tooLong := strings.Repeat("界", BrandProductNameMaxLength+1)
 	before := svc.Brand()
 	if _, err := svc.UpdateWithBrand(nil, BrandPatch{ProductName: &tooLong}); err == nil {

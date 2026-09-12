@@ -75,7 +75,7 @@ export function useWorkflowImport(opts?: {
             return `${i.name}（${short}）`
           })
           .join('、')
-        toast.warn(t('pages.workflowIO.import.missingSkillProfiles', { list }))
+        toast.warn(t('pages.workflowIO.import.missingAgentProfiles', { list }))
       }
     } catch {
       // non-blocking

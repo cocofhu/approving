@@ -206,6 +206,7 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 	env := map[string]string{}
 	for k, v := range s.env {
 		if envauth.IsPlatformAuthEnvKey(k) {
+			log.Warn().Str("key", k).Msg("dropped platform sandbox.env official CLI auth key; use GRASP_* on Agent or shared env")
 			continue
 		}
 		env[k] = v
@@ -221,33 +222,43 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 	}
 	backend := runtime.NormalizeBackend(agent.AcpBackend)
 	workDir := s.skills.WorkDir(profile)
-	merged, err := runtime.PrepareAuthEnv(backend, env, workDir)
+	sharedWorkDir := ""
+	if s.shared != nil && strings.TrimSpace(projectID) != "" {
+		sharedWorkDir = s.shared.WorkDir(projectID)
+	}
+	merged, err := runtime.PrepareAuthEnv(backend, env, workDir, sharedWorkDir)
 	if err != nil {
 		fail(err)
 		return
 	}
 	env = merged
+	ocDoc := runtime.OpenCodeConfigForEnvWithCatalog(
+		context.Background(), backend, env, s.openCodeCatalog,
+	)
+	if err := runtime.RequireOpenCodePlaceholderKey(ocDoc, env); err != nil {
+		fail(err)
+		return
+	}
 
 	home, err := sandbox.BuildConfigHome(sandbox.ConfigHomeSpec{
+		BaseWorkDirSrc:       sharedWorkDir,
 		WorkDirSrc:           s.skills.WorkDir(profile),
 		IncludeArtifactStore: false,
 		MCP:                  specs,
 		OpenCode:             backend == runtime.BackendOpenCode,
 		BrowserMCP:           runtime.EnvEnabled(env["BROWSER_MCP"]),
 		Settings:             runtime.CodeBuddySettingsForEnv(backend, env),
-		OpenCodeConfig: runtime.OpenCodeConfigForEnvWithCatalog(
-			context.Background(), backend, env, s.openCodeCatalog,
-		),
-		AgentName:      profile,
-		ProfilesRoot:   s.profilesRoot,
-		GlobalRulesDir: s.platformRulesRoot,
+		OpenCodeConfig:       ocDoc,
+		AgentName:            profile,
+		ProfilesRoot:         s.profilesRoot,
+		GlobalRulesDir:       s.platformRulesRoot,
 	})
 	if err != nil {
 		fail(fmt.Errorf("build cursor home: %w", err))
 		return
 	}
 
-	env["ACP_BACKEND"] = string(backend)
+	env["AGENT_PROVIDER"] = string(backend)
 	env["CONFIG_ROOT"] = agent.Layout.ConfigRoot
 	env["GRASP_PROJECT_ID"] = projectID
 	env["GRASP_THREAD_ID"] = threadID

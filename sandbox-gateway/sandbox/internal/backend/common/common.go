@@ -25,7 +25,7 @@ const (
 
 // Backend describes one ACP CLI backend.
 type Backend interface {
-	// Name is the backend identifier (matches ACP_BACKEND).
+	// Name is the backend identifier (matches AGENT_PROVIDER).
 	Name() Name
 	// Runtime is the capabilities.agent.runtime label.
 	Runtime() string

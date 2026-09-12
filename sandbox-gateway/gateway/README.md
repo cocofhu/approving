@@ -83,7 +83,7 @@ Then:
 # create
 curl -s -XPOST localhost:8080/api/v1/sandboxes \
   -H 'Content-Type: application/json' \
-  -d '{"env":{"ACP_BACKEND":"cursor"}}'
+  -d '{"env":{"AGENT_PROVIDER":"cursor"}}'
 
 # poll until running, read endpoints
 curl -s localhost:8080/api/v1/sandboxes/<id>

@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -174,6 +175,41 @@ func OpenCodeConfigForEnvWithCatalog(
 	}
 	doc["provider"] = map[string]any{provider: prov}
 	return doc
+}
+
+const openCodeAPIKeyPlaceholder = "{env:OPENCODE_API_KEY}"
+
+// RequireOpenCodePlaceholderKey errors when the generated opencode.json names
+// {env:OPENCODE_API_KEY} but that env var is empty. A nil/empty doc (user-owned
+// auth, or no OpenCode hints) is left alone.
+func RequireOpenCodePlaceholderKey(doc map[string]any, env map[string]string) error {
+	if !containsStringValue(doc, openCodeAPIKeyPlaceholder) {
+		return nil
+	}
+	if strings.TrimSpace(env[EnvOpenCodeAPIKey]) != "" {
+		return nil
+	}
+	return fmt.Errorf("OpenCode 配置引用了 %s，但 %s 为空", openCodeAPIKeyPlaceholder, EnvOpenCodeAPIKey)
+}
+
+func containsStringValue(v any, want string) bool {
+	switch t := v.(type) {
+	case string:
+		return t == want
+	case map[string]any:
+		for _, child := range t {
+			if containsStringValue(child, want) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range t {
+			if containsStringValue(child, want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // openCodeModelDecl describes a model the catalog cannot describe for us.

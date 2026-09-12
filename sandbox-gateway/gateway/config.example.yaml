@@ -38,8 +38,7 @@ database:
 image:
   ref: universal-sandbox:local
   # 默认一张图预装五个对外 CLI；运行时 AGENT_PROVIDER 单活。
-  # 解析顺序：请求 image 覆盖 > byProvider[provider] > template({provider}) > ref。
-  # 自建分镜像仍可用 SBGW_IMAGE_TEMPLATE / SBGW_IMAGE_MAP。
+  # 解析顺序：请求 image 覆盖 > ref。
   ports:
     session: 8765     # ACP bridge / WSP session (readiness probe target)
     codeServer: 8744  # code-server (web IDE)

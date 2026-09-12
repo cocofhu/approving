@@ -5,7 +5,7 @@
 - **运行环境**（来自 ai-tool/sandbox）：Ubuntu 22.04、多语言工具链、容器内 **Docker（DinD）**、**SSH**、**code-server**（浏览器 IDE）、DB 客户端（mysql/redis/psql/mongosh）、Cursor CLI、Claude Code、glab、gh。
 - **agent 与代码能力**（来自 code-flow/sandbox）：多后端 **backend**（ACP 桥接服务）、**多仓库 PULL**、多托管商 **git 凭据路由**、**Playwright（Chromium）+ noVNC 预览栈**。
 
-五类 agent 后端 CLI 均已预装，`AGENT_PROVIDER` / `ACP_BACKEND` 单活切换：`cursor`（Cursor CLI）、`claude_code`（原生 Claude CLI）、`codebuddy`（`@tencent-ai/codebuddy-code`）、`trae`（Trae CLI）、`opencode`（`opencode-ai`，`run --format json`）。
+五类 agent 后端 CLI 均已预装，`AGENT_PROVIDER` 单活切换：`cursor`（Cursor CLI）、`claude_code`（原生 Claude CLI）、`codebuddy`（`@tencent-ai/codebuddy-code`）、`trae`（Trae CLI）、`opencode`（`opencode-ai`，`run --format json`）。
 发布一张图 `ghcr.io/cocofhu/universal-sandbox`。本地打薄镜像：`--build-arg AGENT_PROVIDERS=cursor`。
 
 ## 目录结构
@@ -124,7 +124,7 @@ docker run --privileged -d \
 
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `ACP_BACKEND` | `cursor` | agent 后端，单活：`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode` |
+| `AGENT_PROVIDER` | `cursor` | agent 后端，单活：`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode` |
 | `ACP_BRIDGE_PORT` | `8765` | backend 监听端口 |
 | `ACP_BRIDGE_PASSWORD` | 空 | 设置后 backend 启用登录页鉴权 |
 | `ACP_BRIDGE_MODEL` | 空 | 锁定 agent 模型（不设则用后端默认） |
@@ -188,7 +188,7 @@ docker run --privileged -d \
 - **声明式** `SANDBOX_INJECT`：逗号分隔，每项 `src[|dest]`
   - `src`：容器内已存在的文件/目录/归档（bind-mount 或 `docker cp` 进来），或 `http(s)://` URL；
   - 归档（`.tar` / `.tar.gz` / `.tgz` / `.tar.bz2` / `.tar.xz` / `.zip`）**解压**到 `dest`，其余**复制**到 `dest`；
-  - `dest` 省略时默认 `$CONFIG_ROOT`（随 `ACP_BACKEND` 取 `/root/.cursor` `/.claude` `/.codebuddy` `/.trae`）。
+  - `dest` 省略时默认 `$CONFIG_ROOT`（随 `AGENT_PROVIDER` 取 `/root/.cursor` `/.claude` `/.codebuddy` `/.trae`）。
 
 ```bash
 # 把已就位的目录复制进配置根，并从 URL 下载一个 tgz 解压到工作区

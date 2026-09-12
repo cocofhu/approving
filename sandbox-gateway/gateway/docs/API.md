@@ -55,7 +55,7 @@ Body (all fields optional):
   "image": "universal-sandbox:local",
   "provider": "gemini",
   "env": {
-    "ACP_BACKEND": "cursor",
+    "AGENT_PROVIDER": "cursor",
     "GIT_REPOS": "app|https://github.com/acme/app|main",
     "ROOT_PASSWORD": "toor",
     "ACP_BRIDGE_PASSWORD": "s3cret"
@@ -80,12 +80,9 @@ Body (all fields optional):
 
 - `provider` selects the agent CLI (e.g. `cursor`, `claude_code`, `codebuddy`).
   The published image is one `universal-sandbox`; the gateway injects
-  `AGENT_PROVIDER`/`ACP_BACKEND` when not already set. Optional
-  `image.byProvider` / `image.template` (or `SBGW_IMAGE_TEMPLATE` /
-  `SBGW_IMAGE_MAP`) still map a provider to a custom image. Ignored when
-  `image` is given explicitly.
+  `AGENT_PROVIDER` when not already set.
 - `env` is the injection channel to the image (see the sandbox README for the
-  full variable reference: `WORKSPACE_DIR`, `GIT_REPOS`, `ACP_BACKEND`,
+  full variable reference: `WORKSPACE_DIR`, `GIT_REPOS`, `AGENT_PROVIDER`,
   `VNC_PREVIEW`, `BROWSER_MCP`, `ROOT_PASSWORD`, `SSH_KEY`, etc.).
 - `ports` adds application ports on top of the image defaults.
 - `resources` sets per-sandbox limits (same knobs as remote-dev UI):

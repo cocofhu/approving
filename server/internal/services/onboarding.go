@@ -120,7 +120,6 @@ func (s *OnboardingService) CreateFromBaseline(req CreateBaselineWorkflowRequest
 	applyBaselineRepos(&envelope.Graph, repos)
 	LiftInputVariables(&envelope.Graph)
 	MigrateOutputNodes(&envelope.Graph)
-	MigrateAgentProfileInGraph(&envelope.Graph)
 	if err := envelope.Graph.Validate(); err != nil {
 		return models.WorkflowDef{}, fmt.Errorf("default workflow graph invalid: %w", err)
 	}
@@ -466,7 +465,6 @@ func (s *OnboardingService) upsertDefaultWorkflow(projectID string, envelope mod
 	graph := envelope.Graph
 	LiftInputVariables(&graph)
 	MigrateOutputNodes(&graph)
-	MigrateAgentProfileInGraph(&graph)
 	if err := graph.Validate(); err != nil {
 		return models.WorkflowDef{}, fmt.Errorf("default workflow graph invalid: %w", err)
 	}

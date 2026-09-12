@@ -15,7 +15,7 @@ set -e
 #   GIT_REPOS(多仓 name|url|branch) / GIT_CLONE_URL(单仓兼容),
 #   GITHUB_TOKEN, GITHUB_URL, GITLAB_TOKEN, GITLAB_URL, GIT_SSH_PRIVATE_KEY, GIT_SSH_KNOWN_HOSTS（兼容回退）,
 #   SANDBOX_INJECT（含 SSH staging + ConfigHome，须早于 clone）,
-#   ACP_BACKEND, ACP_BRIDGE_PORT, ACP_BRIDGE_PASSWORD, ACP_BRIDGE_MODEL
+#   AGENT_PROVIDER, ACP_BRIDGE_PORT, ACP_BRIDGE_PASSWORD, ACP_BRIDGE_MODEL
 
 # PVC subPath 挂上来的 /tmp 目录默认不是 1777；补 sticky bit，避免 mktemp/多用户写入失败。
 chmod 1777 /tmp 2>/dev/null || true
@@ -62,10 +62,8 @@ WORKSPACE_DIR=${WORKSPACE_DIR:-/root/workspace}
 CODE_SERVER_PORT=${CODE_SERVER_PORT:-8744}
 
 # 提前解析 agent provider 与配置根：契约注入（默认落到 CONFIG_ROOT）与 backend 都要用。
-# 选型优先级：AGENT_PROVIDER > 旧变量 ACP_BACKEND > 构建期固定值（镜像已按 AGENT_PROVIDER 装 CLI）。
-AGENT_PROVIDER=${AGENT_PROVIDER:-${ACP_BACKEND:-cursor}}
-# 兼容旧变量：backend 的 FromEnv 会同时识别 AGENT_PROVIDER 与 ACP_BACKEND。
-ACP_BACKEND=${ACP_BACKEND:-$AGENT_PROVIDER}
+# 未设置时回落 cursor。五类 CLI 已预装，运行时 AGENT_PROVIDER 单活。
+AGENT_PROVIDER=${AGENT_PROVIDER:-cursor}
 case "$AGENT_PROVIDER" in
   cursor|cursor_acp)                              CONFIG_ROOT=${CONFIG_ROOT:-/root/.cursor} ;;
   claude_code|claude_code_acp|claude_stream_json) CONFIG_ROOT=${CONFIG_ROOT:-/root/.claude} ;;
@@ -73,7 +71,7 @@ case "$AGENT_PROVIDER" in
   opencode)                                       CONFIG_ROOT=${CONFIG_ROOT:-/root/.config/opencode} ;;
   *)                                              CONFIG_ROOT=${CONFIG_ROOT:-/root/.$AGENT_PROVIDER} ;;
 esac
-export AGENT_PROVIDER ACP_BACKEND CONFIG_ROOT
+export AGENT_PROVIDER CONFIG_ROOT
 
 # --- Git credential helpers -------------------------------------------------
 

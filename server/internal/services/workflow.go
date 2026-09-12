@@ -484,7 +484,6 @@ func (s *WorkflowService) validateAgentProfiles(wf *models.WorkflowDef) error {
 	if s == nil || wf == nil {
 		return nil
 	}
-	MigrateAgentProfileInGraph(&wf.Graph)
 	if s.skills == nil {
 		return nil
 	}

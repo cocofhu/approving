@@ -152,9 +152,9 @@ set them Public under GitHub → Packages if anonymous pulls are required.
 
 Default tags used by `./start.sh` (overridable in `.env`):
 
-- `ghcr.io/cocofhu/grasp:0.5.0`
-- `ghcr.io/cocofhu/sandbox-gateway:0.5.0`
-- `ghcr.io/cocofhu/universal-sandbox:0.5.0`
+- `ghcr.io/cocofhu/grasp:0.5.1`
+- `ghcr.io/cocofhu/sandbox-gateway:0.5.1`
+- `ghcr.io/cocofhu/universal-sandbox:0.5.1`
   (one image for every `acpBackend`; `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` pin or override it — used by release-smoke).
 
 ### release-smoke (manual; not a PR required check)

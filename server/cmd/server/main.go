@@ -162,7 +162,6 @@ func main() {
 	services.BackfillAuditElevatedFields(db)
 	sharedAgentSvc := services.NewSharedAgentService(services.DefaultSharedAgentRoot(cfg.Engine.ProfilesRoot))
 	services.MigrateProjectSandboxEnvOnce(db, projectSvc, sharedAgentSvc)
-	services.MigrateAgentProfilesOnce(db)
 	// One snapshot of OpenCode's provider catalog, shared by the pickers and by
 	// every path that generates opencode.json, so both agree on which vendor ids
 	// OpenCode can resolve without an adapter of our own.

@@ -18,7 +18,7 @@ Grasp 是一个开源、可自托管的多 Agent 工作流平台。它把 coding
 [![coverage-server](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-server.json)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![coverage-gateway](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-gateway.json)](https://github.com/cocofhu/approving/actions/workflows/ci-gateway.yml)
 
-> 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose。默认起栈只需 Grasp 与 Gateway；各 Agent 后端的沙箱 runtime 在首次使用时按需拉取。
+> 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose。默认起栈只需 Grasp 与 Gateway；沙箱只有一张 `universal-sandbox` 镜像，拉取一次即可。
 
 ## 为什么需要 Grasp？
 

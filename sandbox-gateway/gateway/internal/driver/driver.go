@@ -44,7 +44,7 @@ type Resources struct {
 }
 
 // Spec describes one sandbox to create. The image is a generic agent runner;
-// all integration behavior rides through Env (e.g. GIT_REPOS, ACP_BACKEND,
+// all integration behavior rides through Env (e.g. GIT_REPOS, AGENT_PROVIDER,
 // ROOT_PASSWORD, SSH_KEY, ACP_BRIDGE_PASSWORD). The gateway stays kind-agnostic.
 type Spec struct {
 	ID           string            // gateway-assigned id (also seeds the resource name)

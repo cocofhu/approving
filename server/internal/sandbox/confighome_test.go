@@ -483,3 +483,21 @@ func TestBuildConfigHomeRejectsInvalidUserOpenCodeJSON(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestBuildConfigHomeRejectsInvalidUserSettingsJSON(t *testing.T) {
+	HomeBaseDir = ""
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "settings.json"), []byte(`{"env":`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := BuildConfigHome(ConfigHomeSpec{
+		WorkDirSrc: src,
+		Settings:   map[string]any{"env": map[string]any{"FOO": "1"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "decode existing settings.json") {
+		if dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+		t.Fatalf("err=%v", err)
+	}
+}
