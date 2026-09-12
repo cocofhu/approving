@@ -35,8 +35,5 @@ func IsDeniedRunSandboxEnvKey(k string) bool {
 		"GRASP_OPENCODE_API_KEY":
 		return true
 	}
-	if strings.HasPrefix(k, "GRASP_ARTIFACT_") {
-		return true
-	}
-	return false
+	return strings.HasPrefix(k, "GRASP_ARTIFACT_")
 }
