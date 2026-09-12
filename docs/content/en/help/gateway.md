@@ -3,7 +3,7 @@ title: Gateway
 description: sandbox-gateway contract summary; full details in GATEWAY.md.
 ---
 
-Approving schedules the generic sandbox image through the vendored **sandbox-gateway** control plane. The Web UI talks to the Approving API; agent / react nodes execute in containers via the gateway.
+Grasp schedules the generic sandbox image through the vendored **sandbox-gateway** control plane. The Web UI talks to the Grasp API; agent / react nodes execute in containers via the gateway.
 
 ## Direct endpoints vs platform proxy
 
@@ -19,7 +19,7 @@ Approving schedules the generic sandbox image through the vendored **sandbox-gat
 ## Health checks (default local stack)
 
 - Gateway: http://localhost:8899/healthz
-- Approving API: http://localhost:8080/api/health
+- Grasp API: http://localhost:8080/api/health
 
 ## Source locations
 

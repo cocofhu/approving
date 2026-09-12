@@ -13,8 +13,8 @@ client-to-sandbox connections; CDP/noVNC stay internal:
 - Chromium CDP: `9222` — **internal only** (container / ClusterIP)
 - noVNC preview: `6080` — **internal only** (container / ClusterIP)
 
-Users reach noVNC via Approving `/sandbox-vnc/:id/ws` and
-`/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on). Approving
+Users reach noVNC via Grasp `/sandbox-vnc/:id/ws` and
+`/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on). Grasp
 outside the cluster or Docker network cannot dial CDP/noVNC.
 
 There is no gateway `exec`/`files`/`terminal` API: run commands and move files
@@ -47,7 +47,7 @@ flowchart TB
   drv --> sbx["sandbox (Docker host IP / K8s LB IP)"]
   gw -. "returns per-port direct addresses" .-> client
   client ==>|"public data plane: 8765/ws · 8744 · 22 · app"| sbx
-  approving["Approving in-cluster"] -.->|"internal dial: 9222 CDP · 6080 noVNC"| sbx
+  grasp["Grasp in-cluster"] -.->|"internal dial: 9222 CDP · 6080 noVNC"| sbx
 ```
 
 ## Layout

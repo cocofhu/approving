@@ -5,7 +5,7 @@ description: FSM orchestration, human gates, sandboxed execution, and artifact c
 
 ## FSM orchestration
 
-Approving turns coding agents into steps in a workflow. You orchestrate on a finite state machine:
+Grasp turns coding agents into steps in a workflow. You orchestrate on a finite state machine:
 
 - **Nodes** are states (agent / react / gate / …)
 - **Edges** are transitions, with configurable success, failure, and rollback paths
@@ -17,7 +17,7 @@ This is not a one-shot, irreversible agent run: design the path first, then gate
 
 When a step needs a human decision, the run stops at a **gate** until someone approves or rejects.
 
-Approval moments are first-class — not an afterthought. Approving bets that agents can be fast while people still own the critical decisions.
+Approval moments are first-class — not an afterthought. Grasp bets that agents can be fast while people still own the critical decisions.
 
 ### Temporary approval links (human_gate)
 

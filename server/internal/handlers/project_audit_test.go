@@ -110,7 +110,7 @@ func TestProjectAuditListExportAndPermission(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("export text: %d %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "Approving Project Audit Export") {
+	if !strings.Contains(w.Body.String(), "Grasp Project Audit Export") {
 		t.Fatalf("text export header missing: %s", w.Body.String())
 	}
 

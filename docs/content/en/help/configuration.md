@@ -3,7 +3,7 @@ title: Configuration
 description: Configuration highlights; full details live in source CONFIGURATION.md.
 ---
 
-Approving server configuration is primarily YAML / environment variables (local examples: `server/config.example.yaml` and the root `.env.example`).
+Grasp server configuration is primarily YAML / environment variables (local examples: `server/config.example.yaml` and the root `.env.example`).
 
 ## Full documentation
 

@@ -81,7 +81,7 @@ func sanitizeFilename(s string) string {
 }
 
 func writeRunHeader(b *strings.Builder, run models.Run) {
-	b.WriteString("=== Approving Run Log Export ===\n")
+	b.WriteString("=== Grasp Run Log Export ===\n")
 	b.WriteString(fmt.Sprintf("Run: %s\n", run.ID))
 	wf := run.WorkflowName
 	if run.WorkflowVersion > 0 {

@@ -33,6 +33,6 @@ describe('useNodeDefs', () => {
     const agentGroup = groups!.value.find((g) => g.types.includes('approve'))
     expect(agentGroup?.types).toContain('approve')
     expect(agentGroup?.types).not.toContain('agent')
-    expect(defs!.value.approve.label).toBe('Approve')
+    expect(defs!.value.approve.label).toBe('Grasp')
   })
 })

@@ -30,10 +30,10 @@ const rootClass = computed(() => [
   props.align === 'center' ? 'items-center text-center' : '',
 ])
 
-/** Both locales use "Approving"; keep literal fallback so brand paints before locale JSON. */
+/** Both locales use "Grasp"; keep literal fallback so brand paints before locale JSON. */
 const appName = computed(() => {
   if (props.useCustomBrand) return productName.value
-  return te('shell.appName') ? String(t('shell.appName')) : 'Approving'
+  return te('shell.appName') ? String(t('shell.appName')) : 'Grasp'
 })
 const TAGLINE_FALLBACK = {
   'zh-CN': '开发工作流编排',

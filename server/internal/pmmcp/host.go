@@ -935,7 +935,7 @@ func toolSchemas(mcpID string) []map[string]any {
 			platformmcp.Tool("pm_list_agent_templates", "列出内置工程师角色模板（id、中文角色名、简介），用于组建团队。", nil),
 			platformmcp.Tool("pm_create_agent_from_template", "从模板创建工程师 Agent（同项目；默认继承 Leader 的 mcp/env；禁止覆盖重名）。", map[string]any{
 				"templateId": map[string]any{"type": "string", "description": "模板 id，如 implement / clarify"},
-				"name":       map[string]any{"type": "string", "description": "新 Agent 名称，如 Approving实现工程师"},
+				"name":       map[string]any{"type": "string", "description": "新 Agent 名称，如 Grasp实现工程师"},
 			}),
 			platformmcp.Tool("pm_set_org_membership", "设置 Agent 的虚拟组成员（groupIds 须在授权范围内）。", map[string]any{
 				"agentName": map[string]any{"type": "string"},

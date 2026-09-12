@@ -3,7 +3,7 @@ export function isLightTheme(root: Element = document.documentElement): boolean 
   return root.classList.contains('light')
 }
 
-/** Convert Approving `--c-*` space-separated RGB channels into css color strings. */
+/** Convert Grasp `--c-*` space-separated RGB channels into css color strings. */
 export function cssTokenColor(name: string, fallback: string, root: Element = document.documentElement): string {
   const raw = getComputedStyle(root).getPropertyValue(name).trim()
   if (!raw) return fallback

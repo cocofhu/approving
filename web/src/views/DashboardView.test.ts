@@ -242,8 +242,8 @@ describe('DashboardView home composer', () => {
     wrapper.unmount()
   })
 
-  // plan g2 — Approving mono brand + Chinese hint；无筛选说明句
-  it('renders monospace Approving brand and Chinese hint', async () => {
+  // plan g2 — Grasp mono brand + Chinese hint；无筛选说明句
+  it('renders monospace Grasp brand and Chinese hint', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand"]').classes()).toContain('home-brand')
@@ -344,30 +344,30 @@ describe('DashboardView home composer', () => {
   })
 
   // plan g3 — one-shot typewriter then opacity-hide caret (keep layout box)
-  it('types Approving once then settles without looping', async () => {
+  it('types Grasp once then settles without looping', async () => {
     const wrapper = mountDashboard()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('')
     await vi.advanceTimersByTimeAsync(220 + 78 * 9 + 50)
-    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Grasp')
     const caret = wrapper.get('[data-testid="home-brand-cursor"]')
     expect(caret.classes()).not.toContain('home-brand__cursor--gone')
     await vi.advanceTimersByTimeAsync(850 * 3 + 50)
-    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Grasp')
     expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).not.toContain('home-brand__cursor--blink')
     await vi.advanceTimersByTimeAsync(5000)
-    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Grasp')
     expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     wrapper.unmount()
   })
 
   // plan g3 — reduced-motion shows static brand; caret stays in layout but gone
-  it('shows full Approving immediately under reduced-motion', async () => {
+  it('shows full Grasp immediately under reduced-motion', async () => {
     stubReducedMotion(true)
     const wrapper = mountDashboard()
     await flushPromises()
-    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Approving')
+    expect(wrapper.get('[data-testid="home-brand-text"]').text()).toBe('Grasp')
     expect(wrapper.get('[data-testid="home-brand-cursor"]').classes()).toContain('home-brand__cursor--gone')
     wrapper.unmount()
   })

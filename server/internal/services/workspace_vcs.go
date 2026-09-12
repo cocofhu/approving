@@ -159,7 +159,7 @@ func (v *WorkspaceVcsService) commitAll(repo *git.Repository, meta VcsCommitMeta
 	}
 	author := strings.TrimSpace(meta.Author)
 	if author == "" {
-		author = "Approving VCS"
+		author = "Grasp VCS"
 	}
 	hash, err := wt.Commit(formatVcsMessage(meta), &git.CommitOptions{
 		Author: &object.Signature{

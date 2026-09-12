@@ -9,10 +9,10 @@ each service has its own auth (session/IDE password, `ROOT_PASSWORD` / `SSH_KEY`
 
 **Internal-only** (container network / ClusterIP, **not** published to host or
 external LB): Chromium CDP (`9222`) and noVNC/websockify (`6080`). These have
-**no application-layer auth**. Approving dials them in-cluster for Pick/navigate
-and VNC WS proxy. Users must **not** reach them directly — use Approving
+**no application-layer auth**. Grasp dials them in-cluster for Pick/navigate
+and VNC WS proxy. Users must **not** reach them directly — use Grasp
 `/sandbox-vnc/:sandboxId/ws` and `/preview-vnc/:runId/:nodeId/:port/ws`
-(Session required when platform Auth is injected). Approving running outside
+(Session required when platform Auth is injected). Grasp running outside
 the cluster or Docker network is not supported for CDP/VNC.
 
 Docker `-p` on already-running containers is not rewritten automatically; rely
@@ -169,9 +169,9 @@ GET /api/v1/sandboxes/:id
 `endpoints` carries friendly names and raw port keys. `session`/`ide`/`ssh`
 (and app ports) are **public** host or LB addresses. `cdp`/`novnc` are
 **internal** container IP or ClusterIP DNS (`<svc>.<ns>.svc.cluster.local`)
-for in-cluster Approving only — not user-facing, not an external LB IP.
+for in-cluster Grasp only — not user-facing, not an external LB IP.
 
-Approving's user `GetView` whitelist returns only `session`/`ide`/`ssh`.
+Grasp's user `GetView` whitelist returns only `session`/`ide`/`ssh`.
 
 ## Lifecycle
 
@@ -259,7 +259,7 @@ for the agent execution event log.
   connecting directly to the sandbox **SSH (`22`)** or the WSP/1 session.
 - No reverse proxy for code-server, session, SSH, or app ports. Clients connect
   to the returned **public** endpoint addresses directly.
-- CDP / noVNC are not an external data-plane. Users go through Approving VNC
+- CDP / noVNC are not an external data-plane. Users go through Grasp VNC
   WebSocket proxies; the gateway does not terminate those WS paths.
 - No streaming / follow logs (`?follow=1` / SSE). Clients re-fetch on demand.
 - No previous-container / multi-container log fan-out (single `sandbox` container).

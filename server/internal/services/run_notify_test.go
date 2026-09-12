@@ -209,7 +209,7 @@ func TestFormatRunNotifyMessage_defaultWaitingHuman(t *testing.T) {
 		ProjectName: "Demo", WorkflowName: "自我迭代", RunID: "run-1",
 		NodeID: "gate", NodeLabel: "门禁", Kind: "waiting_human",
 	}, "https://app.example")
-	want := "【Approving】等待人工处理\n项目：Demo\n工作流：自我迭代\nRun：run-1\n节点：门禁\n打开：https://app.example/runs/run-1"
+	want := "【Grasp】等待人工处理\n项目：Demo\n工作流：自我迭代\nRun：run-1\n节点：门禁\n打开：https://app.example/runs/run-1"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
@@ -219,7 +219,7 @@ func TestFormatRunNotifyMessage_omitsNodeLineWhenEmpty(t *testing.T) {
 	got := FormatRunNotifyMessage(RunNotifyEvent{
 		ProjectName: "P", WorkflowName: "W", RunID: "r", Kind: "failed",
 	}, "")
-	want := "【Approving】运行失败\n项目：P\n工作流：W\nRun：r\n打开：/runs/r"
+	want := "【Grasp】运行失败\n项目：P\n工作流：W\nRun：r\n打开：/runs/r"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
@@ -245,9 +245,9 @@ func TestRenderRunNotifyMessage_customSixKeys(t *testing.T) {
 		ProjectName: "Demo", WorkflowName: "WF", RunID: "run-x",
 		NodeID: "n1", NodeLabel: "节点A", Kind: "failed",
 	}
-	tmpl := "【Approving】{title}\n{project}/{workflow}\n{run_id} · {node}\n{link}"
+	tmpl := "【Grasp】{title}\n{project}/{workflow}\n{run_id} · {node}\n{link}"
 	got := RenderRunNotifyMessage(ev, "https://app.example", tmpl)
-	want := "【Approving】运行失败\nDemo/WF\nrun-x · 节点A\nhttps://app.example/runs/run-x"
+	want := "【Grasp】运行失败\nDemo/WF\nrun-x · 节点A\nhttps://app.example/runs/run-x"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}
@@ -361,7 +361,7 @@ func TestAttemptDeliver_kindsIndependent(t *testing.T) {
 	if d.calls[0] != "proj-n1|CUSTOM_WAIT r1" {
 		t.Fatalf("waiting should use custom: %s", d.calls[0])
 	}
-	if !strings.Contains(d.calls[1], "【Approving】运行失败") || !strings.Contains(d.calls[1], "节点：B") {
+	if !strings.Contains(d.calls[1], "【Grasp】运行失败") || !strings.Contains(d.calls[1], "节点：B") {
 		t.Fatalf("failed should use default: %s", d.calls[1])
 	}
 }
@@ -476,7 +476,7 @@ func TestFormatRunNotifyMessage_completedDefault(t *testing.T) {
 		ProjectName: "Demo", WorkflowName: "自我迭代", RunID: "run-1",
 		NodeID: "output_end", NodeLabel: "结束", Kind: models.NotifyKindCompleted,
 	}, "https://app.example")
-	want := "【Approving】运行完成\n项目：Demo\n工作流：自我迭代\nRun：run-1\n节点：结束\n打开：https://app.example/runs/run-1?node=output_end&tab=output"
+	want := "【Grasp】运行完成\n项目：Demo\n工作流：自我迭代\nRun：run-1\n节点：结束\n打开：https://app.example/runs/run-1?node=output_end&tab=output"
 	if got != want {
 		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
 	}

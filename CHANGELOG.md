@@ -4,9 +4,25 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
-- Also fold leftover `${APPROVING_*}` interpolations in Agent / shared-Agent
-  MCP url / headers / env, and keep runtime aliases so old templates still
-  resolve until the next minor.
+## 0.3.17-beta — 2026-09-12
+
+- Fold leftover `${APPROVING_*}` interpolations in Agent / shared-Agent MCP
+  url / headers / env on boot, read, and save. Runtime template vars keep
+  `APPROVING_*` aliases so unsaved old templates still resolve until the next
+  minor. Run-start sandbox env also denies leftover `APPROVING_*` auth /
+  artifact keys.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.17-beta`.
+
+## 0.3.16-beta — 2026-09-12
+
+- Product wordmark, login/home splash, favicon, default notify prefix, DingTalk
+  card title, run-log export header, and docs site brand are Grasp. A stored
+  product name of `Approving` falls back to Grasp so upgraded instances do not
+  keep the old logo. The Approve node display name is Grasp (type stays
+  `approve`).
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.16-beta`.
 
 ## 0.3.15-beta — 2026-09-12
 

@@ -600,7 +600,7 @@ func warnUnsafeAuth(c *Config) {
 		log.Warn().
 			Str("deployment_mode", c.Server.DeploymentMode).
 			Str("public_advertise", c.Server.PublicAdvertise).
-			Msg("no auth users configured for a non-local deployment; set GRASP_AUTH_USERS before exposing Approving")
+			Msg("no auth users configured for a non-local deployment; set GRASP_AUTH_USERS before exposing Grasp")
 	}
 }
 

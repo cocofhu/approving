@@ -17,7 +17,7 @@ const shortPage =
 
 const tallPage = `<!doctype html><html><body style="margin:0;background:#0a0a0b;color:#eee;font:14px sans-serif">
 <div style="display:flex;height:100vh">
-  <aside style="width:180px;border-right:1px solid #333;padding:12px;background:#141417">Approving</aside>
+  <aside style="width:180px;border-right:1px solid #333;padding:12px;background:#141417">Grasp</aside>
   <main style="flex:1;padding:16px"><h1 style="margin:0 0 8px;font-size:16px">模型构成 / 消耗排行</h1>
   <p style="color:#aaa">视觉产物示意</p>
   ${Array.from({ length: 40 }, (_, i) => `<p style="margin:4px 0;color:#666">row ${i + 1}</p>`).join('')}

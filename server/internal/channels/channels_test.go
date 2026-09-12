@@ -255,7 +255,7 @@ func TestManagerDeliverRunNotifyWithoutCronDeliver(t *testing.T) {
 	if !m.HasRunNotifyTarget("proj", []string{"c1"}) {
 		t.Fatal("expected HasRunNotifyTarget")
 	}
-	if err := m.DeliverRunNotify("proj", "【Approving】等待人工处理\n打开：/runs/r1", []string{"c1"}); err != nil {
+	if err := m.DeliverRunNotify("proj", "【Grasp】等待人工处理\n打开：/runs/r1", []string{"c1"}); err != nil {
 		t.Fatalf("DeliverRunNotify: %v", err)
 	}
 	fa.mu.Lock()

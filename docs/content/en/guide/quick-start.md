@@ -1,6 +1,6 @@
 ---
 title: Quick start
-description: Bring up Approving on a Linux host with Docker Compose.
+description: Bring up Grasp on a Linux host with Docker Compose.
 ---
 
 ## Prerequisites

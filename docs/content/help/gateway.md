@@ -3,7 +3,7 @@ title: 网关
 description: sandbox-gateway 契约摘要；完整说明见 GATEWAY.md。
 ---
 
-Approving 通过 vendored 的 **sandbox-gateway** 控制平面调度通用沙箱镜像。Web UI 走 Approving API；Agent / react 节点经 gateway 在容器中执行。
+Grasp 通过 vendored 的 **sandbox-gateway** 控制平面调度通用沙箱镜像。Web UI 走 Grasp API；Agent / react 节点经 gateway 在容器中执行。
 
 ## 直连与平台代理
 
@@ -19,7 +19,7 @@ Approving 通过 vendored 的 **sandbox-gateway** 控制平面调度通用沙箱
 ## 健康检查（默认本地栈）
 
 - Gateway：http://localhost:8899/healthz
-- Approving API：http://localhost:8080/api/health
+- Grasp API：http://localhost:8080/api/health
 
 ## 源码位置
 

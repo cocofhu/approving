@@ -364,7 +364,7 @@
         <div class="sandbox" id="sandbox">
           <div class="sb-head">
             <div>
-              <h2 id="sbTitle">沙箱 · Approving项目经理</h2>
+              <h2 id="sbTitle">沙箱 · Grasp项目经理</h2>
               <div class="sub">自动启动中 · 将创建项目 / Org 根组 / 工程师 Agent</div>
             </div>
             <span class="badge busy" id="sbBadge">sandbox starting…</span>
@@ -436,11 +436,11 @@
 
     const state = {
       step: 0,
-      teamName: 'Approving',
-      groupName: 'Approving项目组',
-      prefix: 'Approving',
-      pmName: 'Approving项目经理',
-      background: 'Approving 是一套多 Agent 研发协作平台：支持工作流编排、沙箱执行、人工门禁与 PM 咨询。目标仓库为 GitHub monorepo，需要覆盖调研→计划→方案→澄清→视觉→实现→测试→Review→变更摘要的完整流水线。',
+      teamName: 'Grasp',
+      groupName: 'Grasp项目组',
+      prefix: 'Grasp',
+      pmName: 'Grasp项目经理',
+      background: 'Grasp 是一套多 Agent 研发协作平台：支持工作流编排、沙箱执行、人工门禁与 PM 咨询。目标仓库为 GitHub monorepo，需要覆盖调研→计划→方案→澄清→视觉→实现→测试→Review→变更摘要的完整流水线。',
       acp: 'cursor',
       apiKey: '',
       gitUrl: 'https://github.com/example/approving.git',
@@ -495,11 +495,11 @@
           <div class="row2">
             <div class="field">
               <label>项目 / 团队名 <span class="req">*</span></label>
-              <input id="fTeam" value="${esc(state.teamName)}" placeholder="例如：Approving" />
+              <input id="fTeam" value="${esc(state.teamName)}" placeholder="例如：Grasp" />
             </div>
             <div class="field">
               <label>命名前缀 <span class="req">*</span></label>
-              <input id="fPrefix" value="${esc(state.prefix)}" placeholder="例如：Approving" />
+              <input id="fPrefix" value="${esc(state.prefix)}" placeholder="例如：Grasp" />
               <div class="help">生成「{前缀}项目经理」「{前缀}实现工程师」等。</div>
             </div>
           </div>
@@ -906,7 +906,7 @@
       await sleep(600);
       logMcp('MCP · pm_list_agent_templates', '→ research, plan, proposal, clarify, visual, implement, test, review, preview');
 
-      // 参考 Approving 侧栏：根组下 1 PM + Pipeline 子组下 9 工程师
+      // 参考 Grasp 侧栏：根组下 1 PM + Pipeline 子组下 9 工程师
       const roles = [
         ['research', '调研工程师'],
         ['plan', '计划工程师'],
