@@ -28,13 +28,15 @@ func IsDeniedRunSandboxEnvKey(k string) bool {
 		// platform write-backs / manager injects
 		"ACP_BACKEND", "CONFIG_ROOT", "SSH_KEY", "GIT_REPOS",
 		// GRASP_* auth aliases (all backends)
-		"GRASP_CURSOR_API_KEY", "GRASP_CLAUDE_API_KEY",
-		"GRASP_CODEBUDDY_API_KEY", "GRASP_TRAE_API_KEY",
-		"GRASP_OPENCODE_API_KEY":
+		"GRASP_CURSOR_API_KEY", "APPROVING_CURSOR_API_KEY",
+		"GRASP_CLAUDE_API_KEY", "APPROVING_CLAUDE_API_KEY",
+		"GRASP_CODEBUDDY_API_KEY", "APPROVING_CODEBUDDY_API_KEY",
+		"GRASP_TRAE_API_KEY", "APPROVING_TRAE_API_KEY",
+		"GRASP_OPENCODE_API_KEY", "APPROVING_OPENCODE_API_KEY":
 		return true
 	}
-	// Future GRASP_ARTIFACT_* reserved names
-	if strings.HasPrefix(k, "GRASP_ARTIFACT_") {
+	// Future GRASP_ARTIFACT_* reserved names (and leftover APPROVING_ARTIFACT_*)
+	if strings.HasPrefix(k, "GRASP_ARTIFACT_") || strings.HasPrefix(k, "APPROVING_ARTIFACT_") {
 		return true
 	}
 	return false

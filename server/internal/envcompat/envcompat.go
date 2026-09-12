@@ -76,6 +76,56 @@ func MigrateMap(env map[string]string) (map[string]string, int) {
 	return out, n
 }
 
+// RewriteString rewrites APPROVING_ to GRASP_ inside interpolations and names.
+func RewriteString(s string) string {
+	if !strings.Contains(s, OldPrefix) {
+		return s
+	}
+	return strings.ReplaceAll(s, OldPrefix, NewPrefix)
+}
+
+// MigrateStringMap folds APPROVING_* keys and rewrites APPROVING_ inside values.
+func MigrateStringMap(m map[string]string) (map[string]string, int) {
+	if m == nil {
+		return nil, 0
+	}
+	keys, n := MigrateMap(m)
+	out := make(map[string]string, len(keys))
+	extra := 0
+	for k, v := range keys {
+		next := RewriteString(v)
+		if next != v {
+			extra++
+		}
+		out[k] = next
+	}
+	if n == 0 && extra == 0 {
+		return m, 0
+	}
+	return out, n + extra
+}
+
+// AliasGraspKeys copies each GRASP_* entry onto the APPROVING_* name when absent.
+func AliasGraspKeys(vars map[string]string) map[string]string {
+	if len(vars) == 0 {
+		return vars
+	}
+	out := make(map[string]string, len(vars)*2)
+	for k, v := range vars {
+		out[k] = v
+	}
+	for k, v := range vars {
+		if !strings.HasPrefix(k, NewPrefix) {
+			continue
+		}
+		legacy := OldPrefix + strings.TrimPrefix(k, NewPrefix)
+		if _, ok := out[legacy]; !ok {
+			out[legacy] = v
+		}
+	}
+	return out
+}
+
 // Lookup reads GRASP_* first, then the APPROVING_* alias.
 func Lookup(key string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {

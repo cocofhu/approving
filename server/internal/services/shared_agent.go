@@ -89,11 +89,14 @@ func (s *SharedAgentService) migrateApprovingEnvKeys() {
 		}
 		pid := e.Name()
 		cfg := s.readConfig(pid)
-		env, n := envcompat.MigrateMap(cfg.Env)
+		env, n := envcompat.MigrateStringMap(cfg.Env)
+		mcp, mn := migrateMCPServers(cfg.MCP)
+		n += mn
 		if n == 0 {
 			continue
 		}
 		cfg.Env = env
+		cfg.MCP = mcp
 		b, err := json.MarshalIndent(cfg, "", "  ")
 		if err != nil {
 			log.Warn().Err(err).Str("project", pid).Msg("COMPAT(approving→grasp): marshal shared agent env failed")
@@ -140,10 +143,11 @@ func (s *SharedAgentService) Get(projectID string) SharedAgentConfig {
 	if strings.TrimSpace(layout.ConfigRoot) == DefaultConfigRoot && backend != "" && backend != AcpBackendCursor {
 		layout.ConfigRoot = DefaultConfigRootForBackend(backend)
 	}
-	env, _ := envcompat.MigrateMap(cfg.Env)
+	env, _ := envcompat.MigrateStringMap(cfg.Env)
 	if env == nil {
 		env = map[string]string{}
 	}
+	mcp, _ := migrateMCPServers(cfg.MCP)
 	return SharedAgentConfig{
 		ProjectID:         strings.TrimSpace(projectID),
 		AcpBackend:        backend,
@@ -152,7 +156,7 @@ func (s *SharedAgentService) Get(projectID string) SharedAgentConfig {
 		GitSshKnownHosts:  cfg.GitSshKnownHosts,
 		GitSshPrivateKey:  cfg.GitSshPrivateKey,
 		Files:             s.readFiles(pid),
-		MCP:               cfg.MCP,
+		MCP:               mcp,
 		Env:               env,
 		Layout:            layout,
 		Prompts:           cfg.Prompts,
@@ -171,7 +175,8 @@ func (s *SharedAgentService) Save(cfg SharedAgentConfig) error {
 		return err
 	}
 	StripSSHEnvKeys(cfg.Env)
-	cfg.Env, _ = envcompat.MigrateMap(cfg.Env)
+	cfg.Env, _ = envcompat.MigrateStringMap(cfg.Env)
+	cfg.MCP, _ = migrateMCPServers(cfg.MCP)
 	dir := filepath.Join(s.root, pid)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err

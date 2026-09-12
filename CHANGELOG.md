@@ -4,6 +4,10 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- Also fold leftover `${APPROVING_*}` interpolations in Agent / shared-Agent
+  MCP url / headers / env, and keep runtime aliases so old templates still
+  resolve until the next minor.
+
 ## 0.3.15-beta — 2026-09-12
 
 - Fold stored Agent / shared-Agent `APPROVING_*` env keys to `GRASP_*` on

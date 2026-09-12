@@ -1,6 +1,6 @@
 import type { Agent, AgentPrompts, MCPServer } from '@/lib/api/api'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
-import { migrateLegacyEnvRecord } from '@/lib/shared/envCompat'
+import { migrateLegacyEnvRecord, rewriteLegacyEnvText } from '@/lib/shared/envCompat'
 import {
   ACP_BACKENDS,
   normalizeRegions,
@@ -98,10 +98,10 @@ export function apiMcpToDraft(m: MCPServer): DraftMCP {
   return {
     name: m.name,
     transport: m.command ? 'command' : 'url',
-    url: m.url ?? '',
+    url: rewriteLegacyEnvText(m.url ?? ''),
     headers: recToKV(m.headers),
-    command: m.command ?? '',
-    args: (m.args || []).join('\n'),
+    command: rewriteLegacyEnvText(m.command ?? ''),
+    args: (m.args || []).map(rewriteLegacyEnvText).join('\n'),
     env: recToKV(m.env),
   }
 }

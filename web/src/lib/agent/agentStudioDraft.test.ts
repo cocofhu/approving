@@ -39,6 +39,21 @@ describe('legacy APPROVING_ env keys', () => {
     })
   })
 
+  it('rewrites leftover MCP interpolations to GRASP_*', () => {
+    const d = hydrateStudioDraft({
+      ...baseAgent,
+      mcp: [
+        {
+          name: 'artifact-store',
+          url: '${APPROVING_ARTIFACT_URL}',
+          headers: { Authorization: 'Bearer ${APPROVING_ARTIFACT_TOKEN}' },
+        },
+      ],
+    })
+    expect(d.mcp[0].url).toBe('${GRASP_ARTIFACT_URL}')
+    expect(d.mcp[0].headers).toEqual([{ k: 'Authorization', v: 'Bearer ${GRASP_ARTIFACT_TOKEN}' }])
+  })
+
   it('folds APPROVING_ onto existing GRASP_ without clobbering', () => {
     expect(
       recToKV({
