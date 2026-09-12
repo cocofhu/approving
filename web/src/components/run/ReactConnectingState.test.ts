@@ -108,4 +108,34 @@ describe('ReactConnectingState', () => {
     expect(wrapper.text()).toContain('正在拉取镜像…')
     expect(wrapper.text()).not.toContain('正在启动 Agent…')
   })
+
+  it('stage chrome only shows pipeline tab — no fake previewTab (g2.1)', () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(ReactConnectingState, {
+      props: { mode: 'stage' },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    expect(wrapper.get('[data-testid="react-connecting-stage"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="react-connecting-tab-pipeline"]').text()).toContain('流水线产物')
+    expect(wrapper.text()).not.toContain('产物预览')
+    expect(wrapper.find('[data-testid="react-connecting-stage-tabs"]').text()).not.toMatch(/预览/)
+  })
+
+  it('stage chrome English copy has no Artifact preview tab (g2.1)', () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'en',
+      messages: { en: { ...enCommon, ...enPages } },
+    })
+    const wrapper = mount(ReactConnectingState, {
+      props: { mode: 'stage' },
+      global: { plugins: [i18n], stubs: { Icon: true } },
+    })
+    expect(wrapper.get('[data-testid="react-connecting-tab-pipeline"]').text()).toContain('Pipeline artifacts')
+    expect(wrapper.text()).not.toContain('Artifact preview')
+  })
 })

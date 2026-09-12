@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from '@/components/ui/Icon.vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
@@ -21,6 +20,7 @@ import ArtifactPanel from '@/components/run/ArtifactPanel.vue'
 import RunSandboxEnvPanel from '@/components/run/RunSandboxEnvPanel.vue'
 import ExecutionTimeline from '@/components/run/ExecutionTimeline.vue'
 import ExecutionStatsPanel from '@/components/run/ExecutionStatsPanel.vue'
+import RunViewModeSwitcher from '@/components/run/RunViewModeSwitcher.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import RefreshStrip from '@/components/run/RefreshStrip.vue'
 import HardLoadLayer from '@/components/run/HardLoadLayer.vue'
@@ -212,39 +212,6 @@ const {
   currentLiveLogBootSession,
   onLiveLogBootSession,
 } = useRunDetail()
-
-const viewModeTrack = ref<HTMLElement | null>(null)
-const viewModeIndicator = ref<Record<string, string>>({
-  opacity: '0',
-  transform: 'translateX(0)',
-  width: '0px',
-})
-
-function updateViewModeIndicator() {
-  const root = viewModeTrack.value
-  if (!root) return
-  const active = root.querySelector<HTMLElement>('[data-view-mode-active="true"]')
-  if (!active) {
-    viewModeIndicator.value = { opacity: '0', transform: 'translateX(0)', width: '0px' }
-    return
-  }
-  viewModeIndicator.value = {
-    opacity: '1',
-    transform: `translateX(${active.offsetLeft}px)`,
-    width: `${active.offsetWidth}px`,
-  }
-}
-
-watch(viewMode, () => {
-  void nextTick(updateViewModeIndicator)
-})
-onMounted(() => {
-  void nextTick(updateViewModeIndicator)
-  window.addEventListener('resize', updateViewModeIndicator)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateViewModeIndicator)
-})
 </script>
 
 <template>
@@ -454,55 +421,27 @@ onBeforeUnmount(() => {
         class="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col md:flex-row"
         :class="{ 'run-detail-outer-sash-booting': outerSashBooting && desktopOuterSashLayout }"
       >
-      <!-- View mode switcher: always visible so mobile can open stats. -->
+      <!--
+        View mode switcher placement (plan g1):
+        - Mobile: document-flow top bar (always reachable for stats).
+        - Desktop stats: absolute over full-width stats chrome (md:pt-12 keeps clearance).
+        - Desktop canvas/timeline default split: inside left pane only (clipped by overflow).
+        - Desktop full-open: in right panel flow ABOVE node tabs (clickable, does not cover AppTabs).
+        Exactly one mount is active at a time → single data-testid instance.
+      -->
       <div
+        v-if="isMobile"
         data-testid="run-detail-view-mode-switcher"
-        class="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-2 md:absolute md:top-3 md:border-0 md:bg-transparent md:p-0"
-        :class="
-          outerFullOpen
-            ? 'md:left-5 md:z-[1]'
-            : 'md:left-3 md:z-10'
-        "
+        class="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-2"
       >
-        <div
-          ref="viewModeTrack"
-          class="relative inline-flex rounded-lg border border-line bg-surface/90 p-0.5 text-[12px] backdrop-blur"
-        >
-          <span
-            class="seg-indicator pointer-events-none absolute inset-y-0.5 left-0 rounded-md bg-accent-dim"
-            data-testid="run-view-mode-indicator"
-            :style="viewModeIndicator"
-            aria-hidden="true"
-          />
-          <button
-            v-if="!isMobile"
-            data-testid="view-mode-canvas"
-            class="relative z-[1] rounded-md px-2.5 py-1 font-medium transition-colors"
-            :class="viewMode === 'canvas' ? 'text-accent' : 'text-txt3 hover:text-txt2'"
-            :data-view-mode-active="viewMode === 'canvas' ? 'true' : undefined"
-            @click="viewMode = 'canvas'"
-          >
-            {{ t('pages.runDetail.canvas') }}
-          </button>
-          <button
-            data-testid="view-mode-timeline"
-            class="relative z-[1] rounded-md px-2.5 py-1 font-medium transition-colors"
-            :class="viewMode === 'timeline' ? 'text-accent' : 'text-txt3 hover:text-txt2'"
-            :data-view-mode-active="viewMode === 'timeline' ? 'true' : undefined"
-            @click="viewMode = 'timeline'"
-          >
-            {{ t('pages.runDetail.timeline') }}
-          </button>
-          <button
-            data-testid="view-mode-stats"
-            class="relative z-[1] rounded-md px-2.5 py-1 font-medium transition-colors"
-            :class="viewMode === 'stats' ? 'text-accent' : 'text-txt3 hover:text-txt2'"
-            :data-view-mode-active="viewMode === 'stats' ? 'true' : undefined"
-            @click="viewMode = 'stats'"
-          >
-            {{ t('pages.runDetail.stats') }}
-          </button>
-        </div>
+        <RunViewModeSwitcher v-model:view-mode="viewMode" :is-mobile="isMobile" />
+      </div>
+      <div
+        v-else-if="viewMode === 'stats'"
+        data-testid="run-detail-view-mode-switcher"
+        class="absolute left-3 top-3 z-10"
+      >
+        <RunViewModeSwitcher v-model:view-mode="viewMode" :is-mobile="isMobile" />
       </div>
 
       <!-- Stats mode: full-width single/multi tabs; single = timeline+panel (no click link); multi = full panel. -->
@@ -594,10 +533,19 @@ onBeforeUnmount(() => {
       <!-- Canvas: desktop only (narrow viewMode is normalized away from canvas). -->
       <div
         v-if="viewMode === 'canvas'"
-        class="relative hidden min-w-0 flex-1 border-r border-line md:block"
+        data-testid="run-detail-left-pane"
+        class="relative hidden min-w-0 flex-1 overflow-hidden border-r border-line md:block"
         :class="outerFullOpen ? 'pointer-events-none' : ''"
         :style="leftPaneStyle"
       >
+        <!-- plan g1.1: switcher floats only inside left canvas when split is open -->
+        <div
+          v-if="!outerFullOpen"
+          data-testid="run-detail-view-mode-switcher"
+          class="absolute left-3 top-3 z-10"
+        >
+          <RunViewModeSwitcher v-model:view-mode="viewMode" :is-mobile="isMobile" />
+        </div>
         <WorkflowCanvas
           :nodes="wf.nodes"
           :edges="wf.edges"
@@ -655,6 +603,14 @@ onBeforeUnmount(() => {
         :class="[isMobile ? 'border-b-0' : '', outerFullOpen ? 'pointer-events-none' : '']"
         :style="leftPaneStyle"
       >
+        <!-- plan g1.1: switcher floats only inside left timeline when split is open -->
+        <div
+          v-if="!isMobile && !outerFullOpen"
+          data-testid="run-detail-view-mode-switcher"
+          class="absolute left-3 top-3 z-10"
+        >
+          <RunViewModeSwitcher v-model:view-mode="viewMode" :is-mobile="isMobile" />
+        </div>
         <ExecutionTimeline
           :run="run"
           :nodes="wf.nodes"
@@ -699,6 +655,14 @@ onBeforeUnmount(() => {
         ]"
         :style="reviewRightPanelStyle"
       >
+        <!-- plan g1.2: full-open keeps switcher clickable above node tabs, not over them -->
+        <div
+          v-if="!isMobile && outerFullOpen"
+          data-testid="run-detail-view-mode-switcher"
+          class="flex shrink-0 items-center gap-2 px-3 pb-1 pt-2"
+        >
+          <RunViewModeSwitcher v-model:view-mode="viewMode" :is-mobile="isMobile" />
+        </div>
         <!-- Mobile detail chrome: back to timeline -->
         <div
           v-if="isMobile && viewMode === 'timeline'"
@@ -1005,12 +969,6 @@ onBeforeUnmount(() => {
 }
 .run-detail-outer-sash.is-full {
   box-shadow: 8px 0 12px rgb(var(--c-accent) / 0.45);
-}
-.seg-indicator {
-  transition:
-    transform var(--dur-ui) var(--ease-out-expo),
-    width var(--dur-ui) var(--ease-out-expo),
-    opacity var(--dur-ui) ease;
 }
 </style>
 
