@@ -15,13 +15,11 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
@@ -321,51 +319,14 @@ func parse(path string) (*Config, error) {
 	}
 	applyEnvOverrides(c)
 	setDefaults(c)
-	migrateLegacyDefaults(c)
 	return c, nil
-}
-
-// migrateLegacyDefaults moves approving-era default files onto grasp names.
-// COMPAT(approving→grasp): remove after next minor.
-func migrateLegacyDefaults(c *Config) {
-	if c == nil {
-		return
-	}
-	switch c.Database.Path {
-	case "grasp.db", "approving.db":
-		migrateDefaultDB(c, "approving.db", "grasp.db")
-	case "/data/grasp.db", "/data/approving.db":
-		migrateDefaultDB(c, "/data/approving.db", "/data/grasp.db")
-	}
-	if cwd, err := os.Getwd(); err == nil {
-		oldWS := filepath.Join(cwd, ".approving")
-		newWS := filepath.Join(cwd, ".grasp")
-		if ok, err := envcompat.MigrateLegacyPath(oldWS, newWS); err != nil {
-			log.Warn().Err(err).Msg("COMPAT(approving→grasp): could not migrate .approving")
-		} else if ok {
-			log.Info().Str("from", oldWS).Str("to", newWS).Msg("COMPAT(approving→grasp): renamed workspace dir")
-		}
-	}
-}
-
-func migrateDefaultDB(c *Config, oldPath, newPath string) {
-	ok, err := envcompat.MigrateLegacyPath(oldPath, newPath)
-	if err != nil {
-		log.Warn().Err(err).Str("from", oldPath).Str("to", newPath).Msg("COMPAT(approving→grasp): could not migrate database file")
-		return
-	}
-	if ok || c.Database.Path == oldPath {
-		if _, err := os.Stat(newPath); err == nil {
-			c.Database.Path = newPath
-		}
-	}
 }
 
 // applyEnvOverrides lets explicit env vars win over the file. The cursor_api_key
 // secret is injected here from K8s Secret-backed env.
 func applyEnvOverrides(c *Config) {
 	for _, option := range OptionDescriptors() {
-		if option.Deprecated && envcompat.Lookup(option.Env) != "" {
+		if option.Deprecated && os.Getenv(option.Env) != "" {
 			log.Warn().Str("env", option.Env).Msg("deprecated configuration option is set")
 		}
 	}
@@ -699,7 +660,7 @@ func mergeEnvList(c *Config, list string) {
 	}
 }
 
-func env(key string) string { return envcompat.Lookup(key) }
+func env(key string) string { return os.Getenv(key) }
 
 func envInt(key string) int {
 	if v := env(key); v != "" {

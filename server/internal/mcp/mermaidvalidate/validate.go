@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/cocofhu/grasp/internal/envcompat"
 )
 
 //go:embed bundle.mjs
@@ -73,7 +71,7 @@ func Check(source string) error {
 
 func lookUpNode() (string, error) {
 	nodeOnce.Do(func() {
-		if p := envcompat.Lookup("GRASP_NODE"); p != "" {
+		if p := os.Getenv("GRASP_NODE"); p != "" {
 			nodePath = p
 			return
 		}
@@ -89,7 +87,7 @@ func lookUpNode() (string, error) {
 
 func materializeBundle() (string, error) {
 	bundleOnce.Do(func() {
-		if p := envcompat.Lookup("GRASP_MERMAID_VALIDATE_BUNDLE"); p != "" {
+		if p := os.Getenv("GRASP_MERMAID_VALIDATE_BUNDLE"); p != "" {
 			bundleFile = p
 			return
 		}

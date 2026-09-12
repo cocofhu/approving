@@ -149,7 +149,6 @@
       "copyToClipboard.ts",
       "demoScrollbar.ts",
       "directPreviewPick.ts",
-      "envCompat.ts",
       "format.ts",
       "frontmatter.ts",
       "highlightJson.ts",
@@ -188,6 +187,6 @@
     "pm": 7,
     "project": 4,
     "run": 54,
-    "shared": 39
+    "shared": 38
   }
 }

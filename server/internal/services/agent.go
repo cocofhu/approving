@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
@@ -230,77 +229,6 @@ func DefaultPlatformMCP() []MCPServer {
 func (s *AgentService) seed() {
 	s.migrateLegacy()
 	s.migrateAllWorkDirs()
-	s.migrateApprovingEnvKeys()
-}
-
-// migrateApprovingEnvKeys rewrites APPROVING_* → GRASP_* in on-disk agent.json
-// env maps. COMPAT(approving→grasp): remove after next minor.
-func (s *AgentService) migrateApprovingEnvKeys() {
-	entries, err := os.ReadDir(s.root)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		cfg := s.readConfig(e.Name())
-		env, n := envcompat.MigrateStringMap(cfg.Env)
-		mcp, mn := migrateMCPServers(cfg.MCP)
-		n += mn
-		if n == 0 {
-			continue
-		}
-		cfg.Env = env
-		cfg.MCP = mcp
-		b, err := json.MarshalIndent(cfg, "", "  ")
-		if err != nil {
-			log.Warn().Err(err).Str("agent", e.Name()).Msg("COMPAT(approving→grasp): marshal agent env failed")
-			continue
-		}
-		path := filepath.Join(s.root, sanitize(e.Name()), "agent.json")
-		if err := os.WriteFile(path, b, 0o644); err != nil {
-			log.Warn().Err(err).Str("agent", e.Name()).Msg("COMPAT(approving→grasp): rewrite agent env failed")
-			continue
-		}
-		log.Info().Str("agent", e.Name()).Int("keys", n).Msg("COMPAT(approving→grasp): rewrote APPROVING_* keys in agent.json")
-	}
-}
-
-func migrateMCPServers(mcp []MCPServer) ([]MCPServer, int) {
-	if len(mcp) == 0 {
-		return mcp, 0
-	}
-	n := 0
-	out := make([]MCPServer, len(mcp))
-	for i, m := range mcp {
-		url := envcompat.RewriteString(m.URL)
-		cmd := envcompat.RewriteString(m.Command)
-		headers, hn := envcompat.MigrateStringMap(m.Headers)
-		env, en := envcompat.MigrateStringMap(m.Env)
-		args := append([]string{}, m.Args...)
-		an := 0
-		for j, a := range args {
-			next := envcompat.RewriteString(a)
-			if next != a {
-				an++
-			}
-			args[j] = next
-		}
-		if url != m.URL || cmd != m.Command || hn > 0 || en > 0 || an > 0 {
-			n += 1 + hn + en + an
-		}
-		m.URL = url
-		m.Command = cmd
-		m.Headers = headers
-		m.Env = env
-		m.Args = args
-		out[i] = m
-	}
-	if n == 0 {
-		return mcp, 0
-	}
-	return out, n
 }
 
 func (s *AgentService) migrateAllWorkDirs() {
@@ -401,8 +329,10 @@ func (s *AgentService) Get(name string) (Agent, bool) {
 	if strings.TrimSpace(layout.ConfigRoot) == DefaultConfigRoot && backend != AcpBackendCursor {
 		layout.ConfigRoot = DefaultConfigRootForBackend(backend)
 	}
-	env, _ := envcompat.MigrateStringMap(cfg.Env)
-	mcp, _ := migrateMCPServers(cfg.MCP)
+	env := cfg.Env
+	if env == nil {
+		env = map[string]string{}
+	}
 	return Agent{
 		Name:              name,
 		ProjectID:         strings.TrimSpace(cfg.ProjectID),
@@ -411,7 +341,7 @@ func (s *AgentService) Get(name string) (Agent, bool) {
 		GitSshKnownHosts:  cfg.GitSshKnownHosts,
 		GitSshPrivateKey:  cfg.GitSshPrivateKey,
 		Files:             s.readFiles(name),
-		MCP:               mcp,
+		MCP:               cfg.MCP,
 		Env:               env,
 		Layout:            layout,
 		Prompts:           cfg.Prompts,
@@ -574,8 +504,6 @@ func (s *AgentService) saveUnlocked(a Agent) error {
 		return err
 	}
 	StripSSHEnvKeys(a.Env)
-	a.Env, _ = envcompat.MigrateStringMap(a.Env)
-	a.MCP, _ = migrateMCPServers(a.MCP)
 	s.migrateCursorWorkDir(name)
 	dir := filepath.Join(s.root, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

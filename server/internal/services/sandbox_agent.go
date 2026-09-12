@@ -11,7 +11,6 @@ import (
 
 	"github.com/cocofhu/grasp/internal/config"
 	"github.com/cocofhu/grasp/internal/envauth"
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 	"github.com/cocofhu/grasp/internal/runtime"
 	"github.com/cocofhu/grasp/internal/sandbox"
@@ -199,7 +198,6 @@ func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, 
 		}
 	}
 
-	vars = envcompat.AliasGraspKeys(vars)
 	vars = runtime.MergeEnvIntoTemplateVars(vars, agent.Env)
 	specs := filterAgentPlatformMCP(resolveAgentMCP(agent.MCP, vars))
 	specs = append(specs, platformSpecs...)

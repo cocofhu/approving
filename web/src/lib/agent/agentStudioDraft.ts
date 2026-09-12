@@ -1,6 +1,5 @@
 import type { Agent, AgentPrompts, MCPServer } from '@/lib/api/api'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
-import { migrateLegacyEnvRecord, rewriteLegacyEnvText } from '@/lib/shared/envCompat'
 import {
   ACP_BACKENDS,
   normalizeRegions,
@@ -81,13 +80,13 @@ export function normalizePromptText(s: string): string {
 }
 
 export function recToKV(rec?: Record<string, string>): KV[] {
-  return Object.entries(migrateLegacyEnvRecord(rec)).map(([k, v]) => ({ k, v }))
+  return Object.entries(rec || {}).map(([k, v]) => ({ k, v }))
 }
 
 export function kvToRec(kvs: KV[]): Record<string, string> {
   const out: Record<string, string> = {}
   for (const { k, v } of kvs) if (k.trim()) out[k.trim()] = v
-  return migrateLegacyEnvRecord(out)
+  return out
 }
 
 export function normalizeDraftRegions(d: AgentStudioDraft): void {
@@ -98,10 +97,10 @@ export function apiMcpToDraft(m: MCPServer): DraftMCP {
   return {
     name: m.name,
     transport: m.command ? 'command' : 'url',
-    url: rewriteLegacyEnvText(m.url ?? ''),
+    url: m.url ?? '',
     headers: recToKV(m.headers),
-    command: rewriteLegacyEnvText(m.command ?? ''),
-    args: (m.args || []).map(rewriteLegacyEnvText).join('\n'),
+    command: m.command ?? '',
+    args: (m.args || []).join('\n'),
     env: recToKV(m.env),
   }
 }

@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/sandbox"
 
 	"github.com/google/uuid"
@@ -103,11 +102,11 @@ func run(args []string, out io.Writer) error {
 }
 
 func parseOptions(args []string) (options, error) {
-	port := envcompat.Lookup("GRASP_PORT")
+	port := os.Getenv("GRASP_PORT")
 	if port == "" {
 		port = "8080"
 	}
-	gatewayURL := envcompat.Lookup("GRASP_SANDBOX_GATEWAY_URL")
+	gatewayURL := os.Getenv("GRASP_SANDBOX_GATEWAY_URL")
 	if gatewayURL == "" {
 		gatewayURL = "http://127.0.0.1:8899"
 	}
@@ -116,8 +115,8 @@ func parseOptions(args []string) (options, error) {
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&opts.apiURL, "api-url", "http://127.0.0.1:"+port, "Grasp base URL")
 	fs.StringVar(&opts.gatewayURL, "gateway-url", gatewayURL, "sandbox-gateway base URL")
-	fs.StringVar(&opts.gatewayAPIKey, "gateway-api-key", envcompat.Lookup("GRASP_SANDBOX_GATEWAY_API_KEY"), "sandbox-gateway bearer token")
-	fs.StringVar(&opts.doctorToken, "doctor-token", envcompat.Lookup("GRASP_DOCTOR_TOKEN"), "local doctor control-plane token")
+	fs.StringVar(&opts.gatewayAPIKey, "gateway-api-key", os.Getenv("GRASP_SANDBOX_GATEWAY_API_KEY"), "sandbox-gateway bearer token")
+	fs.StringVar(&opts.doctorToken, "doctor-token", os.Getenv("GRASP_DOCTOR_TOKEN"), "local doctor control-plane token")
 	fs.DurationVar(&opts.timeout, "timeout", 3*time.Minute, "overall timeout")
 	fs.BoolVar(&opts.runDemo, "run-demo", false, "create a sandbox and verify artifact isolation")
 	if err := fs.Parse(args); err != nil {

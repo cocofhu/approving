@@ -47,10 +47,8 @@ services:
       # Optional host revision for `go run -ldflags -X` (see Dockerfile.dev).
       # ./start.sh dev fills this from `git rev-parse HEAD` when unset.
       GIT_COMMIT: ${GIT_COMMIT:-}
-      GRASP_ENV_FILE: /app/host.env
     volumes:
       - ./server:/app
-      - ./.env:/app/host.env
       # data 里放 skill profiles(agent.json 等),UI 保存 Agent 时要写回,故可写。
       - ./data:/app/data
       - ./.devdata/db:/data
@@ -79,7 +77,7 @@ services:
       # 留空则用 config.local.yaml 的 image.ref(universal-sandbox-cursor:local)。
       SBGW_IMAGE: ${GRASP_GATEWAY_SANDBOX_IMAGE:-}
       # Default local-demo Bearer; overrides empty auth.apiKeys in config.local.yaml.
-      SBGW_API_KEYS: ${SBGW_API_KEYS:-grasp-local-demo,approving-local-demo}
+      SBGW_API_KEYS: ${SBGW_API_KEYS:-grasp-local-demo}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./sandbox-gateway/deploy/config/config.local.yaml:/etc/sandbox-gateway/config.yaml:ro

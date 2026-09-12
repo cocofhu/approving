@@ -91,7 +91,7 @@ describe('region policy', () => {
 
   it('recognizes managed keys only', () => {
     expect(isManagedRegionKey(' GRASP_TRAE_REGION ')).toBe(true)
-    expect(isManagedRegionKey('APPROVING_CODEBUDDY_REGION')).toBe(true)
+    expect(isManagedRegionKey('APPROVING_CODEBUDDY_REGION')).toBe(false)
     expect(isManagedRegionKey('OTHER')).toBe(false)
   })
 })

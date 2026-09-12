@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/cocofhu/grasp/internal/config"
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 	"github.com/cocofhu/grasp/internal/nodereg"
 	"github.com/cocofhu/grasp/internal/sandbox"
@@ -136,7 +135,6 @@ func (c *acpProvider) agentConfig(profile string) agentFile {
 		return f
 	}
 	_ = json.Unmarshal(b, &f)
-	f.Env, _ = envcompat.MigrateMap(f.Env)
 	return f
 }
 
@@ -175,9 +173,9 @@ func (c *acpProvider) effectiveAgent(req NodeReq) agentFile {
 
 func overlayAgentFile(shared SharedAgentView, agent agentFile) agentFile {
 	out := agent
-	// Env: shared base, agent keys win. Fold APPROVING_* onto GRASP_* first.
-	sharedEnv, _ := envcompat.MigrateMap(shared.Env)
-	agentEnv, _ := envcompat.MigrateMap(agent.Env)
+	// Env: shared base, agent keys win.
+	sharedEnv := shared.Env
+	agentEnv := agent.Env
 	env := map[string]string{}
 	for k, v := range sharedEnv {
 		if strings.TrimSpace(k) == "" {
@@ -333,7 +331,7 @@ func (c *acpProvider) mcpVars(req NodeReq) map[string]string {
 	}
 
 	m["vars.repos"] = sandbox.EncodeRepos(resolveRepos(req))
-	return envcompat.AliasGraspKeys(m)
+	return m
 }
 
 // templateVars is the substitution map for user-authored MCP fields: platform

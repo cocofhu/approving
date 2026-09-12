@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -104,7 +103,7 @@ func (h *Handlers) cleanupDoctorArtifactSession(id, cleanupToken string) error {
 }
 
 func validDoctorToken(header string) bool {
-	want := envcompat.Lookup("GRASP_DOCTOR_TOKEN")
+	want := os.Getenv("GRASP_DOCTOR_TOKEN")
 	got := bearer(header)
 	return want != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
