@@ -120,6 +120,21 @@ describe('LiveLogPanel', () => {
     wrapper.unmount()
   })
 
+  it('shows pulling stage and does not arm 120s dwell timeout (g3.2 g3.4)', async () => {
+    const wrapper = mountPanel({
+      status: 'running',
+      live: true,
+      sandboxStatus: 'pulling',
+    })
+    expect(wrapper.find('[data-testid="boot-stage-pulling"]').attributes('data-state')).toBe('active')
+    expect(wrapper.text()).toContain('正在拉取镜像')
+    await vi.advanceTimersByTimeAsync(BOOT_STAGE_TIMEOUT_MS)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="boot-timeout-banner"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="boot-stage-pulling"]').attributes('data-state')).toBe('active')
+    wrapper.unmount()
+  })
+
   it('hides boot progress after first event', async () => {
     const wrapper = mountPanel({
       status: 'running',
@@ -285,7 +300,8 @@ describe('LiveLogPanel', () => {
     expect(sessions?.length).toBeGreaterThan(0)
     const persisted = sessions[sessions.length - 1][0]
     expect(persisted.timedOut).toBe(true)
-    expect(persisted.confirmedPhase).toBe(1)
+    // creating + container ready → acp_ready (index 2 after pulling=0 was added)
+    expect(persisted.confirmedPhase).toBe(2)
     expect(persisted.stageEnteredAt).toBeTruthy()
     first.unmount()
 
