@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   saveAgentsOrg: vi.fn(),
   renameAgent: vi.fn(),
   listProjectRunTags: vi.fn(),
+  createProjectSharedAgentTest: vi.fn(),
 }))
 
 const breakpointMocks = vi.hoisted(() => {
@@ -44,6 +45,7 @@ vi.mock('@/lib/api/api', async () => {
       saveAgentsOrg: mocks.saveAgentsOrg,
       renameAgent: mocks.renameAgent,
       listProjectRunTags: mocks.listProjectRunTags,
+      createProjectSharedAgentTest: mocks.createProjectSharedAgentTest,
     },
   }
 })
@@ -152,6 +154,7 @@ beforeEach(() => {
     agents: {},
     ...org,
   }))
+  mocks.createProjectSharedAgentTest.mockResolvedValue({ id: 1 })
 })
 
 afterEach(() => {
@@ -1002,6 +1005,65 @@ describe('AgentStudio mobile core path', () => {
       expect(wrapper.text()).toContain('建议在桌面使用')
       expect(wrapper.find('agent-data-panel-stub').exists()).toBe(false)
     }
+  })
+
+  it('mounts chat test on mobile instead of desktop-only tip (g2.3)', async () => {
+    mocks.listAgents.mockResolvedValue([agentWithFiles()])
+    const wrapper = await mountMobileStudio()
+    await flushPromises()
+
+    await wrapper.findAll('button').find((b) => b.text() === '对话测试')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('建议在桌面使用')
+    expect(wrapper.find('[data-testid="studio-chat-test"]').exists()).toBe(true)
+    expect(wrapper.find('agent-chat-tester-stub').exists()).toBe(true)
+  })
+
+  it('deep-links to chat test with current agent profile (g2.2)', async () => {
+    mocks.listAgents.mockResolvedValue([
+      { ...agentWithFiles(), name: 'alpha' },
+      { ...agentWithFiles(), name: 'beta', projectId: 'proj-default' },
+    ])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter({ agent: 'alpha', tab: 'test' })
+    const wrapper = trackMount(
+      mount(AgentStudioView, {
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: true,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: true,
+            ExplorerContextMenu: true,
+            AgentChatTester: {
+              props: ['profile', 'homeProjectId', 'createTest'],
+              template:
+                '<div data-testid="studio-chat-tester-stub">{{ profile }}|{{ homeProjectId }}</div>',
+            },
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
+        },
+      }),
+    )
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="studio-chat-test"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="studio-chat-tester-stub"]').text()).toBe(
+      'alpha|proj-default',
+    )
+    // Switching left Agent remounts tester via :key="activeName" (s3).
+    const viewSrc = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, '.vue'), 'utf8')
+    expect(viewSrc).toMatch(/<AgentChatTester[\s\S]*?:key="activeName"/)
   })
 
   it('deep-links to data sub-tab on mobile without desktop-only tip', async () => {
@@ -2113,19 +2175,23 @@ describe('AgentStudioView entry assembly (g3 / Demo main path)', () => {
     expect(src).toMatch(/v-else-if="tab === 'env'/)
     expect(src).toMatch(/v-else-if="tab === 'prompts'/)
     expect(src).toMatch(/tab === 'platform-rules'/)
-    expect(src).not.toMatch(/tab === 'test'/)
+    expect(src).toMatch(/tab === 'test'/)
     expect(src).toMatch(/tab === 'meta'/)
-    // Rejected demo: must not add chat-test as a STUDIO_TABS trailing item (g2.2).
+    // Chat test is a trailing Studio inner tab (g2.1 / g2.2).
     expect(src).toMatch(/const STUDIO_TABS[\s\S]*?=\s*\[[^\]]*\]/)
-    expect(src).not.toMatch(/STUDIO_TABS[^\n]*test/)
-    expect(src).not.toMatch(/'test' as StudioTab|StudioTab.*'test'/)
+    expect(src).toMatch(/StudioTab[\s\S]*'test'/)
+    expect(src).toMatch(/'test' as const/)
+    expect(viewSrc).toContain('AgentChatTester')
+    expect(viewSrc).toMatch(/data-testid="studio-chat-test"/)
+    expect(viewSrc).toMatch(/createStudioChatTest|createProjectSharedAgentTest/)
+    expect(viewSrc).toMatch(/tab !== 'data' && tab !== 'test'/)
   })
 
   it('switches Demo main-path tabs via tab strip without changing labels', async () => {
     mocks.listAgents.mockResolvedValue([agent()])
     const wrapper = await mountStudio({ agent: 'legacy' })
     await flushPromises()
-    expect(wrapper.text()).not.toContain('对话测试')
+    expect(wrapper.text()).toContain('对话测试')
     const mcpBtn = wrapper.findAll('button').find((b) => /MCP/i.test(b.text()))
     expect(mcpBtn).toBeTruthy()
     await mcpBtn!.trigger('click')

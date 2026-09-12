@@ -55,19 +55,21 @@ describe('user-facing copy remediation keys', () => {
     expect(zh.global.t('pages.projectDetail.pm.inputPh')).toContain('50 MiB')
   })
 
-  it('chat-test entry copy points to Agents → Chat test (g2.2)', () => {
-    expect(zh.global.t('pages.agentChatTester.missingCreateTest')).toContain('智能体 → 对话测试')
-    expect(en.global.t('pages.agentChatTester.missingCreateTest')).toMatch(/Agents → Chat test/i)
-    expect(zh.global.t('pages.sandboxes.empty')).toContain('智能体 → 对话测试')
-    expect(en.global.t('pages.sandboxes.empty')).toMatch(/Agents → Chat test/i)
-    expect(zh.global.t('common.empty.noSandboxes')).toContain('智能体 → 对话测试')
-    expect(en.global.t('common.empty.noSandboxes')).toMatch(/Agents → Chat test/i)
-    expect(zh.global.t('pages.projectDetail.sharedAgent.extendHint')).toContain('智能体 → 对话测试')
+  it('chat-test entry copy points to Agent Studio Chat test (g2.3)', () => {
+    expect(zh.global.t('pages.agentChatTester.missingCreateTest')).toContain('Agent Studio')
+    expect(zh.global.t('pages.agentChatTester.missingCreateTest')).toContain('对话测试')
+    expect(en.global.t('pages.agentChatTester.missingCreateTest')).toMatch(/Agent Studio/i)
+    expect(en.global.t('pages.agentChatTester.missingCreateTest')).toMatch(/Chat test/i)
+    expect(zh.global.t('pages.sandboxes.empty')).toContain('Agent Studio「对话测试」')
+    expect(en.global.t('pages.sandboxes.empty')).toMatch(/Agent Studio → Chat test/i)
+    expect(zh.global.t('common.empty.noSandboxes')).toContain('Agent Studio「对话测试」')
+    expect(en.global.t('common.empty.noSandboxes')).toMatch(/Agent Studio → Chat test/i)
+    expect(zh.global.t('pages.projectDetail.sharedAgent.extendHint')).toContain('Agent Studio「对话测试」')
     expect(zh.global.t('pages.projectDetail.sharedAgent.extendHint')).not.toContain('仅在此入口')
-    expect(en.global.t('pages.projectDetail.sharedAgent.extendHint')).toMatch(/Agents → Chat test/i)
+    expect(en.global.t('pages.projectDetail.sharedAgent.extendHint')).toMatch(/Agent Studio Chat test/i)
     expect(en.global.t('pages.projectDetail.sharedAgent.extendHint')).not.toMatch(/only from this panel/i)
-    expect(zh.global.t('pages.projectDetail.agents.metaTab')).toBe('元信息')
-    expect(zh.global.t('pages.projectDetail.agents.testTab')).toBe('对话测试')
+    expect(zh.global.t('pages.agentStudio.tabs.test')).toBe('对话测试')
+    expect(en.global.t('pages.agentStudio.tabs.test')).toBe('Chat test')
   })
 
   it('pm status/error copy drops internal jargon', () => {

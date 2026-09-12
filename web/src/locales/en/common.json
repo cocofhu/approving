@@ -176,7 +176,7 @@
       "selectWorkflowGroup": "Select a workflow group on the left",
       "noMatchingGroups": "No matching groups",
       "noMatchingOptions": "No matching options",
-      "noSandboxes": "No sandboxes yet. Node sandboxes are created when workflows run, or start a test sandbox under Project detail → Agents → Chat test.",
+      "noSandboxes": "No sandboxes yet. Node sandboxes are created when workflows run, or start a test sandbox under Agent Studio → Chat test.",
       "noAgents": "No agents yet. Click New agent, or the backend seeds a default on first start.",
       "noPendingGates": "Nothing pending",
       "noPendingGatesForPipeline": "No pending items for this pipeline",
