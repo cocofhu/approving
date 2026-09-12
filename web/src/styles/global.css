@@ -276,6 +276,18 @@ html.light .app-sidebar-card {
   .toolbar-control .chip {
     @apply h-5 shrink-0 py-0 leading-none;
   }
+  /*
+   * Tab / split-line clearance (plan g1.4): keep 8–12px so underlines do not
+   * sit on primary action buttons. Use these instead of per-page magic margins.
+   * - toolbar-below-tabs: stacked content under a Tab row (padding-top 10px)
+   * - toolbar-inline-row: Tab/title + actions sharing a border-b row (py 10px)
+   */
+  .toolbar-below-tabs {
+    @apply pt-2.5;
+  }
+  .toolbar-inline-row {
+    @apply py-2.5;
+  }
   .nav-item {
     @apply flex items-center gap-2.5 px-3 py-[9px] text-sm text-txt2 transition
       hover:bg-elevated hover:text-txt;

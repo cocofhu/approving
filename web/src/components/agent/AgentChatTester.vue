@@ -619,7 +619,7 @@ const toolIcon: Record<string, string> = { completed: 'check', failed: 'close', 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
     <!-- header / controls -->
-    <div v-if="!embedded" class="flex items-center gap-2 border-b border-line px-4 py-2">
+    <div v-if="!embedded" class="toolbar-inline-row flex items-center gap-2 border-b border-line px-4">
       <AcpStatusPill v-if="acpConnected" :busy="acpBusy" connected />
       <span
         v-else

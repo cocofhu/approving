@@ -291,7 +291,7 @@ onMounted(() => {
     </div>
 
     <template v-else-if="draft">
-      <div class="flex shrink-0 items-center gap-2 border-b border-line px-2 py-1">
+      <div class="toolbar-inline-row flex shrink-0 items-center gap-2 border-b border-line px-2">
         <details class="relative shrink-0" data-testid="shared-agent-help">
           <summary
             class="flex h-[18px] w-[18px] cursor-pointer list-none items-center justify-center rounded-full border border-line text-[11px] font-semibold text-accent-2 transition hover:border-accent hover:bg-accent-dim [&::-webkit-details-marker]:hidden"

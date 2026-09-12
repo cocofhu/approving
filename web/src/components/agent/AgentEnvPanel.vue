@@ -119,7 +119,7 @@ watch(
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <div class="flex items-center gap-2 border-b border-line px-4 py-2">
+    <div class="toolbar-inline-row flex items-center gap-2 border-b border-line px-4">
       <AppButton
         type="button"
         size="sm"

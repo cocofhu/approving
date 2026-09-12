@@ -118,7 +118,7 @@ watch(
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <div class="flex items-center gap-2 border-b border-line px-4 py-2">
+    <div class="toolbar-inline-row flex items-center gap-2 border-b border-line px-4">
       <button class="rounded border border-line px-2 py-1 text-[11px] text-txt2 hover:border-line-strong" @click="toggleMcpRaw">{{ mcpRaw ? t('pages.agentStudio.mcp.formEdit') : t('pages.agentStudio.mcp.rawJson') }}</button>
       <AppButton
         v-if="!mcpRaw"
