@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.17-beta — 2026-09-12
+
+- Fold leftover `${APPROVING_*}` interpolations in Agent / shared-Agent MCP
+  url / headers / env on boot, read, and save. Runtime template vars keep
+  `APPROVING_*` aliases so unsaved old templates still resolve until the next
+  minor. Run-start sandbox env also denies leftover `APPROVING_*` auth /
+  artifact keys.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.17-beta`.
+
 ## 0.3.16-beta — 2026-09-12
 
 - Product wordmark, login/home splash, favicon, default notify prefix, DingTalk

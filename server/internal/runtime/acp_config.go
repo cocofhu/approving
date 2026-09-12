@@ -333,7 +333,7 @@ func (c *acpProvider) mcpVars(req NodeReq) map[string]string {
 	}
 
 	m["vars.repos"] = sandbox.EncodeRepos(resolveRepos(req))
-	return m
+	return envcompat.AliasGraspKeys(m)
 }
 
 // templateVars is the substitution map for user-authored MCP fields: platform

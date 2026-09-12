@@ -47,6 +47,29 @@ func TestAgentService_MigratesApprovingEnvKeys(t *testing.T) {
 	}
 }
 
+func TestAgentService_MigratesApprovingMCPInterpolations(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "legacy-mcp")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := []byte(`{"mcp":[{"name":"artifact-store","url":"${APPROVING_ARTIFACT_URL}","headers":{"Authorization":"Bearer ${APPROVING_ARTIFACT_TOKEN}"}}]}`)
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewAgentService(root)
+	got, ok := s.Get("legacy-mcp")
+	if !ok || len(got.MCP) != 1 {
+		t.Fatalf("agent=%#v", got)
+	}
+	if got.MCP[0].URL != "${GRASP_ARTIFACT_URL}" {
+		t.Fatalf("url = %q", got.MCP[0].URL)
+	}
+	if got.MCP[0].Headers["Authorization"] != "Bearer ${GRASP_ARTIFACT_TOKEN}" {
+		t.Fatalf("headers = %#v", got.MCP[0].Headers)
+	}
+}
+
 func TestAgentService_SaveRewritesApprovingEnvKeys(t *testing.T) {
 	s := NewAgentService(t.TempDir())
 	if err := s.Save(Agent{

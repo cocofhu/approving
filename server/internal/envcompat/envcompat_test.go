@@ -55,6 +55,35 @@ func TestMigrateMap(t *testing.T) {
 	}
 }
 
+func TestRewriteStringAndMigrateStringMap(t *testing.T) {
+	if got := RewriteString("Bearer ${APPROVING_ARTIFACT_TOKEN}"); got != "Bearer ${GRASP_ARTIFACT_TOKEN}" {
+		t.Fatalf("RewriteString = %q", got)
+	}
+	got, n := MigrateStringMap(map[string]string{
+		"Authorization":            "Bearer ${APPROVING_ARTIFACT_TOKEN}",
+		"APPROVING_ARTIFACT_TOKEN": "x",
+	})
+	if n < 2 {
+		t.Fatalf("n = %d map=%#v", n, got)
+	}
+	if got["Authorization"] != "Bearer ${GRASP_ARTIFACT_TOKEN}" {
+		t.Fatalf("header = %#v", got)
+	}
+	if got["GRASP_ARTIFACT_TOKEN"] != "x" {
+		t.Fatalf("renamed = %#v", got)
+	}
+}
+
+func TestAliasGraspKeys(t *testing.T) {
+	got := AliasGraspKeys(map[string]string{"GRASP_ARTIFACT_URL": "http://x", "KEEP": "1"})
+	if got["APPROVING_ARTIFACT_URL"] != "http://x" || got["GRASP_ARTIFACT_URL"] != "http://x" {
+		t.Fatalf("alias = %#v", got)
+	}
+	if got["KEEP"] != "1" {
+		t.Fatalf("plain key lost: %#v", got)
+	}
+}
+
 func TestLookupInMap(t *testing.T) {
 	env := map[string]string{"APPROVING_CURSOR_API_KEY": "legacy"}
 	if got := LookupInMap(env, "GRASP_CURSOR_API_KEY"); got != "legacy" {
