@@ -30,16 +30,16 @@ func TokenEnvKeys() []string {
 	}
 }
 
-// IsTokenEnvKey reports whether k is a Token-class env key (literal name match;
-// no alias folding). Does not include GIT_REPOS, URL hosts, known_hosts, or
-// region keys.
+// IsTokenEnvKey reports whether k is a Token-class env key (literal name match,
+// plus APPROVING_* aliases of GRASP_* token keys). Does not include GIT_REPOS,
+// URL hosts, known_hosts, or region keys.
 func IsTokenEnvKey(k string) bool {
 	switch k {
-	case "GRASP_CURSOR_API_KEY", "CURSOR_API_KEY",
-		"GRASP_CLAUDE_API_KEY", "ANTHROPIC_API_KEY",
-		"GRASP_CODEBUDDY_API_KEY", "CODEBUDDY_API_KEY",
-		"GRASP_TRAE_API_KEY", "TRAE_API_KEY", "TRAECLI_PERSONAL_ACCESS_TOKEN",
-		"GRASP_OPENCODE_API_KEY", "OPENCODE_API_KEY",
+	case "GRASP_CURSOR_API_KEY", "APPROVING_CURSOR_API_KEY", "CURSOR_API_KEY",
+		"GRASP_CLAUDE_API_KEY", "APPROVING_CLAUDE_API_KEY", "ANTHROPIC_API_KEY",
+		"GRASP_CODEBUDDY_API_KEY", "APPROVING_CODEBUDDY_API_KEY", "CODEBUDDY_API_KEY",
+		"GRASP_TRAE_API_KEY", "APPROVING_TRAE_API_KEY", "TRAE_API_KEY", "TRAECLI_PERSONAL_ACCESS_TOKEN",
+		"GRASP_OPENCODE_API_KEY", "APPROVING_OPENCODE_API_KEY", "OPENCODE_API_KEY",
 		"GITHUB_TOKEN", "GITLAB_TOKEN", "GIT_SSH_PRIVATE_KEY":
 		return true
 	default:

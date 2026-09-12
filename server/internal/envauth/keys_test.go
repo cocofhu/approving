@@ -27,6 +27,9 @@ func TestIsTokenEnvKey(t *testing.T) {
 			t.Fatalf("%s should be token env key", k)
 		}
 	}
+	if !IsTokenEnvKey("APPROVING_CURSOR_API_KEY") {
+		t.Fatal("legacy APPROVING_CURSOR_API_KEY should still count as a token key")
+	}
 	for _, k := range []string{
 		"GIT_REPOS", "GITHUB_URL", "GITLAB_URL", "GIT_SSH_KNOWN_HOSTS",
 		"GRASP_CODEBUDDY_REGION", "GRASP_TRAE_REGION", "FEATURE_FLAG",

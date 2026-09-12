@@ -1,6 +1,7 @@
 package services
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -76,6 +77,23 @@ func TestExtendOverlay_AgentWinsSameKeys(t *testing.T) {
 	}
 }
 
+func TestExtendOverlay_TokenSharedPriorityFoldsApprovingKeys(t *testing.T) {
+	shared := SharedAgentConfig{
+		Env: map[string]string{"APPROVING_CURSOR_API_KEY": "shared-key"},
+	}
+	agent := Agent{
+		Name: "demo",
+		Env:  map[string]string{"GRASP_CURSOR_API_KEY": "agent-key"},
+	}
+	got := ExtendOverlay(shared, agent)
+	if got.Env["GRASP_CURSOR_API_KEY"] != "shared-key" {
+		t.Fatalf("legacy shared token should win after fold: %#v", got.Env)
+	}
+	if _, ok := got.Env["APPROVING_CURSOR_API_KEY"]; ok {
+		t.Fatalf("legacy key should be gone: %#v", got.Env)
+	}
+}
+
 func TestExtendOverlay_TokenSharedPriority(t *testing.T) {
 	shared := SharedAgentConfig{
 		Env: map[string]string{
@@ -112,6 +130,25 @@ func TestExtendOverlay_ProjectIDFillEmptyOnly(t *testing.T) {
 	got2 := ExtendOverlay(shared, Agent{Name: "x", ProjectID: "proj-agent"})
 	if got2.ProjectID != "proj-agent" {
 		t.Fatalf("keep agent projectId = %q", got2.ProjectID)
+	}
+}
+
+func TestSharedAgentService_MigratesApprovingEnvKeys(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "proj-legacy")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(`{"env":{"APPROVING_CURSOR_API_KEY":"crsr_old"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewSharedAgentService(root)
+	got := svc.Get("proj-legacy")
+	if got.Env["GRASP_CURSOR_API_KEY"] != "crsr_old" {
+		t.Fatalf("env = %#v", got.Env)
+	}
+	if _, ok := got.Env["APPROVING_CURSOR_API_KEY"]; ok {
+		t.Fatalf("legacy key still present: %#v", got.Env)
 	}
 }
 

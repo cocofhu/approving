@@ -1,3 +1,5 @@
+import { migrateLegacyEnvKey, migrateLegacyEnvRecord } from '@/lib/shared/envCompat'
+
 export type BackendId = 'cursor' | 'claude_code' | 'codebuddy' | 'trae' | 'opencode'
 export type RegionSite = 'domestic' | 'international'
 export type RegionMode = 'strict' | 'preserve-special'
@@ -71,7 +73,8 @@ export function getRegionPolicy(backend: BackendId): RegionPolicy | undefined {
 }
 
 export function isManagedRegionKey(key: string): boolean {
-  return MANAGED_REGION_KEYS.has(key.trim())
+  const k = key.trim()
+  return MANAGED_REGION_KEYS.has(k) || MANAGED_REGION_KEYS.has(migrateLegacyEnvKey(k))
 }
 
 export function setRegion(
@@ -88,7 +91,7 @@ export function switchBackendRegions(
   env: Record<string, string>,
   backend: BackendId,
 ): Record<string, string> {
-  const next = { ...env }
+  const next = migrateLegacyEnvRecord(env)
   for (const key of MANAGED_REGION_KEYS) delete next[key]
   const policy = getRegionPolicy(backend)
   if (policy) next[policy.regionEnvKey] = policy.defaultRegion
@@ -106,7 +109,7 @@ export function normalizeRegions(
   backend: BackendId,
   mode: RegionMode,
 ): NormalizedRegions {
-  const next = { ...env }
+  const next = migrateLegacyEnvRecord(env)
   for (const key of MANAGED_REGION_KEYS) {
     if (key !== getRegionPolicy(backend)?.regionEnvKey) delete next[key]
   }

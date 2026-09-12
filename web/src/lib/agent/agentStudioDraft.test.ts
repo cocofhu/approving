@@ -6,7 +6,9 @@ import {
   fromDraft,
   fromDraftRaw,
   hydrateStudioDraft,
+  kvToRec,
   normalizePromptText,
+  recToKV,
   PROMPT_KEYS,
   toDraft,
 } from './agentStudioDraft'
@@ -20,6 +22,38 @@ const baseAgent: Agent = {
   env: {},
   layout: { configRoot: '/root/.cursor', workspaceDir: '/root/workspace' },
 }
+
+describe('legacy APPROVING_ env keys', () => {
+  it('hydrates stored APPROVING_CURSOR_API_KEY as GRASP_CURSOR_API_KEY', () => {
+    const d = hydrateStudioDraft({
+      ...baseAgent,
+      env: { APPROVING_CURSOR_API_KEY: 'crsr_old', FEATURE_FLAG: '1' },
+    })
+    expect(kvToRec(d.env)).toEqual({
+      GRASP_CURSOR_API_KEY: 'crsr_old',
+      FEATURE_FLAG: '1',
+    })
+    expect(fromDraft(d).env).toEqual({
+      GRASP_CURSOR_API_KEY: 'crsr_old',
+      FEATURE_FLAG: '1',
+    })
+  })
+
+  it('folds APPROVING_ onto existing GRASP_ without clobbering', () => {
+    expect(
+      recToKV({
+        GRASP_CURSOR_API_KEY: 'new',
+        APPROVING_CURSOR_API_KEY: 'old',
+      }),
+    ).toEqual([{ k: 'GRASP_CURSOR_API_KEY', v: 'new' }])
+    expect(
+      kvToRec([
+        { k: 'APPROVING_CURSOR_API_KEY', v: 'old' },
+        { k: 'GRASP_CURSOR_API_KEY', v: 'new' },
+      ]),
+    ).toEqual({ GRASP_CURSOR_API_KEY: 'new' })
+  })
+})
 
 describe('prompt dirty serialization (g1.1 / g1.2)', () => {
   it('normalizePromptText maps CRLF and CR to LF', () => {

@@ -4,6 +4,15 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.15-beta — 2026-09-12
+
+- Fold stored Agent / shared-Agent `APPROVING_*` env keys to `GRASP_*` on
+  read, save, and boot (the 0.3.14-beta rename left existing
+  `APPROVING_CURSOR_API_KEY` rows in Studio). Runtime still accepts the old
+  names until the next minor.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.15-beta`.
+
 ## 0.3.14-beta — 2026-09-12
 
 - **Breaking:** rename the public package, image, and env prefix from Approving
