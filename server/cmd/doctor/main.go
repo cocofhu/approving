@@ -112,9 +112,9 @@ func parseOptions(args []string) (options, error) {
 		gatewayURL = "http://127.0.0.1:8899"
 	}
 	var opts options
-	fs := flag.NewFlagSet("approving doctor", flag.ContinueOnError)
+	fs := flag.NewFlagSet("grasp doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	fs.StringVar(&opts.apiURL, "api-url", "http://127.0.0.1:"+port, "Approving base URL")
+	fs.StringVar(&opts.apiURL, "api-url", "http://127.0.0.1:"+port, "Grasp base URL")
 	fs.StringVar(&opts.gatewayURL, "gateway-url", gatewayURL, "sandbox-gateway base URL")
 	fs.StringVar(&opts.gatewayAPIKey, "gateway-api-key", envcompat.Lookup("GRASP_SANDBOX_GATEWAY_API_KEY"), "sandbox-gateway bearer token")
 	fs.StringVar(&opts.doctorToken, "doctor-token", envcompat.Lookup("GRASP_DOCTOR_TOKEN"), "local doctor control-plane token")

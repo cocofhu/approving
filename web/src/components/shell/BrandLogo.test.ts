@@ -38,7 +38,7 @@ describe('BrandLogo', () => {
       global: { plugins: [i18n] },
     })
     const name = wrapper.find('.brand-logo__name')
-    expect(name.text()).toBe('Approving')
+    expect(name.text()).toBe('Grasp')
     expect(wrapper.find('.brand-logo__tagline').exists()).toBe(false)
     expect(wrapper.find('.brand-logo__mark').exists()).toBe(false)
     expect(wrapper.classes()).not.toContain('brand-logo--with-mark')
@@ -58,9 +58,16 @@ describe('BrandLogo', () => {
     })
     const loginLogo = mount(BrandLogo, { global: { plugins: [i18n] } })
     expect(shellLogo.get('.brand-logo__name').text()).toBe('Acme Flow')
-    expect(loginLogo.get('.brand-logo__name').text()).toBe('Approving')
+    expect(loginLogo.get('.brand-logo__name').text()).toBe('Grasp')
     shellLogo.unmount()
     loginLogo.unmount()
+    setBrandSettings({ product_name: 'Approving' })
+    const upgraded = mount(BrandLogo, {
+      props: { useCustomBrand: true },
+      global: { plugins: [i18n] },
+    })
+    expect(upgraded.get('.brand-logo__name').text()).toBe('Grasp')
+    upgraded.unmount()
     setBrandSettings(null)
   })
 

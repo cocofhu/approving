@@ -1,8 +1,8 @@
-# Approving
+# Grasp
 
 **Agent 工作流与人类协同推进，开启多 Agent 协作新范式。**
 
-Approving 是一个开源、可自托管的多 Agent 工作流平台。它把 coding agent 编排成可视化、可审查、可回滚的交付流程：Agent 在真实 Docker 沙箱中执行，关键节点由人 **Approve** 后再继续。
+Grasp 是一个开源、可自托管的多 Agent 工作流平台。它把 coding agent 编排成可视化、可审查、可回滚的交付流程：Agent 在真实 Docker 沙箱中执行，关键节点由人 **Approve** 后再继续。
 
 [项目站](https://www.approving-ai.com/) · [快速开始](https://www.approving-ai.com/guide/quick-start/) · [贡献指南](CONTRIBUTING.md) · [配置](server/CONFIGURATION.md)
 
@@ -18,9 +18,9 @@ Approving 是一个开源、可自托管的多 Agent 工作流平台。它把 co
 [![coverage-server](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-server.json)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![coverage-gateway](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-gateway.json)](https://github.com/cocofhu/approving/actions/workflows/ci-gateway.yml)
 
-> 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose。默认起栈只需 Approving 与 Gateway；各 Agent 后端的沙箱 runtime 在首次使用时按需拉取。
+> 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose。默认起栈只需 Grasp 与 Gateway；各 Agent 后端的沙箱 runtime 在首次使用时按需拉取。
 
-## 为什么需要 Approving？
+## 为什么需要 Grasp？
 
 单 Agent 的 Vibe Coding 擅长完成一次任务，但当需求扩展到调研、方案、实现、测试和评审时，新的瓶颈会出现：
 
@@ -30,7 +30,7 @@ Approving 是一个开源、可自托管的多 Agent 工作流平台。它把 co
 - 高风险操作缺少明确的人类决策点；
 - 失败通常依赖人工重试，缺少显式的恢复与回滚路径。
 
-Approving 在 Agent 之上提供一层 Harness：用 FSM 设计路径，用沙箱隔离执行，用 MCP 交接产物，并把人工审批变成工作流中的一等节点。
+Grasp 在 Agent 之上提供一层 Harness：用 FSM 设计路径，用沙箱隔离执行，用 MCP 交接产物，并把人工审批变成工作流中的一等节点。
 
 ## 核心能力
 

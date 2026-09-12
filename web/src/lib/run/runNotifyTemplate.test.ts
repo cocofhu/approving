@@ -13,7 +13,7 @@ describe('runNotifyTemplate', () => {
     const got = formatDefaultRunNotifyMessage('waiting_human', RUN_NOTIFY_PREVIEW_FAKE)
     expect(got).toBe(
       [
-        '【Approving】等待人工处理',
+        '【Grasp】等待人工处理',
         '项目：approving-demo',
         '工作流：gate-main',
         'Run：run-4c9100d0',
@@ -30,7 +30,7 @@ describe('runNotifyTemplate', () => {
     })
     expect(got).toBe(
       [
-        '【Approving】运行失败',
+        '【Grasp】运行失败',
         '项目：approving-demo',
         '工作流：gate-main',
         'Run：run-4c9100d0',
@@ -47,7 +47,7 @@ describe('runNotifyTemplate', () => {
   })
 
   it('custom template replaces six keys; empty node stays empty', () => {
-    const tmpl = '【Approving】{title}\n{project}/{workflow}\n{run_id}|{node}|{link}'
+    const tmpl = '【Grasp】{title}\n{project}/{workflow}\n{run_id}|{node}|{link}'
     expect(
       renderRunNotifyMessage('failed', tmpl, {
         project: 'P',
@@ -56,7 +56,7 @@ describe('runNotifyTemplate', () => {
         node: '',
         link: '/runs/r',
       }),
-    ).toBe('【Approving】运行失败\nP/W\nr||/runs/r')
+    ).toBe('【Grasp】运行失败\nP/W\nr||/runs/r')
   })
 
   it('unknown placeholders stay as-is', () => {
@@ -75,12 +75,12 @@ describe('runNotifyTemplate', () => {
   it('completed title is 运行完成 not 运行失败', () => {
     expect(runNotifyTitle('completed')).toBe('运行完成')
     expect(formatDefaultRunNotifyMessage('completed', RUN_NOTIFY_PREVIEW_FAKE)).toContain(
-      '【Approving】运行完成',
+      '【Grasp】运行完成',
     )
     expect(formatDefaultRunNotifyMessage('completed', RUN_NOTIFY_PREVIEW_FAKE)).not.toContain(
       '运行失败',
     )
-    expect(renderRunNotifyMessage('completed', '')).toContain('【Approving】运行完成')
+    expect(renderRunNotifyMessage('completed', '')).toContain('【Grasp】运行完成')
   })
 
   it('default editable skeleton renders to default with fake data', () => {

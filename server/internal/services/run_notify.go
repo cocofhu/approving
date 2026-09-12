@@ -346,7 +346,7 @@ func FormatRunNotifyMessage(ev RunNotifyEvent, base string) string {
 	}
 	link := runDeepLink(base, ev.RunID, ev.Kind, ev.NodeID)
 	var b strings.Builder
-	b.WriteString("【Approving】")
+	b.WriteString("【Grasp】")
 	b.WriteString(title)
 	b.WriteByte('\n')
 	b.WriteString("项目：")

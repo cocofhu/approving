@@ -1,6 +1,6 @@
 # sandbox-gateway contract
 
-Approving vendors [sandbox-gateway](sandbox-gateway/) in this repository. The
+Grasp vendors [sandbox-gateway](sandbox-gateway/) in this repository. The
 control plane creates and destroys sandboxes; the data plane uses SSH endpoints
 returned by the gateway.
 
@@ -26,7 +26,7 @@ Two paths, different UI ports:
 | Release (default) | `./start.sh -d` | `:8899` | `:8080` | `:8080` (served with the API) |
 | Dev / source | `./start.sh dev -d` | `:8899` | `:8080` | `:5173` (Vite) |
 
-Release mode ensures Approving + Gateway images when missing; sandbox runtimes
+Release mode ensures Grasp + Gateway images when missing; sandbox runtimes
 pull on first create (`status=pulling`). Use `./start.sh pull` to warm all five.
 Dev mode may build `universal-sandbox-cursor:local` from `sandbox-gateway/sandbox`
 on first run (slow).
@@ -37,13 +37,13 @@ on first run (slow).
 | --- | --- |
 | Health | `GET /healthz` returns 2xx |
 | Create | `POST /api/v1/sandboxes` accepts image, env, labels, ports, resources, config.bundleUrl; response `202`, status `creating` then optionally `pulling` while the image downloads, then `creating` again during `docker run` / finalize |
-| Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints. Gateway still includes internal `cdp`/`novnc` (container/ClusterIP) for in-cluster Approving. Approving user `GetView` only returns `session`/`ide`/`ssh`. |
+| Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints. Gateway still includes internal `cdp`/`novnc` (container/ClusterIP) for in-cluster Grasp. Grasp user `GetView` only returns `session`/`ide`/`ssh`. |
 | List | `GET /api/v1/sandboxes?label=key:value` (AND) |
 | Delete | `DELETE /api/v1/sandboxes/{id}` returns 2xx |
 | Logs | `GET /api/v1/sandboxes/{id}/logs?tail=` returns `{content}` (PID1 stdout/stderr, non-follow). Docker (`docker logs --tail`) and kubernetes (pod `sandbox` container via client-go GetLogs) both supported. Cluster RBAC must allow `get` on `pods/log` in the sandbox namespace; the incremental Role+RoleBinding is shipped in `sandbox-gateway/deploy/k8s/` (apply alongside existing Roles — do not replace a full production Role). Drivers that still omit Logs → `501` |
 | Ready | status `running` with a `session` endpoint |
 | Images | per Agent `acpBackend`: `universal-sandbox-{cursor\|claude_code\|codebuddy\|trae\|opencode}` |
-| Data plane | SSH / session / ide may connect directly (each has its own auth). CDP `:9222` and noVNC `:6080` are **not** external data-plane: they stay on the container/cluster network. Users use `/sandbox-vnc/:id/ws` and `/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on; Session validity only, no sandbox/run ownership check). Approving outside the cluster/Docker net cannot dial CDP/noVNC. Docker already-running `-p` needs TTL/Reinstall. K8s inventory `*-lb` is healed on gateway startup reconcile / Start / Reinstall; until then 9222/6080 may still be on the LB. |
+| Data plane | SSH / session / ide may connect directly (each has its own auth). CDP `:9222` and noVNC `:6080` are **not** external data-plane: they stay on the container/cluster network. Users use `/sandbox-vnc/:id/ws` and `/preview-vnc/:runId/:nodeId/:port/ws` (Session when Auth is on; Session validity only, no sandbox/run ownership check). Grasp outside the cluster/Docker net cannot dial CDP/noVNC. Docker already-running `-p` needs TTL/Reinstall. K8s inventory `*-lb` is healed on gateway startup reconcile / Start / Reinstall; until then 9222/6080 may still be on the LB. |
 | Auth | Bearer token: gateway `SBGW_API_KEYS` / client `GRASP_SANDBOX_GATEWAY_API_KEY` (compose default `grasp-local-demo` via `SANDBOX_GATEWAY_API_KEY`; `approving-local-demo` still accepted this version) |
 
 `grasp doctor --run-demo` verifies health, create, ready, and cleanup after failure.

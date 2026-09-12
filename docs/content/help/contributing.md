@@ -1,6 +1,6 @@
 ---
 title: 贡献
-description: 如何为 Approving 做贡献；指向仓库贡献指南。
+description: 如何为 Grasp 做贡献；指向仓库贡献指南。
 ---
 
 欢迎贡献。请先阅读：

@@ -31,7 +31,7 @@ body:
     attributes:
       label: Environment
       value: |
-        - Approving version or commit:
+        - Grasp version or commit:
         - Deployment type:
         - Browser/OS:
         - sandbox-gateway version:

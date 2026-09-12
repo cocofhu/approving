@@ -52,7 +52,7 @@ export function runNotifyTitle(kind: RunNotifyKind): string {
  */
 export function defaultEditableRunNotifyTemplate(_kind: RunNotifyKind): string {
   return [
-    '【Approving】{title}',
+    '【Grasp】{title}',
     '项目：{project}',
     '工作流：{workflow}',
     'Run：{run_id}',
@@ -99,7 +99,7 @@ export function formatDefaultRunNotifyMessage(
   const project = ctx.project.trim() || '—'
   const workflow = ctx.workflow.trim() || '—'
   const lines = [
-    `【Approving】${title}`,
+    `【Grasp】${title}`,
     `项目：${project}`,
     `工作流：${workflow}`,
     `Run：${ctx.runId}`,

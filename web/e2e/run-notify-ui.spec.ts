@@ -289,7 +289,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
 
     await expect(page.getByTestId('notify-template-section')).toBeVisible()
     await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
-    await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】等待人工处理')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('【Grasp】等待人工处理')
 
     // Fill default skeleton → preview stays equivalent but mode becomes custom
     await page.getByTestId('notify-tpl-fill-default').click()
@@ -298,7 +298,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
 
     // Custom shorter template + save
     await page.getByTestId('notify-tpl-input').fill(
-      '【Approving】{title}\n📦 {project} / {workflow}\nRun {run_id} · {node}\n👉 {link}',
+      '【Grasp】{title}\n📦 {project} / {workflow}\nRun {run_id} · {node}\n👉 {link}',
     )
     await expect(page.getByTestId('notify-preview-body')).toContainText('📦 approving-demo / gate-main')
     await page.getByTestId('notify-ph-run_id').click()
@@ -318,12 +318,12 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     // Switch segment: failed still empty → default preview
     await page.getByTestId('notify-tpl-seg-failed').click()
     await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
-    await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】运行失败')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('【Grasp】运行失败')
 
     // Completed segment: title must be 运行完成, never 运行失败
     await page.getByTestId('notify-tpl-seg-completed').click()
     await expect(page.getByTestId('notify-preview-mode')).toContainText('使用系统默认')
-    await expect(page.getByTestId('notify-preview-body')).toContainText('【Approving】运行完成')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('【Grasp】运行完成')
     await expect(page.getByTestId('notify-preview-body')).not.toContainText('运行失败')
 
     // Only toggle master off and save — waiting template must round-trip

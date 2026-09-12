@@ -2,7 +2,7 @@
   "products": [
     {
       "type": "approve",
-      "label": "Approve",
+      "label": "Grasp",
       "category": "Agent",
       "ruleFile": "rules/approve.md",
       "artifacts": [

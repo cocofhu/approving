@@ -51,7 +51,7 @@
         },
         "set_plan": {
           "signature": "set_plan(goals, architecture?, data_design?, interfaces?, components?, interaction?, test_design?)",
-          "desc": "Plan/Approve: write a two-level plan; optional six SDD sections (use 不涉及 when N/A) + Mermaid diagrams"
+          "desc": "Plan/Grasp: write a two-level plan; optional six SDD sections (use 不涉及 when N/A) + Mermaid diagrams"
         },
         "get_plan": {
           "signature": "get_plan() -> plan.json",
@@ -79,7 +79,7 @@
         },
         "set_proposals": {
           "signature": "set_proposals(context, proposals)",
-          "desc": "Mandatory on proposal nodes; on Approve only when ≥2 real alternatives (no single-candidate pseudo-choice)"
+          "desc": "Mandatory on proposal nodes; on Grasp only when ≥2 real alternatives (no single-candidate pseudo-choice)"
         },
         "get_proposals": {
           "signature": "get_proposals() -> proposals.json",
@@ -111,7 +111,7 @@
         },
         "set_preview": {
           "signature": "set_preview(port?, url?, label?)",
-          "desc": "app_preview or Approve: register sandbox port or external http(s) URL (exactly one); URL may include a port; iframe direct, no server probe. On Approve this is optional and does not end the node"
+          "desc": "app_preview or Grasp: register sandbox port or external http(s) URL (exactly one); URL may include a port; iframe direct, no server probe. On Grasp this is optional and does not end the node"
         },
         "set_artifact_preview": {
           "signature": "set_artifact_preview(name)",

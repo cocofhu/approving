@@ -2005,7 +2005,7 @@ html:lang(en) .demo-marquee:not([data-label])::after {
   z-index: 6;
 }
 
-/* PM page — IM manage workflows via ApprovingPM */
+/* PM page — IM manage workflows via GraspPM */
 .panel__body--pm {
   position: relative;
   display: grid;

@@ -1,4 +1,4 @@
-# Contributing to Approving
+# Contributing to Grasp
 
 Short, hard Agent/contribution rules (path→commands, gates, pitfalls, do-not-touch):
 see [`AGENTS.md`](AGENTS.md).
@@ -132,7 +132,7 @@ when Secret `PAGES_DEPLOY_KEY` is configured.
 4. On `cocofhu/approving-pages`, add the **public** key as a Deploy key with
    **Allow write access**.
 5. On `cocofhu/approving`, add the **private** key as Secret `PAGES_DEPLOY_KEY`.
-6. Optional: set the Approving repo Homepage to
+6. Optional: set the Grasp repo Homepage to
    `https://www.approving-ai.com/`.
 
 ## Release images and smoke

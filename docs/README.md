@@ -1,4 +1,4 @@
-# Approving project site
+# Grasp project site
 
 Static HTML homepage + Markdown help, built to `public/` and published by
 `ci-docs` to [`cocofhu/approving-pages`](https://github.com/cocofhu/approving-pages)

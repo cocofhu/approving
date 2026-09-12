@@ -1,7 +1,7 @@
 # AGENTS.md — repo contribution rules
 
 **This file is the short, hard contribution / change-code rules for this
-repository.** It is for humans and coding agents working on Approving.
+repository.** It is for humans and coding agents working on Grasp.
 
 It is **not** `agents/*/workspace/AGENTS.md` (platform role-pack mission and
 delivery contracts). Do not mix them; nested role-pack files must not replace

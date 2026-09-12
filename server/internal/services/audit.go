@@ -558,7 +558,7 @@ func BackfillAuditElevatedFields(db *gorm.DB) {
 // FormatAuditText renders events as human-readable plain text.
 func FormatAuditText(events []models.ProjectAuditEvent) string {
 	var b strings.Builder
-	b.WriteString("=== Approving Project Audit Export ===\n")
+	b.WriteString("=== Grasp Project Audit Export ===\n")
 	b.WriteString(fmt.Sprintf("Exported: %s\n", time.Now().Format(time.RFC3339)))
 	b.WriteString(fmt.Sprintf("Count: %d\n\n", len(events)))
 	for i, ev := range events {
