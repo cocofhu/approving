@@ -81,6 +81,7 @@ const {
   showStreamBubble,
   mainViewState,
   busyHint,
+  isPullingBoot,
   suggestions,
   showStreamTypingDots,
   copyAssistantText,
@@ -702,7 +703,13 @@ const {
             {{ t('pages.projectDetail.pm.send') }}
           </AppButton>
         </div>
-        <p v-if="turnBusy" class="mt-2 text-[11px] text-warn">
+        <p
+          v-if="turnBusy"
+          class="mt-2 text-[11px]"
+          :class="isPullingBoot ? 'text-warn' : 'text-warn'"
+          data-testid="pm-busy-hint"
+          :data-pulling="isPullingBoot ? '1' : '0'"
+        >
           {{ busyHint }}
         </p>
       </div>

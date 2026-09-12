@@ -167,6 +167,8 @@ watch(attachNotice, (n) => {
 
 let ws: WebSocket | null = null
 let sandboxId = 0
+/** Gateway lifecycle while ensureSandbox/waitReady boots (pulling|creating|…). */
+const sandboxBootStatus = ref('')
 /** When true, ignore a late turn_done after user cancelled / failTurn. */
 let streamCancelled = false
 /** Generation token so late async work from a previous turn is ignored. */
@@ -200,9 +202,13 @@ const mainViewState = computed(() => {
   if (messagesLoadFailed.value) return 'errorEmpty'
   return 'content'
 })
+const isPullingBoot = computed(
+  () => (sandboxBootStatus.value || '').trim().toLowerCase() === 'pulling',
+)
 const busyHint = computed(() => {
   if (finalizing.value) return t('pages.projectDetail.pm.busyFinalizing')
   if (resuming.value) return t('pages.projectDetail.pm.busyResuming')
+  if (isPullingBoot.value) return t('pages.projectDetail.pm.busyPulling')
   if (streaming.value && streamText.value) return t('pages.projectDetail.pm.busyStreaming')
   return t('pages.projectDetail.pm.busyWaiting')
 })
@@ -892,15 +898,24 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 async function waitReady(id: number, signal?: AbortSignal) {
   // Align with sandbox create timeout (~20m) so cold image pulls are not cut off at 90s (g3.3 / g3.4).
   const deadline = Date.now() + 20 * 60 * 1000
-  while (Date.now() < deadline) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    const s = await api.getSandbox(id)
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    if (s.status === 'running') return
-    if (s.status === 'error') throw Object.assign(new Error(s.error || 'sandbox error'), { failKind: 'unknown' as FailKind })
-    await sleep(s.status === 'pulling' ? 2000 : 1000)
+  try {
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      const s = await api.getSandbox(id)
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+      sandboxBootStatus.value = s.status || ''
+      // Do not let the 90s turn deadline fire during a long image pull (g3.4).
+      if (s.status === 'pulling') {
+        clearTurnDeadline()
+      }
+      if (s.status === 'running') return
+      if (s.status === 'error') throw Object.assign(new Error(s.error || 'sandbox error'), { failKind: 'unknown' as FailKind })
+      await sleep(s.status === 'pulling' ? 2000 : 1000)
+    }
+    throw Object.assign(new Error('sandbox timeout'), { failKind: 'sandbox' as FailKind })
+  } finally {
+    sandboxBootStatus.value = ''
   }
-  throw Object.assign(new Error('sandbox timeout'), { failKind: 'sandbox' as FailKind })
 }
 
 function waitWsOpen(socket: WebSocket, timeoutMs: number): Promise<void> {
@@ -1381,6 +1396,8 @@ onBeforeUnmount(() => {
   showStreamBubble,
   mainViewState,
   busyHint,
+  isPullingBoot,
+  sandboxBootStatus,
   suggestions,
   showStreamTypingDots,
   copyAssistantText,

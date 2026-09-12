@@ -61,13 +61,15 @@ type TeamBootstrapResource struct {
 // TeamBootstrapSession tracks an in-flight or finished team bootstrap.
 type TeamBootstrapSession struct {
 	ID              string                  `json:"id"`
-	Status          string                  `json:"status"` // starting|running|ready|failed
+	Status          string                  `json:"status"` // starting|running|pulling|ready|failed
 	Error           string                  `json:"error,omitempty"`
 	ProjectID       string                  `json:"projectId,omitempty"`
 	RootGroupID     string                  `json:"rootGroupId,omitempty"`
 	PipelineGroupID string                  `json:"pipelineGroupId,omitempty"`
 	PMAgent         string                  `json:"pmAgent,omitempty"`
 	SandboxID       string                  `json:"sandboxId,omitempty"`
+	// SandboxStatus mirrors gateway/local sandbox lifecycle (pulling|creating|running|error).
+	SandboxStatus   string                  `json:"sandboxStatus,omitempty"`
 	Prefix          string                  `json:"prefix,omitempty"`
 	Background      string                  `json:"background,omitempty"`
 	AllowedGroupIDs []string                `json:"allowedGroupIds,omitempty"`
@@ -78,13 +80,19 @@ type TeamBootstrapSession struct {
 	UpdatedAt       time.Time               `json:"updatedAt"`
 }
 
+// TeamSandbox is the SandboxService surface used by team bootstrap (g3.3).
+type TeamSandbox interface {
+	Open(ctx context.Context, profile string, repos []sandbox.RepoSpec, projectID string) (*models.Sandbox, error)
+	GetView(ctx context.Context, id uint) (*SandboxView, error)
+}
+
 // TeamService orchestrates Create Agent Team bootstrap + scoped template creates.
 type TeamService struct {
 	Projects *ProjectService
 	Skills   *AgentService
 	Org      *OrgService
 	Pm       *PmService
-	Sbx      *SandboxService
+	Sbx      TeamSandbox
 
 	mu         sync.Mutex
 	sessions   map[string]*TeamBootstrapSession
@@ -92,7 +100,7 @@ type TeamService struct {
 }
 
 // NewTeamService wires dependencies (Sbx may be nil in unit tests).
-func NewTeamService(projects *ProjectService, skills *AgentService, org *OrgService, pm *PmService, sbx *SandboxService) *TeamService {
+func NewTeamService(projects *ProjectService, skills *AgentService, org *OrgService, pm *PmService, sbx TeamSandbox) *TeamService {
 	return &TeamService{
 		Projects:   projects,
 		Skills:     skills,
@@ -521,17 +529,90 @@ func (s *TeamService) finishBootstrap(ctx context.Context, sessionID string, req
 		}
 		sb, err := s.Sbx.Open(ctx, pmName, repos, cur.ProjectID)
 		if err != nil {
+			// Quota / missing agent: roster is already created; surface a warn and still finish
+			// ready so the user can open Studio. Pull/create failures after Open are failed below.
 			s.appendEvent(sessionID, "warn", "sandbox start deferred: "+err.Error())
 		} else if sb != nil {
 			sid := fmt.Sprintf("%d", sb.ID)
 			s.patchSession(sessionID, func(sess *TeamBootstrapSession) {
 				sess.SandboxID = sid
+				sess.SandboxStatus = strings.TrimSpace(sb.Status)
 			})
 			s.appendEvent(sessionID, "ok", "sandbox "+sid+" status="+sb.Status)
+			// Do not mark ready while image is still pulling/creating (g3.3 / review v1).
+			if err := s.waitTeamSandboxReady(ctx, sessionID, sb.ID); err != nil {
+				s.appendEvent(sessionID, "err", "sandbox ready failed: "+err.Error())
+				s.setStatus(sessionID, "failed", err.Error())
+				return
+			}
 		}
 	}
 	s.appendEvent(sessionID, "ok", fmt.Sprintf("done: 1 PM + %d engineers (total %d)", len(TeamEngineerTemplates), 1+len(TeamEngineerTemplates)))
 	s.setStatus(sessionID, "ready", "")
+}
+
+// waitTeamSandboxReady polls GetView until running, or fails on error/timeout.
+// While status=pulling the session stays on status=pulling so TeamBootstrapPanel can show pull loading.
+func (s *TeamService) waitTeamSandboxReady(ctx context.Context, sessionID string, sandboxID uint) error {
+	if s.Sbx == nil {
+		return nil
+	}
+	deadline := time.Now().Add(20 * time.Minute)
+	announcedPulling := false
+	poll := 500 * time.Millisecond
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("sandbox %d timeout waiting for running (incl. image pull)", sandboxID)
+		}
+		view, err := s.Sbx.GetView(ctx, sandboxID)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(poll):
+			}
+			continue
+		}
+		st := strings.TrimSpace(view.Status)
+		s.patchSession(sessionID, func(sess *TeamBootstrapSession) {
+			sess.SandboxStatus = st
+		})
+		switch st {
+		case "running":
+			if announcedPulling {
+				s.appendEvent(sessionID, "ok", "runtime image ready")
+			}
+			s.setStatus(sessionID, "running", "")
+			return nil
+		case "error", "stopped":
+			msg := strings.TrimSpace(view.Error)
+			if msg == "" {
+				msg = "sandbox " + st
+			}
+			return fmt.Errorf("%s", msg)
+		case "pulling":
+			if !announcedPulling {
+				s.appendEvent(sessionID, "sys", "pulling runtime image…")
+				announcedPulling = true
+			}
+			s.setStatus(sessionID, "pulling", "")
+			poll = 500 * time.Millisecond
+		default:
+			// creating / unknown: keep session running (not ready) while we wait.
+			if announcedPulling {
+				s.setStatus(sessionID, "running", "")
+			}
+			poll = 500 * time.Millisecond
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(poll):
+		}
+	}
 }
 
 // CreateFromTemplateArgs is used by MCP and bootstrap.

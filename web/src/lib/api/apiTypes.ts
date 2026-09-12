@@ -189,13 +189,15 @@ export interface TeamBootstrapResource {
 
 export interface TeamBootstrapSession {
   id: string
-  status: 'starting' | 'running' | 'ready' | 'failed' | string
+  status: 'starting' | 'running' | 'pulling' | 'ready' | 'failed' | string
   error?: string
   projectId?: string
   rootGroupId?: string
   pipelineGroupId?: string
   pmAgent?: string
   sandboxId?: string
+  /** Gateway/local sandbox lifecycle while bootstrap waits (pulling|creating|running|…). */
+  sandboxStatus?: string
   prefix?: string
   background?: string
   allowedGroupIds?: string[]

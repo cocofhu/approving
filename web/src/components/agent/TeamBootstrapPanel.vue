@@ -28,7 +28,16 @@ const badgeClass = computed(() => {
   if (s === 'ready') return 'border-ok/40 bg-ok/10 text-ok'
   if (s === 'failed') return 'border-err/40 bg-err/10 text-err'
   if (s === 'running') return 'border-ok/40 bg-ok/10 text-ok'
+  if (s === 'pulling' || isPullingSandbox.value) return 'border-warn/40 bg-warn/10 text-warn'
   return 'border-warn/40 bg-warn/10 text-warn'
+})
+
+/** True when session or nested sandbox lifecycle reports image pull (g3.3). */
+const isPullingSandbox = computed(() => {
+  const s = session.value
+  if (!s) return false
+  if (s.status === 'pulling') return true
+  return (s.sandboxStatus || '').trim().toLowerCase() === 'pulling'
 })
 
 const badgeText = computed(() => {
@@ -36,6 +45,9 @@ const badgeText = computed(() => {
   if (s === 'ready') {
     const n = session.value?.agentNames?.length || 0
     return t('pages.agentStudio.teamWizard.progress.ready', { n })
+  }
+  if (isPullingSandbox.value) {
+    return t('pages.agentStudio.teamWizard.progress.pulling')
   }
   return t(`pages.agentStudio.teamWizard.progress.${s}`)
 })
@@ -132,6 +144,15 @@ function lineClass(kind: string) {
       class="shrink-0 border-b border-err/35 bg-err/10 px-4 py-2 text-[12px] text-err"
     >
       {{ session?.error || pollError }}
+    </div>
+
+    <div
+      v-else-if="isPullingSandbox"
+      class="shrink-0 border-b border-warn/35 bg-warn/10 px-4 py-2 text-[12px] text-warn"
+      data-testid="team-bootstrap-pulling"
+      aria-live="polite"
+    >
+      {{ t('pages.agentStudio.teamWizard.progress.pullingHint') }}
     </div>
 
     <div class="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1.15fr_0.85fr]">
