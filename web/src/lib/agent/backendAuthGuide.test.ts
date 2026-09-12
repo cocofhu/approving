@@ -31,6 +31,9 @@ describe('backendAuthGuide', () => {
       hasAuthKeyConfigured([{ k: 'CURSOR_API_KEY', v: 'x' }], 'cursor'),
     ).toBe(true)
     expect(
+      hasAuthKeyConfigured({ APPROVING_CURSOR_API_KEY: 'crsr_old' }, 'cursor'),
+    ).toBe(true)
+    expect(
       hasAuthKeyConfigured({ TRAE_API_KEY: 'trae-lt-x' }, 'trae'),
     ).toBe(true)
     expect(

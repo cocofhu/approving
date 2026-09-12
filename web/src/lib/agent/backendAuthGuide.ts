@@ -1,3 +1,4 @@
+import { migrateLegacyEnvRecord } from '@/lib/shared/envCompat'
 import type { BackendId } from '@/lib/shared/regionPolicy'
 
 export type AuthApplyLink = {
@@ -234,9 +235,11 @@ export function hasAuthKeyConfigured(
   env: Record<string, string> | { k: string; v: string }[],
   backend: BackendId,
 ): boolean {
-  const rec = Array.isArray(env)
-    ? Object.fromEntries(env.filter((e) => e.k.trim()).map((e) => [e.k.trim(), e.v]))
-    : env
+  const rec = migrateLegacyEnvRecord(
+    Array.isArray(env)
+      ? Object.fromEntries(env.filter((e) => e.k.trim()).map((e) => [e.k.trim(), e.v]))
+      : env,
+  )
   const guide = authGuideFor(backend)
   const hint = BACKEND_AUTH_HINTS[backend]
   const keys = new Set<string>([hint.key, ...(hint.alt ? [hint.alt] : [])])

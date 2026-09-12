@@ -64,20 +64,20 @@ fi
 : "${GRASP_GATEWAY_PORT:=8899}"
 : "${GRASP_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${GRASP_GATEWAY_PORT}}"
 : "${GRASP_DEPLOYMENT_MODE:=local-demo}"
-: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.3.14-beta}"
-: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.3.14-beta}"
+: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.3.15-beta}"
+: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.3.15-beta}"
 : "${SANDBOX_GATEWAY_API_KEY:=grasp-local-demo}"
 
 # Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
 # cursor fallback default, so a bare default does not re-force all backends.
 _user_sandbox_image="${SANDBOX_IMAGE-}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.14-beta}"
-: "${GRASP_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.14-beta}"
-: "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.14-beta}"
-: "${GRASP_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.14-beta}"
-: "${GRASP_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.14-beta}"
-: "${GRASP_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.3.14-beta}"
-: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.14-beta}"
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.15-beta}"
+: "${GRASP_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.15-beta}"
+: "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.15-beta}"
+: "${GRASP_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.15-beta}"
+: "${GRASP_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.15-beta}"
+: "${GRASP_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.3.15-beta}"
+: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.15-beta}"
 # Explicit SANDBOX_IMAGE (or GRASP_SANDBOX_IMAGE) → global force; default path leaves it empty.
 if [[ -z "${GRASP_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
   GRASP_SANDBOX_IMAGE="${_user_sandbox_image}"

@@ -28,6 +28,54 @@ func LegacyKey(key string) string {
 	return ""
 }
 
+// CanonicalKey rewrites an APPROVING_* name to GRASP_*; other names are unchanged.
+func CanonicalKey(key string) string {
+	if strings.HasPrefix(key, OldPrefix) {
+		return NewPrefix + strings.TrimPrefix(key, OldPrefix)
+	}
+	return key
+}
+
+// LookupInMap reads key from env, then the APPROVING_* alias when key is GRASP_*.
+func LookupInMap(env map[string]string, key string) string {
+	if v := strings.TrimSpace(env[key]); v != "" {
+		return v
+	}
+	if legacy := LegacyKey(key); legacy != "" {
+		return strings.TrimSpace(env[legacy])
+	}
+	return ""
+}
+
+// MigrateMap renames APPROVING_* keys to GRASP_*. Existing GRASP_* values win.
+func MigrateMap(env map[string]string) (map[string]string, int) {
+	if env == nil {
+		return nil, 0
+	}
+	n := 0
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		if !strings.HasPrefix(k, OldPrefix) {
+			out[k] = v
+		}
+	}
+	for k, v := range env {
+		if !strings.HasPrefix(k, OldPrefix) {
+			continue
+		}
+		n++
+		dest := CanonicalKey(k)
+		if _, exists := out[dest]; exists {
+			continue
+		}
+		out[dest] = v
+	}
+	if n == 0 {
+		return env, 0
+	}
+	return out, n
+}
+
 // Lookup reads GRASP_* first, then the APPROVING_* alias.
 func Lookup(key string) string {
 	if v := strings.TrimSpace(os.Getenv(key)); v != "" {

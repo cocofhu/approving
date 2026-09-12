@@ -1,5 +1,6 @@
 import type { Agent, AgentPrompts, MCPServer } from '@/lib/api/api'
 import type { GitCredentialType } from '@/lib/agent/gitCredentialAnalysis'
+import { migrateLegacyEnvRecord } from '@/lib/shared/envCompat'
 import {
   ACP_BACKENDS,
   normalizeRegions,
@@ -80,13 +81,13 @@ export function normalizePromptText(s: string): string {
 }
 
 export function recToKV(rec?: Record<string, string>): KV[] {
-  return Object.entries(rec || {}).map(([k, v]) => ({ k, v }))
+  return Object.entries(migrateLegacyEnvRecord(rec)).map(([k, v]) => ({ k, v }))
 }
 
 export function kvToRec(kvs: KV[]): Record<string, string> {
   const out: Record<string, string> = {}
   for (const { k, v } of kvs) if (k.trim()) out[k.trim()] = v
-  return out
+  return migrateLegacyEnvRecord(out)
 }
 
 export function normalizeDraftRegions(d: AgentStudioDraft): void {

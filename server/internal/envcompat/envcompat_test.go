@@ -15,6 +15,57 @@ func TestLegacyKey(t *testing.T) {
 	}
 }
 
+func TestCanonicalKey(t *testing.T) {
+	if got := CanonicalKey("APPROVING_CURSOR_API_KEY"); got != "GRASP_CURSOR_API_KEY" {
+		t.Fatalf("CanonicalKey = %q", got)
+	}
+	if got := CanonicalKey("GRASP_CURSOR_API_KEY"); got != "GRASP_CURSOR_API_KEY" {
+		t.Fatalf("already canonical: %q", got)
+	}
+}
+
+func TestMigrateMap(t *testing.T) {
+	got, n := MigrateMap(map[string]string{
+		"APPROVING_CURSOR_API_KEY": "old",
+		"FEATURE_FLAG":             "1",
+		"GRASP_CLAUDE_API_KEY":     "keep",
+		"APPROVING_CLAUDE_API_KEY": "ignored",
+	})
+	if n != 2 {
+		t.Fatalf("n = %d", n)
+	}
+	if got["GRASP_CURSOR_API_KEY"] != "old" {
+		t.Fatalf("renamed = %#v", got)
+	}
+	if _, ok := got["APPROVING_CURSOR_API_KEY"]; ok {
+		t.Fatalf("legacy key must be dropped: %#v", got)
+	}
+	if got["GRASP_CLAUDE_API_KEY"] != "keep" {
+		t.Fatalf("GRASP wins: %#v", got)
+	}
+	if got["FEATURE_FLAG"] != "1" {
+		t.Fatalf("plain key lost: %#v", got)
+	}
+	again, n := MigrateMap(got)
+	if n != 0 {
+		t.Fatalf("idempotent n = %d", n)
+	}
+	if again["GRASP_CURSOR_API_KEY"] != "old" {
+		t.Fatalf("idempotent map = %#v", again)
+	}
+}
+
+func TestLookupInMap(t *testing.T) {
+	env := map[string]string{"APPROVING_CURSOR_API_KEY": "legacy"}
+	if got := LookupInMap(env, "GRASP_CURSOR_API_KEY"); got != "legacy" {
+		t.Fatalf("LookupInMap = %q", got)
+	}
+	env["GRASP_CURSOR_API_KEY"] = "new"
+	if got := LookupInMap(env, "GRASP_CURSOR_API_KEY"); got != "new" {
+		t.Fatalf("GRASP must win: %q", got)
+	}
+}
+
 func TestLookupPrefersGrasp(t *testing.T) {
 	t.Setenv("GRASP_PORT", "8081")
 	t.Setenv("APPROVING_PORT", "8082")

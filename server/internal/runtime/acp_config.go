@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 	"github.com/cocofhu/grasp/internal/nodereg"
 	"github.com/cocofhu/grasp/internal/sandbox"
@@ -135,6 +136,7 @@ func (c *acpProvider) agentConfig(profile string) agentFile {
 		return f
 	}
 	_ = json.Unmarshal(b, &f)
+	f.Env, _ = envcompat.MigrateMap(f.Env)
 	return f
 }
 
@@ -173,15 +175,17 @@ func (c *acpProvider) effectiveAgent(req NodeReq) agentFile {
 
 func overlayAgentFile(shared SharedAgentView, agent agentFile) agentFile {
 	out := agent
-	// Env: shared base, agent keys win.
+	// Env: shared base, agent keys win. Fold APPROVING_* onto GRASP_* first.
+	sharedEnv, _ := envcompat.MigrateMap(shared.Env)
+	agentEnv, _ := envcompat.MigrateMap(agent.Env)
 	env := map[string]string{}
-	for k, v := range shared.Env {
+	for k, v := range sharedEnv {
 		if strings.TrimSpace(k) == "" {
 			continue
 		}
 		env[k] = v
 	}
-	for k, v := range agent.Env {
+	for k, v := range agentEnv {
 		if strings.TrimSpace(k) == "" {
 			continue
 		}

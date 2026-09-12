@@ -10,6 +10,7 @@ import {
 describe('tokenEnvKeys', () => {
   it('recognizes ACP + Git token keys', () => {
     expect(isTokenEnvKey('GRASP_CURSOR_API_KEY')).toBe(true)
+    expect(isTokenEnvKey('APPROVING_CURSOR_API_KEY')).toBe(true)
     expect(isTokenEnvKey('CURSOR_API_KEY')).toBe(true)
     expect(isTokenEnvKey('GITLAB_TOKEN')).toBe(true)
     expect(isTokenEnvKey('GIT_SSH_PRIVATE_KEY')).toBe(true)
