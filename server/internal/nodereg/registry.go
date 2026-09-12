@@ -124,7 +124,7 @@ var registry = map[string]Spec{
 		Type: "agent", Label: "通用", Category: "Agent", Exec: ExecAgent,
 	},
 	"approve": {
-		Type: "approve", Label: "Approve", Category: "Agent", Exec: ExecReact,
+		Type: "approve", Label: "Grasp", Category: "Agent", Exec: ExecReact,
 		EmbeddedRules: []string{"rules/approve.md"},
 		Prompt:        PromptApprove,
 		Products:      approveProducts(),

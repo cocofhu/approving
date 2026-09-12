@@ -2,7 +2,7 @@
   "pages": {
     "dashboard": {
       "title": "从一句话开始一次开发前澄清",
-      "subtitle": "选择 Approve 流水线，第一句话会成为 Run 标题",
+      "subtitle": "选择 Grasp 流水线，第一句话会成为 Run 标题",
       "placeholder": "快速开启你的迭代",
       "placeholders": [
         "快速开启你的迭代",
@@ -12,9 +12,9 @@
         "贴文档或截图，从附件开始澄清"
       ],
       "selectProject": "选择项目",
-      "noProject": "尚未选择项目。选择一个项目后可从首页启动 Approve 流水线。",
-      "noPipelines": "没有可在首页使用的流水线。请到项目详情为已发布、Approve 打头的流水线打开「首页可见」。",
-      "goCanvas": "去画布把 Approve 接到开始节点后",
+      "noProject": "尚未选择项目。选择一个项目后可从首页启动 Grasp 流水线。",
+      "noPipelines": "没有可在首页使用的流水线。请到项目详情为已发布、Grasp 打头的流水线打开「首页可见」。",
+      "goCanvas": "去画布把 Grasp 接到开始节点后",
       "goProjects": "前往项目查看流水线",
       "pickPipeline": "请先选择一条流水线",
       "noPipelineShort": "未选择流水线",
@@ -22,7 +22,7 @@
       "send": "发送",
       "sendShortcut": "Ctrl/⌘ + Enter 发送",
       "missingRequired": "启动前还需填写必填项",
-      "cardFallback": "Approve 开发前澄清",
+      "cardFallback": "Grasp 开发前澄清",
       "scrollLeft": "向左滚动",
       "scrollRight": "向右滚动",
       "draftRestored": "草稿已恢复",

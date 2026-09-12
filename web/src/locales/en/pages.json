@@ -2,7 +2,7 @@
   "pages": {
     "dashboard": {
       "title": "Start a pre-dev clarification in one sentence",
-      "subtitle": "Pick an Approve pipeline; the first message becomes the Run title",
+      "subtitle": "Pick a Grasp pipeline; the first message becomes the Run title",
       "placeholder": "Start your next iteration quickly",
       "placeholders": [
         "Start your next iteration quickly",
@@ -12,9 +12,9 @@
         "Attach a doc or screenshot to start clarifying"
       ],
       "selectProject": "Select a project",
-      "noProject": "No project selected. Pick a project to start an Approve pipeline from Home.",
-      "noPipelines": "No pipelines are available on Home. In a project, turn on “Show on Home” for a published pipeline whose first node after start is Approve.",
-      "goCanvas": "Open the canvas and connect Approve after start",
+      "noProject": "No project selected. Pick a project to start a Grasp pipeline from Home.",
+      "noPipelines": "No pipelines are available on Home. In a project, turn on “Show on Home” for a published pipeline whose first node after start is Grasp.",
+      "goCanvas": "Open the canvas and connect Grasp after start",
       "goProjects": "Browse projects for pipelines",
       "pickPipeline": "Select a pipeline first",
       "noPipelineShort": "No pipeline",
@@ -22,7 +22,7 @@
       "send": "Send",
       "sendShortcut": "Ctrl/⌘ + Enter to send",
       "missingRequired": "Fill required launch fields before starting",
-      "cardFallback": "Approve pre-dev clarification",
+      "cardFallback": "Grasp pre-dev clarification",
       "scrollLeft": "Scroll left",
       "scrollRight": "Scroll right",
       "draftRestored": "Draft restored",
