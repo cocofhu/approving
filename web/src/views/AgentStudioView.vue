@@ -10,9 +10,12 @@ import AgentEnvPanel from '@/components/agent/AgentEnvPanel.vue'
 import AgentPromptsPanel from '@/components/agent/AgentPromptsPanel.vue'
 import AgentPlatformRulesPanel from '@/components/agent/AgentPlatformRulesPanel.vue'
 import AgentMetaPanel from '@/components/agent/AgentMetaPanel.vue'
+import AgentChatTester from '@/components/agent/AgentChatTester.vue'
 import AgentCreateWizard from '@/components/agent/AgentCreateWizard.vue'
 import CreateAgentTeamWizard from '@/components/agent/CreateAgentTeamWizard.vue'
 import TeamBootstrapPanel from '@/components/agent/TeamBootstrapPanel.vue'
+import { computed } from 'vue'
+import { api, type CreateAgentTestPayload, type SandboxView } from '@/lib/api/api'
 import { useAgentStudio } from '@/lib/agent/useAgentStudio'
 
 const props = defineProps<{ projectId?: string; embedded?: boolean }>()
@@ -237,6 +240,24 @@ const {
   onChromeKeydown,
   UNGROUPED_ID,
 } = useAgentStudio({ projectId: () => props.projectId, embedded: () => !!props.embedded })
+
+/** Embedded: host project id; standalone: Agent's saved home project. */
+const chatHomeProjectId = computed(() => {
+  if (embedded.value && props.projectId?.trim()) return props.projectId.trim()
+  return savedProjectId.value
+})
+
+async function createStudioChatTest(
+  profile: string,
+  payload: CreateAgentTestPayload,
+): Promise<SandboxView> {
+  const pid = chatHomeProjectId.value.trim()
+  return api.createProjectSharedAgentTest(pid, {
+    agentName: profile,
+    ...(payload.repos ? { repos: payload.repos } : {}),
+    ...(payload.repoUrl ? { repoUrl: payload.repoUrl } : {}),
+  })
+}
 </script>
 <template>
   <div
@@ -562,10 +583,10 @@ const {
           @restored="reloadAgentFromServer(activeName)"
         />
 
-        <!-- narrow-screen: non-whitelist tabs show desktop-only tip (files+data allowed) -->
+        <!-- narrow-screen: non-whitelist tabs show desktop-only tip (files+data+test allowed) -->
         <Transition name="ui-fade" mode="out-in">
           <div
-            v-if="tab !== 'files' && isMobile && tab !== 'data'"
+            v-if="tab !== 'files' && isMobile && tab !== 'data' && tab !== 'test'"
             key="mobile-desktop-only"
             class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 py-8 text-center"
           >
@@ -657,6 +678,20 @@ const {
             @update:org="org = $event"
             @error="(msg) => (error = msg)"
           />
+
+          <div
+            v-else-if="tab === 'test' && draft"
+            key="test"
+            class="flex min-h-0 flex-1 flex-col overflow-hidden"
+            data-testid="studio-chat-test"
+          >
+            <AgentChatTester
+              :key="activeName"
+              :profile="activeName"
+              :home-project-id="chatHomeProjectId"
+              :create-test="createStudioChatTest"
+            />
+          </div>
         </Transition>
 
       </div>

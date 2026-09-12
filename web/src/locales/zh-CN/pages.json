@@ -992,7 +992,7 @@
       "varsEmptyTitle": "暂无工作流变量",
       "varsEmptyDesc": "添加一行后，即可配置项目级默认值。",
       "sharedAgent": {
-        "extendHint": "本项目 Run 与「智能体 → 对话测试」会先 extend 此共享配置，再由所选 Agent 同名覆盖（Agent 优先）。",
+        "extendHint": "本项目 Run 与 Agent Studio「对话测试」会先 extend 此共享配置，再由所选 Agent 同名覆盖（Agent 优先）。",
         "discard": "放弃修改",
         "defaultProjectId": "默认项目 ID",
         "defaultProjectIdDesc": "写入共享配置的 defaultProjectId；Agent 未绑定项目时可作补全。",
@@ -1702,7 +1702,7 @@
     "sandboxes": {
       "title": "沙箱",
       "errorPrefix": "出错:",
-      "empty": "暂无沙箱。运行工作流时会按需创建节点沙箱，或前往项目详情「智能体 → 对话测试」启动测试沙箱。",
+      "empty": "暂无沙箱。运行工作流时会按需创建节点沙箱，或前往 Agent Studio「对话测试」启动测试沙箱。",
       "copyId": "复制 ID",
       "copied": "已复制",
       "destroy": "销毁",
@@ -3597,7 +3597,7 @@
       "destroy": "结束并销毁",
       "acpSession": "ACP 会话",
       "idleHint": "启动一个绑定 “{profile}” 配置(工作目录 / MCP / 环境变量)的沙箱,与该 Agent 进行多轮对话测试。",
-      "missingCreateTest": "未配置对话测试启动方式。请从项目详情 → 智能体 → 对话测试进入。",
+      "missingCreateTest": "未配置对话测试启动方式。请从 Agent Studio 内层「对话测试」进入。",
       "mode": {
         "sectionLabel": "工作区模式",
         "empty": {

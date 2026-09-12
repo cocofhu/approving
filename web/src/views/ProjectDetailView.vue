@@ -957,7 +957,7 @@ const onboardingEmptyDesc = computed(() =>
         </div>
       </div>
 
-      <!-- Agents: second-level meta | chat test (fill remaining main area) -->
+      <!-- Agents: embed Agent Studio (chat test is an inner Studio tab) -->
       <div v-else-if="tab === 'agents'" class="flex min-h-0 flex-1 flex-col" data-testid="project-agents-tab">
         <ProjectAgentsPanel :project-id="projectId" />
       </div>

@@ -81,7 +81,7 @@ describe('ProjectSharedAgentPanel without chat test (g2.1)', () => {
     expect(wrapper.find('[data-testid="shared-agent-subtab-test"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="shared-agent-chat-tester"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="shared-agent-test-pick"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).toContain('智能体 → 对话测试')
+    expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).toContain('Agent Studio「对话测试」')
     expect(wrapper.get('[data-testid="shared-agent-help-text"]').text()).not.toContain('仅在此入口')
     wrapper.unmount()
   })
