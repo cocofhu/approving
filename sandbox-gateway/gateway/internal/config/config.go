@@ -70,9 +70,8 @@ type DBConfig struct {
 // exposes. Defaults align with the Phase 1 universal image
 // (EXPOSE 8744 22 8765 9222 6080).
 //
-// Per-agent images: with the "shared base + one thin image per agent" build
-// strategy, each agent has its own image tag. The gateway resolves a request's
-// image in this order:
+// The published sandbox is one universal-sandbox image. Optional per-agent
+// mapping remains for self-hosted split images. Resolve order:
 //  1. explicit per-request image override,
 //  2. ByProvider[provider] (exact mapping),
 //  3. Template with "{provider}" substituted (convention-based, no enumeration),
@@ -176,13 +175,13 @@ type DockerConfig struct {
 // K8sConfig configures the production Kubernetes driver and default/max
 // resource limits applied when creating sandboxes (per-request overrides).
 type K8sConfig struct {
-	InCluster          bool    `yaml:"inCluster"`
-	Kubeconfig         string  `yaml:"kubeconfig"`
-	Namespace          string  `yaml:"namespace"`  // shared namespace for sandboxes
-	NamePrefix         string  `yaml:"namePrefix"` // e.g. "sbx-"
+	InCluster          bool              `yaml:"inCluster"`
+	Kubeconfig         string            `yaml:"kubeconfig"`
+	Namespace          string            `yaml:"namespace"`  // shared namespace for sandboxes
+	NamePrefix         string            `yaml:"namePrefix"` // e.g. "sbx-"
 	StorageClass       string            `yaml:"storageClass"`
-	DataDiskGi         int64             `yaml:"dataDiskGi"`    // default PVC size (GiB)
-	MaxDataDiskGi      int64             `yaml:"maxDataDiskGi"` // max PVC size per sandbox
+	DataDiskGi         int64             `yaml:"dataDiskGi"`     // default PVC size (GiB)
+	MaxDataDiskGi      int64             `yaml:"maxDataDiskGi"`  // max PVC size per sandbox
 	PVCAnnotations     map[string]string `yaml:"pvcAnnotations"` // applied to new sandbox data PVCs
 	ImagePullSecret    string            `yaml:"imagePullSecret"`
 	ImagePullPolicy    string            `yaml:"imagePullPolicy"`    // default "Always"
@@ -345,7 +344,7 @@ func Default() *Config {
 		Driver:   "docker",
 		Database: DBConfig{Driver: "sqlite", Path: "gateway.db"},
 		Image: ImageConfig{
-			Ref: "universal-sandbox-cursor:local",
+			Ref: "universal-sandbox:local",
 			Ports: PortsConfig{
 				Session:    8765,
 				CodeServer: 8744,

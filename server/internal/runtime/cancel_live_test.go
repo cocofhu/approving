@@ -16,7 +16,7 @@ import (
 // cancel/resume unit suite with the real universal-sandbox + Cursor path.
 //
 //	GRASP_LIVE_CANCEL=1 GRASP_CURSOR_API_KEY=crsr_… \
-//	GRASP_SANDBOX_IMAGE=universal-sandbox-cursor:local \
+//	GRASP_SANDBOX_IMAGE=universal-sandbox:local \
 //	GRASP_SANDBOX_GATEWAY_URL=http://127.0.0.1:8899 \
 //	go test ./internal/runtime/ -run TestCancelAbortsLiveAgent -v -timeout 30m
 func TestCancelAbortsLiveAgent(t *testing.T) {
@@ -27,7 +27,7 @@ func TestCancelAbortsLiveAgent(t *testing.T) {
 	if apiKey == "" {
 		t.Fatal("GRASP_CURSOR_API_KEY required")
 	}
-	image := getenvOr("GRASP_SANDBOX_IMAGE", "universal-sandbox-cursor:local")
+	image := getenvOr("GRASP_SANDBOX_IMAGE", "universal-sandbox:local")
 	gatewayURL := getenvOr("GRASP_SANDBOX_GATEWAY_URL", "http://127.0.0.1:8899")
 
 	store := newMemStore()

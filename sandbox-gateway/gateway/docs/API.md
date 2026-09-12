@@ -52,7 +52,7 @@ Body (all fields optional):
 
 ```json
 {
-  "image": "universal-sandbox-cursor:local",
+  "image": "universal-sandbox:local",
   "provider": "gemini",
   "env": {
     "ACP_BACKEND": "cursor",
@@ -78,11 +78,12 @@ Body (all fields optional):
 }
 ```
 
-- `provider` selects the agent CLI (e.g. `cursor`, `gemini`, `codex`, `codebuddy`).
-  The gateway resolves it to a per-agent image (`image.byProvider` / `image.template`
-  in config, or `SBGW_IMAGE_TEMPLATE` / `SBGW_IMAGE_MAP` env) and injects
-  `AGENT_PROVIDER`/`ACP_BACKEND` into the sandbox env when not already set.
-  Ignored when `image` is given explicitly.
+- `provider` selects the agent CLI (e.g. `cursor`, `claude_code`, `codebuddy`).
+  The published image is one `universal-sandbox`; the gateway injects
+  `AGENT_PROVIDER`/`ACP_BACKEND` when not already set. Optional
+  `image.byProvider` / `image.template` (or `SBGW_IMAGE_TEMPLATE` /
+  `SBGW_IMAGE_MAP`) still map a provider to a custom image. Ignored when
+  `image` is given explicitly.
 - `env` is the injection channel to the image (see the sandbox README for the
   full variable reference: `WORKSPACE_DIR`, `GIT_REPOS`, `ACP_BACKEND`,
   `VNC_PREVIEW`, `BROWSER_MCP`, `ROOT_PASSWORD`, `SSH_KEY`, etc.).
@@ -115,7 +116,7 @@ Response body (initial `status` is usually `creating`):
   "id": "a1b2c3d4e5f6",
   "name": "sbx-a1b2c3d4e5f6",
   "status": "creating",
-  "image": "universal-sandbox-cursor:local",
+  "image": "universal-sandbox:local",
   "resources": {"cpuCores": 2, "memoryMB": 4096, "diskGi": 160},
   "endpoints": {}
 }
@@ -151,7 +152,7 @@ GET /api/v1/sandboxes/:id
   "id": "a1b2c3d4e5f6",
   "name": "sbx-a1b2c3d4e5f6",
   "status": "running",
-  "image": "universal-sandbox-cursor:local",
+  "image": "universal-sandbox:local",
   "resources": {"cpuCores": 2, "memoryMB": 4096, "diskGi": 160},
   "endpoints": {
     "session": "10.0.0.21:8765",

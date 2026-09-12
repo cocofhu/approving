@@ -69,7 +69,7 @@ func isChatTimeoutErr(err error) bool {
 
 // acpProvider is the ACP + Docker sandbox backend. Each agent/react node runs
 // in a fresh container launched from the preset image
-// (universal-sandbox-cursor:local). The in-container ACP agent is
+// (universal-sandbox:local). The in-container ACP agent is
 // driven via the acp-bridge WebSocket bridge (ACP JSON-RPC). Declared produces
 // are harvested from the container workspace and written through the run-scoped
 // artifact-store MCP, satisfying the produces contract the engine enforces.

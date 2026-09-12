@@ -18,9 +18,8 @@ in the Grasp repo root.
 # Gateway control plane
 docker build -t sandbox-gateway:local -f Dockerfile .
 
-# Default sandbox image used by local compose (Cursor ACP)
-docker build -t universal-sandbox-cursor:local \
-  --build-arg AGENT_PROVIDER=cursor \
+# Default sandbox image used by local compose (five CLIs; runtime AGENT_PROVIDER)
+docker build -t universal-sandbox:local \
   -f sandbox/Dockerfile sandbox
 ```
 

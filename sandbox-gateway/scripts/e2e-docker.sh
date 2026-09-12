@@ -32,7 +32,7 @@ fi
 echo "==> sandbox image: $IMAGE"
 # Compose config uses ...; tag local image to that ref so
 # SBGW_IMAGE override is not required inside the gateway container.
-REF=universal-sandbox-cursor:local
+REF=universal-sandbox:local
 docker tag "$IMAGE" "$REF"
 
 CLEANUP=()

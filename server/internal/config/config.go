@@ -171,11 +171,11 @@ type EngineConfig struct {
 }
 
 type SandboxConfig struct {
-	// Image, when non-empty, forces the same image for every acpBackend
-	// (legacy override). Prefer Images for per-backend routing.
+	// Image, when non-empty, is the sandbox image for every acpBackend.
+	// Empty falls through to Images[backend] then DefaultSandboxImage.
 	Image string `yaml:"image"`
-	// Images maps acpBackend → image ref (cursor / claude_code / codebuddy / trae / opencode).
-	// Empty entries fall back to DefaultSandboxImage(backend).
+	// Images optionally overrides the image for one acpBackend. Empty entries
+	// fall back to DefaultSandboxImage (universal-sandbox:local).
 	Images map[string]string `yaml:"images"`
 	// GatewayURL is the sandbox-gateway control-plane base URL. approving calls
 	// it to create/manage sandboxes instead of driving Docker directly. Empty
@@ -480,9 +480,9 @@ func setDefaults(c *Config) {
 	if c.Engine.NodeAutoRetryMax == 0 {
 		c.Engine.NodeAutoRetryMax = 3
 	}
-	// Image intentionally has no default: empty means per-backend Images /
-	// DefaultSandboxImage. Set sandbox.image / GRASP_SANDBOX_IMAGE only to
-	// force one image for every backend.
+	// Image intentionally has no compiled-in default: empty means
+	// Images[backend] / DefaultSandboxImage (universal-sandbox:local).
+	// Release compose sets GRASP_SANDBOX_IMAGE to the published GHCR pin.
 	if c.Sandbox.Images == nil {
 		c.Sandbox.Images = map[string]string{}
 	}

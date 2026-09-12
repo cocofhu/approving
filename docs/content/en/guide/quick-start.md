@@ -30,7 +30,7 @@ Then open:
 - Gateway health: http://localhost:8899/healthz
 - Default login: `admin` / `demo1234` (local-demo)
 
-Default `./start.sh` / `-d` / `restart` do **not** pre-pull the five sandbox runtimes. The first time you create a sandbox for an Agent backend, the Gateway pulls that image on demand (often multi-GB); Inbox starting and the run page show a “pulling image” loading state. Use `./start.sh pull` to warm all runtimes up front.
+Default `./start.sh` / `-d` / `restart` do **not** pre-pull the sandbox runtime. The first time you create a sandbox, the Gateway pulls that image on demand (often multi-GB); Inbox starting and the run page show a “pulling image” loading state. Use `./start.sh pull` to warm it up front.
 
 Agent / workspace / platform-rules and SQLite data live under `.localdata` at the repo root (bind mounts: `gateway` / `db` / `app-data`). `./start.sh restart` and `./start.sh down` keep that directory. To wipe: `./start.sh down && rm -rf .localdata`.
 
@@ -49,12 +49,12 @@ Ops rules:
 ```bash
 ./start.sh logs
 ./start.sh down
-./start.sh pull          # refresh compose images and warm all five sandbox runtimes
+./start.sh pull          # refresh compose images and warm the sandbox runtime
 ./start.sh restart       # down + up -d (keeps .localdata)
 ./start.sh dev -d        # source stack: go run + Vite HMR
 ```
 
-Image tags / digests can be overridden in `.env` — see [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example) at the repo root. By default sandbox images follow acpBackend; set `SANDBOX_IMAGE` / `GRASP_SANDBOX_IMAGE` only for an optional global force. Publish and smoke checks are covered in [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md).
+Image tags / digests can be overridden in `.env` — see [`.env.example`](https://github.com/cocofhu/approving/blob/main/.env.example) at the repo root. The default is one `universal-sandbox` image (five CLIs; runtime switches by Agent backend). Publish and smoke checks are covered in [Contributing](https://github.com/cocofhu/approving/blob/main/CONTRIBUTING.md).
 
 ## Next steps
 

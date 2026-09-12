@@ -1,25 +1,20 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 )
 
-// knownSandboxBackends are acpBackend values that have dedicated images.
+// knownSandboxBackends are acpBackend values that accept an optional
+// GRASP_SANDBOX_IMAGE_<BACKEND> override. The published image is one
+// universal-sandbox that ships all five CLIs.
 var knownSandboxBackends = []string{"cursor", "claude_code", "codebuddy", "trae", "opencode"}
 
-// DefaultSandboxImage returns the local image tag for an acpBackend when no
-// config override is set. Unknown/empty backends fall back to cursor.
-// Tags match images built from sandbox-gateway/sandbox (see ./start.sh sandbox).
+// DefaultSandboxImage is the local tag built from sandbox-gateway/sandbox
+// (see ./start.sh sandbox). backend is ignored: one image serves every
+// acpBackend; runtime AGENT_PROVIDER / ACP_BACKEND selects the live CLI.
 func DefaultSandboxImage(backend string) string {
-	b := strings.TrimSpace(backend)
-	switch b {
-	case "cursor", "claude_code", "codebuddy", "trae", "opencode":
-		// ok
-	default:
-		b = "cursor"
-	}
-	return fmt.Sprintf("universal-sandbox-%s:local", b)
+	_ = backend
+	return "universal-sandbox:local"
 }
 
 // ResolveSandboxImage picks the sandbox image for an acpBackend:

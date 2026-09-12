@@ -118,7 +118,7 @@ Open:
 - Gateway health: <http://localhost:8899/healthz>
 - Local demo login: `admin` / `demo1234`
 
-> Sandbox runtimes are pulled on demand when you first start a given Agent backend (Inbox / run page show pull loading). Warm all five with `./start.sh pull`.
+> The sandbox runtime is pulled on demand when you first create a sandbox (Inbox / run page show pull loading). Warm it with `./start.sh pull`.
 
 Useful commands:
 

@@ -11,7 +11,7 @@ import (
 )
 
 // TestCompatLiveGatewayCreate verifies create against the deployed gateway:
-// per-backend cursor image, ACP_BRIDGE_PASSWORD, VNC_PREVIEW, BROWSER_MCP.
+// one universal-sandbox image, ACP_BRIDGE_PASSWORD, VNC_PREVIEW, BROWSER_MCP.
 //
 //	GRASP_LIVE_GATEWAY=http://sandbox-gateway.example.com \
 //	GRASP_CURSOR_API_KEY=crsr_… \
@@ -69,8 +69,8 @@ func TestCompatLiveGatewayCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if !strings.Contains(got.Image, "universal-sandbox-cursor") {
-		t.Fatalf("image = %q, want universal-sandbox-cursor", got.Image)
+	if !strings.Contains(got.Image, "universal-sandbox") {
+		t.Fatalf("image = %q, want universal-sandbox", got.Image)
 	}
 	if got.Endpoint("session") == "" || got.Endpoint("ssh") == "" {
 		t.Fatalf("missing endpoints: %+v", got.Endpoints)

@@ -36,15 +36,10 @@ database:
 # Kubernetes: inventory *-lb still listing 9222/6080 is healed on gateway
 # startup reconcile / Start / Reinstall; until then old bookmarks may work.
 image:
-  ref: universal-sandbox-cursor:local
-  # 每 agent 一个薄镜像时，按请求里的 provider 解析镜像。解析顺序：
-  #   请求 image 覆盖 > byProvider[provider] > template(替换 {provider}) > ref(默认)。
-  # 二选一即可：byProvider 精确列举，或 template 走命名约定（无需枚举）。
-  # 也可用环境变量覆盖：SBGW_IMAGE_TEMPLATE、SBGW_IMAGE_MAP="gemini=...,codex=..."。
-  # template: universal-sandbox-{provider}:local
-  # byProvider:
-  #   gemini: universal-sandbox-gemini:local
-  #   codex:  universal-sandbox-codex:local
+  ref: universal-sandbox:local
+  # 默认一张图预装五个对外 CLI；运行时 AGENT_PROVIDER 单活。
+  # 解析顺序：请求 image 覆盖 > byProvider[provider] > template({provider}) > ref。
+  # 自建分镜像仍可用 SBGW_IMAGE_TEMPLATE / SBGW_IMAGE_MAP。
   ports:
     session: 8765     # ACP bridge / WSP session (readiness probe target)
     codeServer: 8744  # code-server (web IDE)

@@ -26,8 +26,8 @@
 ### 1) 选 Agent —— `AGENT_PROVIDER`
 
 - 选型优先级：**`AGENT_PROVIDER`** > 旧别名 **`ACP_BACKEND`** > 默认 `cursor`。
-- **必须与镜像一致**：镜像按 `--build-arg AGENT_PROVIDER=<x>` 只装了那一个 CLI；设成镜像里没有的 provider 会因找不到可执行文件而失败。
-- 经网关时只传 `provider`，网关自动解析镜像并注入 `AGENT_PROVIDER`。
+- 发布镜像预装五个对外 CLI（`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode`）。设成镜像里没有的 provider（或本地薄镜像没装的那个）会因找不到可执行文件而失败。
+- 经网关时只传 `provider`，网关注入 `AGENT_PROVIDER`（默认用同一张 `universal-sandbox`）。
 - 全部取值见文末「默认 transport」表（`cursor` / `claude_code` / `codebuddy` / `gemini` / `codex` /
   `opencode` / `deveco` / `copilot` / `pi` / `openclaw` / `antigravity` / `kimi` / `hermes` / `kiro` /
   `qoder` / `grok` / `trae` 及 `*_acp` 回退）。
