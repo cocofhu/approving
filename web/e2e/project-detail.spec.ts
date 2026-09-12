@@ -516,7 +516,7 @@ test.describe('ProjectDetailView 共享 Agent / 工作流变量面板布局', ()
     await page.goto('/project-detail.html')
     await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
 
-    await page.getByRole('button', { name: '项目共享 Agent 配置' }).click()
+    await page.getByRole('button', { name: '共享Agent配置' }).click()
     await expect(page).toHaveURL(/tab=sharedAgent/)
     const panel = page.getByTestId('project-shared-agent-panel')
     await expect(panel).toBeVisible()
@@ -751,7 +751,7 @@ test.describe('ProjectDetailView 项目信息面板', () => {
     await page.getByTestId('project-meta-footer').getByRole('button', { name: '保存' }).click()
     await expect(page.getByRole('heading', { name: 'Renamed Project' })).toBeVisible({ timeout: 5_000 })
 
-    await page.getByRole('button', { name: '项目共享 Agent 配置' }).click()
+    await page.getByRole('button', { name: '共享Agent配置' }).click()
     await expect(page.getByTestId('project-shared-agent-panel')).toBeVisible()
     await expect(page).toHaveURL(/tab=sharedAgent/)
     await page.getByRole('button', { name: '定时任务' }).click()

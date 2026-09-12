@@ -96,7 +96,7 @@ async function gotoSharedAgentEnv(page: import('@playwright/test').Page) {
   await page.goto('/project-detail.html')
   await dismissOnboardingIfOpen(page)
   await expect(page.getByRole('heading', { name: 'Demo Project' })).toBeVisible({ timeout: 10_000 })
-  await page.getByRole('button', { name: '项目共享 Agent 配置' }).click()
+  await page.getByRole('button', { name: '共享Agent配置' }).click()
   await page.getByTestId('shared-agent-subtab-env').click()
 }
 
