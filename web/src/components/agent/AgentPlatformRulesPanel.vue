@@ -161,7 +161,7 @@ defineExpose({ load: loadPlatformRules, resetState })
     </aside>
 
     <section class="flex min-h-0 min-w-0 flex-col">
-      <div class="flex items-center justify-between gap-2 border-b border-line px-4 py-2">
+      <div class="toolbar-inline-row flex items-center justify-between gap-2 border-b border-line px-4">
         <div class="flex min-w-0 items-center gap-2">
           <span class="truncate font-mono text-[12px] text-txt2">
             {{ platformRuleOverridden ? `profiles/${agentName}/platform-rules/${platformRuleFile}` : t('pages.agentStudio.platformRules.inheritPath', { file: platformRuleFile }) }}

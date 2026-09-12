@@ -245,7 +245,8 @@ const {
     :aria-busy="loading ? 'true' : 'false'"
   >
     <div
-      class="mb-5 flex shrink-0 gap-4"
+      class="toolbar-below-tabs mb-5 flex shrink-0 gap-4"
+      data-testid="agent-studio-action-row"
       :class="isMobile ? 'flex-col items-stretch' : 'justify-end'"
     >
       <div class="flex shrink-0 gap-2" :class="isMobile ? 'flex-col' : 'items-center'">
@@ -419,7 +420,7 @@ const {
         <div
           v-if="isMobile"
           data-test="studio-name-bar"
-          class="flex flex-col gap-2 border-b border-line px-4 py-2.5"
+          class="toolbar-inline-row flex flex-col gap-2 border-b border-line px-4"
         >
           <div data-test="studio-name-row-top" class="flex min-w-0 items-center gap-2">
             <Icon name="robot" :size="15" class="shrink-0 text-accent-2" />
@@ -476,7 +477,7 @@ const {
         <div
           v-else
           data-test="studio-name-bar"
-          class="flex items-center gap-2 border-b border-line px-4 py-2"
+          class="toolbar-inline-row flex items-center gap-2 border-b border-line px-4"
         >
           <Icon name="robot" :size="15" class="shrink-0 text-accent-2" />
           <span class="min-w-0 truncate text-[13px] font-medium text-txt" :title="activeName">{{ activeName }}</span>

@@ -348,7 +348,7 @@ const onboardingEmptyDesc = computed(() =>
       <Transition name="ui-fade" mode="out-in">
       <div
         :key="String(tab)"
-        class="flex min-h-0 flex-1 flex-col overflow-hidden"
+        class="toolbar-below-tabs flex min-h-0 flex-1 flex-col overflow-hidden"
         data-testid="project-detail-tab-panel"
       >
       <div
