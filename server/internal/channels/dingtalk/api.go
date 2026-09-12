@@ -93,7 +93,7 @@ func replySessionWebhook(ctx context.Context, webhook, msgType, title, text stri
 		body = map[string]any{
 			"msgtype": "markdown",
 			"markdown": map[string]string{
-				"title": firstNonEmpty(title, "Approving"),
+				"title": firstNonEmpty(title, "Grasp"),
 				"text":  text,
 			},
 		}
@@ -276,7 +276,7 @@ func downloadPublic(ctx context.Context, rawURL string) ([]byte, string, error) 
 
 func markdownMsgParam(title, text string) string {
 	b, _ := json.Marshal(map[string]string{
-		"title": firstNonEmpty(title, "Approving"),
+		"title": firstNonEmpty(title, "Grasp"),
 		"text":  text,
 	})
 	return string(b)

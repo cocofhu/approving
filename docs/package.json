@@ -2,7 +2,7 @@
   "name": "grasp-docs",
   "private": true,
   "version": "0.1.0",
-  "description": "Approving project site (static HTML) and help docs (Markdown)",
+  "description": "Grasp project site (static HTML) and help docs (Markdown)",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",

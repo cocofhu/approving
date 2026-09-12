@@ -218,12 +218,12 @@ func openAPIPayload(msgType, title, text string) (msgKey, msgParam string) {
 func (a *Adapter) chooseOutbound(text string) (msgType, title, body string) {
 	t := strings.TrimSpace(text)
 	if t == "" {
-		return "text", "Approving", ""
+		return "text", "Grasp", ""
 	}
 	if isProgressOrAck(t) {
-		return "text", "Approving", t
+		return "text", "Grasp", t
 	}
-	title = "Approving"
+	title = "Grasp"
 	for _, line := range strings.Split(t, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {

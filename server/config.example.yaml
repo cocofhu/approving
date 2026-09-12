@@ -77,7 +77,7 @@ sandbox:
   # config.bundleUrl / SSH 注入沙箱。留空=系统临时目录(本地开发与 K8s 预览均可)。
   work_dir: ""
 
-# VNC preview (sandbox-side Chromium + noVNC; Approving only proxies WS).
+# VNC preview (sandbox-side Chromium + noVNC; Grasp only proxies WS).
 # Always enabled; Settings max_preview_tabs overrides max_tabs at runtime.
 # Users connect via /sandbox-vnc/:sandboxId/ws and
 # /preview-vnc/:runId/:nodeId/:port/ws — never host:6080 / host:9222.

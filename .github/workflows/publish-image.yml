@@ -1,6 +1,6 @@
 name: publish-image
 
-# Approving server+web image. Gateway/sandbox publish in sibling workflows.
+# Grasp server+web image. Gateway/sandbox publish in sibling workflows.
 on:
   push:
     tags: ["v*"]

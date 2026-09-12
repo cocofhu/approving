@@ -1,8 +1,8 @@
-# Approving
+# Grasp
 
 **Agent workflows that advance with humans — a new paradigm for multi-agent collaboration.**
 
-Approving is an open-source, self-hostable platform for turning coding agents into visual, reviewable, and recoverable delivery workflows. Agents run in real Docker sandboxes, exchange structured artifacts, and pause for human **Approve** at critical nodes.
+Grasp is an open-source, self-hostable platform for turning coding agents into visual, reviewable, and recoverable delivery workflows. Agents run in real Docker sandboxes, exchange structured artifacts, and pause for human **Approve** at critical nodes.
 
 [Website](https://www.approving-ai.com/) · [Quick start](https://www.approving-ai.com/en/guide/quick-start/) · [Contributing](CONTRIBUTING.md) · [Configuration](server/CONFIGURATION.md) · [Gateway](GATEWAY.md)
 
@@ -18,9 +18,9 @@ Approving is an open-source, self-hostable platform for turning coding agents in
 [![coverage-server](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-server.json)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![coverage-gateway](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-gateway.json)](https://github.com/cocofhu/approving/actions/workflows/ci-gateway.yml)
 
-> Approving is currently a public beta. It requires a Linux host with Docker Compose. Default startup only needs Approving + Gateway; sandbox runtimes pull on first use of each Agent backend.
+> Grasp is currently a public beta. It requires a Linux host with Docker Compose. Default startup only needs Grasp + Gateway; sandbox runtimes pull on first use of each Agent backend.
 
-## Why Approving?
+## Why Grasp?
 
 A single coding agent is effective at completing one task. As work expands across research, design, implementation, testing, and review, new bottlenecks appear:
 
@@ -30,7 +30,7 @@ A single coding agent is effective at completing one task. As work expands acros
 - high-risk actions do not have explicit human decision points;
 - failures often require manual prompting instead of following designed recovery paths.
 
-Approving adds a harness above coding agents: FSMs define the path, sandboxes isolate execution, MCP carries artifacts, and human approval becomes a first-class workflow node.
+Grasp adds a harness above coding agents: FSMs define the path, sandboxes isolate execution, MCP carries artifacts, and human approval becomes a first-class workflow node.
 
 ```text
 Requirement
@@ -179,7 +179,7 @@ Module-specific lint, test, coverage, and E2E commands are documented in [`AGENT
 - The default account is for local demos only. Configure your own authentication users before any shared or production deployment.
 - Keep ACP API keys and Git credentials in project or Agent env; never commit them.
 - Pin production images by digest; see [Release images and smoke](CONTRIBUTING.md#release-images-and-smoke).
-- Approving is still beta software. Perform your own security review, backups, and capacity validation before production use.
+- Grasp is still beta software. Perform your own security review, backups, and capacity validation before production use.
 - **Reverse proxy Host:** temporary approval share links mint from this request's `Host` (never client `X-Forwarded-Host`). Preserve the browser Host (for example nginx `proxy_set_header Host $host`) and forward `X-Forwarded-Proto` when TLS terminates upstream. See [`SECURITY.md`](SECURITY.md).
 - **DB ↔ attachment lifecycle:** release Compose separates SQLite (`./.localdata/db`) from app-data/blobs (`./.localdata/app-data`). Backup and clean them as a pair (and include a custom `GRASP_BLOBS_ROOT` if set); otherwise Run inputs can keep `blob:` refs while `GET /api/blobs/:id` returns 404. Historical orphans are shown as permanent UI placeholders only—this release does not ship an orphan scanner. See [Quick start · Database and attachments](docs/content/en/guide/quick-start.md#database-and-attachments-share-one-lifecycle-backup--cleanup).
 

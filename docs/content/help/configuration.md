@@ -3,7 +3,7 @@ title: 配置
 description: 配置要点摘要；完整说明见源码 CONFIGURATION.md。
 ---
 
-Approving 服务端配置以 YAML / 环境变量为主（本地示例见 `server/config.example.yaml` 与根目录 `.env.example`）。
+Grasp 服务端配置以 YAML / 环境变量为主（本地示例见 `server/config.example.yaml` 与根目录 `.env.example`）。
 
 ## 完整文档
 

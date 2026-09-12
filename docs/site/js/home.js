@@ -10,7 +10,7 @@
         heroTitleIdle: "Delivery · Orchestration",
         parAsk: "Run sign-in, billing, and notifications in parallel — start now.",
         parReply: "Got it. Parallel workflows for the three requirements are up and running.",
-        pmPlaceholder: "Say the next thing to ApprovingPM…",
+        pmPlaceholder: "Say the next thing to GraspPM…",
         idleMeta: "Idle",
         bootingMeta: "Booting",
         readyMeta: "Ready",
@@ -93,7 +93,7 @@
         heroTitleIdle: "需求交付 · 编排",
         parAsk: "并行推进登录鉴权、计费结算、消息通知这三个需求，现在启动。",
         parReply: "收到。已按三条需求拉起并行工作流，开始执行。",
-        pmPlaceholder: "跟 ApprovingPM 说下一句…",
+        pmPlaceholder: "跟 GraspPM 说下一句…",
         idleMeta: "待机",
         bootingMeta: "拉起中",
         readyMeta: "就绪",
@@ -895,7 +895,7 @@
       `<p class="preview-board__desc">${COPY.approveDesc}</p>` +
       `<div class="demo-stage" data-demo-stage>` +
       `<div class="demo-ui" data-demo-case="reject">` +
-      `<div class="demo-ui__brand">Approving</div>` +
+      `<div class="demo-ui__brand">Grasp</div>` +
       `<h4 class="demo-ui__title">${COPY.approveUiTitle}</h4>` +
       `<p class="demo-ui__hint">${COPY.approveUiHint}</p>` +
       `<div class="demo-ui__field"><span></span></div>` +

@@ -517,7 +517,7 @@ func (h *Handlers) PublicGateApprovalPage(c *gin.Context) {
 	b, err := os.ReadFile("./web/dist/index.html")
 	if err != nil {
 		// Missing dist (tests / fresh checkout): still emit security headers.
-		c.String(http.StatusOK, "<!doctype html><html><head><meta charset=\"utf-8\"><title>Approving</title></head><body></body></html>")
+		c.String(http.StatusOK, "<!doctype html><html><head><meta charset=\"utf-8\"><title>Grasp</title></head><body></body></html>")
 		return
 	}
 	c.Data(http.StatusOK, "text/html; charset=utf-8", b)

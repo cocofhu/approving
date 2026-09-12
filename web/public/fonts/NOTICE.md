@@ -9,5 +9,5 @@ WOFF2 Latin subsets under this directory are derived from:
 
 Full OFL text: see `OFL.txt` in this folder.
 
-Subsets were produced for Approving brand/login critical rendering (preload + `font-display: swap`).
+Subsets were produced for Grasp brand/login critical rendering (preload + `font-display: swap`).
 Do not redistribute these binaries without retaining this notice and the OFL.

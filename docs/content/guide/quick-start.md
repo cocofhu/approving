@@ -1,6 +1,6 @@
 ---
 title: 快速开始
-description: 在 Linux 主机上用 Docker Compose 拉起 Approving。
+description: 在 Linux 主机上用 Docker Compose 拉起 Grasp。
 ---
 
 ## 前提

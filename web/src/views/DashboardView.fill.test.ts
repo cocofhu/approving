@@ -54,7 +54,7 @@ describe('DashboardView home chat layout', () => {
     expect(particleBgSrc).toMatch(/pointer-events:\s*none/)
   })
 
-  // plan g1.2 / g1.3 — monospace Approving, no gradient shimmer / staggered / serif accent
+  // plan g1.2 / g1.3 — monospace Grasp, no gradient shimmer / staggered / serif accent
   it('uses local monospace brand without banned brand effects', () => {
     expect(src).toMatch(/data-testid="home-brand"/)
     expect(src).toMatch(/ui-monospace/)

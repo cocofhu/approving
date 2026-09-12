@@ -1,6 +1,6 @@
 {
   "shell": {
-    "appName": "Approving",
+    "appName": "Grasp",
     "tagline": "Dev workflow orchestration",
     "userRole": "Administrator",
     "logout": "Log out",

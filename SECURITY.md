@@ -92,7 +92,7 @@ We will not pursue legal action against researchers who:
 Unauthenticated Chromium CDP (`:9222`, socat) and noVNC/websockify (`:6080`,
 `x11vnc -nopw`) must not be reachable from users or untrusted networks.
 
-- **Users** reach the desktop only through Approving WebSocket proxies:
+- **Users** reach the desktop only through Grasp WebSocket proxies:
   `/sandbox-vnc/:sandboxId/ws` and `/preview-vnc/:runId/:nodeId/:port/ws`.
   When platform Auth is injected (always on outside local-demo), these require
   a valid session cookie. Auth checks **Session validity only** — it does **not**
@@ -101,8 +101,8 @@ Unauthenticated Chromium CDP (`:9222`, socat) and noVNC/websockify (`:6080`,
 - **session / ide / ssh** may still be published. They use their own passwords
   or SSH keys (`ROOT_PASSWORD` / `SSH_KEY` / IDE password). Direct CDP/noVNC
   is not a substitute.
-- **Approving** (and other in-cluster / Docker-network peers) may dial CDP and
-  noVNC on the container IP or ClusterIP DNS. Approving running *outside* the
+- **Grasp** (and other in-cluster / Docker-network peers) may dial CDP and
+  noVNC on the container IP or ClusterIP DNS. Grasp running *outside* the
   cluster or Docker network is **not** a supported topology for CDP/VNC control.
 - **Residual risk**: pods on the same cluster / Docker network can still reach
   `:9222` / `:6080`. This change does not add NetworkPolicy.

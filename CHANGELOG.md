@@ -4,6 +4,11 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+- Product wordmark, login/home splash, favicon, default notify prefix, DingTalk
+  card title, run-log export header, and docs site brand are Grasp. A stored
+  product name of `Approving` falls back to Grasp so upgraded instances do not
+  keep the old logo.
+
 ## 0.3.15-beta — 2026-09-12
 
 - Fold stored Agent / shared-Agent `APPROVING_*` env keys to `GRASP_*` on

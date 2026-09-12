@@ -214,8 +214,8 @@ WebSocket `/ws`,JSON 帧:
 
 | 端口 | 协议 | 用途 | 可达面 |
 | --- | --- | --- | --- |
-| `9222` | HTTP CDP (`/json/version` + DevTools) | Pick / navigate / 开隔离 tab | 仅集群内 / 容器网;Approving 拨号 |
-| `6080` | WebSocket(websockify → RFB) | 前端 noVNC 画面 | 仅集群内 / 容器网;用户经 Approving WS |
+| `9222` | HTTP CDP (`/json/version` + DevTools) | Pick / navigate / 开隔离 tab | 仅集群内 / 容器网;Grasp 拨号 |
+| `6080` | WebSocket(websockify → RFB) | 前端 noVNC 画面 | 仅集群内 / 容器网;用户经 Grasp WS |
 
 用户只走平台代理:
 
@@ -223,7 +223,7 @@ WebSocket `/ws`,JSON 帧:
 - `/preview-vnc/:runId/:nodeId/:port/ws`
 
 启用平台 Auth 时上述 WS **须有效 Session**（仅校验登录有效，不校验沙箱/跑步归属）。
-集群外 Approving 不能拨 CDP/noVNC,不是支持的拓扑。旧书签 `host:9222` /
+集群外 Grasp 不能拨 CDP/noVNC,不是支持的拓扑。旧书签 `host:9222` /
 `host:6080` 不可达为预期破坏性变更。Docker 已运行容器的 `-p` 须 TTL/Reinstall；
 K8s 存量 `*-lb` 在网关启动调和 / Start / Reinstall 完成前仍可能对外暴露这两口。
 
@@ -263,7 +263,7 @@ IP 直连预览时审批页 iframe 的 origin 是 `http://<sandbox-ip>:$PREVIEW_
 - 注入层在 `/__approving/preview-pick.js` 直接返回脚本,HTML 插入同域
   `<script src="/__approving/preview-pick.js">`。不得注入
   `http://localhost:8080/preview-pick.js`:审批人浏览器 origin 是
-  `http://IP:PREVIEW_PORT/`,打不开 Approving 的 loopback。
+  `http://IP:PREVIEW_PORT/`,打不开 Grasp 的 loopback。
 - 脚本用 `postMessage` 向父页发 `direct-preview-ready`(每次文档加载一次,
   经典 `<script>` 早于 iframe `load` 事件),SPA 跳转再发 `direct-preview-url`。
   父页可发 `direct-preview-ping` 要求重播 ready;判定「未加载脚本」须以

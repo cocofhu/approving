@@ -3,7 +3,7 @@
 Use GitHub Issues for reproducible defects and documentation problems. Use
 feature requests for product proposals.
 
-Include the Approving version, deployment type, relevant sanitized logs, and
+Include the Grasp version, deployment type, relevant sanitized logs, and
 exact reproduction steps. Never include tokens, passwords, private repository
 URLs, or personal data.
 

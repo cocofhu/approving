@@ -1,6 +1,6 @@
 # sandbox-gateway (vendored)
 
-Control plane for Approving sandboxes. This tree lives inside the Approving
+Control plane for Grasp sandboxes. This tree lives inside the Grasp
 repository so a single clone can run the full stack with Docker Compose.
 
 - Gateway API: `gateway/`
@@ -9,8 +9,8 @@ repository so a single clone can run the full stack with Docker Compose.
 
 Public data-plane ports: session / ide / ssh / app. CDP `:9222` and noVNC `:6080`
 stay on the container or ClusterIP network (no host/LB publish). Users reach
-noVNC only through Approving VNC WebSockets. See `SECURITY.md` and `GATEWAY.md`
-in the Approving repo root.
+noVNC only through Grasp VNC WebSockets. See `SECURITY.md` and `GATEWAY.md`
+in the Grasp repo root.
 
 ## Build
 
@@ -31,5 +31,5 @@ docker compose up --build -d   # from this directory; listens on :8080 by defaul
 curl -s localhost:8080/healthz
 ```
 
-From the Approving repo root, prefer `./start.sh` or root `docker compose up --build`,
-which wires gateway on `:8899` next to the Approving server.
+From the Grasp repo root, prefer `./start.sh` or root `docker compose up --build`,
+which wires gateway on `:8899` next to the Grasp server.

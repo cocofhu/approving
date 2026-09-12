@@ -1,6 +1,6 @@
 ---
 title: Contributing
-description: How to contribute to Approving; points to the repository contributing guide.
+description: How to contribute to Grasp; points to the repository contributing guide.
 ---
 
 Contributions are welcome. Please read:
