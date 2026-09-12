@@ -890,13 +890,15 @@ async function ensureSandbox(injectHistory: boolean, signal?: AbortSignal) {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function waitReady(id: number, signal?: AbortSignal) {
-  for (let i = 0; i < 90; i++) {
+  // Align with sandbox create timeout (~20m) so cold image pulls are not cut off at 90s (g3.3 / g3.4).
+  const deadline = Date.now() + 20 * 60 * 1000
+  while (Date.now() < deadline) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const s = await api.getSandbox(id)
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     if (s.status === 'running') return
     if (s.status === 'error') throw Object.assign(new Error(s.error || 'sandbox error'), { failKind: 'unknown' as FailKind })
-    await sleep(1000)
+    await sleep(s.status === 'pulling' ? 2000 : 1000)
   }
   throw Object.assign(new Error('sandbox timeout'), { failKind: 'sandbox' as FailKind })
 }

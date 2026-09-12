@@ -84,12 +84,12 @@ func (s *SandboxService) RegisterRunSandbox(info runtime.RunSandboxInfo) {
 	if info.Token != "" {
 		fields["token"] = info.Token
 	}
-	// Adopt the pre-registered "creating" placeholder row (by run+node) in place,
+	// Adopt the pre-registered creating/pulling placeholder row (by run+node) in place,
 	// swapping its placeholder name for the gateway id. Falls back to an upsert
 	// by name when no placeholder exists (legacy path / no BeginRunSandbox).
 	var existing models.Sandbox
-	err := s.db.Where("run_id = ? AND node_id = ? AND purpose = ? AND status = ?",
-		info.RunID, info.NodeID, "run", "creating").
+	err := s.db.Where("run_id = ? AND node_id = ? AND purpose = ? AND status IN ?",
+		info.RunID, info.NodeID, "run", []string{"creating", "pulling"}).
 		Order("updated_at desc").First(&existing).Error
 	if err == nil {
 		oldName := existing.Name
@@ -251,10 +251,10 @@ func (s *SandboxService) SandboxViewForRunNode(ctx context.Context, runID, nodeI
 		Order("updated_at desc").First(&row).Error; err != nil {
 		return nil, fmt.Errorf("not found")
 	}
-	// A sandbox still provisioning (no live container yet) is surfaced as-is so
-	// the UI can render a "starting" state during the cold-start window instead
-	// of a 404. Running rows require a live container.
-	if row.Status != "creating" && s.mgr.Status(ctx, row.Name) != "running" {
+	// A sandbox still provisioning (pulling image / creating container) is
+	// surfaced as-is so the UI can render pull/create loading instead of 404.
+	// Running rows require a live container.
+	if row.Status != "creating" && row.Status != "pulling" && s.mgr.Status(ctx, row.Name) != "running" {
 		return nil, fmt.Errorf("not found")
 	}
 	v := s.view(ctx, &row)

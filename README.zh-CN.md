@@ -18,7 +18,7 @@ Approving 是一个开源、可自托管的多 Agent 工作流平台。它把 co
 [![coverage-server](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-server.json)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![coverage-gateway](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-gateway.json)](https://github.com/cocofhu/approving/actions/workflows/ci-gateway.yml)
 
-> 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose；首次启动会拉取体积较大的沙箱运行时镜像。
+> 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose。默认起栈只需 Approving 与 Gateway；各 Agent 后端的沙箱 runtime 在首次使用时按需拉取。
 
 ## 为什么需要 Approving？
 
@@ -106,7 +106,7 @@ cd approving
 - Gateway 健康检查：<http://localhost:8899/healthz>
 - 本地演示账号：`admin` / `demo1234`
 
-> `./start.sh` 还会拉取数 GB 的沙箱运行时镜像。完成前，沙箱对话可能停留在“正在启动沙箱…”。
+> 沙箱 runtime 在首次启动某 Agent 后端时按需拉取（待办 / 运行页会显示拉取 loading）。可用 `./start.sh pull` 一次性预热全部五个。
 
 常用命令：
 

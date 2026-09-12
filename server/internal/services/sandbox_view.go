@@ -265,7 +265,7 @@ func (s *SandboxService) viewWithStatus(ctx context.Context, row *models.Sandbox
 		containerStatus = s.mgr.Status(ctx, row.Name)
 	}
 
-	return SandboxView{
+	v := SandboxView{
 		Sandbox:         *row,
 		ContainerStatus: containerStatus,
 		Busy:            busy,
@@ -274,4 +274,63 @@ func (s *SandboxService) viewWithStatus(ctx context.Context, row *models.Sandbox
 		HasACP:          row.ACPPort > 0,
 		Password:        row.Token,
 	}
+	s.applyGatewayLifecycle(ctx, row, &v)
+	return v
+}
+
+// applyGatewayLifecycle overlays gateway store status onto a still-booting
+// local row so UI polls see status=pulling while the image downloads (plan g2.2).
+// Local DB may still say "creating" because WaitRunning blocks inside Manager.Create;
+// the gateway record (by id or approving.name correlation) is the source of truth.
+func (s *SandboxService) applyGatewayLifecycle(ctx context.Context, row *models.Sandbox, v *SandboxView) {
+	if row == nil || v == nil {
+		return
+	}
+	local := strings.TrimSpace(row.Status)
+	if local != "creating" && local != "pulling" {
+		return
+	}
+	gwStatus := s.lookupGatewayLifecycleStatus(ctx, row.Name)
+	switch gwStatus {
+	case "pulling":
+		v.Status = "pulling"
+		// Best-effort persist so list badges stay aligned without waiting for Register.
+		if local != "pulling" {
+			_ = s.db.Model(&models.Sandbox{}).Where("id = ? AND status IN ?", row.ID, []string{"creating", "pulling"}).
+				Updates(map[string]any{"status": "pulling"}).Error
+		}
+	case "creating":
+		if local == "pulling" {
+			v.Status = "creating"
+			_ = s.db.Model(&models.Sandbox{}).Where("id = ? AND status = ?", row.ID, "pulling").
+				Updates(map[string]any{"status": "creating"}).Error
+		}
+	case "error":
+		// Leave local status; startContainer / WaitRunning will fail the row.
+	}
+}
+
+func (s *SandboxService) lookupGatewayLifecycleStatus(ctx context.Context, nameOrID string) string {
+	nameOrID = strings.TrimSpace(nameOrID)
+	if nameOrID == "" || s.mgr == nil {
+		return ""
+	}
+	gw := s.mgr.Gateway()
+	if gw == nil {
+		return ""
+	}
+	if sb, err := gw.Get(ctx, nameOrID); err == nil && sb != nil {
+		return strings.TrimSpace(sb.Status)
+	}
+	all, err := s.mgr.ListManaged(ctx)
+	if err != nil {
+		return ""
+	}
+	key := sandbox.CorrelationNameKey()
+	for i := range all {
+		if all[i].Labels[key] == nameOrID {
+			return strings.TrimSpace(all[i].Status)
+		}
+	}
+	return ""
 }

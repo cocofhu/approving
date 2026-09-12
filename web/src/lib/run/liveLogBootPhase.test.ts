@@ -3,6 +3,7 @@ import {
   buildBootStageStates,
   deriveBootPhaseIndex,
   isContainerReady,
+  isPullingSandbox,
   ratchetBootPhaseIndex,
 } from './liveLogBootPhase'
 
@@ -13,12 +14,18 @@ describe('liveLogBootPhase', () => {
     expect(deriveBootPhaseIndex('running', { status: 'running' }, true)).toBeNull()
   })
 
-  it('maps sandbox signals to stages', () => {
-    expect(deriveBootPhaseIndex('running', null, false)).toBe(0)
-    expect(deriveBootPhaseIndex('running', { status: 'creating', containerStatus: 'creating' }, false)).toBe(0)
-    expect(deriveBootPhaseIndex('running', { status: 'creating', containerStatus: 'running' }, false)).toBe(1)
-    expect(deriveBootPhaseIndex('running', { status: 'creating', containerStatus: 'up' }, false)).toBe(1)
-    expect(deriveBootPhaseIndex('running', { status: 'running', containerStatus: 'running' }, false)).toBe(2)
+  it('maps sandbox signals to stages including pulling (g3.2)', () => {
+    expect(deriveBootPhaseIndex('running', null, false)).toBe(1)
+    expect(deriveBootPhaseIndex('running', { status: 'pulling' }, false)).toBe(0)
+    expect(deriveBootPhaseIndex('running', { status: 'creating', containerStatus: 'creating' }, false)).toBe(1)
+    expect(deriveBootPhaseIndex('running', { status: 'creating', containerStatus: 'running' }, false)).toBe(2)
+    expect(deriveBootPhaseIndex('running', { status: 'creating', containerStatus: 'up' }, false)).toBe(2)
+    expect(deriveBootPhaseIndex('running', { status: 'running', containerStatus: 'running' }, false)).toBe(3)
+  })
+
+  it('detects pulling status', () => {
+    expect(isPullingSandbox({ status: 'pulling' })).toBe(true)
+    expect(isPullingSandbox({ status: 'creating' })).toBe(false)
   })
 
   it('treats container ready aliases', () => {
@@ -35,8 +42,8 @@ describe('liveLogBootPhase', () => {
   })
 
   it('builds stage states with timeout on active', () => {
-    expect(buildBootStageStates(1, false)).toEqual(['done', 'active', 'pending'])
-    expect(buildBootStageStates(1, true)).toEqual(['done', 'timeout', 'pending'])
-    expect(buildBootStageStates(0, true)).toEqual(['timeout', 'pending', 'pending'])
+    expect(buildBootStageStates(1, false)).toEqual(['done', 'active', 'pending', 'pending'])
+    expect(buildBootStageStates(1, true)).toEqual(['done', 'timeout', 'pending', 'pending'])
+    expect(buildBootStageStates(0, true)).toEqual(['timeout', 'pending', 'pending', 'pending'])
   })
 })

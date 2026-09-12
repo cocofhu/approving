@@ -17,6 +17,7 @@ func atoi(s string) (int, bool) {
 
 // Sandbox lifecycle states.
 const (
+	StatusPulling  = "pulling"  // image missing locally; docker pull in progress
 	StatusCreating = "creating" // record persisted, container/pod being provisioned
 	StatusRunning  = "running"  // ready and endpoints backfilled
 	StatusStopped  = "stopped"  // stopped but retained (docker stop / scale 0)

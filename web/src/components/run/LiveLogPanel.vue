@@ -121,6 +121,13 @@ function armTimeoutTimer() {
     emitBootSession()
     return
   }
+  // Image pull can take many minutes — do not fire the 120s create/ACP dwell (g3.4).
+  if (BOOT_STAGE_ORDER[confirmedPhase.value] === 'pulling') {
+    stageTimedOut.value = false
+    stageEnteredAt.value = stageEnteredAt.value ?? Date.now()
+    emitBootSession()
+    return
+  }
   const entered = stageEnteredAt.value ?? Date.now()
   stageEnteredAt.value = entered
   const remaining = BOOT_STAGE_TIMEOUT_MS - (Date.now() - entered)
@@ -132,7 +139,11 @@ function armTimeoutTimer() {
   stageTimedOut.value = false
   emitBootSession()
   timeoutTimer = setTimeout(() => {
-    if (showBootProgress.value && confirmedPhase.value != null) {
+    if (
+      showBootProgress.value &&
+      confirmedPhase.value != null &&
+      BOOT_STAGE_ORDER[confirmedPhase.value] !== 'pulling'
+    ) {
       stageTimedOut.value = true
       emitBootSession()
     }
@@ -195,11 +206,13 @@ const activeStageId = computed<BootStageId | null>(() => {
 })
 
 const stageTitleKey: Record<BootStageId, string> = {
+  pulling: 'pages.liveLog.boot.stages.pulling.title',
   creating: 'pages.liveLog.boot.stages.creating.title',
   acp_ready: 'pages.liveLog.boot.stages.acpReady.title',
   first_event: 'pages.liveLog.boot.stages.firstEvent.title',
 }
 const stageDescKey: Record<BootStageId, string> = {
+  pulling: 'pages.liveLog.boot.stages.pulling.desc',
   creating: 'pages.liveLog.boot.stages.creating.desc',
   acp_ready: 'pages.liveLog.boot.stages.acpReady.desc',
   first_event: 'pages.liveLog.boot.stages.firstEvent.desc',

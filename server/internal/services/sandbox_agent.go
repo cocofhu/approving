@@ -95,7 +95,7 @@ func (s *SandboxService) OpenAgentSandbox(ctx context.Context, opts AgentSandbox
 	if opts.Reuse {
 		var existing models.Sandbox
 		if err := s.db.Where("purpose IN ? AND thread_id = ? AND status IN ?",
-			[]string{SandboxPurposeAgent, SandboxPurposePM}, threadID, []string{"running", "creating"}).
+			[]string{SandboxPurposeAgent, SandboxPurposePM}, threadID, []string{"running", "creating", "pulling"}).
 			Order("created_at desc").First(&existing).Error; err == nil {
 			if existing.Status == "running" && s.mgr.Status(ctx, existing.Name) == "running" {
 				at := time.Now().Add(s.TTL())
@@ -106,7 +106,7 @@ func (s *SandboxService) OpenAgentSandbox(ctx context.Context, opts AgentSandbox
 					Uint("id", existing.ID).Msg("reusing agent sandbox for thread")
 				return &existing, true, nil
 			}
-			if existing.Status == "creating" {
+			if existing.Status == "creating" || existing.Status == "pulling" {
 				return &existing, true, nil
 			}
 		}
@@ -158,7 +158,8 @@ func (s *SandboxService) OpenAgentSandboxFresh(ctx context.Context, profile, pro
 }
 
 func (s *SandboxService) startAgentContainer(id uint, name, profile, projectID, threadID, runID, sharedToken string, platformSpecs []sandbox.MCPServerSpec, agent Agent) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	// Cover on-demand image pull + create (same budget as Manager createTimeout / g2.3).
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
 	fail := func(err error) {
@@ -310,7 +311,7 @@ func (s *SandboxService) activeAgentSandboxCount() int {
 	var n int64
 	s.db.Model(&models.Sandbox{}).
 		Where("status IN ? AND purpose IN ?",
-			[]string{"running", "creating"},
+			[]string{"running", "creating", "pulling"},
 			[]string{SandboxPurposeAgent, SandboxPurposePM}).
 		Count(&n)
 	return int(n)

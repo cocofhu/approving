@@ -6,19 +6,30 @@ import Icon from '../ui/Icon.vue'
 // phase:
 //  - 'pending'  节点尚未进入澄清(队列中),静态等待提示
 //  - 'starting' 已进入,正在创建沙箱 / 建立 ACP / 生成第一轮问题,展示分阶段动效
-const props = defineProps<{ phase: 'pending' | 'starting' }>()
+// sandboxPhase: gateway-driven lifecycle when known ('pulling' | 'creating' | …).
+// When 'pulling', pin the pull-image step instead of cycling (plan g3.1 / f5).
+const props = defineProps<{
+  phase: 'pending' | 'starting'
+  sandboxPhase?: string | null
+}>()
 
 const { t } = useI18n()
+
+const isPulling = computed(() => (props.sandboxPhase || '').trim().toLowerCase() === 'pulling')
 
 // Cycle through the real boot stages so the panel feels alive and hints at what
 // is happening, mirroring the Agent 测试沙箱 starting loader.
 const STARTING_STEPS = computed(() => [
+  {
+    title: t('pages.clarifyBootLoader.stepPulling.title'),
+    hint: t('pages.clarifyBootLoader.stepPulling.hint'),
+  },
   { title: t('pages.clarifyBootLoader.stepSandbox.title'), hint: t('pages.clarifyBootLoader.stepSandbox.hint') },
   { title: t('pages.clarifyBootLoader.stepRuntime.title'), hint: t('pages.clarifyBootLoader.stepRuntime.hint') },
   { title: t('pages.clarifyBootLoader.stepAcp.title'), hint: t('pages.clarifyBootLoader.stepAcp.hint') },
   { title: t('pages.clarifyBootLoader.stepQuestions.title'), hint: t('pages.clarifyBootLoader.stepQuestions.hint') },
 ])
-const step = ref(0)
+const step = ref(1) // non-pulling default: workspace step (index 1); pulling pins 0
 let timer: number | undefined
 
 function prefersReducedMotion() {
@@ -28,9 +39,9 @@ function prefersReducedMotion() {
 }
 
 function startCycling() {
-  step.value = 0
+  step.value = isPulling.value ? 0 : 1
   if (timer) clearInterval(timer)
-  if (prefersReducedMotion()) {
+  if (prefersReducedMotion() || isPulling.value) {
     timer = undefined
     return
   }
@@ -48,6 +59,9 @@ watch(
   () => props.phase,
   (p) => (p === 'starting' ? startCycling() : stopCycling()),
 )
+watch(isPulling, () => {
+  if (props.phase === 'starting') startCycling()
+})
 onMounted(() => {
   if (props.phase === 'starting') startCycling()
 })
@@ -55,7 +69,11 @@ onBeforeUnmount(stopCycling)
 </script>
 
 <template>
-  <div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+  <div
+    class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center"
+    data-testid="clarify-boot-loader"
+    :data-sandbox-phase="sandboxPhase || ''"
+  >
     <template v-if="phase === 'pending'">
       <Icon name="dot" :size="22" class="animate-pulseglow text-n-clarify" />
       <p class="text-[13px] text-txt2">{{ t('pages.clarifyBootLoader.pending') }}</p>
@@ -64,7 +82,7 @@ onBeforeUnmount(stopCycling)
     <template v-else>
       <Icon name="spinner" :size="30" class="animate-spin text-n-clarify" />
       <Transition name="startfade" mode="out-in">
-        <p :key="step" class="text-[13px] text-txt2">{{ STARTING_STEPS[step].title }}</p>
+        <p :key="step" class="text-[13px] text-txt2" data-testid="clarify-boot-title">{{ STARTING_STEPS[step].title }}</p>
       </Transition>
       <Transition name="startfade" mode="out-in">
         <p :key="'h' + step" class="max-w-md text-[12px] text-txt3">{{ STARTING_STEPS[step].hint }}</p>
