@@ -36,7 +36,7 @@ on first run (slow).
 | Capability | Contract |
 | --- | --- |
 | Health | `GET /healthz` returns 2xx |
-| Create | `POST /api/v1/sandboxes` accepts image, env, labels, ports, resources, config.bundleUrl; response `202`, status often `creating` |
+| Create | `POST /api/v1/sandboxes` accepts image, env, labels, ports, resources, config.bundleUrl; response `202`, status `creating` then optionally `pulling` while the image downloads, then `creating` again during `docker run` / finalize |
 | Get | `GET /api/v1/sandboxes/{id}` returns status and endpoints. Gateway still includes internal `cdp`/`novnc` (container/ClusterIP) for in-cluster Approving. Approving user `GetView` only returns `session`/`ide`/`ssh`. |
 | List | `GET /api/v1/sandboxes?label=key:value` (AND) |
 | Delete | `DELETE /api/v1/sandboxes/{id}` returns 2xx |
