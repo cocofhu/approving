@@ -4,6 +4,8 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.3.14-beta — 2026-09-12
+
 - **Breaking:** rename the public package, image, and env prefix from Approving
   / `APPROVING_*` to Grasp / `GRASP_*`. Go module is now
   `github.com/cocofhu/grasp`; the app image is `ghcr.io/cocofhu/grasp`; compose
@@ -18,6 +20,8 @@ All notable public-release changes are documented here.
 - **Next release removes this compatibility.** Update compose, agent env
   templates, and secrets to `GRASP_*` now. Custom agent env that still
   injects `APPROVING_*` will not be dual-emitted into sandboxes.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.3.14-beta`.
 
 ## 0.3.13-beta — 2026-09-11
 

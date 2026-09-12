@@ -333,21 +333,9 @@ func migrateLegacyDefaults(c *Config) {
 	}
 	switch c.Database.Path {
 	case "grasp.db", "approving.db":
-		if ok, err := envcompat.MigrateLegacyPath("approving.db", "grasp.db"); err != nil {
-			log.Warn().Err(err).Msg("COMPAT(approving→grasp): could not migrate approving.db")
-		} else if ok || c.Database.Path == "approving.db" {
-			if _, err := os.Stat("grasp.db"); err == nil {
-				c.Database.Path = "grasp.db"
-			}
-		}
+		migrateDefaultDB(c, "approving.db", "grasp.db")
 	case "/data/grasp.db", "/data/approving.db":
-		if ok, err := envcompat.MigrateLegacyPath("/data/approving.db", "/data/grasp.db"); err != nil {
-			log.Warn().Err(err).Msg("COMPAT(approving→grasp): could not migrate /data/approving.db")
-		} else if ok || c.Database.Path == "/data/approving.db" {
-			if _, err := os.Stat("/data/grasp.db"); err == nil {
-				c.Database.Path = "/data/grasp.db"
-			}
-		}
+		migrateDefaultDB(c, "/data/approving.db", "/data/grasp.db")
 	}
 	if cwd, err := os.Getwd(); err == nil {
 		oldWS := filepath.Join(cwd, ".approving")
@@ -356,6 +344,19 @@ func migrateLegacyDefaults(c *Config) {
 			log.Warn().Err(err).Msg("COMPAT(approving→grasp): could not migrate .approving")
 		} else if ok {
 			log.Info().Str("from", oldWS).Str("to", newWS).Msg("COMPAT(approving→grasp): renamed workspace dir")
+		}
+	}
+}
+
+func migrateDefaultDB(c *Config, oldPath, newPath string) {
+	ok, err := envcompat.MigrateLegacyPath(oldPath, newPath)
+	if err != nil {
+		log.Warn().Err(err).Str("from", oldPath).Str("to", newPath).Msg("COMPAT(approving→grasp): could not migrate database file")
+		return
+	}
+	if ok || c.Database.Path == oldPath {
+		if _, err := os.Stat(newPath); err == nil {
+			c.Database.Path = newPath
 		}
 	}
 }

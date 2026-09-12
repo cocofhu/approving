@@ -181,6 +181,59 @@ func TestMigrateLegacyDefaultsDoesNotClobber(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyDefaultsUpdatesApprovingPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("approving.db", []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Config{Database: DatabaseConfig{Path: "approving.db"}}
+	migrateLegacyDefaults(c)
+	if c.Database.Path != "grasp.db" {
+		t.Fatalf("path = %q, want grasp.db", c.Database.Path)
+	}
+}
+
+func TestMigrateLegacyDefaultsRenamesWorkspaceDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.Mkdir(".approving", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	migrateLegacyDefaults(&Config{Database: DatabaseConfig{Path: "other.db"}})
+	if _, err := os.Stat(".grasp"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(".approving"); !os.IsNotExist(err) {
+		t.Fatal("old workspace dir should be gone")
+	}
+}
+
+func TestMigrateLegacyDefaultsNilAndMissing(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	migrateLegacyDefaults(nil)
+	c := &Config{Database: DatabaseConfig{Path: "grasp.db"}}
+	migrateLegacyDefaults(c)
+	if c.Database.Path != "grasp.db" {
+		t.Fatalf("path = %q", c.Database.Path)
+	}
+}
+
+func TestMigrateDefaultDBAbsolutePair(t *testing.T) {
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "approving.db")
+	newPath := filepath.Join(dir, "grasp.db")
+	if err := os.WriteFile(oldPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Config{Database: DatabaseConfig{Path: oldPath}}
+	migrateDefaultDB(c, oldPath, newPath)
+	if c.Database.Path != newPath {
+		t.Fatalf("path = %q", c.Database.Path)
+	}
+}
+
 func TestApplyEnvOverridesBareSecretName(t *testing.T) {
 	c := &Config{}
 	t.Setenv("CURSOR_API_KEY", "bare_key")
