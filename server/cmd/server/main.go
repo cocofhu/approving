@@ -27,7 +27,6 @@ import (
 	"github.com/cocofhu/grasp/internal/crypto"
 	"github.com/cocofhu/grasp/internal/database"
 	"github.com/cocofhu/grasp/internal/engine"
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/gateshare"
 	"github.com/cocofhu/grasp/internal/handlers"
 	"github.com/cocofhu/grasp/internal/logging"
@@ -49,12 +48,6 @@ import (
 
 func main() {
 	logging.Setup()
-
-	// COMPAT(approving→grasp): remove after next minor.
-	envcompat.RewriteNearbyEnvFiles()
-	if n := envcompat.PromoteProcessEnv(); n > 0 {
-		log.Info().Int("count", n).Msg("COMPAT(approving→grasp): promoted APPROVING_* process env to GRASP_*")
-	}
 
 	// Config: single YAML file (CONFIG_PATH, default "config.yaml"); on K8s
 	// it is typically mounted from a ConfigMap at deploy time.

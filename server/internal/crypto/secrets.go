@@ -15,10 +15,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"sync"
-
-	"github.com/cocofhu/grasp/internal/envcompat"
 )
 
 // SecretsKeyEnv is the environment variable holding the base64 32-byte AES key.
@@ -36,7 +35,7 @@ var ErrDecrypt = errors.New("密文解密失败(密钥不匹配或数据损坏)"
 
 var (
 	keyMu     sync.RWMutex
-	keySource = func() string { return envcompat.Lookup(SecretsKeyEnv) }
+	keySource = func() string { return os.Getenv(SecretsKeyEnv) }
 )
 
 // SetKeySource overrides where the raw base64 key is read from. The server

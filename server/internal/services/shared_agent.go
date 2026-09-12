@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/cocofhu/grasp/internal/envauth"
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 
 	"github.com/rs/zerolog/log"
@@ -71,43 +70,7 @@ func NewSharedAgentService(root string) *SharedAgentService {
 		root = DefaultSharedAgentRoot("")
 	}
 	_ = os.MkdirAll(root, 0o755)
-	s := &SharedAgentService{root: root}
-	s.migrateApprovingEnvKeys()
-	return s
-}
-
-// migrateApprovingEnvKeys rewrites APPROVING_* → GRASP_* in project-shared
-// agent.json env maps. COMPAT(approving→grasp): remove after next minor.
-func (s *SharedAgentService) migrateApprovingEnvKeys() {
-	entries, err := os.ReadDir(s.root)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		pid := e.Name()
-		cfg := s.readConfig(pid)
-		env, n := envcompat.MigrateStringMap(cfg.Env)
-		mcp, mn := migrateMCPServers(cfg.MCP)
-		n += mn
-		if n == 0 {
-			continue
-		}
-		cfg.Env = env
-		cfg.MCP = mcp
-		b, err := json.MarshalIndent(cfg, "", "  ")
-		if err != nil {
-			log.Warn().Err(err).Str("project", pid).Msg("COMPAT(approving→grasp): marshal shared agent env failed")
-			continue
-		}
-		if err := os.WriteFile(filepath.Join(s.root, pid, "agent.json"), b, 0o644); err != nil {
-			log.Warn().Err(err).Str("project", pid).Msg("COMPAT(approving→grasp): rewrite shared agent env failed")
-			continue
-		}
-		log.Info().Str("project", pid).Int("keys", n).Msg("COMPAT(approving→grasp): rewrote APPROVING_* keys in shared agent.json")
-	}
+	return &SharedAgentService{root: root}
 }
 
 // Root returns the on-disk root.
@@ -143,11 +106,10 @@ func (s *SharedAgentService) Get(projectID string) SharedAgentConfig {
 	if strings.TrimSpace(layout.ConfigRoot) == DefaultConfigRoot && backend != "" && backend != AcpBackendCursor {
 		layout.ConfigRoot = DefaultConfigRootForBackend(backend)
 	}
-	env, _ := envcompat.MigrateStringMap(cfg.Env)
+	env := cfg.Env
 	if env == nil {
 		env = map[string]string{}
 	}
-	mcp, _ := migrateMCPServers(cfg.MCP)
 	return SharedAgentConfig{
 		ProjectID:         strings.TrimSpace(projectID),
 		AcpBackend:        backend,
@@ -156,7 +118,7 @@ func (s *SharedAgentService) Get(projectID string) SharedAgentConfig {
 		GitSshKnownHosts:  cfg.GitSshKnownHosts,
 		GitSshPrivateKey:  cfg.GitSshPrivateKey,
 		Files:             s.readFiles(pid),
-		MCP:               mcp,
+		MCP:               cfg.MCP,
 		Env:               env,
 		Layout:            layout,
 		Prompts:           cfg.Prompts,
@@ -175,8 +137,6 @@ func (s *SharedAgentService) Save(cfg SharedAgentConfig) error {
 		return err
 	}
 	StripSSHEnvKeys(cfg.Env)
-	cfg.Env, _ = envcompat.MigrateStringMap(cfg.Env)
-	cfg.MCP, _ = migrateMCPServers(cfg.MCP)
 	dir := filepath.Join(s.root, pid)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -331,8 +291,6 @@ func mergeStringMap(base, overlay map[string]string) map[string]string {
 // mergeEnvSharedTokenPriority: non-Token keys use Agent-over-shared; Token keys
 // keep shared when the key exists on shared, otherwise keep Agent stock.
 func mergeEnvSharedTokenPriority(shared, agent map[string]string) map[string]string {
-	shared, _ = envcompat.MigrateMap(shared)
-	agent, _ = envcompat.MigrateMap(agent)
 	out := map[string]string{}
 	for k, v := range shared {
 		if strings.TrimSpace(k) == "" {

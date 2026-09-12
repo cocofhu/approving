@@ -149,7 +149,6 @@
       "copyToClipboard.ts",
       "demoScrollbar.ts",
       "directPreviewPick.ts",
-      "envCompat.ts",
       "format.ts",
       "frontmatter.ts",
       "highlightJson.ts",

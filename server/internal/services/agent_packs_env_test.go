@@ -1,4 +1,4 @@
-package envcompat
+package services
 
 import (
 	"os"
@@ -10,8 +10,8 @@ import (
 func TestAgentPacksUseGraspEnv(t *testing.T) {
 	roots := []string{
 		filepath.Join("..", "..", "..", "agents"),
-		filepath.Join("..", "services", "team_embed"),
-		filepath.Join("..", "services", "first_install_embed"),
+		"team_embed",
+		"first_install_embed",
 	}
 	var files []string
 	for _, root := range roots {

@@ -104,21 +104,6 @@ func TestMergeAuthEnv_TraeKeyPreference(t *testing.T) {
 	}
 }
 
-func TestMergeAuthEnv_CursorApprovingAlias(t *testing.T) {
-	out, err := MergeAuthEnv(BackendCursor, map[string]string{
-		"APPROVING_CURSOR_API_KEY": "crsr_legacy",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out["CURSOR_API_KEY"] != "crsr_legacy" {
-		t.Fatalf("CURSOR_API_KEY = %q env=%#v", out["CURSOR_API_KEY"], out)
-	}
-	if out["GRASP_CURSOR_API_KEY"] != "crsr_legacy" {
-		t.Fatalf("folded GRASP key = %#v", out)
-	}
-}
-
 func TestMergeAuthEnv_CodeBuddyAliases(t *testing.T) {
 	for _, tc := range []struct {
 		name string

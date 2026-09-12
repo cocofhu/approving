@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cocofhu/grasp/internal/envcompat"
-
 	"github.com/rs/zerolog/log"
 )
 
@@ -102,47 +100,37 @@ type authSpec struct {
 	cliKey    string   // env var the bridge CLI reads
 }
 
-func withLegacyAuthKeys(keys ...string) []string {
-	out := append([]string{}, keys...)
-	for _, k := range keys {
-		if legacy := envcompat.LegacyKey(k); legacy != "" {
-			out = append(out, legacy)
-		}
-	}
-	return out
-}
-
 func authSpecFor(b AcpBackend) authSpec {
 	switch b {
 	case BackendClaudeCode:
 		return authSpec{
-			agentKeys: withLegacyAuthKeys("GRASP_CLAUDE_API_KEY", "ANTHROPIC_API_KEY"),
+			agentKeys: []string{"GRASP_CLAUDE_API_KEY", "ANTHROPIC_API_KEY"},
 			cliKey:    "ANTHROPIC_API_KEY",
 		}
 	case BackendCodeBuddy:
 		return authSpec{
-			agentKeys: withLegacyAuthKeys("GRASP_CODEBUDDY_API_KEY", "CODEBUDDY_API_KEY"),
+			agentKeys: []string{"GRASP_CODEBUDDY_API_KEY", "CODEBUDDY_API_KEY"},
 			cliKey:    "CODEBUDDY_API_KEY",
 		}
 	case BackendTrae:
 		// Official traecli headless auth uses TRAECLI_PERSONAL_ACCESS_TOKEN;
-		// keep legacy TRAE_API_KEY / GRASP_TRAE_API_KEY as aliases.
+		// keep TRAE_API_KEY / GRASP_TRAE_API_KEY as aliases.
 		return authSpec{
-			agentKeys: withLegacyAuthKeys(
+			agentKeys: []string{
 				"GRASP_TRAE_API_KEY",
 				"TRAE_API_KEY",
 				EnvTraeCLIToken,
-			),
+			},
 			cliKey: EnvTraeCLIToken,
 		}
 	case BackendOpenCode:
 		return authSpec{
-			agentKeys: withLegacyAuthKeys(EnvApprovingOpenCodeAPIKey, EnvOpenCodeAPIKey),
+			agentKeys: []string{EnvApprovingOpenCodeAPIKey, EnvOpenCodeAPIKey},
 			cliKey:    EnvOpenCodeAPIKey,
 		}
 	default:
 		return authSpec{
-			agentKeys: withLegacyAuthKeys("GRASP_CURSOR_API_KEY", "CURSOR_API_KEY"),
+			agentKeys: []string{"GRASP_CURSOR_API_KEY", "CURSOR_API_KEY"},
 			cliKey:    "CURSOR_API_KEY",
 		}
 	}
@@ -300,7 +288,6 @@ func mergeSettingsAuthIntoEnv(env, settingsAuth map[string]string) map[string]st
 // exists), missing keys do not error; region normalization still applies.
 func mergeAuthEnv(backend AcpBackend, env map[string]string, requireAuth bool) (map[string]string, error) {
 	spec := authSpecFor(backend)
-	env, _ = envcompat.MigrateMap(env)
 	out := map[string]string{}
 	for k, v := range env {
 		out[k] = v

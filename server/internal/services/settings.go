@@ -2,12 +2,12 @@ package services
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cocofhu/grasp/internal/config"
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 
 	"gorm.io/gorm"
@@ -142,7 +142,7 @@ func (s *SettingsService) Brand() BrandSettings {
 // is env-locked its config value is exactly the env value.
 func (s *SettingsService) resolve(k knob, cfg *config.Config) (value int, source string, locked bool) {
 	cfgVal := k.fromCfg(cfg)
-	if k.envVar != "" && envcompat.Lookup(k.envVar) != "" {
+	if k.envVar != "" && os.Getenv(k.envVar) != "" {
 		return cfgVal, "env", true
 	}
 	if v, ok := s.dbInt(k.key); ok {
@@ -176,7 +176,7 @@ func (s *SettingsService) UpdateWithBrand(patch map[string]int, brand BrandPatch
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		for _, k := range knobs() {
 			v, ok := patch[k.key]
-			if !ok || (k.envVar != "" && envcompat.Lookup(k.envVar) != "") {
+			if !ok || (k.envVar != "" && os.Getenv(k.envVar) != "") {
 				continue
 			}
 			if err := setSetting(tx, k.key, strconv.Itoa(v)); err != nil {

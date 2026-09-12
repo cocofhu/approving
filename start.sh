@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Start Approving from published GHCR images (default), or the local source
+# Start Grasp from published GHCR images (default), or the local source
 # stack for development.
 #
 # Usage:
-#   ./start.sh            foreground (ensure Approving+Gateway if missing + up)
+#   ./start.sh            foreground (ensure Grasp+Gateway if missing + up)
 #   ./start.sh -d          detached
 #   ./start.sh logs        follow logs
 #   ./start.sh down        stop and remove containers
@@ -44,40 +44,25 @@ set -a
 source .env
 set +a
 
-# COMPAT(approving→grasp): map old keys for compose interpolation only.
-# The control-plane server rewrites `.env` on boot; do not mutate the file here.
-promoted=0
-while IFS= read -r var; do
-  [[ -n "$var" ]] || continue
-  grasp="GRASP_${var#APPROVING_}"
-  if [[ -z "${!grasp:-}" ]]; then
-    export "${grasp}=${!var}"
-    promoted=1
-  fi
-done < <(compgen -v APPROVING_ || true)
-if [[ "$promoted" -eq 1 ]]; then
-  echo "COMPAT(approving→grasp): exported APPROVING_* as GRASP_* for compose (server rewrites .env on boot)"
-fi
-
 # Defaults so a bare clone can start without editing .env.
 : "${GRASP_PORT:=8080}"
 : "${GRASP_GATEWAY_PORT:=8899}"
 : "${GRASP_SANDBOX_GATEWAY_URL:=http://127.0.0.1:${GRASP_GATEWAY_PORT}}"
 : "${GRASP_DEPLOYMENT_MODE:=local-demo}"
-: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.3.17-beta}"
-: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.3.17-beta}"
+: "${GRASP_IMAGE:=ghcr.io/cocofhu/grasp:0.4.0}"
+: "${SANDBOX_GATEWAY_IMAGE:=ghcr.io/cocofhu/sandbox-gateway:0.4.0}"
 : "${SANDBOX_GATEWAY_API_KEY:=grasp-local-demo}"
 
 # Optional global force: capture user-set SANDBOX_IMAGE BEFORE applying the
 # cursor fallback default, so a bare default does not re-force all backends.
 _user_sandbox_image="${SANDBOX_IMAGE-}"
-: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.17-beta}"
-: "${GRASP_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.3.17-beta}"
-: "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.3.17-beta}"
-: "${GRASP_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.3.17-beta}"
-: "${GRASP_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.3.17-beta}"
-: "${GRASP_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.3.17-beta}"
-: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.3.17-beta}"
+: "${SANDBOX_IMAGE:=ghcr.io/cocofhu/universal-sandbox-cursor:0.4.0}"
+: "${GRASP_SANDBOX_IMAGE_CURSOR:=ghcr.io/cocofhu/universal-sandbox-cursor:0.4.0}"
+: "${GRASP_SANDBOX_IMAGE_CLAUDE_CODE:=ghcr.io/cocofhu/universal-sandbox-claude_code:0.4.0}"
+: "${GRASP_SANDBOX_IMAGE_CODEBUDDY:=ghcr.io/cocofhu/universal-sandbox-codebuddy:0.4.0}"
+: "${GRASP_SANDBOX_IMAGE_TRAE:=ghcr.io/cocofhu/universal-sandbox-trae:0.4.0}"
+: "${GRASP_SANDBOX_IMAGE_OPENCODE:=ghcr.io/cocofhu/universal-sandbox-opencode:0.4.0}"
+: "${SBGW_IMAGE_TEMPLATE:=ghcr.io/cocofhu/universal-sandbox-{provider}:0.4.0}"
 # Explicit SANDBOX_IMAGE (or GRASP_SANDBOX_IMAGE) → global force; default path leaves it empty.
 if [[ -z "${GRASP_SANDBOX_IMAGE:-}" && -n "${_user_sandbox_image}" ]]; then
   GRASP_SANDBOX_IMAGE="${_user_sandbox_image}"
@@ -102,10 +87,9 @@ export GRASP_SANDBOX_IMAGE_OPENCODE
 export SBGW_IMAGE_TEMPLATE
 # May be empty (no global force). Export so compose substitutes ${GRASP_SANDBOX_IMAGE:-}.
 export GRASP_SANDBOX_IMAGE="${GRASP_SANDBOX_IMAGE:-}"
-# Approving client uses the dedicated env name; keep it in sync with the gateway.
+# Grasp client uses the dedicated env name; keep it in sync with the gateway.
 export GRASP_SANDBOX_GATEWAY_API_KEY="${GRASP_SANDBOX_GATEWAY_API_KEY:-$SANDBOX_GATEWAY_API_KEY}"
-# COMPAT(approving→grasp): keep approving-local-demo accepted this version.
-export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY,approving-local-demo}"
+export SBGW_API_KEYS="${SBGW_API_KEYS:-$SANDBOX_GATEWAY_API_KEY}"
 
 # Optional stamp for the source stack (`go run` + Dockerfile.dev ldflags).
 # Unset / failed rev-parse → empty; overview badge stays hidden (allowed).

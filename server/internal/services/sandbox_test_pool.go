@@ -13,7 +13,6 @@ import (
 
 	"github.com/cocofhu/grasp/internal/config"
 	"github.com/cocofhu/grasp/internal/envauth"
-	"github.com/cocofhu/grasp/internal/envcompat"
 	"github.com/cocofhu/grasp/internal/models"
 	"github.com/cocofhu/grasp/internal/runtime"
 	"github.com/cocofhu/grasp/internal/sandbox"
@@ -697,12 +696,12 @@ func (s *SandboxService) mcpVars(runID, token string) map[string]string {
 	if base != "" {
 		url = base + "/mcp/runs/" + runID
 	}
-	return envcompat.AliasGraspKeys(map[string]string{
+	return map[string]string{
 		"GRASP_ARTIFACT_URL":   url,
 		"GRASP_ARTIFACT_TOKEN": token,
 		"GRASP_RUN_ID":         runID,
 		"GRASP_NODE_ID":        "test",
-	})
+	}
 }
 
 func (s *SandboxService) testMcpVars(runID, token, projectID, profile string) map[string]string {
@@ -719,7 +718,7 @@ func (s *SandboxService) testMcpVars(runID, token, projectID, profile string) ma
 	vars["GRASP_SCHEDULER_URL"] = config.RewriteMisconfiguredMCPAdvertise(
 		base + "/mcp/task-scheduler/" + url.PathEscape(profile))
 	vars["GRASP_SCHEDULER_TOKEN"] = token
-	return envcompat.AliasGraspKeys(vars)
+	return vars
 }
 
 func (s *SandboxService) buildTestSandboxSpecs(projectID, profile, runID, token string, agent Agent, vars map[string]string) []sandbox.MCPServerSpec {

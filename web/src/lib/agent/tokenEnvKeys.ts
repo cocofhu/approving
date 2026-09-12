@@ -1,5 +1,3 @@
-import { migrateLegacyEnvKey } from '@/lib/shared/envCompat'
-
 /** Canonical Token-class env keys (ACP auth + Git tokens). Keep in sync with server/internal/envauth. */
 export const TOKEN_ENV_KEYS = [
   'GRASP_CURSOR_API_KEY',
@@ -22,10 +20,8 @@ export type TokenEnvKey = (typeof TOKEN_ENV_KEYS)[number]
 
 const TOKEN_SET = new Set<string>(TOKEN_ENV_KEYS)
 
-/** Literal key-name match, plus APPROVING_* aliases of GRASP_* token keys. */
 export function isTokenEnvKey(key: string): boolean {
-  const k = key.trim()
-  return TOKEN_SET.has(k) || TOKEN_SET.has(migrateLegacyEnvKey(k))
+  return TOKEN_SET.has(key.trim())
 }
 
 /** Git Token keys that Agent-management「添加推荐变量」must not inject. */

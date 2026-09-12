@@ -4,6 +4,16 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.4.0 — 2026-09-12
+
+- **Breaking:** remove the approving → grasp compatibility window. The
+  control plane no longer reads `APPROVING_*`, rewrites `.env`, migrates
+  `approving.db` / `.approving`, aliases `approving-local-demo`, or folds
+  leftover Agent / MCP `APPROVING_*` keys and interpolations. Upgrade to
+  0.3.17-beta first if you still have old names, then set `GRASP_*` only.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.4.0`.
+
 ## 0.3.17-beta — 2026-09-12
 
 - Fold leftover `${APPROVING_*}` interpolations in Agent / shared-Agent MCP
