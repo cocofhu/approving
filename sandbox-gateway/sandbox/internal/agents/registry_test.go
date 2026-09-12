@@ -153,19 +153,21 @@ func TestClaudeCodeArgsGoldenStrictPlusMcpConfig(t *testing.T) {
 
 func TestFromEnvSelection(t *testing.T) {
 	t.Setenv("AGENT_PROVIDER", "gemini")
-	t.Setenv("ACP_BACKEND", "")
 	if FromEnv() != provider.Gemini {
 		t.Fatalf("AGENT_PROVIDER ignored: %s", FromEnv())
 	}
 
-	t.Setenv("AGENT_PROVIDER", "")
-	t.Setenv("ACP_BACKEND", "claude_code")
+	t.Setenv("AGENT_PROVIDER", "claude_code")
 	if FromEnv() != provider.ClaudeCode {
-		t.Fatalf("ACP_BACKEND fallback broken: %s", FromEnv())
+		t.Fatalf("AGENT_PROVIDER claude_code: %s", FromEnv())
+	}
+
+	t.Setenv("AGENT_PROVIDER", "")
+	if FromEnv() != provider.Cursor {
+		t.Fatalf("empty AGENT_PROVIDER should default to cursor: %s", FromEnv())
 	}
 
 	t.Setenv("AGENT_PROVIDER", "does-not-exist")
-	t.Setenv("ACP_BACKEND", "")
 	if FromEnv() != provider.Cursor {
 		t.Fatalf("unknown provider should default to cursor: %s", FromEnv())
 	}

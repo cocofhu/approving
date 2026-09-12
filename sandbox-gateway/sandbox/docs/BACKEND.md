@@ -15,17 +15,17 @@
 
 ## 启动沙箱：Provider / 密钥 / 模型（上游必读）
 
-一个沙箱镜像内置**单一** Agent CLI，运行期靠环境变量决定「用哪个 agent、拿哪个密钥、锁哪个模型」。
+一张沙箱镜像预装五个对外 Agent CLI，运行期靠环境变量决定「用哪个 agent、拿哪个密钥、锁哪个模型」。
 下面是拉起沙箱时上游需要设置的全部约定。**对外 WSP/1 协议不受影响**——这些都只作用于容器内部。
 
 > 两条投喂路径等价：
 > - **直接 `docker run -e KEY=VAL`**（自建/本地）；
 > - **经网关 `POST /api/v1/sandboxes`** 的 `provider` / `env` / `config` 字段（见 `gateway/docs/API.md`）——
->   网关据 `provider` 解析出对应的单-agent 镜像并注入 `AGENT_PROVIDER`，`env` 原样透传进容器。
+>   网关注入 `AGENT_PROVIDER`，`env` 原样透传进容器。默认用同一张 `universal-sandbox`。
 
 ### 1) 选 Agent —— `AGENT_PROVIDER`
 
-- 选型优先级：**`AGENT_PROVIDER`** > 旧别名 **`ACP_BACKEND`** > 默认 `cursor`。
+- 选型：**`AGENT_PROVIDER`**，未设置时默认 `cursor`。
 - 发布镜像预装五个对外 CLI（`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode`）。设成镜像里没有的 provider（或本地薄镜像没装的那个）会因找不到可执行文件而失败。
 - 经网关时只传 `provider`，网关注入 `AGENT_PROVIDER`（默认用同一张 `universal-sandbox`）。
 - 全部取值见文末「默认 transport」表（`cursor` / `claude_code` / `codebuddy` / `gemini` / `codex` /
@@ -87,12 +87,12 @@
 ### 5) 端到端示例
 
 ```bash
-# 直接 docker run：gemini 镜像 + 环境变量密钥 + 锁定模型
+# 直接 docker run：universal-sandbox + 环境变量密钥 + 锁定模型
 docker run --rm -p 8765:8765 \
   -e AGENT_PROVIDER=gemini \
   -e GEMINI_API_KEY=xxxxx \
   -e ACP_BRIDGE_MODEL=gemini-2.5-pro \
-  universal-sandbox-gemini:latest
+  universal-sandbox:latest
 ```
 
 ```bash
@@ -289,7 +289,7 @@ web/                  # 前端（ESM + 静态资源）
   - 🟡 **结构对、待真机确认**：`claude_code` / `codebuddy`（与 qwen 同族方言，已按其字段解析）、`opencode` / `deveco`（`run --format json` 的 `type`+嵌套 `part`；tool_use 事件含 `state` 时同时透出 tool_result）、`codex`（`exec --json` 的 msg 包裹事件，tool 结果取 `output`，含 patch_apply 起止）。
   - ⚙️ **ACP 家族**（`kimi`/`hermes`/`kiro`/`qoder`/`grok`/`trae`）：走已验证的长驻 ACP 通道；其中非 `trae` 的 argv/config 为按公开事实拼装，需真机校准。
 
-- **选型**：`AGENT_PROVIDER` 指定 provider（未设置时回退旧的 `ACP_BACKEND`，默认 `cursor`）。
+- **选型**：`AGENT_PROVIDER` 指定 provider（未设置时默认 `cursor`）。
   `CONFIG_ROOT` 覆盖 provider 的默认配置根。`/api/capabilities` 的 `agent.runtime` 与
   `session.tokenUsage` 均据当前 provider 与会话实况声明。
 - **token usage**：协议早已预留可选 `usage` 字段；会话若上报用量，`prompt_done` 帧与 `connected`

@@ -32,9 +32,9 @@ func NewHandler(svc *service.SandboxService, ports config.PortsConfig) *Handler 
 // createRequest is the POST /sandboxes body.
 type createRequest struct {
 	Image string `json:"image"`
-	// Provider selects the agent CLI (e.g. "cursor", "gemini", "codex"). The
-	// gateway resolves it to a per-agent image and sets AGENT_PROVIDER in the
-	// sandbox env. Ignored when Image is set explicitly.
+	// Provider selects the agent CLI (e.g. "cursor", "claude_code", "opencode").
+	// The published image is one universal-sandbox; the gateway injects
+	// AGENT_PROVIDER. Ignored when Image is set explicitly.
 	Provider     string            `json:"provider"`
 	Env          map[string]string `json:"env"`
 	Labels       map[string]string `json:"labels"`

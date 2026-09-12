@@ -4,6 +4,31 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.5.1 — 2026-09-13
+
+- **Fix:** Grasp now injects `AGENT_PROVIDER` (and no longer `ACP_BACKEND`) so
+  the five backends select the right CLI. 0.5.0 baked `ENV AGENT_PROVIDER=cursor`
+  into `universal-sandbox` and only set `ACP_BACKEND`, so claude_code /
+  codebuddy / trae / opencode all started Cursor CLI. **The server-side fix
+  also works against the already-published `universal-sandbox:0.5.0` image**;
+  you do not have to swap the image first.
+- The sandbox image no longer bakes `AGENT_PROVIDER=cursor`. Runtime selection
+  is `AGENT_PROVIDER` only; the `ACP_BACKEND` env alias is gone.
+- Auth chain no longer fails silently: empty keys warn (and generated OpenCode
+  `{env:OPENCODE_API_KEY}` without a value errors); dropping a platform-level
+  official CLI key logs a WARN; Agent-session and workflow Token merge both
+  keep the shared Token when both sides set one; Agent sessions also read the
+  project shared workspace auth files; invalid `settings.json` errors instead
+  of being overwritten.
+- Remove leftover `APPROVING_*` recognition from server and web (no compat
+  layer). `git grep APPROVING_` should only hit CHANGELOG and the agent-pack
+  guard test. Remove `skill_profile` dual-read / migrate, `cursor/` workdir
+  fallback, and gateway `SBGW_IMAGE_TEMPLATE` / `SBGW_IMAGE_MAP` / byProvider
+  image resolution.
+- Startup logs the SQLite path and whether the file already existed.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.5.1`.
+
 ## 0.5.0 — 2026-09-12
 
 - **Breaking:** publish one sandbox image `ghcr.io/cocofhu/universal-sandbox`

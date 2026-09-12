@@ -10,7 +10,7 @@ import { buildOutputSourceOptions } from '@/lib/run/outputSourceOptions'
 import OutputSourcesEditor from './OutputSourcesEditor.vue'
 import { api } from '@/lib/api/api'
 import { renderMarkdown } from '@/lib/shared/markdown'
-import { getAgentProfile, normalizeAgentProfile } from '@/lib/run/workflowIO'
+import { getAgentProfile } from '@/lib/run/workflowIO'
 import type { WFNode, WFEdge, FieldSchema } from '@/lib/shared/types'
 
 const { t } = useI18n()
@@ -61,14 +61,6 @@ function classifyAgentProfile(name: string): { ok: boolean; label: string } {
   }
   return { ok: true, label: '' }
 }
-
-watch(
-  () => props.node.id,
-  () => {
-    if (props.node?.config) normalizeAgentProfile(props.node.config)
-  },
-  { immediate: true },
-)
 
 const agentProfileStale = computed(() => {
   const hasField = def.value?.fields?.some((f) => f.key === 'agent_profile')
@@ -481,7 +473,7 @@ function setSwitch(key: string, on: boolean) {
           <p
             v-else-if="f.key === 'agent_profile'"
             class="mt-1 text-[11px] leading-4 text-txt3"
-          >{{ t('pages.workflowEditor.inspector.skillProfileHint') }}</p>
+          >{{ t('pages.workflowEditor.inspector.agentProfileHint') }}</p>
         </template>
 
         <OutputSourcesEditor

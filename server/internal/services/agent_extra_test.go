@@ -1,8 +1,6 @@
 package services
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -114,38 +112,6 @@ func TestSafeRel(t *testing.T) {
 		if got := safeRel(in); got != want {
 			t.Errorf("safeRel(%q) = %q want %q", in, got, want)
 		}
-	}
-}
-
-func TestSkillMigrateLegacy(t *testing.T) {
-	root := t.TempDir()
-	// Hand-build a legacy agent: rules.md + skills/ but no cursor/ working dir.
-	dir := filepath.Join(root, "legacy")
-	if err := os.MkdirAll(filepath.Join(dir, "skills", "s"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "rules.md"), []byte("legacy rules"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "skills", "s", "recipe.md"), []byte("recipe"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Construction triggers migrateLegacy via EnsureSeed path.
-	s := NewAgentService(root)
-	s.migrateLegacy()
-
-	// After migration the unified cursor/ working dir exists and legacy files
-	// are gone.
-	if s.WorkDir("legacy") == "" {
-		t.Fatal("legacy agent not migrated to cursor/ working dir")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "rules.md")); !os.IsNotExist(err) {
-		t.Error("legacy rules.md should be removed after migration")
-	}
-	got, ok := s.Get("legacy")
-	if !ok || len(got.Files) == 0 {
-		t.Fatalf("migrated agent should expose files: %+v", got)
 	}
 }
 

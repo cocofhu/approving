@@ -18,7 +18,7 @@ Grasp is an open-source, self-hostable platform for turning coding agents into v
 [![coverage-server](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-server.json)](https://github.com/cocofhu/approving/actions/workflows/ci-server.yml)
 [![coverage-gateway](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fcocofhu%2Fapproving%2Fcoverage-badges%2Fcoverage-gateway.json)](https://github.com/cocofhu/approving/actions/workflows/ci-gateway.yml)
 
-> Grasp is currently a public beta. It requires a Linux host with Docker Compose. Default startup only needs Grasp + Gateway; sandbox runtimes pull on first use of each Agent backend.
+> Grasp is currently a public beta. It requires a Linux host with Docker Compose. Default startup only needs Grasp + Gateway; the single `universal-sandbox` image is pulled once.
 
 ## Why Grasp?
 

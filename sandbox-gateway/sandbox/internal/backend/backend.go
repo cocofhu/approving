@@ -1,7 +1,7 @@
 // Package backend exposes concrete ACP CLI backends (argv / AuthEnv / config root).
 //
-// Selection of the active agent lives in internal/agents (AGENT_PROVIDER /
-// ACP_BACKEND). This package only supplies the long-lived ACP implementations
+// Selection of the active agent lives in internal/agents (AGENT_PROVIDER).
+// This package only supplies the long-lived ACP implementations
 // that acpx.FromBackend wraps — it is not a second provider registry.
 package backend
 

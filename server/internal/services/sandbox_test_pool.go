@@ -179,6 +179,7 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 	env := map[string]string{}
 	for k, v := range s.env {
 		if envauth.IsPlatformAuthEnvKey(k) {
+			log.Warn().Str("key", k).Msg("dropped platform sandbox.env official CLI auth key; use GRASP_* on Agent or shared env")
 			continue
 		}
 		env[k] = v
@@ -204,6 +205,13 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		return
 	}
 	env = merged
+	ocDoc := runtime.OpenCodeConfigForEnvWithCatalog(
+		context.Background(), backend, env, s.openCodeCatalog,
+	)
+	if err := runtime.RequireOpenCodePlaceholderKey(ocDoc, env); err != nil {
+		fail(err)
+		return
+	}
 
 	home, err := sandbox.BuildConfigHome(sandbox.ConfigHomeSpec{
 		BaseWorkDirSrc:       sharedWorkDir,
@@ -213,19 +221,17 @@ func (s *SandboxService) startContainer(id uint, name, profile, projectID, runID
 		OpenCode:             backend == runtime.BackendOpenCode,
 		BrowserMCP:           runtime.EnvEnabled(env["BROWSER_MCP"]),
 		Settings:             runtime.CodeBuddySettingsForEnv(backend, env),
-		OpenCodeConfig: runtime.OpenCodeConfigForEnvWithCatalog(
-			context.Background(), backend, env, s.openCodeCatalog,
-		),
-		AgentName:      profile,
-		ProfilesRoot:   s.profilesRoot,
-		GlobalRulesDir: s.platformRulesRoot,
+		OpenCodeConfig:       ocDoc,
+		AgentName:            profile,
+		ProfilesRoot:         s.profilesRoot,
+		GlobalRulesDir:       s.platformRulesRoot,
 	})
 	if err != nil {
 		fail(fmt.Errorf("build cursor home: %w", err))
 		return
 	}
 
-	env["ACP_BACKEND"] = string(backend)
+	env["AGENT_PROVIDER"] = string(backend)
 	env["CONFIG_ROOT"] = agent.Layout.ConfigRoot
 	// remote-dev parity: PASSWORD / ROOT_PASSWORD / CURSOR_ACP_PASSWORD so
 	// code-server (8744) and ACP bridge (8765) accept the same secret for

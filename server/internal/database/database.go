@@ -38,6 +38,18 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 // and API readers from tripping over SQLite write locks. Exported so tests can
 // spin up a file/memory DB without constructing a full DatabaseConfig.
 func OpenSQLite(path string) (*gorm.DB, error) {
+	if path != "" && path != ":memory:" && !strings.HasPrefix(path, "file:") {
+		display := path
+		if abs, absErr := filepath.Abs(path); absErr == nil {
+			display = abs
+		}
+		_, err := os.Stat(path)
+		status := "new"
+		if err == nil {
+			status = "existing"
+		}
+		log.Info().Str("path", display).Str("database", status).Msg("opening sqlite database")
+	}
 	db, err := openSQLiteConn(path)
 	if err != nil {
 		return nil, err

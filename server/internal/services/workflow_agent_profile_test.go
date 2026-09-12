@@ -58,21 +58,6 @@ func TestValidateAgentProfilesProject(t *testing.T) {
 		}
 	})
 
-	t.Run("legacy skill_profile still validated", func(t *testing.T) {
-		g := models.Graph{Nodes: []models.Node{
-			{ID: "n1", Type: "implement", Label: "实现", Config: map[string]any{"skill_profile": "ok-agent"}},
-		}}
-		if err := ValidateAgentProfilesProject(skills, "alpha", g); err != nil {
-			t.Fatalf("legacy key should pass: %v", err)
-		}
-		g2 := models.Graph{Nodes: []models.Node{
-			{ID: "n1", Type: "implement", Label: "实现", Config: map[string]any{"skill_profile": "ghost"}},
-		}}
-		if err := ValidateAgentProfilesProject(skills, "alpha", g2); err == nil {
-			t.Fatal("legacy deleted agent should fail")
-		}
-	})
-
 	t.Run("covers all agent_profile node types not only agent", func(t *testing.T) {
 		types := []string{"react", "agent", "approve", "plan", "implement", "research", "test", "review", "proposal", "submit_mr", "visual", "app_preview"}
 		for _, typ := range types {
@@ -86,7 +71,7 @@ func TestValidateAgentProfilesProject(t *testing.T) {
 	})
 }
 
-func TestWorkflowServiceSavePublishSkillProfileGate(t *testing.T) {
+func TestWorkflowServiceSavePublishAgentProfileGate(t *testing.T) {
 	db := newTestDB(t)
 	s := NewWorkflowService(db)
 	s.SetAgents(fakeAgentLookup{

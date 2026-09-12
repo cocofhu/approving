@@ -519,3 +519,22 @@ func TestPrepareAuthEnv_OpenCodeJSONSkipsKey(t *testing.T) {
 		t.Fatalf("should not invent key: %#v", out)
 	}
 }
+
+func TestRequireOpenCodePlaceholderKey(t *testing.T) {
+	if err := RequireOpenCodePlaceholderKey(nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	doc := OpenCodeConfigForEnv(BackendOpenCode, map[string]string{
+		EnvOpenCodeProvider: "custom",
+		EnvOpenCodeBaseURL:  "https://example.test/v1",
+	})
+	if err := RequireOpenCodePlaceholderKey(doc, map[string]string{}); err == nil {
+		t.Fatal("empty OPENCODE_API_KEY must fail when we wrote the placeholder")
+	}
+	if err := RequireOpenCodePlaceholderKey(doc, map[string]string{EnvOpenCodeAPIKey: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequireOpenCodePlaceholderKey(map[string]any{"model": "openai/gpt-4.1"}, nil); err != nil {
+		t.Fatal(err)
+	}
+}

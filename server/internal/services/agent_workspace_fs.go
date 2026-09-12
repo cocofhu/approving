@@ -43,13 +43,10 @@ func (s *AgentService) ensureWorkspaceRoot(agent string) (string, error) {
 	if !s.Exists(name) {
 		return "", ErrWorkspaceAgentMissing
 	}
-	s.migrateCursorWorkDir(name)
 	root := filepath.Join(s.root, name, WorkDirName)
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", err
 	}
-	// Drop legacy cursor/ once workspace is authoritative for FS ops.
-	_ = os.RemoveAll(filepath.Join(s.root, name, legacyWorkDirName))
 	return root, nil
 }
 

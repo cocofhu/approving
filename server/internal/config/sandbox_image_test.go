@@ -53,16 +53,6 @@ func TestApplySandboxImageEnv(t *testing.T) {
 	}
 }
 
-func TestApplySandboxImageEnvGraspWins(t *testing.T) {
-	t.Setenv("GRASP_SANDBOX_IMAGE_CURSOR", "new/cursor:1")
-	t.Setenv("APPROVING_SANDBOX_IMAGE_CURSOR", "legacy/cursor:1")
-	c := &Config{}
-	applySandboxImageEnv(c)
-	if c.Sandbox.Images["cursor"] != "new/cursor:1" {
-		t.Fatalf("GRASP should win: %v", c.Sandbox.Images)
-	}
-}
-
 func TestApplySandboxImageEnvSkipsEmptyOpenCode(t *testing.T) {
 	t.Setenv("GRASP_SANDBOX_IMAGE_OPENCODE", "")
 	c := &Config{}

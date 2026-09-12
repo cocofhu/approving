@@ -11,6 +11,7 @@ import (
 	"github.com/cocofhu/grasp/internal/mcp"
 	"github.com/cocofhu/grasp/internal/models"
 	"github.com/cocofhu/grasp/internal/sandbox"
+	"github.com/rs/zerolog/log"
 )
 
 // registerLive records a node's sandbox so its event log can be read straight
@@ -306,6 +307,7 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 
 	for k, v := range c.opts.Env {
 		if envauth.IsPlatformAuthEnvKey(k) {
+			log.Warn().Str("key", k).Msg("dropped platform sandbox.env official CLI auth key; use GRASP_* on Agent or shared env")
 			continue
 		}
 		env[k] = v
@@ -335,7 +337,10 @@ func (c *acpProvider) spec(req NodeReq) (sandbox.Spec, error) {
 		return sandbox.Spec{}, err
 	}
 	env = merged
-	env["ACP_BACKEND"] = string(c.backend)
+	env["AGENT_PROVIDER"] = string(c.backend)
+	if err := RequireOpenCodePlaceholderKey(OpenCodeConfigForEnvWithCatalog(context.Background(), c.backend, env, c.opts.OpenCodeCatalog), env); err != nil {
+		return sandbox.Spec{}, err
+	}
 	applyAppPreviewEnv(env, req.NodeType, req.Config, c.opts.PublicAdvertise)
 
 	for k, v := range vars {

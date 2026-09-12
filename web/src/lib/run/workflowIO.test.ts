@@ -6,7 +6,6 @@ import {
   agentProfileIssues,
   getAgentProfile,
   setAgentProfile,
-  normalizeAgentProfile,
 } from './workflowIO'
 import type { WFNode } from '../shared/types'
 
@@ -40,7 +39,7 @@ describe('buildEnvelope', () => {
   })
 })
 
-describe('skill profile helpers', () => {
+describe('agent profile helpers', () => {
   const nodes: WFNode[] = [
     { id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { agent_profile: 'ImplementAgent' } },
     { id: 'b', type: 'input', label: 'In', position: { x: 0, y: 0 }, config: {} },
@@ -58,7 +57,7 @@ describe('skill profile helpers', () => {
     )
   })
 
-  it('reports missing or foreign skill profiles for import warn', () => {
+  it('reports missing or foreign agent profiles for import warn', () => {
     const agents = [
       { name: 'ImplementAgent', projectId: 'alpha' },
       { name: 'PreviewAgent', projectId: 'beta' },
@@ -83,26 +82,10 @@ describe('skill profile helpers', () => {
     )).toEqual([])
   })
 
-  it('reads legacy skill_profile and normalizes on export', () => {
-    const legacy: WFNode[] = [
-      { id: 'a', type: 'implement', label: 'I', position: { x: 0, y: 0 }, config: { skill_profile: 'ImplementAgent' } },
-    ]
-    expect(getAgentProfile(legacy[0].config)).toBe('ImplementAgent')
-    expect(collectAgentProfiles(legacy)).toEqual(['ImplementAgent'])
-    const env = buildEnvelope({ name: 'L', description: '', needsRepo: false }, { nodes: legacy, edges: [] })
-    expect(env.graph.nodes[0].config.agent_profile).toBe('ImplementAgent')
-    expect(env.graph.nodes[0].config.skill_profile).toBeUndefined()
-  })
-
-  it('setAgentProfile drops the legacy key', () => {
-    const cfg: Record<string, unknown> = { skill_profile: 'Old' }
+  it('setAgentProfile writes agent_profile', () => {
+    const cfg: Record<string, unknown> = {}
     setAgentProfile(cfg, 'New')
     expect(cfg.agent_profile).toBe('New')
-    expect(cfg.skill_profile).toBeUndefined()
-    expect(normalizeAgentProfile({ agent_profile: 'A' })).toBe(false)
-    const both: Record<string, unknown> = { agent_profile: '', skill_profile: 'LegacyAgent' }
-    expect(normalizeAgentProfile(both)).toBe(true)
-    expect(both.agent_profile).toBe('LegacyAgent')
-    expect(both.skill_profile).toBeUndefined()
+    expect(getAgentProfile(cfg)).toBe('New')
   })
 })

@@ -41,7 +41,7 @@ func TestCompatLiveGatewayCreate(t *testing.T) {
 
 	env := map[string]string{
 		"SKIP_INNER_DOCKER": "1",
-		"ACP_BACKEND":       "cursor",
+		"AGENT_PROVIDER":    "cursor",
 		"ACP_BRIDGE_MODEL":  model,
 		"BROWSER_MCP":       "1",
 		"VNC_PREVIEW":       "1",

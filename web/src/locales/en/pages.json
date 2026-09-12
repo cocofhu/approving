@@ -1144,7 +1144,7 @@
         "nodeName": "Node name",
         "noAgents": "No agents yet — create one in Agent Studio",
         "emptyAgent": "(empty · no Agent)",
-        "skillProfileHint": "List is filtered to this workflow's project; unbound and other-project Agents are hidden. Empty is allowed.",
+        "agentProfileHint": "List is filtered to this workflow's project; unbound and other-project Agents are hidden. Empty is allowed.",
         "staleBannerTitle": "stale reference",
         "staleBannerBody": "Current Agent profile \"{name}\" is {reason}. Pick a same-project Agent before saving.",
         "staleReasons": {
@@ -2771,7 +2771,7 @@
       },
       "import": {
         "success": "Imported \"{name}\"; opening editor…",
-        "missingSkillProfiles": "Imported, but missing or non-project Agent refs were found: {list}. Fix them in the editor before saving.",
+        "missingAgentProfiles": "Imported, but missing or non-project Agent refs were found: {list}. Fix them in the editor before saving.",
         "issueMissing": "missing",
         "issueForeign": "not this project",
         "discardTitle": "Unsaved changes will be lost",

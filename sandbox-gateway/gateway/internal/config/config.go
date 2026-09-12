@@ -70,36 +70,19 @@ type DBConfig struct {
 // exposes. Defaults align with the Phase 1 universal image
 // (EXPOSE 8744 22 8765 9222 6080).
 //
-// The published sandbox is one universal-sandbox image. Optional per-agent
-// mapping remains for self-hosted split images. Resolve order:
+// The published sandbox is one universal-sandbox image. Resolve order:
 //  1. explicit per-request image override,
-//  2. ByProvider[provider] (exact mapping),
-//  3. Template with "{provider}" substituted (convention-based, no enumeration),
-//  4. Ref (the default/fallback image).
+//  2. Ref (the default/fallback image).
 type ImageConfig struct {
-	Ref string `yaml:"ref"`
-	// ByProvider maps an agent provider name (e.g. "gemini") to an image ref.
-	ByProvider map[string]string `yaml:"byProvider"`
-	// Template derives a per-provider image from a convention, e.g.
-	// "universal-sandbox-{provider}:local". "{provider}" is
-	// replaced with the requested provider name.
-	Template string      `yaml:"template"`
-	Ports    PortsConfig `yaml:"ports"`
+	Ref   string      `yaml:"ref"`
+	Ports PortsConfig `yaml:"ports"`
 }
 
-// Resolve returns the image ref for a create request: an explicit override wins,
-// then a per-provider mapping, then the template convention, then the default.
-func (i ImageConfig) Resolve(override, provider string) string {
+// Resolve returns the image ref for a create request: an explicit override
+// wins, otherwise Ref.
+func (i ImageConfig) Resolve(override, _ string) string {
 	if override != "" {
 		return override
-	}
-	if provider != "" {
-		if ref, ok := i.ByProvider[provider]; ok && ref != "" {
-			return ref
-		}
-		if i.Template != "" {
-			return strings.ReplaceAll(i.Template, "{provider}", provider)
-		}
 	}
 	return i.Ref
 }
@@ -523,29 +506,6 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("SBGW_IMAGE"); v != "" {
 		c.Image.Ref = v
-	}
-	// Convention-based per-agent image derivation, e.g.
-	//   SBGW_IMAGE_TEMPLATE=universal-sandbox-{provider}:local
-	if v := os.Getenv("SBGW_IMAGE_TEMPLATE"); v != "" {
-		c.Image.Template = v
-	}
-	// Explicit per-agent overrides: "provider=ref,provider2=ref2".
-	if v := os.Getenv("SBGW_IMAGE_MAP"); v != "" {
-		if c.Image.ByProvider == nil {
-			c.Image.ByProvider = map[string]string{}
-		}
-		for _, pair := range strings.Split(v, ",") {
-			pair = strings.TrimSpace(pair)
-			if pair == "" {
-				continue
-			}
-			if k, ref, ok := strings.Cut(pair, "="); ok {
-				k, ref = strings.TrimSpace(k), strings.TrimSpace(ref)
-				if k != "" && ref != "" {
-					c.Image.ByProvider[k] = ref
-				}
-			}
-		}
 	}
 	if v := os.Getenv("SBGW_API_KEYS"); v != "" {
 		c.Auth.APIKeys = splitCSV(v)

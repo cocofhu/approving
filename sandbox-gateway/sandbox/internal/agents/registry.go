@@ -1,7 +1,7 @@
 // Package agents is the single source of truth for the active agent provider.
 //
-// It resolves the provider selected by AGENT_PROVIDER (falling back to the
-// legacy ACP_BACKEND) and exposes the stable facade used by the handler/service
+// It resolves the provider selected by AGENT_PROVIDER and exposes the stable
+// facade used by the handler/service
 // layers (FromEnv / Current / Get / ConfigRoot / RuntimeLabel). Concrete
 // providers live under internal/provider/* and are transport-specific
 // (long-lived ACP, one-shot stream-json / NDJSON / plain-text, ...). Adding a
@@ -226,21 +226,14 @@ func genericAuthEnv(nativeVar string, aliases ...string) func(env []string) []st
 	}
 }
 
-// FromEnv resolves the active provider name from AGENT_PROVIDER, falling back to
-// the legacy ACP_BACKEND, defaulting to cursor. Unknown values are logged and
-// ignored (cursor is used).
+// FromEnv resolves the active provider name from AGENT_PROVIDER, defaulting to
+// cursor. Unknown values are logged and ignored (cursor is used).
 func FromEnv() Name {
 	if v := strings.TrimSpace(os.Getenv("AGENT_PROVIDER")); v != "" {
 		if _, ok := registry[Name(v)]; ok {
 			return Name(v)
 		}
-		log.Printf("agents: 未知 AGENT_PROVIDER=%q，回退 ACP_BACKEND / cursor", v)
-	}
-	if v := strings.TrimSpace(os.Getenv("ACP_BACKEND")); v != "" {
-		if _, ok := registry[Name(v)]; ok {
-			return Name(v)
-		}
-		log.Printf("agents: 未知 ACP_BACKEND=%q，回退 cursor", v)
+		log.Printf("agents: 未知 AGENT_PROVIDER=%q，回退 cursor", v)
 	}
 	return provider.Cursor
 }

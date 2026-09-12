@@ -12,7 +12,7 @@ func TestIsDeniedRunSandboxEnvKey(t *testing.T) {
 		"PASSWORD", "ROOT_PASSWORD", "ACP_BRIDGE_PASSWORD", "CURSOR_ACP_PASSWORD",
 		"GRASP_ARTIFACT_URL", "GRASP_ARTIFACT_TOKEN", "GRASP_ARTIFACT_FOO",
 		"GRASP_RUN_ID", "GRASP_NODE_ID",
-		"ACP_BACKEND", "CONFIG_ROOT", "SSH_KEY", "GIT_REPOS",
+		"AGENT_PROVIDER", "CONFIG_ROOT", "SSH_KEY", "GIT_REPOS",
 	}
 	for _, k := range denied {
 		if !IsDeniedRunSandboxEnvKey(k) {

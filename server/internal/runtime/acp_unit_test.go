@@ -742,28 +742,6 @@ func TestWorkspaceWorkDirSrc(t *testing.T) {
 	}
 }
 
-func TestLegacyCursorWorkDirFallback(t *testing.T) {
-	root := t.TempDir()
-	profile := "legacy"
-	agentDir := filepath.Join(root, profile)
-	legacyDir := filepath.Join(agentDir, "cursor")
-	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(legacyDir, "AGENTS.md"), []byte("legacy agents"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(agentDir, "agent.json"), []byte(`{}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	host := mcp.NewHost(newMemStore())
-	p := newACPProvider(host, Options{ProfilesRoot: root}).(*acpProvider)
-	if wd := p.workDir(profile); wd != legacyDir {
-		t.Fatalf("workDir = %q, want legacy %q", wd, legacyDir)
-	}
-}
-
 func TestUpstreamArtifacts(t *testing.T) {
 	store := newMemStore()
 	host := mcp.NewHost(store)

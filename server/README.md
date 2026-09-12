@@ -6,7 +6,7 @@
 
 支持五类 ACP 后端(`cursor` / `claude_code` / `codebuddy` / `trae` / `opencode`),由 Agent 卡片
 `agent.json` 的 `acpBackend` 字段选择;`ProviderRegistry` 按 Agent profile (`agent_profile`) 路由到
-对应 Provider。统一沙箱镜像内 `acp-bridge` 按 `ACP_BACKEND` 单活启动 bridge(:8765)。
+对应 Provider。统一沙箱镜像内 `acp-bridge` 按 `AGENT_PROVIDER` 单活启动 bridge(:8765)。
 兼容期容器内 `acp-gateway` / `cursor-acp` 为指向 `acp-bridge` 的软链(计划 0.2.0 移除)。
 
 **鉴权**:各后端 Key / 站点可配置在 **项目沙箱 env**(流水线底噪)或 **Agent env**(同名覆盖;
@@ -19,7 +19,7 @@
 
 ```
 engine → ProviderRegistry → baseACPProvider → sandbox-gateway REST(创建统一镜像沙箱)
-       → acp-bridge(ACP_BACKEND) → ACP WebSocket → chat / MCP / harvest
+       → acp-bridge(AGENT_PROVIDER) → ACP WebSocket → chat / MCP / harvest
        → 数据面(exec / 文件 / 终端 / 变化上报)走 SSH 直连沙箱
 ```
 - **原生 artifact-store MCP(已落地)**:每个节点的容器都会接入一个 **run 级 HTTP MCP**:

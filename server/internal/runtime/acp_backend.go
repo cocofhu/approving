@@ -209,7 +209,27 @@ func PrepareAuthEnv(backend AcpBackend, env map[string]string, workDirSrc string
 	settingsAuth := ReadSettingsAuthEnv(settingsDir, backend)
 	merged := mergeSettingsAuthIntoEnv(env, settingsAuth)
 	requireAuth := !AuthConfigFileExists(settingsDir, backend)
-	return mergeAuthEnv(backend, merged, requireAuth)
+	out, err := mergeAuthEnv(backend, merged, requireAuth)
+	if err != nil {
+		return out, err
+	}
+	spec := authSpecFor(backend)
+	if strings.TrimSpace(out[spec.cliKey]) == "" && !requireAuth {
+		hint := "settings.json"
+		if AuthConfigFileExists(settingsDir, backend) {
+			if OpenCodeConfigFileExists(settingsDir) {
+				hint = "opencode.json"
+			}
+		}
+		log.Warn().
+			Str("backend", string(backend)).
+			Strs("tried_keys", spec.agentKeys).
+			Str("cli_key", spec.cliKey).
+			Str("auth_dir", settingsDir).
+			Str("gate_file", hint).
+			Msg("auth keys empty; gate skipped because a backend config file exists")
+	}
+	return out, nil
 }
 
 // ReadSettingsAuthEnv reads backend-relevant auth keys from settings.json under

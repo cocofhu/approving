@@ -1,7 +1,7 @@
 # 统一通用沙箱镜像：多语言 + 容器内 DinD（docker / docker compose）+ SSH + code-server + backend 网关
 #
 # 镜像策略：一张图预装五个对外 CLI（cursor / claude_code / codebuddy / trae / opencode）。
-# 运行时 AGENT_PROVIDER / ACP_BACKEND 单活。本地打薄镜像：
+# 运行时 AGENT_PROVIDER 单活。本地打薄镜像：
 #   docker build --build-arg AGENT_PROVIDERS=cursor -t universal-sandbox:local .
 #   docker build --build-arg AGENT_PROVIDERS=gemini -t sandbox:gemini .
 #   docker build --build-arg AGENT_INSTALL_CMD='npm i -g <pkg>' -t sandbox:custom .
@@ -315,12 +315,11 @@ COPY scripts/startup.sh /startup.sh
 RUN chmod +x /startup.sh
 
 # ── Agent 安装层 ──────────────────────────────────────────────────────────
-# 默认预装五个对外 CLI；运行时 AGENT_PROVIDER / ACP_BACKEND 单活。
+# 默认预装五个对外 CLI；运行时 AGENT_PROVIDER 单活（未设置时回落 cursor）。
 # 本地打薄镜像：--build-arg AGENT_PROVIDERS=cursor
 ARG AGENT_PROVIDERS=cursor,claude_code,codebuddy,trae,opencode
 ARG AGENT_OPTIONAL_PROVIDERS=trae
 ARG AGENT_INSTALL_CMD=
-ENV AGENT_PROVIDER=cursor
 COPY scripts/install-agent.sh /usr/local/bin/install-agent.sh
 RUN chmod +x /usr/local/bin/install-agent.sh && \
     AGENT_INSTALL_CMD="${AGENT_INSTALL_CMD}" \

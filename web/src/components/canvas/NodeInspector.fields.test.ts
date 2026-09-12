@@ -400,20 +400,6 @@ describe('NodeInspector field editors', () => {
     w.unmount()
   })
 
-  it('normalizes agent_profile again when the inspected node changes', async () => {
-    const first = node('agent', { skill_profile: 'legacy' }, 'a1', 'A1')
-    const second = node('agent', { skill_profile: 'legacy2' }, 'a2', 'A2')
-    const w = mountInspector(first, [first, second])
-    await flushPromises()
-    expect(first.config.agent_profile).toBe('legacy')
-
-    await w.setProps({ node: second, allNodes: [first, second] })
-    await flushPromises()
-    expect(second.config.agent_profile).toBe('legacy2')
-    expect(second.config.skill_profile).toBeUndefined()
-    w.unmount()
-  })
-
   it('renders the output_sources editor with the migration flag', async () => {
     const out = node('output', { results: [] }, 'output', '输出')
     const w = mountInspector(out, [out], [], { outputMigration: true })

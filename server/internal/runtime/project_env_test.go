@@ -79,11 +79,54 @@ func TestSpecMergesSharedEnvExtendThenAgentOverlay(t *testing.T) {
 	if spec.Env["ANTHROPIC_API_KEY"] != "shared-anthropic" {
 		t.Fatalf("shared anthropic = %q", spec.Env["ANTHROPIC_API_KEY"])
 	}
-	if spec.Env["CURSOR_API_KEY"] != "agent-cursor" {
-		t.Fatalf("agent cursor wins = %q", spec.Env["CURSOR_API_KEY"])
+	if spec.Env["CURSOR_API_KEY"] != "shared-cursor" {
+		t.Fatalf("shared token wins = %q", spec.Env["CURSOR_API_KEY"])
 	}
 	if spec.Env["CURSOR_API_KEY"] == "should-skip-platform" {
 		t.Fatal("platform CURSOR_API_KEY must stay skipped")
+	}
+}
+
+func TestSpecSetsAgentProviderForEveryBackend(t *testing.T) {
+	backends := []struct {
+		backend AcpBackend
+		authKey string
+	}{
+		{BackendCursor, "CURSOR_API_KEY"},
+		{BackendClaudeCode, "ANTHROPIC_API_KEY"},
+		{BackendCodeBuddy, "CODEBUDDY_API_KEY"},
+		{BackendTrae, "TRAECLI_PERSONAL_ACCESS_TOKEN"},
+		{BackendOpenCode, "OPENCODE_API_KEY"},
+	}
+	for _, tc := range backends {
+		t.Run(string(tc.backend), func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, "demo")
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			agentJSON := `{"env":{"` + tc.authKey + `":"k"}}`
+			if err := os.WriteFile(filepath.Join(dir, "agent.json"), []byte(agentJSON), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c := &acpProvider{
+				opts:    Options{ProfilesRoot: root},
+				backend: tc.backend,
+			}
+			spec, err := c.spec(NodeReq{
+				Token:  "tok",
+				Config: map[string]any{"agent_profile": "demo"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := spec.Env["AGENT_PROVIDER"]; got != string(tc.backend) {
+				t.Fatalf("AGENT_PROVIDER=%q, want %q", got, tc.backend)
+			}
+			if _, ok := spec.Env["ACP_BACKEND"]; ok {
+				t.Fatal("ACP_BACKEND must not be injected")
+			}
+		})
 	}
 }
 
@@ -216,8 +259,8 @@ func TestSpecMergesRunSandboxEnvAfterAgent(t *testing.T) {
 	if spec.Env["AGENT_ONLY"] != "a1" {
 		t.Fatalf("untouched agent=%q", spec.Env["AGENT_ONLY"])
 	}
-	if spec.Env["ACP_BACKEND"] != string(BackendCursor) {
-		t.Fatalf("ACP_BACKEND=%q", spec.Env["ACP_BACKEND"])
+	if spec.Env["AGENT_PROVIDER"] != string(BackendCursor) {
+		t.Fatalf("AGENT_PROVIDER=%q", spec.Env["AGENT_PROVIDER"])
 	}
 	if spec.Env["CURSOR_API_KEY"] != "agent-cursor" {
 		t.Fatalf("auth from agent must remain: %q", spec.Env["CURSOR_API_KEY"])
@@ -241,7 +284,7 @@ func TestSpecRunSandboxEnvDoesNotOverrideReservedAfterInject(t *testing.T) {
 			ProfilesRoot: root,
 			RunSandboxEnvForRun: func(string) []models.EnvEntry {
 				return []models.EnvEntry{
-					{Key: "ACP_BACKEND", Value: "evil"},
+					{Key: "AGENT_PROVIDER", Value: "evil"},
 					{Key: "GRASP_RUN_ID", Value: "evil-run"},
 					{Key: "PASSWORD", Value: "evil-pw"},
 					{Key: "CONFIG_ROOT", Value: "/evil"},
@@ -258,8 +301,8 @@ func TestSpecRunSandboxEnvDoesNotOverrideReservedAfterInject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Env["ACP_BACKEND"] == "evil" {
-		t.Fatal("ACP_BACKEND must not be overridden by run env")
+	if spec.Env["AGENT_PROVIDER"] == "evil" {
+		t.Fatal("AGENT_PROVIDER must not be overridden by run env")
 	}
 	if spec.Env["PASSWORD"] == "evil-pw" {
 		t.Fatal("PASSWORD must not be overridden by run env")
@@ -354,13 +397,13 @@ func TestResolvedMCPSpecsAgentEnvOverlaysShared(t *testing.T) {
 func TestMergeEnvIntoTemplateVarsReservedWinAndSubst(t *testing.T) {
 	base := map[string]string{
 		"GRASP_ARTIFACT_TOKEN": "tok",
-		"vars.region":              "cn-east",
+		"vars.region":          "cn-east",
 	}
 	got := MergeEnvIntoTemplateVars(base, map[string]string{
-		"LOG_CENTER_TOKEN":         "secret",
+		"LOG_CENTER_TOKEN":     "secret",
 		"GRASP_ARTIFACT_TOKEN": "evil",
-		"TEMPLATED":                "${vars.region}",
-		"":                         "skip",
+		"TEMPLATED":            "${vars.region}",
+		"":                     "skip",
 	})
 	if got["LOG_CENTER_TOKEN"] != "secret" {
 		t.Fatalf("LOG_CENTER_TOKEN=%q", got["LOG_CENTER_TOKEN"])

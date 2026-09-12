@@ -87,11 +87,8 @@ def main() -> int:
     ap.add_argument("--mime", default="", help="可选:MIME 类型;缺省按扩展名推断")
     args = ap.parse_args()
 
-    # COMPAT(approving→grasp): fall back to APPROVING_* this version only.
-    url = rewrite_spa_mcp_url(
-        (os.environ.get("GRASP_ARTIFACT_URL") or os.environ.get("APPROVING_ARTIFACT_URL") or "").strip()
-    )
-    token = (os.environ.get("GRASP_ARTIFACT_TOKEN") or os.environ.get("APPROVING_ARTIFACT_TOKEN") or "").strip()
+    url = rewrite_spa_mcp_url((os.environ.get("GRASP_ARTIFACT_URL") or "").strip())
+    token = (os.environ.get("GRASP_ARTIFACT_TOKEN") or "").strip()
     if not url or not token:
         eprint("artifact-upload: 缺少 GRASP_ARTIFACT_URL / GRASP_ARTIFACT_TOKEN 环境变量,"
                "无法定位产物存储(仅在平台运行的沙箱内可用)。")

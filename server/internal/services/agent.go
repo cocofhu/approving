@@ -34,10 +34,9 @@ type AgentService struct {
 }
 
 // NewAgentService builds the service. It ships no preset agents (users create
-// their own); it only migrates any existing agents to the current on-disk layout.
+// their own).
 func NewAgentService(root string) *AgentService {
 	s := &AgentService{root: root, Vcs: NewWorkspaceVcsService(root)}
-	s.seed()
 	return s
 }
 
@@ -49,10 +48,6 @@ const ArtifactStoreMCP = "artifact-store"
 
 // WorkDirName is the subfolder under each agent that holds its working-dir tree.
 const WorkDirName = "workspace"
-
-// legacyWorkDirName is the pre-vendor-neutral layout; kept for dual-read and
-// auto-migration during the compatibility window (remove in 0.2.0).
-const legacyWorkDirName = "cursor"
 
 // MCPServer describes one MCP server an agent can talk to. A server is either
 // URL-based (streamable HTTP, optional headers) or command-based (stdio).
@@ -224,76 +219,6 @@ func DefaultPlatformMCP() []MCPServer {
 	}}
 }
 
-// seed no longer ships any preset agents — users create their own. It only runs
-// on-disk layout migrations for any agents that already exist.
-func (s *AgentService) seed() {
-	s.migrateLegacy()
-	s.migrateAllWorkDirs()
-}
-
-func (s *AgentService) migrateAllWorkDirs() {
-	entries, err := os.ReadDir(s.root)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		s.migrateCursorWorkDir(e.Name())
-	}
-}
-
-// migrateCursorWorkDir upgrades cursor/ → workspace/ when only the legacy dir
-// exists. If workspace/ already exists, migration is skipped (workspace wins).
-func (s *AgentService) migrateCursorWorkDir(name string) {
-	dir := filepath.Join(s.root, sanitize(name))
-	workspace := filepath.Join(dir, WorkDirName)
-	legacy := filepath.Join(dir, legacyWorkDirName)
-	if fi, err := os.Stat(workspace); err == nil && fi.IsDir() {
-		return // canonical dir already present
-	}
-	if fi, err := os.Stat(legacy); err != nil || !fi.IsDir() {
-		return // nothing to migrate
-	}
-	if err := os.Rename(legacy, workspace); err != nil {
-		return
-	}
-	_ = os.RemoveAll(legacy)
-}
-
-// migrateLegacy upgrades any agent still using the old on-disk layout
-// (rules.md + skills/<name>/) to the unified workspace/ working-dir tree, so both
-// the UI and the runtime read a single consistent representation.
-func (s *AgentService) migrateLegacy() {
-	entries, err := os.ReadDir(s.root)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		dir := filepath.Join(s.root, e.Name())
-		if _, err := os.Stat(filepath.Join(dir, WorkDirName)); err == nil {
-			continue // already migrated
-		}
-		if _, err := os.Stat(filepath.Join(dir, legacyWorkDirName)); err == nil {
-			continue // cursor/ layout handled by migrateCursorWorkDir
-		}
-		if _, err := os.Stat(filepath.Join(dir, "rules.md")); err != nil {
-			if _, err := os.Stat(filepath.Join(dir, "skills")); err != nil {
-				continue // nothing legacy to migrate
-			}
-		}
-		if a, ok := s.Get(e.Name()); ok {
-			if err := s.Save(a); err != nil { // Save writes workspace/ and removes the legacy files
-				log.Warn().Err(err).Str("agent", e.Name()).Msg("legacy skill migrate save failed")
-			}
-		}
-	}
-}
-
 // List returns all agents, sorted by name.
 func (s *AgentService) List() []Agent {
 	out := []Agent{}
@@ -348,18 +273,10 @@ func (s *AgentService) Get(name string) (Agent, bool) {
 	}, true
 }
 
-// readFiles loads the agent's working-dir tree from workspace/, falling back to
-// legacy cursor/ during the compatibility window. If the agent still uses the
-// oldest layout it synthesizes the tree from rules.md + skills/.
+// readFiles loads the agent's working-dir tree from workspace/.
 func (s *AgentService) readFiles(name string) []AgentFile {
 	dir := filepath.Join(s.root, sanitize(name))
-	if files := readTreeIfDir(filepath.Join(dir, WorkDirName)); len(files) > 0 {
-		return files
-	}
-	if files := readTreeIfDir(filepath.Join(dir, legacyWorkDirName)); len(files) > 0 {
-		return files
-	}
-	return s.legacyFiles(dir, name)
+	return readTreeIfDir(filepath.Join(dir, WorkDirName))
 }
 
 func readTreeIfDir(dir string) []AgentFile {
@@ -368,24 +285,6 @@ func readTreeIfDir(dir string) []AgentFile {
 		return nil
 	}
 	return readTree(dir)
-}
-
-// legacyFiles maps the old rules.md + skills/<name>/ layout to working-dir paths.
-func (s *AgentService) legacyFiles(dir, name string) []AgentFile {
-	var out []AgentFile
-	if b, err := os.ReadFile(filepath.Join(dir, "rules.md")); err == nil {
-		body := string(b)
-		if !strings.HasPrefix(strings.TrimSpace(body), "---") {
-			body = "---\ndescription: " + name + " 身份\nalwaysApply: true\n---\n\n" + body
-		}
-		out = append(out, AgentFile{Path: "rules/" + sanitize(name) + ".md", Content: body})
-	}
-	skills := filepath.Join(dir, "skills")
-	for _, f := range readTree(skills) {
-		out = append(out, AgentFile{Path: "skills/" + f.Path, Content: f.Content})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out
 }
 
 // readTree walks dir and returns every file as a slash-relative AgentFile.
@@ -487,8 +386,7 @@ func (s *AgentService) UpdateProjectID(name, projectID string) error {
 }
 
 // Save writes an agent's working-dir tree + config, creating it if needed. The
-// workspace/ tree is fully rewritten so removed files disappear from disk; the
-// legacy rules.md / skills/ / cursor/ are dropped on save.
+// workspace/ tree is fully rewritten so removed files disappear from disk.
 func (s *AgentService) Save(a Agent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -504,7 +402,6 @@ func (s *AgentService) saveUnlocked(a Agent) error {
 		return err
 	}
 	StripSSHEnvKeys(a.Env)
-	s.migrateCursorWorkDir(name)
 	dir := filepath.Join(s.root, name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -555,10 +452,6 @@ func (s *AgentService) saveUnlocked(a Agent) error {
 			return err
 		}
 	}
-	// Drop legacy layouts now that the working dir is authoritative.
-	_ = os.Remove(filepath.Join(dir, "rules.md"))
-	_ = os.RemoveAll(filepath.Join(dir, "skills"))
-	_ = os.RemoveAll(filepath.Join(dir, legacyWorkDirName))
 	return nil
 }
 
@@ -620,15 +513,11 @@ func (s *AgentService) Exists(name string) bool {
 	return err == nil
 }
 
-// WorkDir returns the agent's on-disk working directory (workspace/ or legacy
-// cursor/) if it exists, for verbatim copy into the sandbox config root.
+// WorkDir returns the agent's on-disk workspace/ directory if it exists.
 func (s *AgentService) WorkDir(name string) string {
-	dir := filepath.Join(s.root, sanitize(name))
-	for _, sub := range []string{WorkDirName, legacyWorkDirName} {
-		d := filepath.Join(dir, sub)
-		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
-			return d
-		}
+	d := filepath.Join(s.root, sanitize(name), WorkDirName)
+	if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+		return d
 	}
 	return ""
 }

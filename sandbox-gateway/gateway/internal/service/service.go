@@ -39,11 +39,7 @@ type lbWaiter interface {
 
 // Config tunes the service orchestration.
 type Config struct {
-	Image string
-	// ProviderImages maps an agent provider name to a specific image ref.
-	ProviderImages map[string]string
-	// ImageTemplate derives a per-provider image by convention ("{provider}").
-	ImageTemplate string
+	Image         string
 	Ports         []int // public ports to publish (image config Public())
 	InternalPorts []int // cdp/novnc — cluster/container network only
 	SessionPort   int   // port used for the readiness probe (default 8765)
@@ -107,9 +103,8 @@ type CreateRequest struct {
 	Mounts       []string
 	Config       *driver.ConfigInject
 	Image        string // override image (optional; wins over provider mapping)
-	// Provider selects the agent CLI. When set (and Image is empty) the gateway
-	// may resolve a custom per-provider image, and injects AGENT_PROVIDER/ACP_BACKEND
-	// into the sandbox env when the caller did not set them.
+	// Provider selects the agent CLI. When set, the gateway injects
+	// AGENT_PROVIDER into the sandbox env when the caller did not set it.
 	Provider string
 	// Resources are optional per-sandbox limits; zeros use gateway defaults.
 	CPUCores float64
@@ -128,13 +123,7 @@ func (s *SandboxService) Create(_ context.Context, req CreateRequest) (*models.S
 	}
 
 	id := uuid.NewString()[:12]
-	// Resolve the image: explicit override > per-provider mapping > template >
-	// default. See config.ImageConfig.Resolve for the shared ordering.
-	image := config.ImageConfig{
-		Ref:        s.cfg.Image,
-		ByProvider: s.cfg.ProviderImages,
-		Template:   s.cfg.ImageTemplate,
-	}.Resolve(req.Image, req.Provider)
+	image := config.ImageConfig{Ref: s.cfg.Image}.Resolve(req.Image, req.Provider)
 	workspace := req.WorkspaceDir
 	if workspace == "" {
 		workspace = s.cfg.WorkspaceDir
@@ -156,14 +145,10 @@ func (s *SandboxService) Create(_ context.Context, req CreateRequest) (*models.S
 	// only survive the very first pod (Config lives in-memory on the request).
 	env := mergeEnv(req.Env, configInjectEnv(req.Config))
 	// When a provider is requested, make the sandbox select it at runtime too:
-	// set AGENT_PROVIDER (and the legacy ACP_BACKEND alias) unless the caller
-	// already provided them explicitly via env.
+	// set AGENT_PROVIDER unless the caller already provided it via env.
 	if req.Provider != "" {
 		if _, ok := env["AGENT_PROVIDER"]; !ok {
 			env["AGENT_PROVIDER"] = req.Provider
-		}
-		if _, ok := env["ACP_BACKEND"]; !ok {
-			env["ACP_BACKEND"] = req.Provider
 		}
 	}
 	sb.SetEnv(env)

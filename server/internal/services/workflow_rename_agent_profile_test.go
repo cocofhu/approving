@@ -43,7 +43,7 @@ func graphWithProfiles(profiles map[string]string) models.Graph {
 	return models.Graph{Nodes: nodes, Edges: edges}
 }
 
-func skillProfileOf(g models.Graph, nodeType string) string {
+func agentProfileOf(g models.Graph, nodeType string) string {
 	for _, n := range g.Nodes {
 		if n.Type != nodeType || n.Config == nil {
 			continue
@@ -101,15 +101,15 @@ func TestRenameAgentProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 		t.Fatal("missing wf-multi")
 	}
 	for _, typ := range []string{"research", "app_preview", "implement"} {
-		if skillProfileOf(got.Graph, typ) != neu {
-			t.Fatalf("%s agent_profile want %q got %q", typ, neu, skillProfileOf(got.Graph, typ))
+		if agentProfileOf(got.Graph, typ) != neu {
+			t.Fatalf("%s agent_profile want %q got %q", typ, neu, agentProfileOf(got.Graph, typ))
 		}
 	}
-	if skillProfileOf(got.Graph, "proposal") != "other-bot" {
-		t.Fatalf("unrelated profile rewritten: %q", skillProfileOf(got.Graph, "proposal"))
+	if agentProfileOf(got.Graph, "proposal") != "other-bot" {
+		t.Fatalf("unrelated profile rewritten: %q", agentProfileOf(got.Graph, "proposal"))
 	}
-	if skillProfileOf(got.Graph, "agent") != old+"-extra" {
-		t.Fatalf("substring profile rewritten: %q", skillProfileOf(got.Graph, "agent"))
+	if agentProfileOf(got.Graph, "agent") != old+"-extra" {
+		t.Fatalf("substring profile rewritten: %q", agentProfileOf(got.Graph, "agent"))
 	}
 	// No exact old-name residue.
 	for _, node := range got.Graph.Nodes {
@@ -125,21 +125,21 @@ func TestRenameAgentProfileRefs_multiNodeTypesExactReplace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version graph: %v", err)
 	}
-	if skillProfileOf(snap, "research") != neu || skillProfileOf(snap, "app_preview") != neu {
+	if agentProfileOf(snap, "research") != neu || agentProfileOf(snap, "app_preview") != neu {
 		t.Fatalf("version snapshot not rewritten: research=%q app_preview=%q",
-			skillProfileOf(snap, "research"), skillProfileOf(snap, "app_preview"))
+			agentProfileOf(snap, "research"), agentProfileOf(snap, "app_preview"))
 	}
 
 	restored, err := s.Restore("wf-multi", got.Version)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if skillProfileOf(restored.Graph, "research") != neu {
-		t.Fatalf("restore brought back old name: %q", skillProfileOf(restored.Graph, "research"))
+	if agentProfileOf(restored.Graph, "research") != neu {
+		t.Fatalf("restore brought back old name: %q", agentProfileOf(restored.Graph, "research"))
 	}
 
 	otherGot, _ := s.Get("wf-other")
-	if skillProfileOf(otherGot.Graph, "plan") != "planner" {
+	if agentProfileOf(otherGot.Graph, "plan") != "planner" {
 		t.Fatalf("unrelated workflow changed: %+v", otherGot.Graph)
 	}
 }
@@ -192,23 +192,23 @@ func TestRenameAgentProfileRefs_versionOnlyCountsAndSkipsRun(t *testing.T) {
 	}
 
 	def, _ := s.Get("wf-ver")
-	if skillProfileOf(def.Graph, "react") != "orchestrator" {
-		t.Fatalf("def current graph should stay orchestrator, got %q", skillProfileOf(def.Graph, "react"))
+	if agentProfileOf(def.Graph, "react") != "orchestrator" {
+		t.Fatalf("def current graph should stay orchestrator, got %q", agentProfileOf(def.Graph, "react"))
 	}
 	snap, err := s.VersionGraph("wf-ver", ver)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if skillProfileOf(snap, "react") != neu {
-		t.Fatalf("version snapshot want %q got %q", neu, skillProfileOf(snap, "react"))
+	if agentProfileOf(snap, "react") != neu {
+		t.Fatalf("version snapshot want %q got %q", neu, agentProfileOf(snap, "react"))
 	}
 
 	var runGot models.Run
 	if err := db.First(&runGot, "id = ?", "run-pin").Error; err != nil {
 		t.Fatal(err)
 	}
-	if skillProfileOf(runGot.Graph, "react") != old {
-		t.Fatalf("Run.Graph must not be rewritten, got %q", skillProfileOf(runGot.Graph, "react"))
+	if agentProfileOf(runGot.Graph, "react") != old {
+		t.Fatalf("Run.Graph must not be rewritten, got %q", agentProfileOf(runGot.Graph, "react"))
 	}
 }
 
@@ -253,16 +253,16 @@ func TestRenameAgentProfileRefs_keepsPublishedAndDraftStatus(t *testing.T) {
 	if gotPub.Version != pubVer {
 		t.Fatalf("version bumped %d → %d", pubVer, gotPub.Version)
 	}
-	if skillProfileOf(gotPub.Graph, "test") != neu {
-		t.Fatalf("pub profile not updated: %q", skillProfileOf(gotPub.Graph, "test"))
+	if agentProfileOf(gotPub.Graph, "test") != neu {
+		t.Fatalf("pub profile not updated: %q", agentProfileOf(gotPub.Graph, "test"))
 	}
 
 	gotDraft, _ := s.Get("wf-draft2")
 	if gotDraft.Status != "draft" {
 		t.Fatalf("draft promoted to %s", gotDraft.Status)
 	}
-	if skillProfileOf(gotDraft.Graph, "review") != neu {
-		t.Fatalf("draft profile not updated: %q", skillProfileOf(gotDraft.Graph, "review"))
+	if agentProfileOf(gotDraft.Graph, "review") != neu {
+		t.Fatalf("draft profile not updated: %q", agentProfileOf(gotDraft.Graph, "review"))
 	}
 }
 
@@ -289,43 +289,7 @@ func TestRenameAgentProfileRefs_failHookAbortsTransaction(t *testing.T) {
 		t.Fatalf("count on failure want 0, got %d", n)
 	}
 	got, _ := s.Get("wf-fail")
-	if skillProfileOf(got.Graph, "visual") != old {
-		t.Fatalf("graph should roll back to old name, got %q", skillProfileOf(got.Graph, "visual"))
-	}
-}
-
-func TestRenameAgentProfileRefs_legacyKey(t *testing.T) {
-	db := newTestDB(t)
-	s := NewWorkflowService(db)
-	wf := &models.WorkflowDef{
-		ID: "wf-legacy", ProjectID: models.DefaultProjectID, Name: "Legacy",
-		Graph: models.Graph{Nodes: []models.Node{
-			{ID: "in", Type: "input", Label: "S"},
-			{ID: "ag", Type: "agent", Label: "A", Config: map[string]any{"skill_profile": "old-bot"}},
-			{ID: "out", Type: "output", Label: "E"},
-		}, Edges: []models.Edge{
-			{ID: "e1", Source: "in", Target: "ag"},
-			{ID: "e2", Source: "ag", Target: "out"},
-		}},
-	}
-	if err := db.Create(wf).Error; err != nil {
-		t.Fatal(err)
-	}
-	n, err := s.RenameAgentProfileRefs("old-bot", "new-bot")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n != 1 {
-		t.Fatalf("count=%d", n)
-	}
-	got, ok := s.Get("wf-legacy")
-	if !ok {
-		t.Fatal("missing")
-	}
-	if models.AgentProfile(got.Graph.Nodes[1].Config) != "new-bot" {
-		t.Fatalf("got %#v", got.Graph.Nodes[1].Config)
-	}
-	if _, ok := got.Graph.Nodes[1].Config["skill_profile"]; ok {
-		t.Fatal("legacy key should be dropped")
+	if agentProfileOf(got.Graph, "visual") != old {
+		t.Fatalf("graph should roll back to old name, got %q", agentProfileOf(got.Graph, "visual"))
 	}
 }

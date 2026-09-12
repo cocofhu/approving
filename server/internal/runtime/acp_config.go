@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cocofhu/grasp/internal/config"
+	"github.com/cocofhu/grasp/internal/envauth"
 	"github.com/cocofhu/grasp/internal/models"
 	"github.com/cocofhu/grasp/internal/nodereg"
 	"github.com/cocofhu/grasp/internal/sandbox"
@@ -67,13 +68,9 @@ func EnvEnabled(value string) bool {
 	}
 }
 
-const (
-	agentWorkDirName       = "workspace"
-	legacyAgentWorkDirName = "cursor" // compatibility window; remove in 0.2.0
-)
+const agentWorkDirName = "workspace"
 
-// workDir returns the agent's on-disk working directory (workspace/ or legacy
-// cursor/) if it exists, for verbatim copy into the sandbox config root.
+// workDir returns the agent's on-disk workspace/ directory if it exists.
 func (c *acpProvider) workDir(profile string) string {
 	if profile == "" || c.opts.ProfilesRoot == "" {
 		return ""
@@ -82,11 +79,9 @@ func (c *acpProvider) workDir(profile string) string {
 	if err != nil {
 		return ""
 	}
-	for _, sub := range []string{agentWorkDirName, legacyAgentWorkDirName} {
-		d := filepath.Join(base, sub)
-		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
-			return d
-		}
+	d := filepath.Join(base, agentWorkDirName)
+	if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+		return d
 	}
 	return ""
 }
@@ -173,23 +168,8 @@ func (c *acpProvider) effectiveAgent(req NodeReq) agentFile {
 
 func overlayAgentFile(shared SharedAgentView, agent agentFile) agentFile {
 	out := agent
-	// Env: shared base, agent keys win.
-	sharedEnv := shared.Env
-	agentEnv := agent.Env
-	env := map[string]string{}
-	for k, v := range sharedEnv {
-		if strings.TrimSpace(k) == "" {
-			continue
-		}
-		env[k] = v
-	}
-	for k, v := range agentEnv {
-		if strings.TrimSpace(k) == "" {
-			continue
-		}
-		env[k] = v
-	}
-	out.Env = env
+	// Env: shared base, Agent overlay; Token keys keep shared when present.
+	out.Env = envauth.MergeEnvSharedTokenPriority(shared.Env, agent.Env)
 	// MCP by name
 	byName := map[string]agentMCP{}
 	order := make([]string, 0, len(shared.MCP)+len(agent.MCP))

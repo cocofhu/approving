@@ -200,7 +200,7 @@ func (c *ACPClient) wsURL() string {
 }
 
 // acpSessionCookieNames are Set-Cookie names accepted from POST /api/login.
-// Deployed universal-sandbox-* images use agentchat_session; older images and
+// Deployed universal-sandbox images use agentchat_session; older images and
 // local fakes still use cursor_acp_session.
 var acpSessionCookieNames = []string{"agentchat_session", "cursor_acp_session"}
 
