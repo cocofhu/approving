@@ -13,6 +13,7 @@ function read(...parts: string[]) {
 
 /** Entry + panel shells + orchestration composables (Demo「入口只装配」拆分后的源码图). */
 const viewSrc = read('views/RunDetailView.vue')
+const viewModeSwitcherSrc = read('components/run/RunViewModeSwitcher.vue')
 const gatePanelSrc = read('components/run/RunGatePanel.vue')
 const logPanelSrc = read('components/run/RunLogPanel.vue')
 const sandboxPanelSrc = read('components/run/RunSandboxPanel.vue')
@@ -25,6 +26,7 @@ const detailOrchestrationSrc = read('lib/run/useRunDetail.ts')
 
 const src = [
   viewSrc,
+  viewModeSwitcherSrc,
   detailOrchestrationSrc,
   gatePanelSrc,
   logPanelSrc,
@@ -37,7 +39,7 @@ const src = [
 ].join('\n')
 
 /** View shell + extracted orchestration (post structure-sink). */
-const viewOrchestrationSrc = viewSrc + '\n' + detailOrchestrationSrc
+const viewOrchestrationSrc = viewSrc + '\n' + detailOrchestrationSrc + '\n' + viewModeSwitcherSrc
 
 describe('RunDetailView delete run', () => {
   it('exposes delete button, disabled hint, and confirm modal wiring', () => {
@@ -355,11 +357,28 @@ describe('RunDetailView desktop outer sash layout (all node tabs)', () => {
     expect(viewOrchestrationSrc).toMatch(/fullOpen/)
   })
 
-  it('moves view-mode switcher off the outer sash hit target when full-open', () => {
-    expect(viewSrc).toMatch(/data-testid="run-detail-view-mode-switcher"/)
-    expect(viewSrc).toMatch(/outerFullOpen/)
-    expect(viewSrc).toMatch(/md:left-5 md:z-\[1\]/)
-    expect(viewSrc).toMatch(/md:left-3 md:z-10/)
+  it('keeps view-mode switcher inside left pane on default split and above node tabs when full-open (g1)', () => {
+    // plan g1.1 / g1.3: default split mounts switcher inside left canvas/timeline with overflow clip
+    expect(viewSrc).toMatch(/data-testid="run-detail-left-pane"/)
+    expect(viewSrc).toMatch(/overflow-hidden border-r border-line md:block/)
+    // timeline relies on leftPaneStyle.overflow=hidden (desktop); class must stay free of Tailwind `hidden`
+    expect(viewSrc).toMatch(/data-testid="run-timeline-pane"/)
+    expect(viewOrchestrationSrc).toMatch(/overflow: 'hidden'/)
+    expect(viewSrc).toMatch(/RunViewModeSwitcher/)
+    // plan g1.2: full-open mounts switcher in right panel document flow above AppTabs
+    expect(viewSrc).toMatch(/v-if="!isMobile && outerFullOpen"/)
+    expect(viewSrc).toMatch(/data-testid="run-detail-right-panel"[\s\S]*?run-detail-view-mode-switcher[\s\S]*?AppTabs/)
+    // Must not float over the whole split with left-5 (old overlay that covered node tabs)
+    expect(viewSrc).not.toMatch(/md:left-5 md:z-\[1\]/)
+    expect(viewSrc).not.toMatch(/md:absolute md:top-3 md:border-0 md:bg-transparent md:p-0/)
+  })
+
+  it('renders only one view-mode switcher mount at a time (g1.3)', () => {
+    // Mutually exclusive branches: mobile | stats | left(!fullOpen) | right(fullOpen)
+    expect(viewSrc).toMatch(/v-if="isMobile"[\s\S]*?run-detail-view-mode-switcher/)
+    expect(viewSrc).toMatch(/v-else-if="viewMode === 'stats'"[\s\S]*?run-detail-view-mode-switcher/)
+    expect(viewSrc).toMatch(/v-if="!outerFullOpen"[\s\S]*?run-detail-view-mode-switcher/)
+    expect(viewSrc).toMatch(/v-if="!isMobile && outerFullOpen"[\s\S]*?run-detail-view-mode-switcher/)
   })
 
   it('hides outer sash on mobile (no horizontal drag)', () => {
