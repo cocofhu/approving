@@ -4,6 +4,13 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.5.4 — 2026-09-13
+
+- Revert high-contrast origin-fill button hover (#576 / #581); restore prior
+  button hover styling.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.5.4`.
+
 ## 0.5.3 — 2026-09-13
 
 - **Fix:** `publish-image` can build again. Web `npm run build` runs the brand
