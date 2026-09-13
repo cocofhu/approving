@@ -799,15 +799,12 @@ button::before {
   margin-top: calc(var(--or) / -2);
   border-radius: 50%;
   pointer-events: none;
-  z-index: 0;
+  /* isolation:isolate + z-index:-1 keeps cover above the button background but
+     under ALL content, including bare text nodes / default slots (not only element children). */
+  z-index: -1;
   transform: scale(0);
   transition: transform var(--dur-origin-fill) var(--ease-out-expo);
   background: rgb(var(--origin-fill-cover));
-}
-
-button > * {
-  position: relative;
-  z-index: 1;
 }
 
 button.is-filled {

@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   coverDiameter,
@@ -7,6 +9,14 @@ import {
   shouldSkipOriginFill,
   uninstallOriginFill,
 } from './originFill'
+
+/** Stacking contract (review v1/v3): ::before under all content including bare text nodes. */
+function originFillCssBlock(): string {
+  const css = readFileSync(resolve(__dirname, '../../styles/global.css'), 'utf8')
+  const start = css.indexOf('/* ---------- Button origin-fill')
+  expect(start).toBeGreaterThanOrEqual(0)
+  return css.slice(start)
+}
 
 function dispatchPointer(type: 'pointerenter' | 'pointerleave', target: EventTarget, init: PointerEventInit = {}) {
   const event = new PointerEvent(type, {
@@ -185,5 +195,55 @@ describe('originFill', () => {
     document.body.appendChild(btn)
     uninstallOriginFill()
     expect(btn.classList.contains('is-filled')).toBe(false)
+  })
+
+  it('CSS stacks ::before under bare text (z-index:-1, no button>* lift) (g1.1 / FR-f1)', () => {
+    const block = originFillCssBlock()
+    expect(block).toMatch(/button::before\s*\{[^}]*z-index:\s*-1/s)
+    expect(block).not.toMatch(/button\s*>\s*\*\s*\{/)
+    expect(block).not.toMatch(/z-index:\s*0/)
+  })
+
+  it('is-filled keeps bare text node label in the accessibility name (g2.3 / review v1)', () => {
+    installOriginFill()
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.appendChild(document.createTextNode('Bare text'))
+    Object.defineProperty(btn, 'clientWidth', { value: 96 })
+    Object.defineProperty(btn, 'clientHeight', { value: 32 })
+    btn.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 96, height: 32, right: 96, bottom: 32, x: 0, y: 0, toJSON() { return {} } }) as DOMRect
+    document.body.appendChild(btn)
+
+    dispatchPointer('pointerenter', btn, { clientX: 8, clientY: 8 })
+    expect(btn.classList.contains('is-filled')).toBe(true)
+    // Label must remain a direct text node (not only element children) and stay exposed.
+    expect([...btn.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.includes('Bare text'))).toBe(
+      true,
+    )
+    expect(btn.textContent).toContain('Bare text')
+    expect(btn.getAttribute('aria-hidden')).toBeNull()
+  })
+
+  it('is-filled keeps icon element + sibling text label readable (g2.3 / review v1)', () => {
+    installOriginFill()
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    const icon = document.createElement('span')
+    icon.setAttribute('aria-hidden', 'true')
+    icon.textContent = '★'
+    btn.appendChild(icon)
+    btn.appendChild(document.createTextNode('编辑'))
+    Object.defineProperty(btn, 'clientWidth', { value: 88 })
+    Object.defineProperty(btn, 'clientHeight', { value: 32 })
+    btn.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 88, height: 32, right: 88, bottom: 32, x: 0, y: 0, toJSON() { return {} } }) as DOMRect
+    document.body.appendChild(btn)
+
+    dispatchPointer('pointerenter', btn, { clientX: 6, clientY: 6 })
+    expect(btn.classList.contains('is-filled')).toBe(true)
+    expect(btn.textContent).toContain('★')
+    expect(btn.textContent).toContain('编辑')
+    expect([...btn.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.includes('编辑'))).toBe(true)
   })
 })
