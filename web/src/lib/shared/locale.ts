@@ -73,6 +73,14 @@ export async function setLocale(next: AppLocale): Promise<void> {
 }
 
 let initPromise: Promise<void> | null = null
+/** Last titleKey from router/App; remembered so initLocale can refresh after messages load. */
+let currentTitleKey: string | undefined
+
+function translationsReady(titleKey: string | undefined): boolean {
+  if (!i18n.global.te('shell.appName')) return false
+  if (titleKey && !i18n.global.te(titleKey)) return false
+  return true
+}
 
 export function initLocale(): Promise<void> {
   if (!initPromise) {
@@ -85,6 +93,9 @@ export function initLocale(): Promise<void> {
       i18n.global.locale.value = initial
       locale.value = initial
       applyHtmlLocale(initial)
+      // Cold start: locale string often stays zh-CN, so App.vue watch will not re-run.
+      // Force-refresh once messages exist so document.title never sticks on raw keys.
+      updateDocumentTitle(currentTitleKey)
 
       const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 200))
       idle(() => prefetchLocale(otherLocale(initial)))
@@ -94,6 +105,10 @@ export function initLocale(): Promise<void> {
 }
 
 export function updateDocumentTitle(titleKey: string | undefined) {
+  currentTitleKey = titleKey
+  // Messages may still be empty (mount before initLocale). Keep HTML placeholder;
+  // never write raw i18n keys like "route.login · shell.appName" into the tab.
+  if (!translationsReady(titleKey)) return
   const appName = i18n.global.t('shell.appName')
   document.title = titleKey ? `${i18n.global.t(titleKey)} · ${appName}` : appName
 }
