@@ -1,8 +1,8 @@
 # Grasp
 
-**Agent 工作流与人类协同推进，开启多 Agent 协作新范式。**
+**用 FSM 编排 coding agent：看得见的路径、可回滚的失败、人一眼看懂再批。**
 
-Grasp 是一个开源、可自托管的多 Agent 工作流平台。它把 coding agent 编排成可视化、可审查、可回滚的交付流程：Agent 在真实 Docker 沙箱中执行，关键节点由人 **Approve** 后再继续。
+多数多 Agent 方案把路径藏在对话里：一条聊天、一条幸福路径，失败了只能重问。Grasp 把路径做成**有限状态机**。你在画布上设计成功、失败与回滚；Agent 在 Docker 沙箱里跑这些状态；人只在显式门禁进入——审批看的是澄清规格和 `page.html` 预览，而不是整段对话。
 
 [项目站](https://www.approving-ai.com/) · [快速开始](https://www.approving-ai.com/guide/quick-start/) · [贡献指南](CONTRIBUTING.md) · [配置](server/CONFIGURATION.md)
 
@@ -20,66 +20,95 @@ Grasp 是一个开源、可自托管的多 Agent 工作流平台。它把 coding
 
 > 当前版本为公开 Beta。需要 Linux 宿主和 Docker Compose。默认起栈只需 Grasp 与 Gateway；沙箱只有一张 `universal-sandbox` 镜像，拉取一次即可。
 
-## 为什么需要 Grasp？
+## 为什么是 FSM，而不是又一个 Agent 对话
 
-单 Agent 的 Vibe Coding 擅长完成一次任务，但当需求扩展到调研、方案、实现、测试和评审时，新的瓶颈会出现：
+单 Agent 擅长完成一次任务。把多个 Agent 串起来之后，三件事会一起坏：
 
-- 协作过程藏在对话中，难以复用和审计；
-- 多个 Agent 并行后，人的理解与审核速度限制整体吞吐；
-- Agent 之间缺少稳定、可验证的产物交接；
-- 高风险操作缺少明确的人类决策点；
-- 失败通常依赖人工重试，缺少显式的恢复与回滚路径。
+- **路径**活在 Prompt 里，无法复用、审计、恢复；
+- **失败**等于「再问一遍」，而不是回到设计好的 checkpoint；
+- **人**跟不上并行中的多条 run——除非每个待审状态都是可视化、结构化的。
 
-Grasp 在 Agent 之上提供一层 Harness：用 FSM 设计路径，用沙箱隔离执行，用 MCP 交接产物，并把人工审批变成工作流中的一等节点。
+Grasp 的赌注：Agent 可以很快，但工作流必须是一台你设计过的机器。
+
+```text
+                    ┌──── 失败 / 回滚（恢复 checkpoint）────┐
+                    ▼                                       │
+一句话 → Grasp → 视觉 page.html → 人工门禁 → 实现 → 测试 → 评审 → PR
+   ▲                 ▲                    │
+   └──── 退回修改 ───┴────────────────────┘
+```
+
+节点即状态。边即转移（`success` / `fail` / `rollback`），可加 `when` 守卫。Checkpoint 会快照变量，重试是一次状态迁移，而不是新开一轮聊天。
+
+## 差异化在哪里
+
+### 1. 先设计路径
+
+在 Vue Flow 画布上组装机器：Input、Grasp、角色 Agent、Visual、Branch、人工门禁、应用预览、Output。
+
+- **成功 / 失败 / 回滚**是一等边，不是 Prompt 里的备注。
+- **`when` 守卫**和 **Branch**（if / else-if / else）按产物、JSON 字段和输出分流。
+- **Checkpoint** 标记可安全重入的点；回滚恢复变量快照并注入错误上下文。
+- **状态轨迹**记录进入 / 退出 / 转移 / 回滚——一次 run 可被审查。
+
+这和一次性 Agent 相反：路径在有人说出目标之前就已经存在。
+
+### 2. 人是状态，不是旁观者
+
+某一步需要决策时，FSM **停住**。门禁出现在收件箱和运行详情。审批人对照结构化产物——澄清规格、计划、`page.html` 预览——确认后，机器沿你画好的边继续。
+
+他们不必跟踪每一次工具调用。多条 run 可以停在不同门禁；人扫一眼可视化产物，并行审批。
+
+### 3. 可视化澄清让每个状态都看得懂
+
+首页用一句话（或截图 / 文档）启动一次**开发前 Grasp**。该节点是不限轮次的 ReAct：没有 Prompt 模板，用户先说目标，Agent 用工具对齐需求，只在真正有分歧时 `ask_question`。
+
+节点结束必须交出：
+
+1. `clarified_requirement.json` — 结构化的 WHAT
+2. `plan.json` — 最多两级的短计划
+
+可选：调研、方案、可运行预览，以及贴合现有前端的自包含 `page.html`。门禁用 iframe 渲染页面，待审状态是可以*看见*的。
+
+### 4. 产物驱动转移
+
+每次 run 有隔离的 artifact MCP。Agent 用 `write_artifact`、`set_*`、`node_complete` 写入。引擎不会因为模型「觉得做完了」就往前走——必要产物必须存在（`when` 也可以读这些产物）。交接是契约，不是粘贴对话。
+
+### 5. 沙箱执行，后端可换
+
+Agent 状态通过内置 `sandbox-gateway` 在 Docker 中运行。同一条工作流可混用 Cursor、Claude Code、CodeBuddy、Trae、OpenCode。密钥留在 Agent env，不进平台镜像。
 
 ## 核心能力
 
-### 可视化 FSM 编排
+| 能力 | 在 FSM 里的位置 |
+|---|---|
+| 可视化画布 | 节点 + 成功 / 失败 / 回滚 + `when` + checkpoint |
+| 可视化澄清 | Grasp 节点 → 规格 + 计划 + 可选 `page.html` |
+| 人工门禁 | 收件箱、运行详情、可分享的临时链接 |
+| 并行 run | 多台机器同时跑；人在一个收件箱里审批 |
+| Artifact MCP | 按 run 隔离；必要产物卡住转移 |
+| Git 交付 | 沙箱内 `gh` / `glab` / SSH |
+| 可观测 | 时间线、沙箱日志、产物、Token |
 
-通过 Vue Flow 画布编排 agent、react 和 gate 节点。边可以表达成功、失败与回滚路径，并可结合 `when` 守卫和 checkpoint 控制流程。
-
-### Human-in-the-loop 门禁
-
-工作流可以在方案选择、视觉验收、发布确认等节点暂停。审批者查看结构化产物后，可批准、拒绝或退回修改，而不必持续跟踪 Agent 的每一步执行。
-
-### 真实 Docker 沙箱
-
-agent / react 节点通过仓库内置的 `sandbox-gateway` 在独立容器中运行。平台统一管理沙箱生命周期，ACP bridge 负责连接不同 Agent 后端。
-
-### 多 Agent 后端
-
-同一套工作流可使用：
-
-- Cursor
-- Claude Code
-- CodeBuddy
-- Trae
-
-每个 Agent 独立选择 `acpBackend`，密钥放在 Agent 元信息 env 中，不写入平台镜像。
-
-### Run 级产物契约
-
-每次 run 拥有隔离的 artifact MCP 和 token。Agent 使用 `write_artifact`、`read_artifact`、`set_*`、`node_complete` 等工具完成结构化交接；平台在节点结束前检查必要产物是否存在。
-
-### Git 与交付
-
-GitHub、GitLab 或 SSH 凭据可按 Agent 注入沙箱，值支持 `${vars.<name>}` 引用。GitLab 可通过 `glab` 创建 MR；GitHub PR 由 Agent 在沙箱内使用 `gh` 创建。
-
-### 运行观测
-
-通过运行详情、执行时间线、沙箱日志、产物、待审批收件箱和 Token 统计查看任务状态与资源消耗。
+仓库内提供 Clarify、Visual、Research、Proposal、Plan、Implement、Test、Preview、Review 等角色包。用 `agents/pack.sh` 打包后导入 Agent Studio。
 
 ## 典型工作流
 
-一个完整的软件交付流程可以拆分为：
+短的开发前闭环：
 
 ```text
-需求澄清 → 技术调研 → 方案设计 → 人工审批
+一句话 → Grasp（澄清 / 计划 / page.html）→ 人工门禁 → 开工
+```
+
+更完整的交付机器：
+
+```text
+需求澄清 → 技术调研 → 方案设计 → 人工门禁
         → 执行计划 → 代码实现 → 测试验证 → 代码评审
         → 人工确认 → PR / MR
 ```
 
-仓库内提供 Clarify、Visual、Research、Proposal、Plan、Implement、Test、Preview、Review 等角色 Agent 包，可通过 `agents/pack.sh` 打包后导入 Agent Studio。
+失败边和回滚边画在同一张画布上。下一次失败应该走你已经设计好的路径。
 
 ## 快速开始
 
@@ -123,15 +152,28 @@ cd approving
 
 1. 使用本地演示账号登录。全新安装默认是空项目，不会自动创建样例流水线。
 2. 在 **Agent Studio** 创建 Agent，选择 `cursor`、`claude_code`、`codebuddy`、`trae` 或 `opencode`，并配置对应 API Key。
-3. 新建工作流，在画布中连接 Agent 节点、成功/失败边、回滚路径与人工 gate。
-4. 发布并启动 run，观察沙箱执行、MCP 产物和待审批节点。
+3. 打开画布：把 Grasp 接到开始节点，再接 Visual / 门禁 / 实现。画出成功、失败与回滚，并在该重入的地方标 checkpoint。
+4. 发布并启动 run（也可从**首页**用一句话启动）。观察状态轨迹、`page.html` 预览，以及停在门禁上的收件箱项。
 
 后端鉴权和 Agent env 配置详见 [`server/README.md`](server/README.md)。
 
 ## 系统架构
 
-- `web/`：Vue 3 + Vue Flow，负责画布、运行详情、审批与 Agent Studio。
-- `server/`：Go 后端，负责 FSM 引擎、API、SQLite、artifact MCP、调度与审计。
+```text
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│ Vue 3 + Vue Flow │────▶│ Go 后端          │────▶│ sandbox-gateway  │
+│ FSM 画布         │◀────│ 引擎 + API + MCP │◀────│ 控制面           │
+└──────────────────┘     └────────┬─────────┘     └────────┬─────────┘
+                                  │                        │
+                                  │                        ▼
+                                  │               ┌──────────────────┐
+                                  └──────────────▶│ Docker 沙箱      │
+                                    产物           │ ACP 后端         │
+                                                  └──────────────────┘
+```
+
+- `web/`：Vue 3 + Vue Flow，负责画布、首页澄清、运行详情、收件箱与 Agent Studio。
+- `server/`：Go FSM 引擎、API、SQLite、artifact MCP、调度与审计。
 - `sandbox-gateway/gateway/`：沙箱生命周期控制面。
 - `sandbox-gateway/sandbox/`：通用沙箱镜像与 ACP bridge。
 - `agents/`：可导入的角色 Agent 工作区。
@@ -156,6 +198,7 @@ cd approving
 - 发布环境建议使用 digest 固定镜像，参考 [Release images and smoke](CONTRIBUTING.md#release-images-and-smoke)。
 - 项目仍处于 Beta 阶段，请在实际环境中完成安全评估、备份和容量验证。
 - **反向代理 Host：** 临时审批分享链接按本请求的 `Host` 铸造（不信任客户端 `X-Forwarded-Host`）。代理须保留浏览器原始 Host（如 nginx `proxy_set_header Host $host`）；TLS 终止时正确转发 `X-Forwarded-Proto`。详见 [`SECURITY.md`](SECURITY.md)。
+- **数据库与附件同生命周期：** 发布 Compose 把 SQLite（`./.localdata/db`）和附件（`./.localdata/app-data`）分开挂载。备份和清理要成对进行（若自定义了 `GRASP_BLOBS_ROOT` 也要一起带上）；否则 Run 输入可能仍引用 `blob:`，而 `GET /api/blobs/:id` 返回 404。历史孤儿只在 UI 里显示为永久占位，本版本不提供孤儿扫描。详见 [快速开始 · 数据库与附件](docs/content/guide/quick-start.md#数据库与附件同生命周期备份--清理)。
 
 ## 文档
 
