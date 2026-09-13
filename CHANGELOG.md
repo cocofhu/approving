@@ -4,6 +4,30 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.5.2 — 2026-09-13
+
+- Clear remaining product Approving brand identifiers (storage keys, MIME,
+  preview-pick path, doctor header, sandbox prefixes, fixtures) to grasp with
+  one-shot read-old-write-new migration; add a CI brand guard. GitHub repo URLs
+  are unchanged.
+- Clarify composer: unanswered ask_question cards send text/images as a fixed
+  three-line skip envelope instead of applying recommended choices.
+- ReAct empty/failed idle slots stay visible with a trailing-turn retry; later
+  turns hide retry so the API is not called on a buried failure.
+- Restore the connecting preview tab with HardLoadLayer; connecting→ready no
+  longer flashes HardLoadLayer or the pipeline grid.
+- Keep the Run detail canvas/timeline switcher in the left pane (no overlay on
+  right-side node tabs).
+- Agent Studio: move import / new agent / create-team into the AGENTS list
+  header; reclaim vertical space below the org list.
+- Settings general no longer duplicates platform rules and integrations cards
+  (still reachable via settings subnav).
+- High-contrast origin-fill hover on buttons; login tab title waits for locale
+  so it shows 登录/Login · Grasp instead of raw i18n keys; zh-CN shared agent
+  project tab label is「共享Agent配置」.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.5.2`.
+
 ## 0.5.1 — 2026-09-13
 
 - **Fix:** Grasp now injects `AGENT_PROVIDER` (and no longer `ACP_BACKEND`) so
