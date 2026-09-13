@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/ui/Icon.vue'
 import ClarifyBootLoader from './ClarifyBootLoader.vue'
+import HardLoadLayer from './HardLoadLayer.vue'
 
 withDefaults(
   defineProps<{
@@ -18,6 +20,16 @@ withDefaults(
 )
 
 const { t } = useI18n()
+
+/** Boot-class threshold: connecting has no REST retry; do not use the 10s default. */
+const CONNECT_PREVIEW_STUCK_MS = 60_000
+
+type ConnectingStageTab = 'pipeline' | 'preview'
+const stageTab = ref<ConnectingStageTab>('preview')
+
+function selectStageTab(tab: ConnectingStageTab) {
+  stageTab.value = tab
+}
 </script>
 
 <template>
@@ -27,22 +39,68 @@ const { t } = useI18n()
     data-testid="react-connecting-stage"
     aria-busy="true"
   >
-    <!-- plan g2.1: match ReactArtifactStage chrome — only pipeline tab, no fake previewTab -->
-    <div class="flex shrink-0 gap-1 border-b border-line px-3 py-2" data-testid="react-connecting-stage-tabs">
-      <span
-        class="rounded-md bg-elevated px-2.5 py-1 text-[11px] text-txt2"
+    <div
+      class="flex shrink-0 gap-1 border-b border-line px-3 py-2"
+      data-testid="react-connecting-stage-tabs"
+      role="tablist"
+    >
+      <button
+        type="button"
+        role="tab"
+        class="rounded-md px-2.5 py-1 text-[11px] transition"
+        :class="
+          stageTab === 'pipeline'
+            ? 'bg-elevated text-txt2'
+            : 'text-txt3 hover:bg-elevated/60 hover:text-txt2'
+        "
+        :aria-selected="stageTab === 'pipeline' ? 'true' : 'false'"
         data-testid="react-connecting-tab-pipeline"
+        @click="selectStageTab('pipeline')"
       >
         {{ t('pages.reactArtifactStage.pipelineTab') }}
-      </span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="rounded-md px-2.5 py-1 text-[11px] transition"
+        :class="
+          stageTab === 'preview'
+            ? 'bg-elevated text-txt2'
+            : 'text-txt3 hover:bg-elevated/60 hover:text-txt2'
+        "
+        :aria-selected="stageTab === 'preview' ? 'true' : 'false'"
+        data-testid="react-connecting-tab-preview"
+        @click="selectStageTab('preview')"
+      >
+        {{ t('pages.reactArtifactStage.previewTab') }}
+      </button>
     </div>
-    <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-5 text-center">
+    <div
+      v-if="stageTab === 'pipeline'"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-5 text-center"
+      data-testid="react-connecting-pipeline-skeleton"
+    >
       <div class="w-full max-w-[420px] space-y-2" aria-hidden="true">
         <div class="h-28 animate-pulse rounded-md bg-elevated" />
         <div class="h-2.5 w-4/5 animate-pulse rounded bg-elevated" />
         <div class="h-2.5 w-1/2 animate-pulse rounded bg-elevated" />
       </div>
       <p class="text-[11px] text-txt3">{{ t('pages.clarify.connectingStageHint') }}</p>
+    </div>
+    <div
+      v-else
+      class="relative min-h-0 flex-1"
+      data-testid="react-connecting-preview-surface"
+    >
+      <HardLoadLayer
+        :overlay="false"
+        :show-retry="false"
+        :stuck-after-ms="CONNECT_PREVIEW_STUCK_MS"
+        :stage="t('pages.artifactPreview.loading')"
+      />
+      <p class="px-4 pb-4 text-center text-[11px] text-txt3">
+        {{ t('pages.clarify.connectingStageHint') }}
+      </p>
     </div>
   </div>
 
