@@ -552,10 +552,25 @@ const (
 	ChoiceReplyPrefixEN = "My choices:"
 )
 
+// Skip-envelope first lines (zh-CN + en). Composer send while ask_question is
+// unanswered wraps human.text as three lines: skip label / user-reply label /
+// original body. Must not be treated as IsChoiceReply.
+const (
+	SkipReplyPrefixZH = "回答已跳过"
+	SkipReplyPrefixEN = "Answers skipped"
+)
+
 // IsChoiceReply reports whether text is a structured choice-card summary
 // (not free-text). Prefix match is exact at the start — same as the UI.
 func IsChoiceReply(text string) bool {
 	return strings.HasPrefix(text, ChoiceReplyPrefixZH) || strings.HasPrefix(text, ChoiceReplyPrefixEN)
+}
+
+// IsSkipReply reports whether text is a composer skip envelope (not a choice
+// summary). Match requires the label followed by a newline so a free-text line
+// that merely mentions the phrase is not treated as skip.
+func IsSkipReply(text string) bool {
+	return strings.HasPrefix(text, SkipReplyPrefixZH+"\n") || strings.HasPrefix(text, SkipReplyPrefixEN+"\n")
 }
 
 // FormatChoiceReply builds the human reply text an auto-select would submit,

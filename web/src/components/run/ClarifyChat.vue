@@ -58,6 +58,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
+  (e: 'retry-last'): void
   (e: 'finish'): void
   (e: 'cancel'): void
   (e: 'queue-remove', itemId: string | undefined, index: number): void
@@ -135,6 +136,11 @@ const {
   isThoughtOpen,
   onThoughtToggle,
   showTurnCompleted,
+  isRetryableFailedAgent,
+  emptyFailDisplayText,
+  showFailRetry,
+  failRetryDisabled,
+  retryLastFailed,
   showAnnotationChips,
   persistedTurns,
   inputPlaceholder,
@@ -370,7 +376,7 @@ const {
             </details>
             <!-- Message body + streaming caret -->
             <div
-              v-if="agentHasMessage(t)"
+              v-if="agentHasMessage(t) && !isRetryableFailedAgent(t)"
               class="md rounded-lg border border-line bg-elevated px-3 py-2 text-[13px] leading-relaxed text-txt"
               data-testid="clarify-agent-message"
             >
@@ -382,6 +388,44 @@ const {
                 data-testid="clarify-stream-caret"
                 aria-hidden="true"
               />
+            </div>
+            <!-- Empty / failure card + cover-retry (plan g1.1 / g1.2) -->
+            <div
+              v-else-if="isRetryableFailedAgent(t)"
+              class="rounded-lg flex max-w-full flex-col gap-2 border border-err/35 bg-err/10 px-3 py-2.5"
+              role="alert"
+              data-testid="clarify-empty-fail"
+            >
+              <div class="flex items-start gap-2">
+                <Icon name="alert" :size="16" class="mt-0.5 shrink-0 text-err" />
+                <div class="min-w-0">
+                  <div class="text-[13px] font-semibold text-err">
+                    {{ translate('pages.clarify.emptyFailTitle') }}
+                  </div>
+                  <div
+                    class="mt-0.5 break-words text-xs text-txt2 [overflow-wrap:anywhere]"
+                    data-testid="clarify-empty-fail-desc"
+                  >
+                    {{
+                      emptyFailDisplayText(
+                        t,
+                        translate('pages.clarify.emptyFailDesc'),
+                      )
+                    }}
+                  </div>
+                </div>
+              </div>
+              <div v-if="showFailRetry(t, i)">
+                <button
+                  type="button"
+                  class="rounded-md border border-err/40 bg-transparent px-2.5 py-1 text-xs text-err hover:bg-err/15 disabled:opacity-50"
+                  :disabled="failRetryDisabled"
+                  data-testid="clarify-empty-fail-retry"
+                  @click="retryLastFailed"
+                >
+                  {{ translate('pages.clarify.retry') }}
+                </button>
+              </div>
             </div>
             <!-- Restrained completion footnote (Demo); never for interrupted/error -->
             <div

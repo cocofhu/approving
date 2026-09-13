@@ -115,6 +115,9 @@ type reactReplyBody struct {
 	// up and the node completes regardless of any further questions. For a
 	// review node force=true is "确认并流转"; force=false is one in-place edit.
 	Force bool `json:"force"`
+	// RetryLast re-runs the latest human turn without inserting another human
+	// row (cover-this-turn retry after an empty/failed agent reply).
+	RetryLast bool `json:"retryLast"`
 }
 
 func (h *Handlers) ReactReply(c *gin.Context) {
@@ -124,7 +127,17 @@ func (h *Handlers) ReactReply(c *gin.Context) {
 		return
 	}
 	runID, nodeID := c.Param("id"), c.Param("nodeId")
-	if err := h.Eng.ReactReply(runID, nodeID, b.Text, b.Images, b.Annotations, b.Force); err != nil {
+	var err error
+	if b.RetryLast {
+		if b.Force {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "retryLast cannot be combined with force"})
+			return
+		}
+		err = h.Eng.ReactReplyRetryLast(runID, nodeID)
+	} else {
+		err = h.Eng.ReactReply(runID, nodeID, b.Text, b.Images, b.Annotations, b.Force)
+	}
+	if err != nil {
 		_ = c.Error(err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

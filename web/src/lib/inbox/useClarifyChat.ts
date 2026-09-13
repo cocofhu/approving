@@ -4,6 +4,12 @@ import { renderMarkdown } from '@/lib/shared/markdown'
 import { createStreamMarkdownPreview } from '@/lib/shared/streamMarkdownPreview'
 import { createStreamTextReveal } from '@/lib/run/streamTextReveal'
 import { mergePersistedAndLiveTurns, persistedCompletedLiveHuman } from '@/lib/inbox/mergeClarifyLiveTurns'
+import {
+  emptyFailDisplayText,
+  isEmptyFailedAgent,
+  isFailureAssistantText,
+  isRetryableFailedAgent,
+} from '@/lib/inbox/clarifyEmptyFail'
 import { relTime } from '@/lib/shared/format'
 import {
   demoGridColsClass,
@@ -72,6 +78,7 @@ export type ClarifyChatProps = {
 
 export type ClarifyChatEmit = {
   (e: 'send', text: string, images: ClarifyImage[], annotations: ReactAnnotation[]): void
+  (e: 'retry-last'): void
   (e: 'finish'): void
   (e: 'cancel'): void
   (e: 'queue-remove', itemId: string | undefined, index: number): void
@@ -116,12 +123,6 @@ const showAnnotationChips = computed(() => props.reviewMode || props.annotateEna
 const { t: translate, locale } = useI18n()
 
 const persistedTurns = computed(() => props.turns ?? [])
-
-const inputPlaceholder = computed(() => {
-  if (props.reviewMode) return translate('pages.clarify.reviewInputPlaceholder')
-  if (props.nodeType === 'approve') return translate('pages.clarify.approveInputPlaceholder')
-  return translate('pages.clarify.inputPlaceholder')
-})
 
 const thinking = ref(false)
 /** Review confirm mid-state: re-validating product (not Agent thinking). */
@@ -310,6 +311,13 @@ onBeforeUnmount(() => {
 /** Legacy zh-CN prefix for messages persisted before i18n. */
 const LEGACY_CHOICE_PREFIX = '我的选择:'
 const choicePrefix = computed(() => translate('pages.clarify.choicePrefix'))
+/** Skip-envelope first line (zh / en) — not a choice reply. */
+const LEGACY_SKIP_PREFIX = '回答已跳过'
+const LEGACY_SKIP_USER_LABEL = '用户回复'
+const SKIP_PREFIX_EN = 'Answers skipped'
+const SKIP_USER_LABEL_EN = 'User reply'
+const skipPrefix = computed(() => translate('pages.clarify.skipPrefix'))
+const skipUserReplyLabel = computed(() => translate('pages.clarify.skipUserReplyLabel'))
 
 function textHasChoicePrefix(text: string): boolean {
   return text.startsWith(choicePrefix.value) || text.startsWith(LEGACY_CHOICE_PREFIX)
@@ -325,6 +333,38 @@ function isChoiceReply(text: string): boolean {
   return !!text && textHasChoicePrefix(text)
 }
 
+function textHasSkipPrefix(text: string): boolean {
+  if (!text) return false
+  return (
+    text.startsWith(skipPrefix.value + '\n') ||
+    text.startsWith(LEGACY_SKIP_PREFIX + '\n') ||
+    text.startsWith(SKIP_PREFIX_EN + '\n')
+  )
+}
+
+function isSkipReply(text: string): boolean {
+  return textHasSkipPrefix(text)
+}
+
+/** Three-line skip envelope: label / user-label / original (may be empty or multiline). */
+function formatSkipReply(userText: string): string {
+  return `${skipPrefix.value}\n${skipUserReplyLabel.value}\n${userText}`
+}
+
+/**
+ * A human turn / queue item that closes the current ask_question card:
+ * structured choice, skip envelope, free text, or any attachment.
+ */
+function closesQuestionRound(
+  text: string,
+  images?: ClarifyImage[] | null,
+  anns?: ReactAnnotation[] | null,
+): boolean {
+  if (isChoiceReply(text) || isSkipReply(text)) return true
+  if ((images?.length || 0) > 0 || (anns?.length || 0) > 0) return true
+  return !!(text || '').trim()
+}
+
 /** Index of the latest agent turn that raised structured questions. */
 function latestQuestionTurnIndex(turnList: ClarifyTurn[]): number {
   for (let i = turnList.length - 1; i >= 0; i--) {
@@ -336,7 +376,8 @@ function latestQuestionTurnIndex(turnList: ClarifyTurn[]): number {
 
 function hasHumanReplyAfter(turnList: ClarifyTurn[], qIdx: number): boolean {
   for (let i = qIdx + 1; i < turnList.length; i++) {
-    if (turnList[i].role === 'human' && isChoiceReply(turnList[i].text)) return true
+    const t = turnList[i]
+    if (t.role === 'human' && closesQuestionRound(t.text, t.images, t.annotations)) return true
   }
   return false
 }
@@ -362,7 +403,23 @@ const latestQuestionAnswered = computed(() => {
   const qIdx = latestQuestionTurnIndex(list)
   if (qIdx < 0) return latestQuestions.value.length === 0
   if (hasHumanReplyAfter(list, qIdx)) return true
-  return queued.value.some((q) => isChoiceReply(q.text))
+  return queued.value.some((q) => closesQuestionRound(q.text, q.images, q.annotations))
+})
+
+/** Unanswered ask_question round is live — composer send becomes skip (not default choice). */
+const pendingQuestionsOpen = computed(
+  () =>
+    !props.done &&
+    !!props.active &&
+    latestQuestions.value.length > 0 &&
+    !latestQuestionAnswered.value,
+)
+
+const inputPlaceholder = computed(() => {
+  if (pendingQuestionsOpen.value) return translate('pages.clarify.skipInputPlaceholder')
+  if (props.reviewMode) return translate('pages.clarify.reviewInputPlaceholder')
+  if (props.nodeType === 'approve') return translate('pages.clarify.approveInputPlaceholder')
+  return translate('pages.clarify.inputPlaceholder')
 })
 
 const displayTurns = computed<ClarifyTurn[]>(() => {
@@ -450,19 +507,13 @@ function editQueuedItem(index: number) {
     const t = draft.value.trim()
     const imgs = cloneClarifyImages(attachments.value)
     const anns = cloneReactAnnotations(annotations.value)
-    const over = findOversizedAttachments(imgs)
-    if (over.length) {
-      attachNotice.value = formatSendRejectMessage(
-        over.map((im, i) => attachmentDisplayName(im, i)),
-        SITE_ATTACH_MAX_MIB,
-      )
-      return
-    }
+    const prepared = prepareComposerSend(t, imgs, anns)
+    if (!prepared) return
     draft.value = ''
     attachments.value = []
     annotations.value = []
     attachNotice.value = null
-    sendMessage(t, imgs, anns)
+    sendMessage(prepared.text, prepared.images, prepared.annotations)
     // Append keeps the target index stable.
   }
 
@@ -649,7 +700,9 @@ function removeAttachment(i: number) {
 }
 
 function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotation[] = []) {
-  const t = text.trim()
+  // Skip envelopes keep a trailing newline so an empty third line stays present
+  // (trim would collapse "回答已跳过\n用户回复\n" → two lines).
+  const t = textHasSkipPrefix(text) ? text.replace(/^\s+/, '') : text.trim()
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
   // Enqueue only — bubbles materialize on turn_begin (AgentChatTester / Demo).
   // Busy may still enqueue; never open a concurrent turn via optimistic pending.
@@ -661,24 +714,48 @@ function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotat
   void scrollBottom(true)
 }
 
-function sendFromComposer() {
-  const t = draft.value.trim()
-  const imgs = cloneClarifyImages(attachments.value)
-  const anns = cloneReactAnnotations(annotations.value)
-  if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
+/**
+ * Prepare composer payload: when ask_question cards are unanswered, wrap text
+ * as the skip envelope and clear pre-checked options. Images/annotations stay
+ * intact (never emptied by the envelope wrapper).
+ */
+function prepareComposerSend(
+  text: string,
+  imgs: ClarifyImage[],
+  anns: ReactAnnotation[],
+): { text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] } | null {
+  if ((!text && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return null
   const over = findOversizedAttachments(imgs)
   if (over.length) {
     attachNotice.value = formatSendRejectMessage(
       over.map((im, i) => attachmentDisplayName(im, i)),
       SITE_ATTACH_MAX_MIB,
     )
-    return
+    return null
   }
+  let outText = text
+  if (pendingQuestionsOpen.value) {
+    outText = formatSkipReply(text)
+    sel.value = {}
+    other.value = {}
+    otherChecked.value = {}
+    step.value = 0
+  }
+  return { text: outText, images: imgs, annotations: anns }
+}
+
+function sendFromComposer() {
+  const t = draft.value.trim()
+  const imgs = cloneClarifyImages(attachments.value)
+  const anns = cloneReactAnnotations(annotations.value)
+  const prepared = prepareComposerSend(t, imgs, anns)
+  if (!prepared) return
   draft.value = ''
   attachments.value = []
   annotations.value = []
   attachNotice.value = null
-  sendMessage(t, imgs, anns)
+  // Always forward cloned images/annotations — skip only rewrites text.
+  sendMessage(prepared.text, prepared.images, prepared.annotations)
 }
 
 function onComposerKeydown(e: KeyboardEvent) {
@@ -928,25 +1005,18 @@ function discardLastQueued() {
 
 /**
  * Authoritative idle (waiting=0 ∧ !busy ∧ no activeItem): force-clear local
- * sticky busy — ghost queued, unfinished live slot (incl. body + streaming===false),
- * and thinking. Used by queue_state/poll idle (not turn_done — that must keep
- * real server-id waiters).
+ * sticky busy — ghost queued, stop streaming on the live agent, and thinking.
+ * Empty / failure agent slots stay in liveTurns as failure cards (plan g1.1);
+ * do not wipe liveTurns=[] on empty.
  */
 function forceAuthoritativeIdle() {
   if (queued.value.length) queued.value = []
   if (liveAgentIdx.value >= 0) {
     const agent = liveTurns.value[liveAgentIdx.value]
-    const empty = !!agent && !agent.text && !agent.thought
-    if (empty) {
-      liveTurns.value = []
-      streamPreview.reset()
-      thoughtPreview.reset()
-    } else if (agent) {
-      if (agent.streaming) {
-        agent.streaming = false
-        streamPreview.flush()
-        thoughtPreview.flush()
-      }
+    if (agent?.streaming) {
+      agent.streaming = false
+      streamPreview.flush()
+      thoughtPreview.flush()
     }
     liveAgentIdx.value = -1
   }
@@ -1062,24 +1132,16 @@ function applyQueueState(
     streamPreview.reset()
     thoughtPreview.reset()
   }
-  // Authority idle / !busy: tear down live slot — empty placeholder or finished
-  // body with streaming===false must not keep thinking stuck true.
+  // Authority idle / !busy: tear down streaming — keep empty/failure cards
+  // (plan g1.1); never wipe liveTurns=[] for empty agents.
   if (!busy && liveAgentIdx.value >= 0) {
     const agent = liveTurns.value[liveAgentIdx.value]
-    const empty = !!agent && !agent.text && !agent.thought
-    if (empty) {
-      liveTurns.value = []
-      liveAgentIdx.value = -1
-      streamPreview.reset()
-      thoughtPreview.reset()
-    } else {
-      if (agent?.streaming) {
-        agent.streaming = false
-        streamPreview.flush()
-        thoughtPreview.flush()
-      }
-      liveAgentIdx.value = -1
+    if (agent?.streaming) {
+      agent.streaming = false
+      streamPreview.flush()
+      thoughtPreview.flush()
     }
+    liveAgentIdx.value = -1
   }
   thinking.value = liveAgentIdx.value >= 0 || queued.value.length > 0 || !!busy
 }
@@ -1137,21 +1199,46 @@ function applyReviewFrame(frame: {
         auth?.annotations && auth.annotations.length > 0
           ? auth.annotations
           : local?.annotations
-      liveTurns.value.push({
-        role: 'human',
-        text: text || local?.text || '',
-        at: new Date().toISOString(),
-        images,
-        annotations,
-      })
-      liveAgentIdx.value =
+      const humanText = text || local?.text || ''
+      // Cover retry: reuse trailing live human + failed/empty agent instead of duplicating.
+      const last = liveTurns.value.length
+      const existingHuman = last >= 2 ? liveTurns.value[last - 2] : null
+      const existingAgent = last >= 2 ? liveTurns.value[last - 1] : null
+      if (
+        existingHuman?.role === 'human' &&
+        existingAgent?.role === 'agent' &&
+        (existingHuman.text || '') === humanText &&
+        (isRetryableFailedAgent(existingAgent) ||
+          (!existingAgent.streaming &&
+            !(existingAgent.text || '').trim() &&
+            !(existingAgent.thought || '').trim()))
+      ) {
+        existingHuman.images = images ?? existingHuman.images
+        existingHuman.annotations = annotations ?? existingHuman.annotations
+        existingAgent.text = ''
+        existingAgent.thought = ''
+        existingAgent.questions = undefined
+        existingAgent.interrupted = false
+        existingAgent.streaming = true
+        existingAgent.at = new Date().toISOString()
+        liveAgentIdx.value = last - 1
+      } else {
         liveTurns.value.push({
-          role: 'agent',
-          text: '',
-          thought: '',
+          role: 'human',
+          text: humanText,
           at: new Date().toISOString(),
-          streaming: true,
-        }) - 1
+          images,
+          annotations,
+        })
+        liveAgentIdx.value =
+          liveTurns.value.push({
+            role: 'agent',
+            text: '',
+            thought: '',
+            at: new Date().toISOString(),
+            streaming: true,
+          }) - 1
+      }
       thoughtOpenOverride.value = {}
       messageReveal.reset()
       thoughtReveal.reset()
@@ -1264,14 +1351,90 @@ function onThoughtToggle(idx: number, e: Event) {
   thoughtOpenOverride.value = { ...thoughtOpenOverride.value, [idx]: el.open }
 }
 
-/** Normal completion footnote (not interrupted / error). */
+/** Normal completion footnote (not interrupted / empty-fail / error banner). */
 function showTurnCompleted(t: ClarifyTurn): boolean {
   return (
     t.role === 'agent' &&
     !t.streaming &&
     !t.interrupted &&
+    !isRetryableFailedAgent(t) &&
     !!(t.text || t.thought)
   )
+}
+
+/** Index in displayTurns of the latest retryable empty/failure agent (or -1). */
+function latestRetryableFailIndex(): number {
+  const list = displayTurns.value
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (isRetryableFailedAgent(list[i])) return i
+  }
+  return -1
+}
+
+/**
+ * Only the trailing empty/failure agent shows a clickable retry.
+ * Must be the last display turn — matches backend retryLast (rejects when a
+ * later human/agent already followed the empty fail).
+ */
+function showFailRetry(t: ClarifyTurn, idx: number): boolean {
+  if (props.done || !props.active) return false
+  if (!isRetryableFailedAgent(t)) return false
+  const list = displayTurns.value
+  if (idx !== list.length - 1) return false
+  return idx === latestRetryableFailIndex()
+}
+
+const failRetryDisabled = computed(
+  () => sessionBusy.value || queued.value.length > 0 || props.done,
+)
+
+/**
+ * Cover-this-turn retry: emit retry-last; keep draft untouched; optimistically
+ * re-open the failed agent as a streaming slot when it is still in liveTurns
+ * (or seed live from the trailing persisted human + empty agent).
+ */
+function retryLastFailed() {
+  if (failRetryDisabled.value) return
+  const list = displayTurns.value
+  const failIdx = latestRetryableFailIndex()
+  if (failIdx < 0) return
+  // Prefer the human immediately before the failed agent.
+  let human: ClarifyTurn | null = null
+  for (let i = failIdx - 1; i >= 0; i--) {
+    if (list[i]?.role === 'human') {
+      human = list[i]!
+      break
+    }
+  }
+  if (!human) return
+
+  // Optimistic: put human + streaming agent into liveTurns (merge replaces
+  // persisted empty/failure for the same human).
+  liveTurns.value = [
+    {
+      role: 'human',
+      text: human.text || '',
+      at: human.at || new Date().toISOString(),
+      images: human.images,
+      annotations: human.annotations,
+    },
+    {
+      role: 'agent',
+      text: '',
+      thought: '',
+      at: new Date().toISOString(),
+      streaming: true,
+    },
+  ]
+  liveAgentIdx.value = 1
+  thinking.value = true
+  thoughtOpenOverride.value = {}
+  messageReveal.reset()
+  thoughtReveal.reset()
+  streamPreview.reset()
+  thoughtPreview.reset()
+  emit('retry-last')
+  void scrollBottom()
 }
 
 
@@ -1288,6 +1451,10 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     textHasChoicePrefix,
     stripChoicePrefix,
     isChoiceReply,
+    textHasSkipPrefix,
+    isSkipReply,
+    formatSkipReply,
+    closesQuestionRound,
     latestQuestionTurnIndex,
     hasHumanReplyAfter,
     imagePreviewLabel,
@@ -1298,6 +1465,7 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     onPaste,
     removeAttachment,
     sendMessage,
+    prepareComposerSend,
     sendFromComposer,
     onComposerKeydown,
     removeAnnotation,
@@ -1330,6 +1498,13 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     isThoughtOpen,
     onThoughtToggle,
     showTurnCompleted,
+    isRetryableFailedAgent,
+    isEmptyFailedAgent,
+    isFailureAssistantText,
+    emptyFailDisplayText,
+    showFailRetry,
+    failRetryDisabled,
+    retryLastFailed,
     showAnnotationChips,
     persistedTurns,
     inputPlaceholder,
@@ -1366,9 +1541,16 @@ function showTurnCompleted(t: ClarifyTurn): boolean {
     AUTO_GROW_MAX,
     LEGACY_CHOICE_PREFIX,
     choicePrefix,
+    LEGACY_SKIP_PREFIX,
+    LEGACY_SKIP_USER_LABEL,
+    SKIP_PREFIX_EN,
+    SKIP_USER_LABEL_EN,
+    skipPrefix,
+    skipUserReplyLabel,
     latestQuestionIdx,
     latestQuestions,
     latestQuestionAnswered,
+    pendingQuestionsOpen,
     displayTurns,
     attachNotice,
     queueNotice,

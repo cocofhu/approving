@@ -119,6 +119,93 @@ describe('useClarifyChat actions', () => {
     app.unmount()
   })
 
+  it('wraps composer send as skip envelope while questions are open (text + image)', async () => {
+    const q = question()
+    const { chat, app, emit, models } = withChat({
+      turns: [{ role: 'agent', text: 'ask', at: '1', questions: [q] }],
+    })
+    await nextTick()
+    expect(chat.activeQuestions.value).toHaveLength(1)
+    // Pre-check recommended (cards may already do this); skip must discard it.
+    chat.applyRecommended()
+    expect(chat.isSelected('q1', 'dev')).toBe(true)
+    models.draft.value = '先按现有集群，文档这次先不动'
+    models.attachments.value = [image('架构草图.png')]
+    chat.sendFromComposer()
+
+    const skipText = '回答已跳过\n用户回复\n先按现有集群，文档这次先不动'
+    expect(emit).toHaveBeenCalledWith(
+      'send',
+      skipText,
+      expect.arrayContaining([expect.objectContaining({ name: '架构草图.png' })]),
+      [],
+    )
+    expect(chat.isSkipReply(skipText)).toBe(true)
+    expect(chat.isChoiceReply(skipText)).toBe(false)
+    expect(skipText).not.toContain('开发')
+    expect(skipText).not.toContain('我的选择')
+    expect(chat.sel.value).toEqual({})
+    expect(chat.activeQuestions.value).toHaveLength(0)
+    expect(chat.latestQuestionAnswered.value).toBe(true)
+    app.unmount()
+  })
+
+  it('skips with image-only composer send and closes the question card', async () => {
+    const q = question()
+    const { chat, app, emit, models } = withChat({
+      turns: [{ role: 'agent', text: 'ask', at: '1', questions: [q] }],
+    })
+    await nextTick()
+    models.draft.value = ''
+    models.attachments.value = [image('paste.png')]
+    chat.sendFromComposer()
+
+    expect(emit).toHaveBeenCalledWith(
+      'send',
+      '回答已跳过\n用户回复\n',
+      expect.arrayContaining([expect.objectContaining({ name: 'paste.png' })]),
+      [],
+    )
+    const sentImgs = emit.mock.calls.at(-1)![2] as ClarifyImage[]
+    expect(sentImgs.length).toBeGreaterThanOrEqual(1)
+    expect(chat.activeQuestions.value).toHaveLength(0)
+    app.unmount()
+  })
+
+  it('rejects oversized images without skipping or submitting defaults', async () => {
+    const q = question()
+    const { chat, app, emit, models } = withChat({
+      turns: [{ role: 'agent', text: 'ask', at: '1', questions: [q] }],
+    })
+    await nextTick()
+    expect(chat.activeQuestions.value).toHaveLength(1)
+    chat.applyRecommended()
+    expect(chat.isSelected('q1', 'dev')).toBe(true)
+    models.draft.value = 'should not send'
+    models.attachments.value = [image('huge.png', { sizeBytes: 51 * 1024 * 1024 })]
+    chat.sendFromComposer()
+    expect(emit).not.toHaveBeenCalled()
+    expect(chat.attachNotice.value).toBeTruthy()
+    expect(models.draft.value).toBe('should not send')
+    expect(chat.activeQuestions.value).toHaveLength(1)
+    expect(chat.isSelected('q1', 'dev')).toBe(true)
+    app.unmount()
+  })
+
+  it('keeps confirm-selection and adopt-recommendation on choicePrefix path', async () => {
+    const q = question()
+    const { chat, app, emit } = withChat({
+      turns: [{ role: 'agent', text: 'ask', at: '1', questions: [q] }],
+    })
+    await nextTick()
+    chat.submitRecommended()
+    const sent = String(emit.mock.calls.at(-1)![1])
+    expect(sent.startsWith('我的选择:')).toBe(true)
+    expect(sent).toContain('开发')
+    expect(chat.isSkipReply(sent)).toBe(false)
+    app.unmount()
+  })
+
   it('guards sends and rejects oversized composer attachments', () => {
     const { chat, app, emit, models, props } = withChat()
     chat.sendMessage(' ')
@@ -583,6 +670,51 @@ describe('useClarifyChat actions', () => {
     chat.queued.value.push({ text: 'ghost', images: [], annotations: [] })
     chat.settleAfterTurnEnd()
     expect(chat.queued.value.map((q) => q.id)).toEqual(['wait'])
+    app.unmount()
+  })
+
+  it('keeps empty failed live slot on authoritative idle (plan g1.1)', () => {
+    const { chat, app } = withChat()
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'goal' } })
+    chat.applyReviewFrame({ event: 'turn_done' })
+    expect(chat.liveTurns.value[1]?.text).toBe('')
+    expect(chat.liveTurns.value[1]?.streaming).toBe(false)
+    chat.applyQueueState(0, [], false)
+    expect(chat.liveTurns.value).toHaveLength(2)
+    expect(chat.isRetryableFailedAgent(chat.liveTurns.value[1]!)).toBe(true)
+    expect(chat.showTurnCompleted(chat.liveTurns.value[1]!)).toBe(false)
+    app.unmount()
+  })
+
+  it('retryLast emits retry-last without touching draft (plan g1.2)', async () => {
+    const { chat, app, emit, models } = withChat()
+    models.draft.value = 'keep-me'
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'goal' } })
+    chat.applyReviewFrame({ event: 'turn_done' })
+    chat.applyQueueState(0, [], false)
+    expect(chat.failRetryDisabled.value).toBe(false)
+    chat.retryLastFailed()
+    expect(emit).toHaveBeenCalledWith('retry-last')
+    expect(models.draft.value).toBe('keep-me')
+    expect(chat.liveTurns.value[1]?.streaming).toBe(true)
+    expect(chat.liveTurns.value.filter((t) => t.role === 'human')).toHaveLength(1)
+    app.unmount()
+  })
+
+  it('does not show retry on success or interrupted turns (plan g2.3)', () => {
+    const { chat, app } = withChat()
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'ok' } })
+    chat.applyAcpEvents([{ kind: 'message', text: '正文' }])
+    chat.applyReviewFrame({ event: 'turn_done' })
+    expect(chat.showTurnCompleted(chat.liveTurns.value[1]!)).toBe(true)
+    expect(chat.showFailRetry(chat.liveTurns.value[1]!, 1)).toBe(false)
+
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'cancel-me' } })
+    chat.cancelReview()
+    const agent = chat.liveTurns.value.at(-1)!
+    expect(agent.interrupted).toBe(true)
+    expect(agent.text).toBe('(已中断)')
+    expect(chat.isRetryableFailedAgent(agent)).toBe(false)
     app.unmount()
   })
 })

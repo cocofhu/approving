@@ -197,3 +197,134 @@ func TestClarifyChoiceReplyAllowedAfterNewAsk(t *testing.T) {
 		t.Fatalf("wait round2: %v", err)
 	}
 }
+
+func countHumanTurns(msgs []models.ReactMessage) int {
+	n := 0
+	for _, m := range msgs {
+		if m.Role == "human" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestLastRetryableHuman(t *testing.T) {
+	t.Parallel()
+	_, _, _, ok := lastRetryableHuman(nil)
+	if ok {
+		t.Fatal("empty transcript")
+	}
+	text, _, _, ok := lastRetryableHuman([]models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: ""},
+	})
+	if !ok || text != "做登录" {
+		t.Fatalf("empty agent: ok=%v text=%q", ok, text)
+	}
+	text, _, _, ok = lastRetryableHuman([]models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: "(澄清回复失败:timeout)"},
+	})
+	if !ok || text != "做登录" {
+		t.Fatalf("fail banner: ok=%v text=%q", ok, text)
+	}
+	_, _, _, ok = lastRetryableHuman([]models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: "正常正文"},
+	})
+	if ok {
+		t.Fatal("success agent must not be retryable")
+	}
+	_, _, _, ok = lastRetryableHuman([]models.ReactMessage{
+		{Role: "human", Text: "做登录"},
+		{Role: "agent", Text: "(已中断)", Interrupted: true},
+	})
+	if ok {
+		t.Fatal("interrupted must not be retryable")
+	}
+}
+
+// TestClarifyRetryLastDoesNotInsertHuman locks plan g2.1: cover-retry reuses the
+// last human and does not append a duplicate human row.
+func TestClarifyRetryLastDoesNotInsertHuman(t *testing.T) {
+	eng, db, provider := setupEngineGraphP(t, reactOnlyGraph())
+	provider.reactPending = 5
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+
+	if err := eng.ReactReply(run.ID, "clarify", "做登录", nil, nil, false); err != nil {
+		t.Fatalf("first reply: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait first: %v", err)
+	}
+
+	var conv models.ReactConversation
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "clarify").
+		Order("iteration desc, id desc").First(&conv).Error; err != nil {
+		t.Fatalf("load conv: %v", err)
+	}
+	beforeHumans := countHumanTurns(conv.Messages)
+	if beforeHumans < 1 {
+		t.Fatalf("expected at least one human, got %d msgs=%+v", beforeHumans, conv.Messages)
+	}
+	last := &conv.Messages[len(conv.Messages)-1]
+	if last.Role != "agent" {
+		t.Fatalf("expected trailing agent, got %+v", last)
+	}
+	last.Text = ""
+	last.Questions = nil
+	if err := db.Save(&conv).Error; err != nil {
+		t.Fatalf("save empty agent: %v", err)
+	}
+
+	if err := eng.ReactReplyRetryLast(run.ID, "clarify"); err != nil {
+		t.Fatalf("retryLast: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait retry: %v", err)
+	}
+
+	if err := db.Where("run_id = ? AND node_id = ?", run.ID, "clarify").
+		Order("iteration desc, id desc").First(&conv).Error; err != nil {
+		t.Fatalf("reload conv: %v", err)
+	}
+	afterHumans := countHumanTurns(conv.Messages)
+	if afterHumans != beforeHumans {
+		t.Fatalf("retryLast must not insert human: before=%d after=%d msgs=%+v",
+			beforeHumans, afterHumans, conv.Messages)
+	}
+	if conv.Done {
+		t.Fatal("session must stay open after empty-fail retry (plan g2.2)")
+	}
+}
+
+func TestClarifyRetryLastRejectsSuccessAgent(t *testing.T) {
+	eng, db, provider := setupEngineGraphP(t, reactOnlyGraph())
+	provider.reactPending = 5
+
+	run, err := eng.StartRun("wf", nil, "test")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitReactPause(t, db, run.ID, "clarify")
+
+	if err := eng.ReactReply(run.ID, "clarify", "做登录", nil, nil, false); err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	if err := eng.waitReviewReadyForTest(run.ID, "clarify", 5*time.Second); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+
+	err = eng.ReactReplyRetryLast(run.ID, "clarify")
+	if err == nil {
+		t.Fatal("retryLast on success agent must fail")
+	}
+	if !strings.Contains(err.Error(), "没有可重试") {
+		t.Fatalf("reject message: %v", err)
+	}
+}
