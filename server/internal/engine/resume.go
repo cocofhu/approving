@@ -368,19 +368,37 @@ func (e *Engine) snapshotPreviewIssues(c *execCtx, runID, nodeID string) error {
 // Non-force clarify and review turns enqueue onto the platform FIFO and return
 // immediately (SandboxChat-aligned); human/agent bubbles materialize on turn_begin.
 func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force bool) error {
+	return e.reactReply(runID, nodeID, humanText, images, annotations, force, false)
+}
+
+// ReactReplyRetryLast covers the last human turn after an empty/failed agent
+// reply without inserting another human row (plan g2.1).
+func (e *Engine) ReactReplyRetryLast(runID, nodeID string) error {
+	return e.reactReply(runID, nodeID, "", nil, nil, false, true)
+}
+
+func (e *Engine) reactReply(runID, nodeID, humanText string, images []models.PromptImage, annotations []models.ReactAnnotation, force, retryLast bool) error {
 	if e.IsHalted() {
 		return errors.New("server is shutting down")
 	}
+	if retryLast && force {
+		return errors.New("retryLast cannot be combined with force")
+	}
 	var err error
-	images, err = blob.IngestPromptImages(context.Background(), e.blobs, images)
-	if err != nil {
-		return fmt.Errorf("ingest attachments: %w", err)
+	if !retryLast {
+		images, err = blob.IngestPromptImages(context.Background(), e.blobs, images)
+		if err != nil {
+			return fmt.Errorf("ingest attachments: %w", err)
+		}
 	}
 
 	cPeek, peekErr := e.loadCtx(runID)
 	if peekErr == nil {
 		if n := cPeek.graph.FindNode(nodeID); n != nil {
 			if isReviewNode(n.Type) {
+				if retryLast {
+					return errors.New("retryLast is only supported for clarify/approve dialogues")
+				}
 				// Review !force: enqueue onto the platform FIFO (SandboxChat-aligned)
 				// and return immediately — human/agent bubbles materialize on turn_begin.
 				if !force {
@@ -409,6 +427,10 @@ func (e *Engine) ReactReply(runID, nodeID, humanText string, images []models.Pro
 				}
 				if convPeek.Done {
 					return errors.New("react already done")
+				}
+				if retryLast {
+					_, err := e.EnqueueClarifyRetryLast(runID, nodeID)
+					return err
 				}
 				_, err := e.EnqueueClarifyTurn(runID, nodeID, humanText, images, annotations)
 				return err

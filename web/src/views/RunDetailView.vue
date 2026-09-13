@@ -89,6 +89,7 @@ const {
   clarifyConfirmError,
   onGateResolve,
   onClarifySend,
+  onClarifyRetryLast,
   onClarifyCancel,
   onClarifyQueueRemove,
   onClarifyQueueReorder,
@@ -747,6 +748,7 @@ const {
               :confirm-error="clarifyConfirmError"
               :sel-status="selStatus"
               @send="onClarifySend"
+              @retry-last="onClarifyRetryLast"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
               @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"
@@ -767,6 +769,7 @@ const {
               :confirm-error="clarifyConfirmError"
               :sel-status="selStatus"
               @send="onClarifySend"
+              @retry-last="onClarifyRetryLast"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
               @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"

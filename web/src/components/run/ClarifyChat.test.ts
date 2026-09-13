@@ -1859,4 +1859,117 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
   })
+
+  describe('empty fail card + retry (plan g1.1 / g1.2 / g2.3)', () => {
+    it('persisted empty agent shows failure card and retry (plan g1.1)', () => {
+      const wrapper = mountChat({
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '', at: 't2' },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-empty-fail"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-empty-fail"]').text()).toContain('本轮没有输出')
+      expect(wrapper.find('[data-testid="clarify-empty-fail-desc"]').text()).toContain(
+        '可重试上一轮',
+      )
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('success body has 已完成 and no retry (plan g1.2)', () => {
+      const wrapper = mountChat({
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '好的，开始对齐。', at: 't2' },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-empty-fail"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('interrupted (已中断) is not an empty-fail retry card (plan g2.3)', () => {
+      const wrapper = mountChat({
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '(已中断)', at: 't2', interrupted: true },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-empty-fail"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('done session keeps failure visible without clickable retry (plan g1.2)', () => {
+      const wrapper = mountChat({
+        done: true,
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '', at: 't2' },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-empty-fail"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(false)
+      wrapper.unmount()
+    })
+
+    it('empty-fail buried under a later turn keeps card but no retry (retryLast trailing-only)', () => {
+      const wrapper = mountChat({
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '', at: 't2' },
+          { role: 'human', text: '下一条', at: 't3' },
+          { role: 'agent', text: '好的，开始对齐。', at: 't4' },
+        ],
+      })
+      expect(wrapper.findAll('[data-testid="clarify-empty-fail"]')).toHaveLength(1)
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
+    it('retry emits retry-last and does not change draft (plan g1.2)', async () => {
+      const wrapper = mountChat({
+        draft: 'keep-draft',
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '(澄清回复失败:timeout)', at: 't2' },
+        ],
+      })
+      expect(wrapper.find('[data-testid="clarify-empty-fail-desc"]').text()).toContain(
+        '澄清回复失败',
+      )
+      await wrapper.get('[data-testid="clarify-empty-fail-retry"]').trigger('click')
+      expect(wrapper.emitted('retry-last')).toBeTruthy()
+      expect(wrapper.vm.$props.draft ?? wrapper.props('draft')).toBe('keep-draft')
+      wrapper.unmount()
+    })
+
+    it('live empty turn_done keeps failure card (plan g1.1)', async () => {
+      const wrapper = mountChat({ draft: '做登录' })
+      const vm = wrapper.vm as unknown as {
+        applyReviewFrame: (f: Record<string, unknown>) => void
+        applyQueueState: (
+          w: number,
+          items: unknown[],
+          busy?: boolean,
+        ) => void
+      }
+      vm.applyReviewFrame({
+        event: 'turn_begin',
+        nodeId: 'react-1',
+        item: { text: '做登录' },
+      })
+      vm.applyReviewFrame({ event: 'turn_done', nodeId: 'react-1' })
+      vm.applyQueueState(0, [], false)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="clarify-empty-fail"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+  })
 })

@@ -123,6 +123,14 @@ describe('runsClient request coverage', () => {
     const annotation = { annotations: [{ seq: 1, selector: '#x', comment: 'fix', screenshot: 'MISSING' }] } as never
     await runsClient.saveAnnotationArtifact('r', 'n', annotation)
     await runsClient.reactReply('r', 'n', 'text', [], true, [{ selector: '#x' }])
+    await runsClient.reactReply('r', 'n', '', [], false, [], true)
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)![1].body))).toEqual({
+      text: '',
+      images: [],
+      force: false,
+      annotations: [],
+      retryLast: true,
+    })
     await runsClient.reactCancel('r', 'n')
     await runsClient.reactQueueRemove('r', 'n', 'q1')
     await runsClient.reactQueueReorder('r', 'n', ['q2', 'q1'])
