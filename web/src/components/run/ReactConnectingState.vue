@@ -27,12 +27,13 @@ const { t } = useI18n()
     data-testid="react-connecting-stage"
     aria-busy="true"
   >
-    <div class="flex shrink-0 gap-1 border-b border-line px-3 py-2">
-      <span class="rounded-md bg-elevated px-2.5 py-1 text-[11px] text-txt2">
+    <!-- plan g2.1: match ReactArtifactStage chrome — only pipeline tab, no fake previewTab -->
+    <div class="flex shrink-0 gap-1 border-b border-line px-3 py-2" data-testid="react-connecting-stage-tabs">
+      <span
+        class="rounded-md bg-elevated px-2.5 py-1 text-[11px] text-txt2"
+        data-testid="react-connecting-tab-pipeline"
+      >
         {{ t('pages.reactArtifactStage.pipelineTab') }}
-      </span>
-      <span class="px-2.5 py-1 text-[11px] text-txt3">
-        {{ t('pages.reactArtifactStage.previewTab') }}
       </span>
     </div>
     <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-5 text-center">
