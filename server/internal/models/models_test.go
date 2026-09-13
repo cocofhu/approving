@@ -352,6 +352,30 @@ func TestIsChoiceReply(t *testing.T) {
 	if IsChoiceReply(" 我的选择:\n- q → a") {
 		t.Fatal("leading space is not a choice prefix")
 	}
+	if IsChoiceReply("回答已跳过\n用户回复\n先按现有集群") {
+		t.Fatal("skip envelope must not be treated as choice")
+	}
+}
+
+func TestIsSkipReply(t *testing.T) {
+	if !IsSkipReply("回答已跳过\n用户回复\n先按现有集群，文档这次先不动") {
+		t.Fatal("zh skip envelope")
+	}
+	if !IsSkipReply("Answers skipped\nUser reply\nkeep the cluster") {
+		t.Fatal("en skip envelope")
+	}
+	if !IsSkipReply("回答已跳过\n用户回复\n") {
+		t.Fatal("empty body still skip")
+	}
+	if IsSkipReply("回答已跳过") {
+		t.Fatal("label alone without newline is not skip")
+	}
+	if IsSkipReply("我的选择:\n- q → a") {
+		t.Fatal("choice must not match skip")
+	}
+	if IsSkipReply("提到回答已跳过的自由文本") {
+		t.Fatal("mention in body is not skip")
+	}
 }
 
 func TestFormatChoiceReply(t *testing.T) {

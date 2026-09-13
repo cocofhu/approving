@@ -124,12 +124,6 @@ const { t: translate, locale } = useI18n()
 
 const persistedTurns = computed(() => props.turns ?? [])
 
-const inputPlaceholder = computed(() => {
-  if (props.reviewMode) return translate('pages.clarify.reviewInputPlaceholder')
-  if (props.nodeType === 'approve') return translate('pages.clarify.approveInputPlaceholder')
-  return translate('pages.clarify.inputPlaceholder')
-})
-
 const thinking = ref(false)
 /** Review confirm mid-state: re-validating product (not Agent thinking). */
 const validating = ref(false)
@@ -317,6 +311,13 @@ onBeforeUnmount(() => {
 /** Legacy zh-CN prefix for messages persisted before i18n. */
 const LEGACY_CHOICE_PREFIX = '我的选择:'
 const choicePrefix = computed(() => translate('pages.clarify.choicePrefix'))
+/** Skip-envelope first line (zh / en) — not a choice reply. */
+const LEGACY_SKIP_PREFIX = '回答已跳过'
+const LEGACY_SKIP_USER_LABEL = '用户回复'
+const SKIP_PREFIX_EN = 'Answers skipped'
+const SKIP_USER_LABEL_EN = 'User reply'
+const skipPrefix = computed(() => translate('pages.clarify.skipPrefix'))
+const skipUserReplyLabel = computed(() => translate('pages.clarify.skipUserReplyLabel'))
 
 function textHasChoicePrefix(text: string): boolean {
   return text.startsWith(choicePrefix.value) || text.startsWith(LEGACY_CHOICE_PREFIX)
@@ -332,6 +333,38 @@ function isChoiceReply(text: string): boolean {
   return !!text && textHasChoicePrefix(text)
 }
 
+function textHasSkipPrefix(text: string): boolean {
+  if (!text) return false
+  return (
+    text.startsWith(skipPrefix.value + '\n') ||
+    text.startsWith(LEGACY_SKIP_PREFIX + '\n') ||
+    text.startsWith(SKIP_PREFIX_EN + '\n')
+  )
+}
+
+function isSkipReply(text: string): boolean {
+  return textHasSkipPrefix(text)
+}
+
+/** Three-line skip envelope: label / user-label / original (may be empty or multiline). */
+function formatSkipReply(userText: string): string {
+  return `${skipPrefix.value}\n${skipUserReplyLabel.value}\n${userText}`
+}
+
+/**
+ * A human turn / queue item that closes the current ask_question card:
+ * structured choice, skip envelope, free text, or any attachment.
+ */
+function closesQuestionRound(
+  text: string,
+  images?: ClarifyImage[] | null,
+  anns?: ReactAnnotation[] | null,
+): boolean {
+  if (isChoiceReply(text) || isSkipReply(text)) return true
+  if ((images?.length || 0) > 0 || (anns?.length || 0) > 0) return true
+  return !!(text || '').trim()
+}
+
 /** Index of the latest agent turn that raised structured questions. */
 function latestQuestionTurnIndex(turnList: ClarifyTurn[]): number {
   for (let i = turnList.length - 1; i >= 0; i--) {
@@ -343,7 +376,8 @@ function latestQuestionTurnIndex(turnList: ClarifyTurn[]): number {
 
 function hasHumanReplyAfter(turnList: ClarifyTurn[], qIdx: number): boolean {
   for (let i = qIdx + 1; i < turnList.length; i++) {
-    if (turnList[i].role === 'human' && isChoiceReply(turnList[i].text)) return true
+    const t = turnList[i]
+    if (t.role === 'human' && closesQuestionRound(t.text, t.images, t.annotations)) return true
   }
   return false
 }
@@ -369,7 +403,23 @@ const latestQuestionAnswered = computed(() => {
   const qIdx = latestQuestionTurnIndex(list)
   if (qIdx < 0) return latestQuestions.value.length === 0
   if (hasHumanReplyAfter(list, qIdx)) return true
-  return queued.value.some((q) => isChoiceReply(q.text))
+  return queued.value.some((q) => closesQuestionRound(q.text, q.images, q.annotations))
+})
+
+/** Unanswered ask_question round is live — composer send becomes skip (not default choice). */
+const pendingQuestionsOpen = computed(
+  () =>
+    !props.done &&
+    !!props.active &&
+    latestQuestions.value.length > 0 &&
+    !latestQuestionAnswered.value,
+)
+
+const inputPlaceholder = computed(() => {
+  if (pendingQuestionsOpen.value) return translate('pages.clarify.skipInputPlaceholder')
+  if (props.reviewMode) return translate('pages.clarify.reviewInputPlaceholder')
+  if (props.nodeType === 'approve') return translate('pages.clarify.approveInputPlaceholder')
+  return translate('pages.clarify.inputPlaceholder')
 })
 
 const displayTurns = computed<ClarifyTurn[]>(() => {
@@ -457,19 +507,13 @@ function editQueuedItem(index: number) {
     const t = draft.value.trim()
     const imgs = cloneClarifyImages(attachments.value)
     const anns = cloneReactAnnotations(annotations.value)
-    const over = findOversizedAttachments(imgs)
-    if (over.length) {
-      attachNotice.value = formatSendRejectMessage(
-        over.map((im, i) => attachmentDisplayName(im, i)),
-        SITE_ATTACH_MAX_MIB,
-      )
-      return
-    }
+    const prepared = prepareComposerSend(t, imgs, anns)
+    if (!prepared) return
     draft.value = ''
     attachments.value = []
     annotations.value = []
     attachNotice.value = null
-    sendMessage(t, imgs, anns)
+    sendMessage(prepared.text, prepared.images, prepared.annotations)
     // Append keeps the target index stable.
   }
 
@@ -656,7 +700,9 @@ function removeAttachment(i: number) {
 }
 
 function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotation[] = []) {
-  const t = text.trim()
+  // Skip envelopes keep a trailing newline so an empty third line stays present
+  // (trim would collapse "回答已跳过\n用户回复\n" → two lines).
+  const t = textHasSkipPrefix(text) ? text.replace(/^\s+/, '') : text.trim()
   if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
   // Enqueue only — bubbles materialize on turn_begin (AgentChatTester / Demo).
   // Busy may still enqueue; never open a concurrent turn via optimistic pending.
@@ -668,24 +714,48 @@ function sendMessage(text: string, imgs: ClarifyImage[] = [], anns: ReactAnnotat
   void scrollBottom(true)
 }
 
-function sendFromComposer() {
-  const t = draft.value.trim()
-  const imgs = cloneClarifyImages(attachments.value)
-  const anns = cloneReactAnnotations(annotations.value)
-  if ((!t && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return
+/**
+ * Prepare composer payload: when ask_question cards are unanswered, wrap text
+ * as the skip envelope and clear pre-checked options. Images/annotations stay
+ * intact (never emptied by the envelope wrapper).
+ */
+function prepareComposerSend(
+  text: string,
+  imgs: ClarifyImage[],
+  anns: ReactAnnotation[],
+): { text: string; images: ClarifyImage[]; annotations: ReactAnnotation[] } | null {
+  if ((!text && imgs.length === 0 && anns.length === 0) || props.done || !props.active) return null
   const over = findOversizedAttachments(imgs)
   if (over.length) {
     attachNotice.value = formatSendRejectMessage(
       over.map((im, i) => attachmentDisplayName(im, i)),
       SITE_ATTACH_MAX_MIB,
     )
-    return
+    return null
   }
+  let outText = text
+  if (pendingQuestionsOpen.value) {
+    outText = formatSkipReply(text)
+    sel.value = {}
+    other.value = {}
+    otherChecked.value = {}
+    step.value = 0
+  }
+  return { text: outText, images: imgs, annotations: anns }
+}
+
+function sendFromComposer() {
+  const t = draft.value.trim()
+  const imgs = cloneClarifyImages(attachments.value)
+  const anns = cloneReactAnnotations(annotations.value)
+  const prepared = prepareComposerSend(t, imgs, anns)
+  if (!prepared) return
   draft.value = ''
   attachments.value = []
   annotations.value = []
   attachNotice.value = null
-  sendMessage(t, imgs, anns)
+  // Always forward cloned images/annotations — skip only rewrites text.
+  sendMessage(prepared.text, prepared.images, prepared.annotations)
 }
 
 function onComposerKeydown(e: KeyboardEvent) {
@@ -1381,6 +1451,10 @@ function retryLastFailed() {
     textHasChoicePrefix,
     stripChoicePrefix,
     isChoiceReply,
+    textHasSkipPrefix,
+    isSkipReply,
+    formatSkipReply,
+    closesQuestionRound,
     latestQuestionTurnIndex,
     hasHumanReplyAfter,
     imagePreviewLabel,
@@ -1391,6 +1465,7 @@ function retryLastFailed() {
     onPaste,
     removeAttachment,
     sendMessage,
+    prepareComposerSend,
     sendFromComposer,
     onComposerKeydown,
     removeAnnotation,
@@ -1466,9 +1541,16 @@ function retryLastFailed() {
     AUTO_GROW_MAX,
     LEGACY_CHOICE_PREFIX,
     choicePrefix,
+    LEGACY_SKIP_PREFIX,
+    LEGACY_SKIP_USER_LABEL,
+    SKIP_PREFIX_EN,
+    SKIP_USER_LABEL_EN,
+    skipPrefix,
+    skipUserReplyLabel,
     latestQuestionIdx,
     latestQuestions,
     latestQuestionAnswered,
+    pendingQuestionsOpen,
     displayTurns,
     attachNotice,
     queueNotice,
