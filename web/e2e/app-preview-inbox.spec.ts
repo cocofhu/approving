@@ -184,7 +184,7 @@ async function mockInboxApis(
 
     if (method === 'GET' && (path === '/api/projects' || path.endsWith('/api/projects'))) {
       await route.fulfill({
-        json: [{ id: 'proj-1', name: 'Approving', slug: 'approving' }],
+        json: [{ id: 'proj-1', name: 'Grasp', slug: 'grasp' }],
       })
       return
     }

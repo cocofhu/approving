@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 /** localStorage key read by shouldAutoOpenOnboarding. */
 export function onboardingDismissStorageKey(projectId: string): string {
-  return `approving-onboarding-suppress:${projectId}`
+  return `grasp-onboarding-suppress:${projectId}`
 }
 
 /**
@@ -18,7 +18,7 @@ export async function seedOnboardingDismissed(
   await page.addInitScript((pids: string[]) => {
     try {
       for (const pid of pids) {
-        localStorage.setItem(`approving-onboarding-suppress:${pid}`, '1')
+        localStorage.setItem(`grasp-onboarding-suppress:${pid}`, '1')
       }
     } catch {
       /* ignore */

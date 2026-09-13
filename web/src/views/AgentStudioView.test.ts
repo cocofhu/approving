@@ -665,25 +665,25 @@ describe('AgentStudio rename entry migration', () => {
 
   it('filters managed agents with a case-insensitive trimmed query, count, and safe highlight', async () => {
     mocks.listAgents.mockResolvedValue([
-      { ...agent('public'), name: 'Approving Review Engineer' },
+      { ...agent('public'), name: 'Grasp Review Engineer' },
       { ...agent('public'), name: 'HarnessPlugin Reviewer' },
     ])
     const wrapper = await mountRenameStudio()
     await flushPromises()
 
     await wrapper.get('[data-test="manage"]').trigger('click')
-    await wrapper.get('[data-test="manage-search"]').setValue('  approving  ')
+    await wrapper.get('[data-test="manage-search"]').setValue('  grasp  ')
     await nextTick()
 
-    expect(wrapper.find('[data-manage-agent="Approving Review Engineer"]').exists()).toBe(true)
+    expect(wrapper.find('[data-manage-agent="Grasp Review Engineer"]').exists()).toBe(true)
     expect(wrapper.find('[data-manage-agent="HarnessPlugin Reviewer"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="manage-search-count"]').text()).toBe('匹配 1 / 共 2')
-    expect(wrapper.get('[data-manage-agent="Approving Review Engineer"] mark').text()).toBe('Approving')
+    expect(wrapper.get('[data-manage-agent="Grasp Review Engineer"] mark').text()).toBe('Grasp')
   })
 
   it('shows a distinct no-match state and clears the management search from either entry point', async () => {
     mocks.listAgents.mockResolvedValue([
-      { ...agent('public'), name: 'Approving Review Engineer' },
+      { ...agent('public'), name: 'Grasp Review Engineer' },
       { ...agent('public'), name: 'HarnessPlugin Reviewer' },
     ])
     const wrapper = await mountRenameStudio()
@@ -1489,13 +1489,13 @@ describe('AgentStudio mobile chrome', () => {
   })
 
   it('splits name bar into two rows and hides disabled saved button when clean', async () => {
-    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Approving代办助手' }])
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Grasp代办助手' }])
     const wrapper = await mountMobileStudio()
     await flushPromises()
 
     expect(wrapper.find('[data-test="studio-name-row-top"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="studio-name-row-bottom"]').exists()).toBe(true)
-    expect(wrapper.get('[data-test="agent-name"]').text()).toContain('Approving代办助手')
+    expect(wrapper.get('[data-test="agent-name"]').text()).toContain('Grasp代办助手')
     expect(wrapper.get('[data-test="org-switch"]').classes().join(' ')).toMatch(/min-h-11/)
     expect(wrapper.get('[data-test="studio-export"]').classes().join(' ')).toMatch(/min-h-11/)
     expect(wrapper.find('[data-test="studio-save"]').exists()).toBe(false)
@@ -1523,7 +1523,7 @@ describe('AgentStudio mobile chrome', () => {
   })
 
   it('opens full name tip only when the name is truncated', async () => {
-    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Approving代办助手超长名称' }])
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Grasp代办助手超长名称' }])
     const wrapper = await mountMobileStudio()
     await flushPromises()
 
@@ -1538,7 +1538,7 @@ describe('AgentStudio mobile chrome', () => {
     await nextTick()
     const tip = document.querySelector('[data-test="agent-name-tip"]')
     expect(tip).toBeTruthy()
-    expect(tip!.textContent).toContain('Approving代办助手超长名称')
+    expect(tip!.textContent).toContain('Grasp代办助手超长名称')
     expect(tip!.textContent).toContain('完整名称')
 
     ;(document.querySelector('[data-test="agent-name-tip-backdrop"]') as HTMLElement).click()
@@ -1585,7 +1585,7 @@ describe('AgentStudio mobile chrome', () => {
   })
 
   it('keeps more menu items at least 44px and mutually exclusive with full name tip', async () => {
-    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Approving代办助手超长名称' }])
+    mocks.listAgents.mockResolvedValue([{ ...agentWithFiles(), name: 'Grasp代办助手超长名称' }])
     const wrapper = await mountMobileStudio()
     await flushPromises()
 

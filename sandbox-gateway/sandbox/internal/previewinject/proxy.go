@@ -32,7 +32,7 @@ const flushInterval = 100 * time.Millisecond
 // left untouched (no rewrite) rather than corrupted.
 //
 // When upstream is unreachable the connection is closed without an HTTP
-// status. Approving ProbeHTTPPort treats any HTTP response as healthy; a
+// status. Grasp ProbeHTTPPort treats any HTTP response as healthy; a
 // 502 here would make set_preview succeed before the app is listening.
 func NewHandler(upstream *url.URL, scriptURL string) http.Handler {
 	if upstream == nil {

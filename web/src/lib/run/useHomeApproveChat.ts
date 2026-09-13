@@ -19,11 +19,20 @@ import { attachmentDisplayName } from '@/lib/shared/attachments'
 import type { ClarifyImage, Project, Workflow } from '@/lib/shared/types'
 import type { RunPriority } from '@/components/ui/PrioritySegmented.vue'
 
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from '@/lib/shared/migrateBrandStorage'
+
 /** Remember last selected home pipeline across visits (plan g2.4). */
-export const HOME_PIPELINE_MEMORY_KEY = 'approving.home.lastPipelineId'
+export const HOME_PIPELINE_MEMORY_KEY = GRASP_STORAGE_KEYS.homeLastPipelineId
 
 /** Remember last home Composer priority (plan g1.4). Not stored in IndexedDB draft. */
-export const HOME_PRIORITY_MEMORY_KEY = 'approving.home.lastPriority'
+export const HOME_PRIORITY_MEMORY_KEY = GRASP_STORAGE_KEYS.homeLastPriority
+
+migrateLocalStorageKey(LEGACY_STORAGE_KEYS.homeLastPipelineId, HOME_PIPELINE_MEMORY_KEY)
+migrateLocalStorageKey(LEGACY_STORAGE_KEYS.homeLastPriority, HOME_PRIORITY_MEMORY_KEY)
 
 /** Debounce for auto-save (plan g2.2; NFR ~300–800ms). */
 export const HOME_COMPOSER_DRAFT_DEBOUNCE_MS = 400

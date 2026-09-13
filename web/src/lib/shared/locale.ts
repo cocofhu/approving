@@ -6,13 +6,22 @@ import {
   prefetchLocale,
   type AppLocale,
 } from './loadLocaleMessages'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from './migrateBrandStorage'
 
 export type { AppLocale }
 
-const STORAGE_KEY = 'approving-locale'
+const STORAGE_KEY = GRASP_STORAGE_KEYS.locale
+
+function readLocaleStorage(): string | null {
+  return migrateLocalStorageKey(LEGACY_STORAGE_KEYS.locale, STORAGE_KEY)
+}
 
 export function detectLocale(): AppLocale {
-  const saved = localStorage.getItem(STORAGE_KEY)
+  const saved = readLocaleStorage()
   if (saved === 'zh-CN' || saved === 'en') return saved
   const lang = (navigator.language || 'zh-CN').toLowerCase()
   if (lang.startsWith('zh')) return 'zh-CN'
@@ -28,7 +37,7 @@ function detectPublicLocale(): AppLocale {
 }
 
 export async function applyPublicLocale(): Promise<void> {
-  const saved = localStorage.getItem(STORAGE_KEY)
+  const saved = readLocaleStorage()
   const next = saved === 'zh-CN' || saved === 'en' ? saved : detectPublicLocale()
   const messages = await loadLocaleMessages(next)
   i18n.global.setLocaleMessage(next, messages)

@@ -5,8 +5,8 @@ import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onbo
 const MOCK_PROJECTS = [
   {
     id: 'p1',
-    name: 'Approving',
-    description: 'Approving Project',
+    name: 'Grasp',
+    description: 'Grasp Project',
     workflowCount: 3,
     totalTokens: 128400,
     workflowTokens: 100000,
@@ -136,7 +136,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
     await page.goto('/project-list.html?theme=light')
     await expect(page.getByRole('heading', { name: '项目' })).toBeVisible({ timeout: 15_000 })
 
-    const approving = page.getByRole('button').filter({ hasText: 'Approving' }).first()
+    const approving = page.getByRole('button').filter({ hasText: 'Grasp' }).first()
     await expect(approving).toContainText('Token')
     await expect(approving).toContainText('128.4K')
     await expect(approving).toContainText('个工作流')
@@ -172,7 +172,7 @@ test.describe('项目 Token 总体消耗 UI', () => {
 
     const approvingToken = page
       .getByRole('button')
-      .filter({ hasText: 'Approving' })
+      .filter({ hasText: 'Grasp' })
       .getByTestId('project-list-token')
     await approvingToken.hover()
     const tip = approvingToken.getByTestId('token-detail-tip')

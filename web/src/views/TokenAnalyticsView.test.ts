@@ -64,7 +64,7 @@ const sampleData = {
   prevTrend: [{ bucket: '2026-06-01', total: 80, workflowTotal: 60, pmTotal: 20, inputTokens: 30, outputTokens: 25, cacheReadTokens: 15, cacheWriteTokens: 10 }],
   composition: { inputTokens: 3000, outputTokens: 1500, cacheReadTokens: 400, cacheWriteTokens: 100, total: 5000 },
   projects: [
-    { projectId: 'p1', name: 'Approving', total: 3000, inputTokens: 1800, outputTokens: 900, cacheReadTokens: 200, cacheWriteTokens: 100 },
+    { projectId: 'p1', name: 'Grasp', total: 3000, inputTokens: 1800, outputTokens: 900, cacheReadTokens: 200, cacheWriteTokens: 100 },
     { projectId: 'p2', name: 'Other project', total: 2000, inputTokens: 1200, outputTokens: 600, cacheReadTokens: 200, cacheWriteTokens: 0 },
   ],
   modelRanking: [
@@ -76,11 +76,11 @@ const sampleData = {
     { workflowId: 'w1', name: 'main', total: 3000, inputTokens: 1800, outputTokens: 900, cacheReadTokens: 200, cacheWriteTokens: 100, kind: 'workflow' as const },
     { workflowId: 'w2', name: 'review', total: 2000, inputTokens: 1200, outputTokens: 600, cacheReadTokens: 200, cacheWriteTokens: 0, kind: 'workflow' as const },
   ],
-  heatmap: { rows: ['Sonnet'], cols: ['Approving'], grid: [[3000]] },
-  topRuns: [{ runId: 'r1', title: 'Run 1', projectId: 'p1', projectName: 'Approving', workflowName: 'main', modelKey: 'sonnet', modelName: 'Sonnet', total: 500 }],
-  projectTrends: [{ key: 'p1', name: 'Approving', trend: [{ bucket: '2026-07-01', total: 100, workflowTotal: 80, pmTotal: 20, inputTokens: 40, outputTokens: 30, cacheReadTokens: 20, cacheWriteTokens: 10 }] }],
+  heatmap: { rows: ['Sonnet'], cols: ['Grasp'], grid: [[3000]] },
+  topRuns: [{ runId: 'r1', title: 'Run 1', projectId: 'p1', projectName: 'Grasp', workflowName: 'main', modelKey: 'sonnet', modelName: 'Sonnet', total: 500 }],
+  projectTrends: [{ key: 'p1', name: 'Grasp', trend: [{ bucket: '2026-07-01', total: 100, workflowTotal: 80, pmTotal: 20, inputTokens: 40, outputTokens: 30, cacheReadTokens: 20, cacheWriteTokens: 10 }] }],
   modelTrends: [{ key: 'sonnet', name: 'Sonnet', trend: [{ bucket: '2026-07-01', total: 100, workflowTotal: 80, pmTotal: 20, inputTokens: 40, outputTokens: 30, cacheReadTokens: 20, cacheWriteTokens: 10 }] }],
-  filterOptions: { projects: [{ key: 'p1', name: 'Approving' }], models: [{ key: 'sonnet', name: 'Sonnet' }] },
+  filterOptions: { projects: [{ key: 'p1', name: 'Grasp' }], models: [{ key: 'sonnet', name: 'Sonnet' }] },
 }
 
 describe('TokenAnalyticsView', () => {
@@ -307,7 +307,7 @@ describe('TokenAnalyticsView', () => {
     vi.mocked(api.getGlobalTokenStats).mockClear()
     getBarChart().vm.$emit('click', {
       componentType: 'series',
-      name: 'Approving',
+      name: 'Grasp',
       data: { filterKey: 'p1', other: false },
     })
     await flushPromises()
@@ -367,7 +367,7 @@ describe('TokenAnalyticsView', () => {
   it('navigates to project board when clicking project name', async () => {
     const wrapper = mount(TokenAnalyticsView, { global: { plugins: [i18n] } })
     await flushPromises()
-    const projectBtn = wrapper.findAll('button.text-accent-2').find((b) => b.text() === 'Approving')
+    const projectBtn = wrapper.findAll('button.text-accent-2').find((b) => b.text() === 'Grasp')
     expect(projectBtn).toBeTruthy()
     await projectBtn!.trigger('click')
     expect(pushMock).toHaveBeenCalledWith({ path: '/projects/p1', query: { tab: 'board' } })

@@ -150,7 +150,7 @@ func TestGatewayClientCRUD(t *testing.T) {
 
 	sb, err := cli.Create(ctx, GWCreateRequest{
 		Image:     "img:test",
-		Labels:    map[string]string{"approving.managed": "1"},
+		Labels:    map[string]string{"grasp.managed": "1"},
 		Resources: &GWResources{CPUCores: 2, MemoryMB: 8192, DiskGi: 40},
 	})
 	if err != nil {
@@ -181,11 +181,11 @@ func TestGatewayClientCRUD(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Fatalf("List = %v err=%v", list, err)
 	}
-	filtered, err := cli.List(ctx, "approving.managed:1")
+	filtered, err := cli.List(ctx, "grasp.managed:1")
 	if err != nil || len(filtered) != 1 {
 		t.Fatalf("List label filter = %v err=%v", filtered, err)
 	}
-	empty, err := cli.List(ctx, "approving.managed:nope")
+	empty, err := cli.List(ctx, "grasp.managed:nope")
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("List miss filter = %v err=%v", empty, err)
 	}

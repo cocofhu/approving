@@ -149,7 +149,7 @@ func TestManagerCreateInjectsEnvAndLabels(t *testing.T) {
 	gw, fg := newInlineGW(t)
 	m := NewManager(gw, ManagerOptions{Image: "img:test", WorkspaceDir: "/root/workspace"})
 	sb, err := m.Create(context.Background(), Spec{
-		Name: "approving-sb-abc",
+		Name: "grasp-sb-abc",
 		Env:  map[string]string{"GIT_REPOS": "web|https://x/y.git", "K": "V"},
 	})
 	if err != nil {
@@ -176,7 +176,7 @@ func TestManagerCreateInjectsEnvAndLabels(t *testing.T) {
 		t.Errorf("GIT_REPOS not passed through: %v", env["GIT_REPOS"])
 	}
 	labels, _ := fg.lastCreate["labels"].(map[string]any)
-	if labels[managedByLabel] != "1" || labels[cfNameLabel] != "approving-sb-abc" {
+	if labels[managedByLabel] != "1" || labels[cfNameLabel] != "grasp-sb-abc" {
 		t.Errorf("labels = %v", labels)
 	}
 }

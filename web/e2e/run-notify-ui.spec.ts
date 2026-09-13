@@ -300,7 +300,7 @@ test.describe('Run NotifyPolicy UI (P0)', () => {
     await page.getByTestId('notify-tpl-input').fill(
       '【Grasp】{title}\n📦 {project} / {workflow}\nRun {run_id} · {node}\n👉 {link}',
     )
-    await expect(page.getByTestId('notify-preview-body')).toContainText('📦 approving-demo / gate-main')
+    await expect(page.getByTestId('notify-preview-body')).toContainText('📦 grasp-demo / gate-main')
     await page.getByTestId('notify-ph-run_id').click()
     await expect(page.getByTestId('notify-tpl-input')).toHaveValue(/\{run_id\}/)
 

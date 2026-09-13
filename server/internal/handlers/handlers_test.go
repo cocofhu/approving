@@ -786,9 +786,9 @@ func TestSandboxEndpoints(t *testing.T) {
 		t.Fatalf("destroy bad id: %d", w.Code)
 	}
 	// Seed a stopped sandbox and exercise stop/destroy/log endpoints.
-	h.db.Create(&models.Sandbox{Name: "approving-sb-h1", Purpose: "test", Status: "stopped"})
+	h.db.Create(&models.Sandbox{Name: "grasp-sb-h1", Purpose: "test", Status: "stopped"})
 	var row models.Sandbox
-	h.db.Where("name = ?", "approving-sb-h1").First(&row)
+	h.db.Where("name = ?", "grasp-sb-h1").First(&row)
 	if w := h.do("GET", "/api/sandboxes/999/log", nil); w.Code != 200 {
 		t.Fatalf("log missing: %d", w.Code)
 	}
@@ -831,9 +831,9 @@ func TestSandboxProxyEndpoints(t *testing.T) {
 		t.Fatalf("acp proxy bad id: %d", w.Code)
 	}
 	// No code-server / no acp -> 404.
-	h.db.Create(&models.Sandbox{Name: "approving-sb-p1", Purpose: "test", Status: "running"})
+	h.db.Create(&models.Sandbox{Name: "grasp-sb-p1", Purpose: "test", Status: "running"})
 	var row models.Sandbox
-	h.db.Where("name = ?", "approving-sb-p1").First(&row)
+	h.db.Where("name = ?", "grasp-sb-p1").First(&row)
 	if w := h.do("GET", "/sandbox/"+uintToStr(row.ID)+"/", nil); w.Code != 404 {
 		t.Fatalf("proxy no cs: %d", w.Code)
 	}
@@ -881,7 +881,7 @@ func TestSandboxProxySuccess(t *testing.T) {
 	_, portStr, _ := strings.Cut(upHost, ":")
 	port, _ := strconv.Atoi(portStr)
 
-	const sbName = "approving-sb-px"
+	const sbName = "grasp-sb-px"
 	h.fg.Seed(sbName)
 	h.fg.SetEndpoints(sbName, map[string]string{
 		"ide":     upHost,
@@ -948,7 +948,7 @@ func TestSandboxProxyAutoLogin(t *testing.T) {
 	_, portStr, _ := strings.Cut(upHost, ":")
 	port, _ := strconv.Atoi(portStr)
 
-	const sbName = "approving-sb-autologin"
+	const sbName = "grasp-sb-autologin"
 	h.fg.Seed(sbName)
 	h.fg.SetEndpoints(sbName, map[string]string{
 		"ide":     upHost,
@@ -1004,7 +1004,7 @@ func TestSandboxProxyDialsGatewayHostPort(t *testing.T) {
 	// upstream via /etc/hosts is unavailable in CI). Instead assert the
 	// service-layer resolver returns the full host:port from endpoints — that
 	// is the dial target SandboxProxy/SandboxACPProxy use.
-	const sbName = "approving-sb-nonloop"
+	const sbName = "grasp-sb-nonloop"
 	wantIDE := "10.42.9.9:" + portStr
 	wantACP := "10.42.9.10:" + portStr
 	h.fg.Seed(sbName)
@@ -1059,7 +1059,7 @@ func closedLocalAddr(t *testing.T) string {
 
 func TestSandboxProxyErrorHandler(t *testing.T) {
 	h := newHarness(t)
-	const sbName = "approving-sb-unreach"
+	const sbName = "grasp-sb-unreach"
 	// Closed local ports → instant dial failure into ReverseProxy ErrorHandler.
 	dialIDE := closedLocalAddr(t)
 	dialACP := closedLocalAddr(t)
@@ -1362,7 +1362,7 @@ func TestRunDetailFailedExposesRunLevelError(t *testing.T) {
 // endpoints by seeding an archived log alongside a stopped sandbox row.
 func TestSandboxLogFoundBranches(t *testing.T) {
 	h := newHarness(t)
-	row := &models.Sandbox{Name: "approving-sb-logh", Purpose: "run", Status: "exited", RunID: "runH", NodeID: "n1"}
+	row := &models.Sandbox{Name: "grasp-sb-logh", Purpose: "run", Status: "exited", RunID: "runH", NodeID: "n1"}
 	h.db.Create(row)
 	h.db.Create(&models.SandboxLog{Name: row.Name, RunID: "runH", NodeID: "n1", Content: "archived"})
 
@@ -1386,7 +1386,7 @@ func TestSandboxLogFoundBranches(t *testing.T) {
 // error field (found=false) rather than the empty "no source" disguise.
 func TestSandboxLogLiveErrorSurfaced(t *testing.T) {
 	h := newHarness(t)
-	row := &models.Sandbox{Name: "approving-sb-logerr", Purpose: "run", Status: "running", RunID: "runE", NodeID: "n1"}
+	row := &models.Sandbox{Name: "grasp-sb-logerr", Purpose: "run", Status: "running", RunID: "runE", NodeID: "n1"}
 	h.db.Create(row)
 	h.fg.SetStatus(row.Name, "running")
 	h.fg.FailLogs = true
@@ -1827,7 +1827,7 @@ func TestDoctorArtifactSessionIsLoopbackAndTokenProtected(t *testing.T) {
 
 	w = request(http.MethodDelete, "/_internal/doctor/artifact-sessions/"+session["id"], map[string]string{
 		"Authorization":              "Bearer doctor-secret",
-		"X-Approving-Doctor-Cleanup": session["cleanup_token"],
+		"X-Grasp-Doctor-Cleanup": session["cleanup_token"],
 	}, "127.0.0.1:1234")
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("cleanup status = %d, body=%s", w.Code, w.Body.String())

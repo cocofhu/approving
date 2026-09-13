@@ -1,14 +1,25 @@
 /**
- * Docs/site locale: approving-locale (zh-CN | en).
+ * Docs/site locale: grasp-locale (zh-CN | en), migrating approving-locale once.
  * Priority: localStorage > navigator (zh* → zh-CN, en* → en, else zh-CN).
  * Home entry (/ and /en/) may redirect once; deep links never auto-rewrite.
  */
 (() => {
-  const STORAGE_KEY = "approving-locale";
+  const STORAGE_KEY = "grasp-locale";
+  const LEGACY_KEY = "approving-locale";
 
   function getSaved() {
     try {
-      const v = localStorage.getItem(STORAGE_KEY);
+      let v = localStorage.getItem(STORAGE_KEY);
+      if (v !== "zh-CN" && v !== "en") {
+        const legacy = localStorage.getItem(LEGACY_KEY);
+        if (legacy === "zh-CN" || legacy === "en") {
+          localStorage.setItem(STORAGE_KEY, legacy);
+          localStorage.removeItem(LEGACY_KEY);
+          v = legacy;
+        }
+      } else if (localStorage.getItem(LEGACY_KEY) != null) {
+        localStorage.removeItem(LEGACY_KEY);
+      }
       if (v === "zh-CN" || v === "en") return v;
     } catch {
       /* private mode / opaque origin */
@@ -20,6 +31,7 @@
     if (loc !== "zh-CN" && loc !== "en") return;
     try {
       localStorage.setItem(STORAGE_KEY, loc);
+      localStorage.removeItem(LEGACY_KEY);
     } catch {
       /* ignore */
     }

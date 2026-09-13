@@ -17,7 +17,7 @@ import (
 	"github.com/cocofhu/grasp/internal/sandbox"
 )
 
-const managedLabel = "approving.managed"
+const managedLabel = "grasp.managed"
 
 // record is one sandbox the fake gateway knows about.
 type record struct {
@@ -108,7 +108,7 @@ func (fg *FakeGateway) endpointsFor() map[string]string {
 
 // SetStatus registers/updates a sandbox by id with a gateway-vocab status
 // ("running"/"stopped"/…). Ids registered this way appear in List (with the
-// approving.managed label) and answer Get/status, so a test can pre-seed DB
+// grasp.managed label) and answer Get/status, so a test can pre-seed DB
 // rows whose Name is the sandbox id. Empty status removes the record.
 func (fg *FakeGateway) SetStatus(id, status string) {
 	fg.mu.Lock()

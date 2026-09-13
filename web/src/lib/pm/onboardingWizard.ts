@@ -15,6 +15,11 @@ import {
   startPathForBackend,
   syncStartPathFields,
 } from '@/lib/shared/startPath'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from '@/lib/shared/migrateBrandStorage'
 
 export {
   APIKEY_BACKEND as ONBOARDING_APIKEY_BACKEND,
@@ -154,11 +159,14 @@ export type OnboardingBootstrapResult = {
  * re-opens the wizard until the default workflow exists (see needsOnboarding).
  * The key differs from the old `approving-onboarding-dismiss:` one so browsers
  * that dismissed the wizard before this rule change are not stuck forever.
+ * Brand clear: migrate from approving-onboarding-suppress: → grasp-… once.
  */
-const SUPPRESS_PREFIX = 'approving-onboarding-suppress:'
+const SUPPRESS_PREFIX = GRASP_STORAGE_KEYS.onboardingSuppressPrefix
 
 export function onboardingSuppressKey(projectId: string): string {
-  return `${SUPPRESS_PREFIX}${projectId}`
+  const key = `${SUPPRESS_PREFIX}${projectId}`
+  migrateLocalStorageKey(`${LEGACY_STORAGE_KEYS.onboardingSuppressPrefix}${projectId}`, key)
+  return key
 }
 
 export function isOnboardingSuppressed(projectId: string): boolean {

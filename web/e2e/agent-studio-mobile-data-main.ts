@@ -8,7 +8,7 @@ import { setTheme } from '../src/lib/shared/theme'
 import AgentStudioView from '../src/views/AgentStudioView.vue'
 
 const params = new URLSearchParams(window.location.search)
-const agent = params.get('agent') || 'ApprovingPM'
+const agent = params.get('agent') || 'GraspPM'
 const tab = params.get('tab') || 'data'
 const sub = params.get('sub') || 'memory'
 

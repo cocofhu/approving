@@ -83,7 +83,7 @@ func OpenSQLiteTest(path string) (*gorm.DB, error) {
 
 func ensureSQLiteTemplate() error {
 	sqliteTemplateOnce.Do(func() {
-		dir, err := os.MkdirTemp("", "approving-schema-*")
+		dir, err := os.MkdirTemp("", "grasp-schema-*")
 		if err != nil {
 			sqliteTemplateErr = err
 			return

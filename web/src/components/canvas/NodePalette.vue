@@ -22,7 +22,7 @@ const groups = computed(() =>
 )
 
 function onDragStart(ev: DragEvent, type: NodeType) {
-  ev.dataTransfer?.setData('application/approving-node', type)
+  ev.dataTransfer?.setData('application/grasp-node', type)
   if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move'
 }
 </script>

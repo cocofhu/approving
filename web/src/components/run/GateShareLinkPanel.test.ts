@@ -271,7 +271,7 @@ describe('GateShareLinkPanel', () => {
     const url = `https://app.example/public/gate-approvals#t=${token}`
     rememberShareUrl('run-1', 'hg1', 1, url)
     forgetShareUrl('run-1', 'hg1', 1)
-    sessionStorage.setItem('approving.gateShareUrl.run-1:hg1:1', url)
+    sessionStorage.setItem('grasp.gateShareUrl.run-1:hg1:1', url)
 
     const w = mount(GateShareLinkPanel, {
       props: {

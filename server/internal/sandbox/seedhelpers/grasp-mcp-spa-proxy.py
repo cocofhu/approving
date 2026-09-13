@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""approving-mcp-spa-proxy: optional SPA host → API ingress proxy (sandbox-local).
+"""grasp-mcp-spa-proxy: optional SPA host → API ingress proxy (sandbox-local).
 
 When _SPA_TO_API is non-empty, maps SPA Host headers to an API upstream.
 The public tree ships an empty map (no rewrite). Prefer setting mcp_advertise
 to a URL that already serves /mcp/runs/:id.
 
 Usage:
-  approving-mcp-spa-proxy --ensure   # idempotent install+daemonize
-  approving-mcp-spa-proxy            # foreground (for debugging)
+  grasp-mcp-spa-proxy --ensure   # idempotent install+daemonize
+  grasp-mcp-spa-proxy            # foreground (for debugging)
 """
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # Keep in sync with artifact-upload _SPA_MCP_HOSTS (empty in public tree).
 _SPA_TO_API = {}
 _LISTEN = ("127.0.0.1", 80)
-_PID_FILE = "/var/run/approving-mcp-spa-proxy.pid"
-_HOSTS_MARK = "# approving-mcp-spa-proxy"
+_PID_FILE = "/var/run/grasp-mcp-spa-proxy.pid"
+_HOSTS_MARK = "# grasp-mcp-spa-proxy"
 
 
 def eprint(*a):
@@ -37,7 +37,7 @@ def ensure_hosts() -> None:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             cur = f.read()
     except OSError as e:
-        eprint(f"approving-mcp-spa-proxy: read /etc/hosts failed: {e}")
+        eprint(f"grasp-mcp-spa-proxy: read /etc/hosts failed: {e}")
         return
     lines = []
     changed = False
@@ -55,7 +55,7 @@ def ensure_hosts() -> None:
                 f.write("\n")
             f.write("\n".join(lines) + "\n")
     except OSError as e:
-        eprint(f"approving-mcp-spa-proxy: write /etc/hosts failed: {e}")
+        eprint(f"grasp-mcp-spa-proxy: write /etc/hosts failed: {e}")
 
 
 def upstream_for_host(host: str) -> str | None:
@@ -67,7 +67,7 @@ class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
-        eprint("approving-mcp-spa-proxy:", fmt % args)
+        eprint("grasp-mcp-spa-proxy:", fmt % args)
 
     def _proxy(self):
         host = self.headers.get("Host", "")
@@ -152,14 +152,14 @@ def write_pid():
         with open(_PID_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
     except OSError as e:
-        eprint(f"approving-mcp-spa-proxy: pid file: {e}")
+        eprint(f"grasp-mcp-spa-proxy: pid file: {e}")
 
 
 def serve_forever():
     ensure_hosts()
     httpd = ThreadingHTTPServer(_LISTEN, _Handler)
     write_pid()
-    eprint(f"approving-mcp-spa-proxy: listening on {_LISTEN[0]}:{_LISTEN[1]}")
+    eprint(f"grasp-mcp-spa-proxy: listening on {_LISTEN[0]}:{_LISTEN[1]}")
     try:
         httpd.serve_forever()
     finally:
@@ -173,7 +173,7 @@ def serve_forever():
 def ensure_daemon() -> int:
     ensure_hosts()
     if already_running():
-        eprint("approving-mcp-spa-proxy: already running")
+        eprint("grasp-mcp-spa-proxy: already running")
         return 0
     # Double-fork daemon so SSH seedHelpers returns immediately.
     if os.fork() > 0:
@@ -188,7 +188,7 @@ def ensure_daemon() -> int:
     if os.fork() > 0:
         os._exit(0)
     sys.stdin = open("/dev/null", "r")
-    sys.stdout = open("/var/log/approving-mcp-spa-proxy.log", "a", buffering=1)
+    sys.stdout = open("/var/log/grasp-mcp-spa-proxy.log", "a", buffering=1)
     sys.stderr = sys.stdout
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
     serve_forever()
@@ -196,7 +196,7 @@ def ensure_daemon() -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="approving-mcp-spa-proxy")
+    ap = argparse.ArgumentParser(prog="grasp-mcp-spa-proxy")
     ap.add_argument(
         "--ensure",
         action="store_true",

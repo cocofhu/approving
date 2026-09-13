@@ -449,8 +449,8 @@ test.describe('看板 Token 统计图', () => {
           contentType: 'application/json',
           body: JSON.stringify({
             id: 'proj-1',
-            name: 'Approving',
-            description: 'Approving Project',
+            name: 'Grasp',
+            description: 'Grasp Project',
             workflowCount: 3,
             totalTokens: 128400,
             workflowTokens: 100000,

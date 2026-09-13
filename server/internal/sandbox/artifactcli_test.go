@@ -82,7 +82,7 @@ func TestArtifactUploadScriptDoesNotCallWriteArtifactImage(t *testing.T) {
 
 func TestMCPSpaProxyPath(t *testing.T) {
 	t.Parallel()
-	if mcpSpaProxyPath != "/usr/local/bin/approving-mcp-spa-proxy" {
+	if mcpSpaProxyPath != "/usr/local/bin/grasp-mcp-spa-proxy" {
 		t.Fatalf("mcpSpaProxyPath = %q", mcpSpaProxyPath)
 	}
 }
@@ -98,15 +98,15 @@ func TestRepoScriptMatchesEmbeddedProxy(t *testing.T) {
 	}
 	// …/server/internal/sandbox/artifactcli_test.go → repo root = ../../../
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
-	scriptPath := filepath.Join(repoRoot, "server", "scripts", "approving-mcp-spa-proxy.py")
+	scriptPath := filepath.Join(repoRoot, "server", "scripts", "grasp-mcp-spa-proxy.py")
 	raw, err := os.ReadFile(scriptPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", scriptPath, err)
 	}
 	got := string(raw)
 	if got != mcpSpaProxyScript {
-		t.Fatalf("server/scripts/approving-mcp-spa-proxy.py diverged from embedded seedhelpers copy\n"+
-			"script len=%d embed len=%d — copy seedhelpers/approving-mcp-spa-proxy.py → server/scripts/",
+		t.Fatalf("server/scripts/grasp-mcp-spa-proxy.py diverged from embedded seedhelpers copy\n"+
+			"script len=%d embed len=%d — copy seedhelpers/grasp-mcp-spa-proxy.py → server/scripts/",
 			len(got), len(mcpSpaProxyScript))
 	}
 }

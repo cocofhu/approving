@@ -498,11 +498,11 @@ describe('reactArtifactPreview helpers', () => {
 
   it('extracts visual HTML title/summary from title/h1 and meta/banner', () => {
     const html =
-      '<!doctype html><html><head><title>Approving · Demo</title>' +
+      '<!doctype html><html><head><title>Grasp · Demo</title>' +
       '<meta name="description" content="meta 摘要"/>' +
       '</head><body><div class="banner"><h1>主标题</h1><p>banner 段落</p></div></body></html>'
     expect(extractVisualHtmlSummary(html)).toEqual({
-      title: 'Approving · Demo',
+      title: 'Grasp · Demo',
       summary: 'meta 摘要',
     })
     const noMeta =

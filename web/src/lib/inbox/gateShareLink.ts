@@ -1,4 +1,10 @@
 import type { Artifact, ClarifyInboxItem, GateInboxItem, GateShareInboxStatus, InboxItem } from '@/lib/shared/types'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateSessionStorageKey,
+  migrateSessionStoragePrefix,
+} from '@/lib/shared/migrateBrandStorage'
 
 export const GATE_SHARE_TTL_TIERS = ['1h', '8h', '24h', '72h', '7d'] as const
 export type GateShareTTLTier = (typeof GATE_SHARE_TTL_TIERS)[number]
@@ -18,7 +24,12 @@ export function normalizePermissionPreset(
 const GATE_SHARE_TOKEN_HEADER = 'X-Gate-Share-Token'
 const GATE_SHARE_REQUEST_HEADER = 'X-Gate-Share-Requested'
 
-const SHARE_URL_STORAGE_PREFIX = 'approving.gateShareUrl.'
+const SHARE_URL_STORAGE_PREFIX = GRASP_STORAGE_KEYS.gateShareUrlPrefix
+
+migrateSessionStoragePrefix(
+  LEGACY_STORAGE_KEYS.gateShareUrlPrefix,
+  SHARE_URL_STORAGE_PREFIX,
+)
 
 /** In-memory cache plus sessionStorage so refresh can copy the same active URL. */
 const shareUrlMemory = new Map<string, string>()
@@ -47,7 +58,10 @@ export function recallShareUrl(runId: string, nodeId: string, iteration?: number
   const mem = shareUrlMemory.get(shareMemoryKey(runId, nodeId, iteration))
   if (mem) return mem
   try {
-    return sessionStorage.getItem(storageKey(runId, nodeId, iteration)) || ''
+    const key = storageKey(runId, nodeId, iteration)
+    const legacy = LEGACY_STORAGE_KEYS.gateShareUrlPrefix + shareMemoryKey(runId, nodeId, iteration)
+    migrateSessionStorageKey(legacy, key)
+    return sessionStorage.getItem(key) || ''
   } catch {
     return ''
   }

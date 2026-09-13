@@ -44,7 +44,7 @@ const dir = dirname(fileURLToPath(import.meta.url))
 const modalSrc = readFileSync(join(dir, 'HomeCreateBaselineModal.vue'), 'utf8')
 const menuSrc = readFileSync(join(dir, '../workflow/NewWorkflowMenu.vue'), 'utf8')
 
-const p1 = { id: 'proj-1', name: 'Approving', description: '', variables: [] }
+const p1 = { id: 'proj-1', name: 'Grasp', description: '', variables: [] }
 const p2 = { id: 'proj-2', name: 'Platform', description: '', variables: [] }
 const p3 = { id: 'proj-3', name: 'Demo', description: '', variables: [] }
 
@@ -97,7 +97,7 @@ describe('HomeCreateBaselineModal (plan g2 / g3 / g4)', () => {
     expect(name.element).toBe(document.activeElement)
     await name.setValue('需求对齐流水线')
     expect((name.element as HTMLInputElement).value).toBe('需求对齐流水线')
-    expect(document.body.textContent).toContain('项目：Approving')
+    expect(document.body.textContent).toContain('项目：Grasp')
     expect(document.body.textContent).not.toContain('从零开始')
     wrapper.unmount()
   })

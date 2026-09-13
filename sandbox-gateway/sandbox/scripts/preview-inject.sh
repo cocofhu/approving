@@ -16,7 +16,7 @@ CHAIN="${PREVIEW_INJECT_CHAIN:-APPROVING-PREVIEW}"
 PID_DIR="${PREVIEW_INJECT_PID_DIR:-/tmp/sandbox-preview-inject}"
 BIN="${PREVIEW_INJECT_BIN:-/usr/local/bin/preview-inject}"
 LOG="${PREVIEW_INJECT_LOG:-/tmp/preview-inject.log}"
-COMMENT="approving-preview-inject"
+COMMENT="grasp-preview-inject"
 
 preview_inject_missing_env() {
   if ! truthy "${PREVIEW_DIRECT:-}"; then

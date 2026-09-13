@@ -1008,7 +1008,7 @@ describe('ReactArtifactStage', () => {
       kind: 'html',
       nodeId: 'visual_bqc5',
       content:
-        '<html><head><title>Approving · Demo</title></head><body><div class="banner"><h1>主标题</h1><p>banner 摘要</p></div></body></html>',
+        '<html><head><title>Grasp · Demo</title></head><body><div class="banner"><h1>主标题</h1><p>banner 摘要</p></div></body></html>',
     })
     vi.mocked(api.artifactContent).mockImplementation(async (id: string) => {
       if (id === 'r') return research
@@ -1050,7 +1050,7 @@ describe('ReactArtifactStage', () => {
     const pageSummary = wrapper.get(
       '[data-testid="react-artifact-card-page.html"] [data-testid="react-artifact-card-summary"]',
     )
-    expect(pageSummary.text()).toContain('Approving · Demo')
+    expect(pageSummary.text()).toContain('Grasp · Demo')
     expect(pageSummary.text()).toContain('banner 摘要')
     wrapper.unmount()
   })

@@ -580,7 +580,7 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 	// Only rows we keep are recorded — recycled names must not block Destroy.
 	tracked := map[string]bool{}
 	// protectedCorr = placeholder Names of in-grace creating rows; orphan pass
-	// skips gateway sandboxes labeled approving.name=<placeholder>.
+	// skips gateway sandboxes labeled grasp.name=<placeholder>.
 	protectedCorr := map[string]bool{}
 	for i := range rows {
 		row := &rows[i]
@@ -636,7 +636,7 @@ func (s *SandboxService) ReconcileOnStartup(ctx context.Context) {
 }
 
 // destroyLocalSandbox tears down the gateway instance (by Name and by
-// approving.name correlation) then deletes the local list row.
+// grasp.name correlation) then deletes the local list row.
 func (s *SandboxService) destroyLocalSandbox(ctx context.Context, row *models.Sandbox) {
 	s.archiveLog(ctx, row.Name)
 	_ = s.mgr.DestroyByName(ctx, row.Name)

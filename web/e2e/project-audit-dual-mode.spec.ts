@@ -5,7 +5,7 @@ import { dismissOnboardingIfOpen, seedOnboardingDismissed } from './helpers/onbo
 
 const MOCK_PROJECT = {
   id: 'proj-1',
-  name: 'Approving Project',
+  name: 'Grasp Project',
   description: 'Audit dual-mode e2e',
   sandboxEnv: [],
   variables: [],

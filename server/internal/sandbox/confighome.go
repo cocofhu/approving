@@ -91,7 +91,7 @@ func BuildConfigHome(spec ConfigHomeSpec) (string, error) {
 			return "", fmt.Errorf("create sandbox work dir %q: %w", HomeBaseDir, err)
 		}
 	}
-	dir, err := os.MkdirTemp(HomeBaseDir, "approving-acp-")
+	dir, err := os.MkdirTemp(HomeBaseDir, "grasp-acp-")
 	if err != nil {
 		return "", err
 	}

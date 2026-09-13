@@ -64,7 +64,7 @@ beforeEach(() => {
 
 describe('useWorkflowFavorites', () => {
   it('keys storage by username and isolates accounts', () => {
-    expect(favoritesKeyForUser('dev.li')).toBe('approving.workflowFavorites.dev.li')
+    expect(favoritesKeyForUser('dev.li')).toBe('grasp.workflowFavorites.dev.li')
     const fav = withSetup(() => useWorkflowFavorites())
     fav.toggleFavorite('wf-a', { name: 'A', silent: true })
     expect(loadFavoriteEntries('dev.li')).toHaveLength(1)

@@ -448,7 +448,7 @@ func TestOpenCodeConfigForEnv_CustomSkipsLookup(t *testing.T) {
 
 func TestMergeAuthEnv_OpenCodeMapsNativeKey(t *testing.T) {
 	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
-		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvGraspOpenCodeAPIKey: "sk-oc",
 		EnvOpenCodeProvider:        "openai",
 	})
 	if err != nil {
@@ -467,7 +467,7 @@ func TestMergeAuthEnv_OpenCodeMapsNativeKey(t *testing.T) {
 
 func TestMergeAuthEnv_OpenCodePrefixesBridgeModel(t *testing.T) {
 	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
-		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvGraspOpenCodeAPIKey: "sk-oc",
 		EnvOpenCodeProvider:        "tencent-tokenhub",
 		EnvACPBridgeModel:          "deepseek/deepseek-flash",
 	})
@@ -481,7 +481,7 @@ func TestMergeAuthEnv_OpenCodePrefixesBridgeModel(t *testing.T) {
 
 func TestMergeAuthEnv_OpenCodeBridgeModelPrefixIdempotent(t *testing.T) {
 	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
-		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvGraspOpenCodeAPIKey: "sk-oc",
 		EnvOpenCodeProvider:        "openrouter",
 		EnvACPBridgeModel:          "openrouter/openrouter/auto",
 	})
@@ -495,7 +495,7 @@ func TestMergeAuthEnv_OpenCodeBridgeModelPrefixIdempotent(t *testing.T) {
 
 func TestMergeAuthEnv_OpenCodeBridgeModelStaysEmpty(t *testing.T) {
 	out, err := MergeAuthEnv(BackendOpenCode, map[string]string{
-		EnvApprovingOpenCodeAPIKey: "sk-oc",
+		EnvGraspOpenCodeAPIKey: "sk-oc",
 		EnvOpenCodeProvider:        "openai",
 	})
 	if err != nil {

@@ -118,7 +118,7 @@ for (let i = 0; i < WORKFLOW_FAVORITES_MAX; i++) {
 }
 
 function seedFavorites() {
-  const key = `approving.workflowFavorites.${username}`
+  const key = `grasp.workflowFavorites.${username}`
   const seedKey = `workflow-favorites.seeded.${scene}.${username}`
   if (sessionStorage.getItem(seedKey) === '1') return
   localStorage.removeItem(key)
