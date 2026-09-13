@@ -421,6 +421,48 @@ func TestReactReplySuccess(t *testing.T) {
 	}
 }
 
+func TestReactReplyRetryLast(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+	runID := "run-react-retry"
+	h.db.Create(&models.Run{
+		ID: runID, Status: "waiting_human", StartedAt: now,
+		Graph: models.Graph{Nodes: []models.Node{{ID: "react", Type: "react", Label: "澄清"}}},
+	})
+	h.db.Create(&models.ReactConversation{
+		RunID: runID, NodeID: "react", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{
+			{Role: "human", Text: "做登录", At: now.Format(time.RFC3339)},
+			{Role: "agent", Text: "", At: now.Format(time.RFC3339)},
+		},
+	})
+	h.db.Create(&models.StateRun{RunID: runID, NodeID: "react", Iteration: 1, Status: "waiting_human"})
+	w := h.do(http.MethodPost, "/api/runs/"+runID+"/react/react/reply", map[string]any{"retryLast": true})
+	if w.Code != http.StatusOK {
+		t.Fatalf("retryLast: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReactReplyRetryLastWithForceRejected(t *testing.T) {
+	h := newHarness(t)
+	now := time.Now()
+	runID := "run-react-retry-force"
+	h.db.Create(&models.Run{
+		ID: runID, Status: "waiting_human", StartedAt: now,
+		Graph: models.Graph{Nodes: []models.Node{{ID: "react", Type: "react", Label: "澄清"}}},
+	})
+	h.db.Create(&models.ReactConversation{
+		RunID: runID, NodeID: "react", Iteration: 1, Done: false,
+		Messages: []models.ReactMessage{{Role: "human", Text: "x", At: now.Format(time.RFC3339)}},
+	})
+	w := h.do(http.MethodPost, "/api/runs/"+runID+"/react/react/reply", map[string]any{
+		"retryLast": true, "force": true,
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestImportAgentDefaultMode(t *testing.T) {
 	h := newHarness(t)
 	seedAgent(t, h, "ZipMode")

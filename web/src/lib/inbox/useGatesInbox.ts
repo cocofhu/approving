@@ -1725,6 +1725,7 @@ async function onClarifySend(
   images: import('@/lib/shared/types').ClarifyImage[] = [],
   annotations: import('@/lib/shared/types').ReactAnnotation[] = [],
   force = false,
+  retryLast = false,
 ) {
   const it = active.value
   if (!it || it.type !== 'clarify' || it.done) return
@@ -1748,12 +1749,25 @@ async function onClarifySend(
     }
   }
   // Always merge a staged pick when present (Approve may gain app preview mid-session).
-  const mergedAnnotations = !force ? mergeStagedAppPreviewPick(annotations) : annotations
+  const mergedAnnotations =
+    !force && !retryLast ? mergeStagedAppPreviewPick(annotations) : annotations
   clarifyConfirmError.value = null
   let ok = true
   try {
-    await api.reactReply(it.runId, it.nodeId, text, images, force, mergedAnnotations)
-    if (!force) lastStagedAppPreviewPick.value = null
+    if (retryLast) {
+      await api.reactReply(
+        it.runId,
+        it.nodeId,
+        text,
+        images,
+        force,
+        mergedAnnotations,
+        true,
+      )
+    } else {
+      await api.reactReply(it.runId, it.nodeId, text, images, force, mergedAnnotations)
+    }
+    if (!force && !retryLast) lastStagedAppPreviewPick.value = null
   } catch (e: any) {
     ok = false
     /* refresh below to reflect real state */
@@ -1771,7 +1785,7 @@ async function onClarifySend(
       return
     }
     // Non-force enqueue failed: roll back optimistic queue + surface error.
-    reviewChatRef.value?.discardLastQueued?.()
+    if (!retryLast) reviewChatRef.value?.discardLastQueued?.()
     clarifyConfirmError.value = msg
   }
   const finished = force && ok
@@ -1821,6 +1835,11 @@ function onClarifyFinish() {
     ? t('pages.clarify.confirmFlowPrompt')
     : t('pages.runDetail.clarifyFinishPrompt')
   onClarifySend(prompt, [], [], true)
+}
+
+/** Cover-this-turn retry for empty/failure agent (plan g2.1). */
+async function onClarifyRetryLast() {
+  await onClarifySend('', [], [], false, true)
 }
 
 async function onClarifyCancel() {
@@ -1977,6 +1996,7 @@ function itemSecondary(it: InboxItem) {
     openDetail,
     backToList,
     onClarifySend,
+    onClarifyRetryLast,
     onClarifyFinish,
     onClarifyCancel,
     onClarifyQueueRemove,

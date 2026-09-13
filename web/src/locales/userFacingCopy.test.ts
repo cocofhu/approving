@@ -86,6 +86,13 @@ describe('user-facing copy remediation keys', () => {
     expect(en.global.t('pages.clarify.approveEmptyHint')).toMatch(/goal first/i)
   })
 
+  it('clarify empty-fail retry copy is user-facing (plan g1.1)', () => {
+    expect(zh.global.t('pages.clarify.emptyFailTitle')).toBe('本轮没有输出')
+    expect(zh.global.t('pages.clarify.retry')).toBe('重试')
+    expect(en.global.t('pages.clarify.emptyFailTitle')).toMatch(/no output/i)
+    expect(en.global.t('pages.clarify.retry')).toBe('Retry')
+  })
+
   it('run list page title is 运行记录 not the terse 运行', () => {
     expect(zh.global.t('pages.runList.title')).toBe('运行记录')
     expect(en.global.t('pages.runList.title')).toBe('Run history')

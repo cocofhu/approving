@@ -585,4 +585,49 @@ describe('useClarifyChat actions', () => {
     expect(chat.queued.value.map((q) => q.id)).toEqual(['wait'])
     app.unmount()
   })
+
+  it('keeps empty failed live slot on authoritative idle (plan g1.1)', () => {
+    const { chat, app } = withChat()
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'goal' } })
+    chat.applyReviewFrame({ event: 'turn_done' })
+    expect(chat.liveTurns.value[1]?.text).toBe('')
+    expect(chat.liveTurns.value[1]?.streaming).toBe(false)
+    chat.applyQueueState(0, [], false)
+    expect(chat.liveTurns.value).toHaveLength(2)
+    expect(chat.isRetryableFailedAgent(chat.liveTurns.value[1]!)).toBe(true)
+    expect(chat.showTurnCompleted(chat.liveTurns.value[1]!)).toBe(false)
+    app.unmount()
+  })
+
+  it('retryLast emits retry-last without touching draft (plan g1.2)', async () => {
+    const { chat, app, emit, models } = withChat()
+    models.draft.value = 'keep-me'
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'goal' } })
+    chat.applyReviewFrame({ event: 'turn_done' })
+    chat.applyQueueState(0, [], false)
+    expect(chat.failRetryDisabled.value).toBe(false)
+    chat.retryLastFailed()
+    expect(emit).toHaveBeenCalledWith('retry-last')
+    expect(models.draft.value).toBe('keep-me')
+    expect(chat.liveTurns.value[1]?.streaming).toBe(true)
+    expect(chat.liveTurns.value.filter((t) => t.role === 'human')).toHaveLength(1)
+    app.unmount()
+  })
+
+  it('does not show retry on success or interrupted turns (plan g2.3)', () => {
+    const { chat, app } = withChat()
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'ok' } })
+    chat.applyAcpEvents([{ kind: 'message', text: '正文' }])
+    chat.applyReviewFrame({ event: 'turn_done' })
+    expect(chat.showTurnCompleted(chat.liveTurns.value[1]!)).toBe(true)
+    expect(chat.showFailRetry(chat.liveTurns.value[1]!, 1)).toBe(false)
+
+    chat.applyReviewFrame({ event: 'turn_begin', item: { text: 'cancel-me' } })
+    chat.cancelReview()
+    const agent = chat.liveTurns.value.at(-1)!
+    expect(agent.interrupted).toBe(true)
+    expect(agent.text).toBe('(已中断)')
+    expect(chat.isRetryableFailedAgent(agent)).toBe(false)
+    app.unmount()
+  })
 })

@@ -592,6 +592,7 @@ async function onClarifySend(
   images: import('@/lib/shared/types').ClarifyImage[] = [],
   annotations: import('@/lib/shared/types').ReactAnnotation[] = [],
   force = false,
+  retryLast = false,
 ) {
   const conv = selClarify.value
   if (!conv || conv.done) return
@@ -599,17 +600,23 @@ async function onClarifySend(
   clarifyConfirmError.value = null
   // Demo: send may attach the latest staged pick even if user skipped「添加到聊天」.
   const anns =
-    hasAppPreview.value && !force ? mergeStagedAppPreviewPick(annotations) : annotations
+    hasAppPreview.value && !force && !retryLast
+      ? mergeStagedAppPreviewPick(annotations)
+      : annotations
   if (anns !== annotations) lastStagedAppPreviewPick.value = null
   try {
-    await api.reactReply(runId.value, nodeId, text, images, force, anns)
+    if (retryLast) {
+      await api.reactReply(runId.value, nodeId, text, images, force, anns, true)
+    } else {
+      await api.reactReply(runId.value, nodeId, text, images, force, anns)
+    }
   } catch (e: any) {
     // Re-sync below so the UI reflects the real state (e.g. the dialogue has
     // already completed) instead of leaving the input enabled to re-click.
     console.warn('reactReply failed', e?.message || e)
     const msg = e?.message || t('pages.runDetail.gateError')
     // Non-force: roll back optimistic pending-send row so FR4 / send lock is not stuck.
-    if (!force) reviewChatRef.value?.discardLastQueued?.()
+    if (!force && !retryLast) reviewChatRef.value?.discardLastQueued?.()
     clarifyConfirmError.value = msg
   }
   // Enqueue returns before the turn finishes — avoid wiping live bubbles.
@@ -618,6 +625,11 @@ async function onClarifySend(
     lastStagedAppPreviewPick.value = null
     await loadRun(false)
   }
+}
+
+/** Cover-this-turn retry: re-run last human without a new bubble (plan g2.1). */
+async function onClarifyRetryLast() {
+  await onClarifySend('', [], [], false, true)
 }
 async function onClarifyCancel() {
   const conv = selClarify.value
@@ -1326,6 +1338,7 @@ function selectExecution(nodeId: string, idx: number) {
   clarifyConfirmError,
   onGateResolve,
   onClarifySend,
+  onClarifyRetryLast,
   onClarifyCancel,
   onClarifyQueueRemove,
   onClarifyQueueReorder,
