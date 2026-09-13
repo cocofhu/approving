@@ -57,7 +57,8 @@ describe('mobile scroll contract — list A (plan g1 / g3.1)', () => {
     expect(panel).not.toMatch(/AppModal/)
     const settings = read('SettingsView.vue')
     expect(settings).toMatch(/IntegrationsPanel v-if="showIntegrations"/)
-    expect(settings).toMatch(/data-testid="settings-integrations-card"/)
+    expect(settings).not.toMatch(/data-testid="settings-integrations-card"/)
+    expect(settings).not.toMatch(/data-testid="settings-integrations-open"/)
   })
 
   it('BoardView: fill root + body overflow-y-auto for standalone and embedded (g1.3)', () => {
