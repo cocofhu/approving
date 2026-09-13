@@ -80,40 +80,4 @@ describe('AppButton', () => {
     expect(disabled.classes()).not.toContain('ui-pressable')
     disabled.unmount()
   })
-
-  it('marks danger with ui-btn-danger for high-contrast origin-fill (g2.1)', () => {
-    const danger = mountBtn({ variant: 'danger' })
-    expect(danger.classes()).toContain('ui-btn-danger')
-    expect(danger.classes()).toContain('text-err')
-    danger.unmount()
-    const primary = mountBtn({ variant: 'primary' })
-    expect(primary.classes()).not.toContain('ui-btn-danger')
-    primary.unmount()
-  })
-
-  it('default slot stays readable under is-filled (bare text path, g2.1 / review v1)', () => {
-    const wrapper = mountBtn({ variant: 'primary' }, '保存')
-    const el = wrapper.element as HTMLButtonElement
-    el.classList.add('is-filled')
-    expect(wrapper.text()).toContain('保存')
-    // AppButton renders default slot as text next to optional Icon — not wrapped in a lift span.
-    expect([...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent || '').includes('保存'))).toBe(
-      true,
-    )
-    wrapper.unmount()
-  })
-
-  it('icon + default slot stay readable under is-filled (g2.1 / review v1)', () => {
-    const wrapper = mountBtn({ variant: 'ghost', icon: 'edit' }, '编辑')
-    const el = wrapper.element as HTMLButtonElement
-    el.classList.add('is-filled')
-    expect(wrapper.text()).toContain('编辑')
-    expect(wrapper.findComponent({ name: 'Icon' }).exists() || wrapper.find('svg').exists() || el.querySelector('[class*="icon"], svg, i') != null || wrapper.html().includes('edit')).toBe(
-      true,
-    )
-    expect([...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent || '').includes('编辑'))).toBe(
-      true,
-    )
-    wrapper.unmount()
-  })
 })

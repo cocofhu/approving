@@ -20,13 +20,11 @@ const cls = computed(() => {
     'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium outline-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-1 focus-visible:ring-offset-base'
   // Height tokens: sm=h-6 (24px), md=h-9 (36px). Vertical padding no longer drives height.
   const sizes = props.size === 'sm' ? 'h-6 px-2.5 text-xs' : 'h-9 px-3.5 text-sm'
-  // ui-btn-danger marks high-contrast origin-fill cover (solid err + white ink).
-  // Icons use currentColor so is-filled ink flip applies without per-icon overrides.
   const variants: Record<string, string> = {
     primary: 'bg-accent text-white hover:bg-accent-2 shadow-glow',
     ghost: 'text-txt2 hover:bg-elevated hover:text-txt',
     outline: 'border border-line bg-surface text-txt hover:border-line-strong hover:bg-elevated',
-    danger: 'ui-btn-danger border border-err/40 bg-err/10 text-err hover:bg-err/20',
+    danger: 'border border-err/40 bg-err/10 text-err hover:bg-err/20',
     subtle: 'bg-elevated text-txt2 hover:text-txt',
   }
   const press =

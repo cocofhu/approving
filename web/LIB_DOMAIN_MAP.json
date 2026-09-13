@@ -166,7 +166,6 @@
       "markdown.ts",
       "migrateBrandStorage.ts",
       "migrateOutputConfig.ts",
-      "originFill.ts",
       "previewFps.ts",
       "previewPickUrl.ts",
       "previewTabKey.ts",
@@ -190,6 +189,6 @@
     "pm": 7,
     "project": 4,
     "run": 54,
-    "shared": 40
+    "shared": 39
   }
 }
