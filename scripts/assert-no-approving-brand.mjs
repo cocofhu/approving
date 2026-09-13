@@ -11,8 +11,10 @@
  * - LEGACY_PRODUCT_NAME / BrandLogo stored Approving → display Grasp
  * - comments documenting the old onboarding-dismiss key
  * - node type=approve / Approve node concept
+ *
+ * Uses a Node walk (not ripgrep) so GitHub-hosted runners without `rg` still pass.
  */
-import { execSync } from 'node:child_process'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -41,6 +43,23 @@ const patterns = [
   String.raw`/tmp/approving-ssh-inject`,
   String.raw`approving-acp-`,
 ]
+
+const skipDirNames = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'coverage',
+  '.vite',
+  'vendor',
+])
+
+const skipFileNames = new Set(['CHANGELOG.md'])
+
+const skipExt = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.pdf',
+  '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.mp3', '.zip',
+  '.gz', '.tgz', '.wasm', '.bin', '.lock',
+])
 
 const allowPathSubstrings = [
   'CHANGELOG.md',
@@ -83,31 +102,52 @@ const allowLineRegexes = [
   /runTerminalNotifications\.readIds/,
 ]
 
-function main() {
-  const pattern = patterns.join('|')
-  let out = ''
+const hitRe = new RegExp(patterns.join('|'))
+
+function walk(dir, acc) {
+  let entries
   try {
-    out = execSync(
-      `rg -n --no-heading -g '!**/node_modules/**' -g '!**/.git/**' -g '!CHANGELOG.md' -e '${pattern}' .`,
-      { cwd: root, encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 },
-    )
-  } catch (e) {
-    if (e.status === 1) {
-      console.log('assert-no-approving-brand: ok')
-      return
-    }
-    console.error(e.stderr || e.message)
-    process.exit(2)
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return
   }
+  for (const ent of entries) {
+    if (ent.isDirectory()) {
+      if (skipDirNames.has(ent.name)) continue
+      if (ent.name.startsWith('.') && ent.name !== '.github') continue
+      walk(path.join(dir, ent.name), acc)
+      continue
+    }
+    if (skipFileNames.has(ent.name)) continue
+    const ext = path.extname(ent.name).toLowerCase()
+    if (skipExt.has(ext)) continue
+    acc.push(path.join(dir, ent.name))
+  }
+}
+
+function main() {
+  const files = []
+  walk(root, files)
 
   const offenders = []
-  for (const line of out.split('\n')) {
-    if (!line.trim()) continue
-    const colon = line.indexOf(':')
-    const file = colon === -1 ? line : line.slice(0, colon)
-    if (allowPathSubstrings.some((s) => file.includes(s))) continue
-    if (allowLineRegexes.some((re) => re.test(line))) continue
-    offenders.push(line)
+  for (const abs of files) {
+    const rel = path.relative(root, abs).split(path.sep).join('/')
+    if (allowPathSubstrings.some((s) => rel.includes(s))) continue
+    let text
+    try {
+      text = readFileSync(abs, 'utf8')
+    } catch {
+      continue
+    }
+    if (!hitRe.test(text)) continue
+    const lines = text.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (!hitRe.test(line)) continue
+      const rec = `${rel}:${i + 1}:${line}`
+      if (allowLineRegexes.some((re) => re.test(rec))) continue
+      offenders.push(rec)
+    }
   }
 
   if (offenders.length) {
