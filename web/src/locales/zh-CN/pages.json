@@ -1652,18 +1652,6 @@
         "concurrency": "并发",
         "autoRefresh": "每 5 秒自动刷新",
         "note": "合计 = 测试占用 + running workflow · 不含 TTL 保活沙箱"
-      },
-      "platformRulesCard": {
-        "title": "平台规则",
-        "desc": "管理 skills_embed 下 10 个平台规则的全局默认，持久化到 data/platform-rules/。",
-        "readOnly": "当前账号无管理员权限，仅可查看。",
-        "manage": "管理规则",
-        "view": "查看规则"
-      },
-      "integrationsCard": {
-        "title": "集成",
-        "desc": "查看内置 MCP 发现目录（按作用域注入，无需在此配置）。",
-        "view": "查看集成"
       }
     },
     "platformRules": {

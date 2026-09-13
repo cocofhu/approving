@@ -1652,18 +1652,6 @@
         "concurrency": "concurrency",
         "autoRefresh": "Auto-refresh every 5s",
         "note": "total = test + running workflows · excludes TTL keep-alive sandboxes"
-      },
-      "platformRulesCard": {
-        "title": "Platform rules",
-        "desc": "Manage global defaults for all 10 embedded platform rules under data/platform-rules/.",
-        "readOnly": "Read-only for non-admin accounts.",
-        "manage": "Manage rules",
-        "view": "View rules"
-      },
-      "integrationsCard": {
-        "title": "Integrations",
-        "desc": "Browse the built-in MCP discovery catalog (injected by scope; no configuration here).",
-        "view": "View integrations"
       }
     },
     "platformRules": {
