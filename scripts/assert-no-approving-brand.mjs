@@ -126,6 +126,10 @@ function walk(dir, acc) {
 }
 
 function main() {
+  if (root === path.parse(root).root) {
+    console.error(`assert-no-approving-brand: refusing to walk filesystem root (${root})`)
+    process.exit(2)
+  }
   const files = []
   walk(root, files)
 
