@@ -30,11 +30,7 @@
   --dur-press: 90ms;
   --dur-ui: 160ms;
   --dur-overlay: 200ms;
-  --dur-origin-fill: 350ms;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  /* High-contrast origin-fill (g1.1): light solid cover + dark ink on dark theme */
-  --origin-fill-cover: 250 250 251;
-  --origin-fill-ink: 24 24 27;
   --flow-dot: #1f1f26;
   --flow-mask: rgba(10, 10, 11, 0.72);
   --grad-logo: linear-gradient(90deg, #7B61FF 0%, #818CF8 35%, #6366F1 55%, #7B61FF 75%, #A78BFA 100%);
@@ -73,9 +69,6 @@ html.light {
   --flow-dot: #d8dce3;
   --flow-mask: rgba(250, 250, 251, 0.72);
   --grad-logo: linear-gradient(90deg, #6D28D9 0%, #7B61FF 30%, #6366F1 55%, #4F46E5 75%, #7B61FF 100%);
-  /* High-contrast origin-fill: dark solid cover + light ink on light theme */
-  --origin-fill-cover: 24 24 27;
-  --origin-fill-ink: 250 250 251;
 
   /* JSON 代码板 — VS Code Light+（g1.1） */
   --json-bg: #ffffff;
@@ -552,11 +545,6 @@ html.light .app-sidebar-card {
     transition: none !important;
     transform: none !important;
   }
-
-  /* g1.3: origin-fill — no scale transition under reduced motion */
-  button::before {
-    transition: none !important;
-  }
 }
 
 /* ---------- Shared micro-interaction utilities (g1–g3) ---------- */
@@ -772,58 +760,4 @@ html.light .app-sidebar-card {
   .md table {
     overflow-x: auto;
   }
-}
-
-/* ---------- Button origin-fill (high-contrast hover cover, g1.1–g1.3) ----------
-   Solid circle expands from pointer (--ox/--oy/--or) on is-filled.
-   Non-danger: light cover + dark ink (dark theme) / dark cover + light ink (light).
-   Danger (.ui-btn-danger / .text-err): solid err + white ink. No accent-2/elevated wash.
-*/
-button {
-  --ox: 50%;
-  --oy: 50%;
-  --or: 0px;
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-button::before {
-  content: '';
-  position: absolute;
-  left: var(--ox);
-  top: var(--oy);
-  width: var(--or);
-  height: var(--or);
-  margin-left: calc(var(--or) / -2);
-  margin-top: calc(var(--or) / -2);
-  border-radius: 50%;
-  pointer-events: none;
-  /* isolation:isolate + z-index:-1 keeps cover above the button background but
-     under ALL content, including bare text nodes / default slots (not only element children). */
-  z-index: -1;
-  transform: scale(0);
-  transition: transform var(--dur-origin-fill) var(--ease-out-expo);
-  background: rgb(var(--origin-fill-cover));
-}
-
-button.is-filled {
-  color: rgb(var(--origin-fill-ink)) !important;
-}
-
-button.is-filled::before {
-  transform: scale(1);
-}
-
-/* Danger: solid error red + white label/icon (currentColor) */
-button.ui-btn-danger,
-button.text-err {
-  --origin-fill-cover: var(--c-err);
-  --origin-fill-ink: 255 255 255;
-}
-
-/* Keyboard focus: outline survives overflow:hidden (Tailwind ring uses box-shadow) */
-button:focus-visible {
-  outline: 2px solid rgb(var(--c-accent) / 0.45);
-  outline-offset: 2px;
 }
