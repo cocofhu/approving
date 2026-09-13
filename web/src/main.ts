@@ -6,6 +6,7 @@ import { router } from './router'
 import { i18n } from './lib/shared/i18n'
 import { initLocale } from './lib/shared/locale'
 import { installIdleScrollbar } from './lib/shared/idleScrollbar'
+import { installOriginFill } from './lib/shared/originFill'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -15,6 +16,7 @@ import './styles/global.css'
 import './lib/shared/theme'
 
 installIdleScrollbar()
+installOriginFill()
 
 async function bootstrap() {
   const localeReady = initLocale()

@@ -80,4 +80,14 @@ describe('AppButton', () => {
     expect(disabled.classes()).not.toContain('ui-pressable')
     disabled.unmount()
   })
+
+  it('marks danger with ui-btn-danger for high-contrast origin-fill (g2.1)', () => {
+    const danger = mountBtn({ variant: 'danger' })
+    expect(danger.classes()).toContain('ui-btn-danger')
+    expect(danger.classes()).toContain('text-err')
+    danger.unmount()
+    const primary = mountBtn({ variant: 'primary' })
+    expect(primary.classes()).not.toContain('ui-btn-danger')
+    primary.unmount()
+  })
 })

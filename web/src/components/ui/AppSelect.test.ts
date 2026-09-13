@@ -258,6 +258,9 @@ describe('AppSelect', () => {
     expect(panel.style.width).toBe('200px')
     // Opens below the trigger (bottom + gap).
     expect(Number.parseInt(panel.style.top, 10)).toBeGreaterThan(132)
+    // g2.2: panel escapes the overflow:hidden trigger (Teleport → body tree)
+    expect(triggerEl.contains(panel)).toBe(false)
+    expect(document.body.contains(panel)).toBe(true)
     wrapper.unmount()
   })
 
