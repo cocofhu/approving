@@ -508,6 +508,48 @@ describe('AgentOrgSidebar agent name text color', () => {
     await btn.trigger('click')
     expect(wrapper.emitted('create-team')).toBeTruthy()
   })
+
+  it('列表头可触发导入与新建 Agent（22px 图标）', async () => {
+    const wrapper = mountSidebar()
+    const importBtn = wrapper.find('[data-testid="agent-org-import"]')
+    const createBtn = wrapper.find('[data-testid="agent-org-create-agent"]')
+    expect(importBtn.exists()).toBe(true)
+    expect(createBtn.exists()).toBe(true)
+    expect(importBtn.classes()).toContain('h-[22px]')
+    expect(createBtn.classes()).toContain('w-[22px]')
+    expect(importBtn.attributes('aria-label')).toBe('导入')
+    expect(createBtn.attributes('aria-label')).toBe('新建 Agent')
+    expect(importBtn.text()).not.toContain('导入')
+    expect(createBtn.text()).not.toContain('新建 Agent')
+
+    await importBtn.trigger('click')
+    await createBtn.trigger('click')
+    expect(wrapper.emitted('import')).toBeTruthy()
+    expect(wrapper.emitted('create-agent')).toBeTruthy()
+  })
+
+  it('折叠态不展示导入/新建图标', async () => {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const wrapper = mount(AgentOrgSidebar, {
+      props: {
+        org: sampleOrg,
+        agentNames,
+        activeName: '',
+        collapsed: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: { Icon: { template: '<span class="icon" />' }, Teleport: true },
+      },
+    })
+    expect(wrapper.find('[data-testid="agent-org-import"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="agent-org-create-agent"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })
 
 describe('AgentOrgSidebar project bracket', () => {
