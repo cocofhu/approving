@@ -1917,6 +1917,21 @@ describe('ClarifyChat', () => {
       wrapper.unmount()
     })
 
+    it('empty-fail buried under a later turn keeps card but no retry (retryLast trailing-only)', () => {
+      const wrapper = mountChat({
+        turns: [
+          { role: 'human', text: '做登录', at: 't1' },
+          { role: 'agent', text: '', at: 't2' },
+          { role: 'human', text: '下一条', at: 't3' },
+          { role: 'agent', text: '好的，开始对齐。', at: 't4' },
+        ],
+      })
+      expect(wrapper.findAll('[data-testid="clarify-empty-fail"]')).toHaveLength(1)
+      expect(wrapper.find('[data-testid="clarify-empty-fail-retry"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="clarify-turn-completed"]').exists()).toBe(true)
+      wrapper.unmount()
+    })
+
     it('retry emits retry-last and does not change draft (plan g1.2)', async () => {
       const wrapper = mountChat({
         draft: 'keep-draft',

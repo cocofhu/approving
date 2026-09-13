@@ -1301,10 +1301,16 @@ function latestRetryableFailIndex(): number {
   return -1
 }
 
-/** Only the latest empty/failure agent shows a clickable retry. */
+/**
+ * Only the trailing empty/failure agent shows a clickable retry.
+ * Must be the last display turn — matches backend retryLast (rejects when a
+ * later human/agent already followed the empty fail).
+ */
 function showFailRetry(t: ClarifyTurn, idx: number): boolean {
   if (props.done || !props.active) return false
   if (!isRetryableFailedAgent(t)) return false
+  const list = displayTurns.value
+  if (idx !== list.length - 1) return false
   return idx === latestRetryableFailIndex()
 }
 
