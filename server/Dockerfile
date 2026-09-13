@@ -9,16 +9,16 @@
 
 # --- Web (Vite) 构建 ---
 FROM node:20-bookworm-slim AS web-builder
-WORKDIR /web
+# Keep repo-relative layout: web build runs ../scripts/assert-no-approving-brand.mjs
+# which walks its parent as the project root. WORKDIR /web would put that parent
+# at /, and the guard would scan the whole image (OOM).
+WORKDIR /src/web
 # .npmrc 把 registry 指向 registry.npmmirror.com(见 web/.npmrc):国内网络直连
 # registry.npmjs.org 拉大包(monaco-editor)易 ECONNRESET,换镜像源规避。
 COPY web/package*.json web/.npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
-# web `npm run build` also runs ../scripts/assert-no-approving-brand.mjs
-# (WORKDIR=/web → /scripts/...). The image context is repo root, but only
-# web/ is copied above, so place the guard where the script path expects it.
-COPY scripts/assert-no-approving-brand.mjs /scripts/assert-no-approving-brand.mjs
+COPY scripts/assert-no-approving-brand.mjs /src/scripts/assert-no-approving-brand.mjs
 RUN npm run build
 
 # --- Go 构建 ---
@@ -32,7 +32,7 @@ COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ .
 # 前端产物随二进制由 Go 进程从文件系统服务(非 go:embed)。
-COPY --from=web-builder /web/dist ./web/dist
+COPY --from=web-builder /src/web/dist ./web/dist
 # Optional revision stamp for the overview-page service commit badge.
 # Production images have no .git (root .dockerignore); pass GIT_COMMIT or
 # GITHUB_SHA as build-arg. Empty args still produce a working binary.
