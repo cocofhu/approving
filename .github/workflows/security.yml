@@ -36,6 +36,12 @@ jobs:
             build-mode: none
     steps:
       - uses: actions/checkout@v7
+      - name: Free disk space for CodeQL
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+            /usr/local/share/powershell /usr/share/swift || true
+          df -h
       - uses: actions/setup-go@v7
         if: matrix.language == 'go'
         with:
