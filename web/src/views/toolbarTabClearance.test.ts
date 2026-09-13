@@ -36,10 +36,9 @@ describe('project page tab-panel clearance (g1.1)', () => {
 })
 
 describe('Agent Studio action / name bars (g1.2 / g1.3)', () => {
-  it('import/new action row uses toolbar-below-tabs', () => {
-    expect(studioSrc).toMatch(
-      /class="toolbar-below-tabs mb-5 flex shrink-0 gap-4"\s+data-testid="agent-studio-action-row"/,
-    )
+  it('no longer renders independent import/new action row under tabs', () => {
+    expect(studioSrc).not.toMatch(/data-testid="agent-studio-action-row"/)
+    expect(studioSrc).not.toMatch(/toolbar-below-tabs mb-5 flex shrink-0 gap-4/)
   })
 
   it('desktop and mobile name bars use toolbar-inline-row', () => {

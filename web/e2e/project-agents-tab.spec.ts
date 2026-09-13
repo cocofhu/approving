@@ -156,7 +156,11 @@ test('项目详情智能体 Tab：嵌入 Studio、过滤他项目、隐藏创建
 
   const body = await page.locator('[data-testid="project-agents-tab"]').innerText()
   expect(body).not.toContain('创建 Agent 团队')
-  expect(body).toMatch(/新建 Agent|New Agent/)
+  await expect(page.getByTestId('agent-studio-action-row')).toHaveCount(0)
+  await expect(page.getByTestId('agent-org-import')).toBeVisible()
+  await expect(page.getByTestId('agent-org-create-agent')).toBeVisible()
+  await expect(page.getByRole('button', { name: '新建 Agent' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '导入' })).toBeVisible()
 
   await expect(page.getByTestId('project-tab-sharedAgent')).toBeVisible()
 

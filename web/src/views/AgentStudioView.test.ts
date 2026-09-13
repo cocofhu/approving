@@ -1416,16 +1416,21 @@ describe('AgentStudio mobile core path', () => {
     wrapper.unmount()
   })
 
-  it('keeps new/import entries available alongside switch', async () => {
+  it('keeps switch and exposes import/new via org sheet header', async () => {
     mocks.listAgents.mockResolvedValue([agentWithFiles()])
     const wrapper = await mountMobileStudio()
     await flushPromises()
 
     expect(wrapper.find('[data-test="org-switch"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('导入')
-    expect(wrapper.text()).toContain('新建 Agent')
+    expect(wrapper.find('[data-testid="agent-studio-action-row"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('配置可复用的 Agent')
     expect(wrapper.text()).not.toContain('复制进沙箱')
+
+    await wrapper.get('[data-test="org-switch"]').trigger('click')
+    await flushPromises()
+    expect(document.querySelector('[data-test="org-sheet"]')).toBeTruthy()
+    expect(document.querySelector('[data-test="org-sheet-import"]')).toBeTruthy()
+    expect(document.querySelector('[data-test="org-sheet-create-agent"]')).toBeTruthy()
     wrapper.unmount()
   })
 })
@@ -1647,10 +1652,6 @@ describe('AgentStudio copy removal (subtitle + toolbar)', () => {
     'clearToast',
   ]
 
-  function toolbar(wrapper: Awaited<ReturnType<typeof mountStudio>>) {
-    return wrapper.find('.mb-5.flex.shrink-0')
-  }
-
   async function mountStudioEn() {
     const i18n = createI18n({
       legacy: false,
@@ -1671,16 +1672,55 @@ describe('AgentStudio copy removal (subtitle + toolbar)', () => {
           AgentChatTester: true,
           AgentGitGuide: true,
           AgentCreateWizard: true,
-          AgentOrgSidebar: true,
+          AgentOrgSidebar: {
+            template:
+              '<div data-test="sidebar">' +
+              '<button data-testid="agent-org-import" aria-label="Import">Import</button>' +
+              '<button data-testid="agent-org-create-agent" aria-label="New agent">New agent</button>' +
+              '</div>',
+          },
           AgentDataPanel: true,
         },
       },
     })
   }
 
-  it('hides zh subtitle, right-aligns desktop import/new, and does not add a page title', async () => {
+  async function mountStudioWithSidebar() {
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    return mount(AgentStudioView, {
+      global: {
+        plugins: [i18n, router],
+        stubs: {
+          AppButton: ButtonStub,
+          Icon: true,
+          AppModal: true,
+          CodeEditor: CodeEditorStub,
+          MarkdownSplitEditor: true,
+          ExplorerContextMenu: true,
+          AgentChatTester: true,
+          AgentGitGuide: true,
+          AgentCreateWizard: true,
+          AgentOrgSidebar: {
+            template:
+              '<div data-test="sidebar">' +
+              '<button data-testid="agent-org-import" aria-label="导入">导入</button>' +
+              '<button data-testid="agent-org-create-agent" aria-label="新建 Agent">新建 Agent</button>' +
+              '</div>',
+          },
+          AgentDataPanel: true,
+        },
+      },
+    })
+  }
+
+  it('hides zh subtitle, drops action row, and keeps import/new on sidebar header', async () => {
     mocks.listAgents.mockResolvedValue([agent('public')])
-    const wrapper = await mountStudio()
+    const wrapper = await mountStudioWithSidebar()
     await flushPromises()
 
     const text = wrapper.text()
@@ -1689,24 +1729,24 @@ describe('AgentStudio copy removal (subtitle + toolbar)', () => {
     expect(text).not.toMatch(/改前|改后/)
     expect(wrapper.findAll('h1,h2').some((el) => /Agent\s*(管理|Studio)/i.test(el.text()))).toBe(false)
 
-    const bar = toolbar(wrapper)
-    expect(bar.exists()).toBe(true)
-    expect(bar.classes()).toContain('justify-end')
-    expect(bar.classes()).not.toContain('justify-between')
-    expect(bar.text()).toContain('导入')
-    expect(bar.text()).toContain('新建 Agent')
+    expect(wrapper.find('[data-testid="agent-studio-action-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="agent-org-import"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-org-create-agent"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-org-import"]').attributes('aria-label')).toBe('导入')
+    expect(wrapper.find('[data-testid="agent-org-create-agent"]').attributes('aria-label')).toBe('新建 Agent')
     wrapper.unmount()
   })
 
-  it('hides en subtitle and keeps Import / New agent', async () => {
+  it('hides en subtitle and keeps Import / New agent via sidebar', async () => {
     mocks.listAgents.mockResolvedValue([agent('public')])
     const wrapper = await mountStudioEn()
     await flushPromises()
 
     const text = wrapper.text()
     for (const s of subtitleEn) expect(text).not.toContain(s)
-    expect(text).toContain('Import')
-    expect(text).toContain('New agent')
+    expect(wrapper.find('[data-testid="agent-studio-action-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="agent-org-import"]').attributes('aria-label')).toBe('Import')
+    expect(wrapper.find('[data-testid="agent-org-create-agent"]').attributes('aria-label')).toBe('New agent')
     wrapper.unmount()
   })
 })
@@ -2142,6 +2182,57 @@ describe('AgentStudioView loading / four-state', () => {
     expect(wrapper.text()).toContain('加载失败')
     expect(wrapper.text()).toContain('重试')
     expect(wrapper.text()).not.toContain('用一个入口拉起整支团队')
+    wrapper.unmount()
+  })
+
+  it('empty state keeps primary CTA and secondary import (standalone)', async () => {
+    mocks.listAgents.mockResolvedValue([])
+    const wrapper = await mountStudio()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-studio-action-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="agent-studio-empty-team"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-studio-empty-create-team"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-studio-empty-import"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('创建 Agent 团队')
+    expect(wrapper.text()).toContain('导入')
+    wrapper.unmount()
+  })
+
+  it('embedded empty state keeps new-agent CTA and secondary import', async () => {
+    mocks.listAgents.mockResolvedValue([])
+    const i18n = createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': { ...common, ...pages } },
+    })
+    const router = await createStudioRouter()
+    const wrapper = trackMount(
+      mount(AgentStudioView, {
+        props: { projectId: 'proj-1', embedded: true },
+        global: {
+          plugins: [i18n, router],
+          stubs: {
+            AppButton: ButtonStub,
+            Icon: true,
+            AppModal: true,
+            CodeEditor: CodeEditorStub,
+            MarkdownSplitEditor: true,
+            ExplorerContextMenu: true,
+            AgentChatTester: true,
+            AgentGitGuide: true,
+            AgentCreateWizard: true,
+            AgentOrgSidebar: true,
+            AgentDataPanel: true,
+          },
+        },
+      }),
+    )
+    await flushPromises()
+    expect(wrapper.find('[data-testid="agent-studio-action-row"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="agent-studio-empty-create"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agent-studio-empty-import"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('新建 Agent')
+    expect(wrapper.text()).not.toContain('创建 Agent 团队')
     wrapper.unmount()
   })
 })
