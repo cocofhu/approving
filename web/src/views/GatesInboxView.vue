@@ -95,6 +95,7 @@ const {
   openDetail,
   backToList,
   onClarifySend,
+  onClarifyRetryLast,
   onClarifyFinish,
   onClarifyCancel,
   onClarifyQueueRemove,
@@ -491,6 +492,7 @@ const listFadeKey = computed(() =>
               :active="clarifyInputActive"
               :confirm-error="clarifyConfirmError"
               @send="onClarifySend"
+              @retry-last="onClarifyRetryLast"
               @finish="onClarifyFinish"
               @cancel="onClarifyCancel"
               @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"
@@ -617,6 +619,7 @@ const listFadeKey = computed(() =>
                   :active="clarifyInputActive"
                   :confirm-error="clarifyConfirmError"
                   @send="onClarifySend"
+                  @retry-last="onClarifyRetryLast"
                   @finish="onClarifyFinish"
                   @cancel="onClarifyCancel"
                   @queue-remove="(itemId) => onClarifyQueueRemove(itemId)"

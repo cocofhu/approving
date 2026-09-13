@@ -196,6 +196,15 @@ func (c *acpProvider) ReactReply(ctx context.Context, req NodeReq, history []mod
 	}
 
 	if !force && !reactCapReached(req, history) {
+		// Empty narration with no questions: keep the dialogue open as an empty
+		// failure (plan g2.2) — do not Done / finishReact / node-failed.
+		if strings.TrimSpace(narration) == "" {
+			if req.NodeType == "approve" {
+				c.host.ClearOutcome(req.RunID, req.NodeID)
+			}
+			events = c.snapshotEvents(ctx, sess.sb, events)
+			return ReactTurn{Msg: narration, Done: false, Events: events, Usage: usage, UsageByModel: usageByModel}
+		}
 		if gq, msg, ge, gu, gum, ok := c.enforceOpenQuestionsGate(ctx, req, sess); ok {
 			events = append(events, ge...)
 			usage = models.AddTokenUsage(usage, gu)

@@ -231,10 +231,11 @@ export const runsClient = {
     images: ClarifyImage[] = [],
     force = false,
     annotations: ReactAnnotation[] = [],
+    retryLast = false,
   ) =>
     req<{ status: string; waiting?: number }>(`/runs/${runId}/react/${nodeId}/reply`, {
       method: 'POST',
-      body: JSON.stringify({ text, images, force, annotations }),
+      body: JSON.stringify({ text, images, force, annotations, retryLast }),
     }),
   /** 轮级 Cancel for node-inline review (clears FIFO + aborts active ACP turn). */
   reactCancel: (runId: string, nodeId: string) =>

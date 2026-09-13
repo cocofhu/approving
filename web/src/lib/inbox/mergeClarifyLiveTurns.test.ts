@@ -64,4 +64,20 @@ describe('mergePersistedAndLiveTurns', () => {
     expect(merged.filter((t) => t.role === 'human' && t.text === '改成绿的')).toHaveLength(2)
     expect(merged[merged.length - 1].streaming).toBe(true)
   })
+
+  it('cover retry replaces trailing empty/failure agent with live stream (plan g2.1)', () => {
+    const persisted: ClarifyTurn[] = [
+      { role: 'human', text: '做登录', at: 't1' },
+      { role: 'agent', text: '', at: 't2' },
+    ]
+    const live: ClarifyTurn[] = [
+      { role: 'human', text: '做登录', at: 't1-live' },
+      { role: 'agent', text: '', at: 't3', streaming: true },
+    ]
+    expect(persistedCompletedLiveHuman(persisted, '做登录')).toBe(true)
+    const merged = mergePersistedAndLiveTurns(persisted, live)
+    expect(merged.filter((t) => t.role === 'human')).toHaveLength(1)
+    expect(merged.filter((t) => t.role === 'agent')).toHaveLength(1)
+    expect(merged[merged.length - 1].streaming).toBe(true)
+  })
 })

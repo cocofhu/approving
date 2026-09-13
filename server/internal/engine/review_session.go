@@ -46,6 +46,9 @@ type reviewQueueItem struct {
 	Source      string // "node" | "gate"
 	GateNodeID  string
 	Force       bool // clarify force wrap-up (rare via enqueue; normally sync)
+	// RetryLast re-runs the last human without inserting another human row
+	// (cover-this-turn after empty/failed agent).
+	RetryLast bool
 }
 
 // reviewSession is the platform-authoritative controller for one parked
@@ -237,20 +240,81 @@ func (e *Engine) BroadcastReviewSessions(runID string) {
 // returns immediately with the new waiting count. Serial pump starts if idle.
 // Both ReactReply(force=false) and GateReactRevise share this entry (FR5).
 func (e *Engine) EnqueueReviewTurn(runID, producerID, text string, images []models.PromptImage, annotations []models.ReactAnnotation, source, gateNodeID string) (waiting int, err error) {
-	return e.enqueueReactTurn(runID, producerID, text, images, annotations, source, gateNodeID, sessionKindReview)
+	return e.enqueueReactTurn(runID, producerID, text, images, annotations, source, gateNodeID, sessionKindReview, false)
 }
 
 // EnqueueClarifyTurn queues a classic react (需求澄清) turn onto the same platform
 // FIFO / WS frame protocol as review, returning immediately.
 func (e *Engine) EnqueueClarifyTurn(runID, nodeID, text string, images []models.PromptImage, annotations []models.ReactAnnotation) (waiting int, err error) {
-	return e.enqueueReactTurn(runID, nodeID, text, images, annotations, "node", "", sessionKindClarify)
+	return e.enqueueReactTurn(runID, nodeID, text, images, annotations, "node", "", sessionKindClarify, false)
 }
 
-func (e *Engine) enqueueReactTurn(runID, producerID, text string, images []models.PromptImage, annotations []models.ReactAnnotation, source, gateNodeID string, kind sessionKind) (waiting int, err error) {
+// EnqueueClarifyRetryLast re-runs the latest human turn without inserting a new
+// human row. Last agent must be empty/failed (or absent after a lone human).
+func (e *Engine) EnqueueClarifyRetryLast(runID, nodeID string) (waiting int, err error) {
+	var conv models.ReactConversation
+	if err := e.db.Where("run_id = ? AND node_id = ?", runID, nodeID).
+		Order("iteration desc, id desc").First(&conv).Error; err != nil {
+		return 0, errors.New("no react conversation")
+	}
+	if conv.Done {
+		return 0, errors.New("react already done")
+	}
+	text, images, annotations, ok := lastRetryableHuman(conv.Messages)
+	if !ok {
+		return 0, errors.New("没有可重试的上一轮用户消息")
+	}
+	return e.enqueueReactTurn(runID, nodeID, text, images, annotations, "node", "", sessionKindClarify, true)
+}
+
+// lastRetryableHuman finds the latest human whose following agent (if any) is
+// empty/failed — suitable for cover-this-turn retry. Pops trailing empty agent
+// is done in executeClarifyTurn(RetryLast).
+func lastRetryableHuman(msgs []models.ReactMessage) (text string, images []models.PromptImage, anns []models.ReactAnnotation, ok bool) {
+	if len(msgs) == 0 {
+		return "", nil, nil, false
+	}
+	last := msgs[len(msgs)-1]
+	switch last.Role {
+	case "human":
+		return last.Text, last.Images, last.Annotations, true
+	case "agent":
+		if !isRetryableEmptyOrFailedAgent(last) {
+			return "", nil, nil, false
+		}
+		if len(msgs) < 2 {
+			return "", nil, nil, false
+		}
+		h := msgs[len(msgs)-2]
+		if h.Role != "human" {
+			return "", nil, nil, false
+		}
+		return h.Text, h.Images, h.Annotations, true
+	default:
+		return "", nil, nil, false
+	}
+}
+
+// isRetryableEmptyOrFailedAgent matches frontend empty/failure cards: no
+// questions, not interrupted, and either blank body or a known failure banner.
+func isRetryableEmptyOrFailedAgent(m models.ReactMessage) bool {
+	if m.Role != "agent" || m.Interrupted || len(m.Questions) > 0 {
+		return false
+	}
+	t := strings.TrimSpace(m.Text)
+	if t == "" {
+		return true
+	}
+	return strings.Contains(t, "澄清回复失败") ||
+		strings.Contains(t, "澄清会话已失效") ||
+		strings.Contains(t, "复审修改失败")
+}
+
+func (e *Engine) enqueueReactTurn(runID, producerID, text string, images []models.PromptImage, annotations []models.ReactAnnotation, source, gateNodeID string, kind sessionKind, retryLast bool) (waiting int, err error) {
 	if e.IsHalted() {
 		return 0, errors.New("server is shutting down")
 	}
-	if strings.TrimSpace(text) == "" && len(images) == 0 && len(annotations) == 0 {
+	if !retryLast && strings.TrimSpace(text) == "" && len(images) == 0 && len(annotations) == 0 {
 		return 0, errors.New("text, images, or annotations required")
 	}
 	images, err = blob.IngestPromptImages(context.Background(), e.blobs, images)
@@ -266,15 +330,16 @@ func (e *Engine) enqueueReactTurn(runID, producerID, text string, images []model
 		Annotations: annotations,
 		Source:      source,
 		GateNodeID:  gateNodeID,
+		RetryLast:   retryLast,
 	}
 
 	choiceDup := models.IsChoiceReply(text)
-	if choiceDup && e.transcriptHasChoiceAfterLatestAsk(runID, producerID) {
+	if !retryLast && choiceDup && e.transcriptHasChoiceAfterLatestAsk(runID, producerID) {
 		return 0, errors.New("本轮选择题已提交,请等待回复")
 	}
 
 	s.mu.Lock()
-	if choiceDup && sessionHasChoiceLocked(s) {
+	if !retryLast && choiceDup && sessionHasChoiceLocked(s) {
 		s.mu.Unlock()
 		return 0, errors.New("本轮选择题已提交,请等待回复")
 	}
@@ -619,6 +684,8 @@ func (e *Engine) pumpReviewSession(s *reviewSession) {
 // cancelable ctx), persists the agent turn (marking interrupted on cancel), and
 // finalizes the node when the agent is Done — mirroring the former sync ReactReply
 // path but under the shared FIFO pump so refresh can resume busy/queue/stream.
+// When item.RetryLast is set, the latest human is reused (trailing empty/failed
+// agent is dropped) and no new human row is inserted (plan g2.1).
 func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item *reviewQueueItem) (interrupted bool, err error) {
 	unlock := e.lockResume(s.runID + ":" + s.producerID)
 	defer unlock()
@@ -646,12 +713,26 @@ func (e *Engine) executeClarifyTurn(ctx context.Context, s *reviewSession, item 
 	answered := lastAgentQuestions(conv.Messages)
 
 	now := time.Now().Format(time.RFC3339)
-	conv.Messages = append(conv.Messages, models.ReactMessage{
-		Role: "human", Text: item.Text, At: now,
-		Images: item.Images, Annotations: item.Annotations,
-	})
-	logDB(e.db.Save(&conv), s.runID, "save clarify human turn (turn_begin)")
-	humanMsg := conv.Messages[len(conv.Messages)-1]
+	var humanMsg models.ReactMessage
+	if item.RetryLast {
+		// Drop trailing empty/failed agent so the next agent reply overwrites it.
+		if n := len(conv.Messages); n > 0 && isRetryableEmptyOrFailedAgent(conv.Messages[n-1]) {
+			conv.Messages = conv.Messages[:n-1]
+		}
+		if n := len(conv.Messages); n == 0 || conv.Messages[n-1].Role != "human" {
+			return false, errors.New("没有可重试的上一轮用户消息")
+		}
+		humanMsg = conv.Messages[len(conv.Messages)-1]
+		// Ensure Effective uses the persisted human (item already carries it).
+		logDB(e.db.Save(&conv), s.runID, "clarify retryLast drop failed agent")
+	} else {
+		humanMsg = models.ReactMessage{
+			Role: "human", Text: item.Text, At: now,
+			Images: item.Images, Annotations: item.Annotations,
+		}
+		conv.Messages = append(conv.Messages, humanMsg)
+		logDB(e.db.Save(&conv), s.runID, "save clarify human turn (turn_begin)")
+	}
 	e.broker.Publish(s.runID, jsonMsg("react", s.runID, s.producerID))
 
 	req := e.nodeReq(c, node)
