@@ -4,6 +4,7 @@ import type { Artifact, Run } from '@/lib/shared/types'
 import {
   REACT_STAGE_TAB_GRID,
   REACT_STAGE_TAB_NOVNC,
+  REACT_STAGE_TAB_PREVIEW,
   applyPreviewArtifactFromRun,
   applyPreviewArtifactName,
   artifactFingerprint,
@@ -253,7 +254,7 @@ describe('reactArtifactPreview helpers', () => {
     expect(openStagePreviewTab(['a.html', 'b.md'], 'a.html')).toEqual(['a.html', 'b.md'])
     expect(closeStagePreviewTab(['a.html', 'b.md'], 'a.html')).toEqual(['b.md'])
     expect(nextTabAfterClose(['a.html', 'b.md'], 'b.md', previewTabId('b.md'))).toBe(previewTabId('a.html'))
-    expect(nextTabAfterClose(['a.html'], 'a.html', previewTabId('a.html'))).toBe(REACT_STAGE_TAB_GRID)
+    expect(nextTabAfterClose(['a.html'], 'a.html', previewTabId('a.html'))).toBe(REACT_STAGE_TAB_PREVIEW)
     expect(nextTabAfterClose(['a.html', 'b.md'], 'a.html', previewTabId('b.md'))).toBe(previewTabId('b.md'))
     expect(nextTabAfterClose(['a.html'], 'a.html', previewTabId('a.html'), true)).toBe(REACT_STAGE_TAB_NOVNC)
     expect(nextTabAfterClose(['a.html'], 'a.html', REACT_STAGE_TAB_NOVNC)).toBe(REACT_STAGE_TAB_NOVNC)
