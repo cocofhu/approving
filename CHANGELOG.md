@@ -4,6 +4,19 @@ All notable public-release changes are documented here.
 
 ## Unreleased
 
+## 0.5.3 — 2026-09-13
+
+- **Fix:** `publish-image` can build again. Web `npm run build` runs the brand
+  guard at `../scripts/assert-no-approving-brand.mjs`; the image now keeps
+  `web/` and `scripts/` under `/src` so the walk root is the project, not `/`
+  (which 404'd on `v0.5.2`, then OOM'd when the script sat at `/scripts`).
+- CodeQL on default runners frees unused SDK disk before analyze so incremental
+  analysis does not fail the `security` job.
+- README (EN / zh-CN) leads with the FSM differentiator: designed
+  success / fail / rollback, visual clarify, parallel human gates.
+- Default `./start.sh` / `.env.example` / `compose.release.yaml` pins GHCR
+  images to `*:0.5.3`.
+
 ## 0.5.2 — 2026-09-13
 
 - Clear remaining product Approving brand identifiers (storage keys, MIME,
