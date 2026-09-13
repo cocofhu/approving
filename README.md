@@ -1,8 +1,8 @@
 # Grasp
 
-**Agent workflows that advance with humans — a new paradigm for multi-agent collaboration.**
+**An FSM for coding agents — visual states humans can approve in parallel.**
 
-Grasp is an open-source, self-hostable platform for turning coding agents into visual, reviewable, and recoverable delivery workflows. Agents run in real Docker sandboxes, exchange structured artifacts, and pause for human **Approve** at critical nodes.
+Most multi-agent setups hide the path inside a conversation: one chat, one happy path, and a human who must re-prompt when something fails. Grasp makes the path a **finite state machine**. You design success, failure, and rollback on a canvas; agents run those states in Docker sandboxes; humans only enter at explicit gates — and they approve from a clarified spec and a `page.html` preview, not a transcript.
 
 [Website](https://www.approving-ai.com/) · [Quick start](https://www.approving-ai.com/en/guide/quick-start/) · [Contributing](CONTRIBUTING.md) · [Configuration](server/CONFIGURATION.md) · [Gateway](GATEWAY.md)
 
@@ -20,78 +20,95 @@ Grasp is an open-source, self-hostable platform for turning coding agents into v
 
 > Grasp is currently a public beta. It requires a Linux host with Docker Compose. Default startup only needs Grasp + Gateway; the single `universal-sandbox` image is pulled once.
 
-## Why Grasp?
+## Why an FSM — not another agent chat
 
-A single coding agent is effective at completing one task. As work expands across research, design, implementation, testing, and review, new bottlenecks appear:
+A single coding agent can finish one task. String several together and three things break:
 
-- collaboration is hidden inside conversations and is hard to reuse or audit;
-- once agents run in parallel, human understanding and review speed limit throughput;
-- agents lack stable, verifiable contracts for handing work to one another;
-- high-risk actions do not have explicit human decision points;
-- failures often require manual prompting instead of following designed recovery paths.
+- the **path** lives in prompts, so nobody can reuse, audit, or recover it;
+- **failure** means “ask again”, not a designed rollback to a checkpoint;
+- **humans** cannot keep up once many runs are waiting — unless each pending state is visual and structured.
 
-Grasp adds a harness above coding agents: FSMs define the path, sandboxes isolate execution, MCP carries artifacts, and human approval becomes a first-class workflow node.
+Grasp’s bet: agents are fast; the workflow must still be a machine you designed.
 
 ```text
-Requirement
-    → Clarify Agent
-    → Research Agent
-    → Proposal Agent
-    → Human Gate
-    → Implement Agent
-    → Test Agent
-    → Review Agent
-    → PR / MR
+                    ┌──── fail / rollback (restore checkpoint) ────┐
+                    ▼                                              │
+One sentence → Grasp → Visual page.html → Human gate → Implement → Test → Review → PR
+     ▲                    ▲                    │
+     └──── revise ────────┴────────────────────┘
 ```
+
+Nodes are states. Edges are transitions (`success` / `fail` / `rollback`) with optional `when` guards. Checkpoints snapshot variables so a retry is a state change, not a new chat.
+
+## What is different
+
+### 1. Design the path first
+
+Build the machine on a Vue Flow canvas: Input, Grasp, role agents, Visual, Branch, Human gate, App preview, Output.
+
+- **Success / fail / rollback** are first-class edges, not comments in a prompt.
+- **`when` guards** and **Branch** (if / else-if / else) route on artifacts, JSON fields, and outputs.
+- **Checkpoints** mark safe re-entry; rollback restores the variable snapshot and injects the error.
+- A **state trace** records enter / exit / transition / rollback — the run is inspectable.
+
+This is the opposite of a one-shot agent: the path exists before anyone types a goal.
+
+### 2. Humans are states, not spectators
+
+When a step needs a decision, the FSM **stops**. The gate appears in the inbox and on the run. Reviewers confirm from structured artifacts — a clarified requirement, a plan, a `page.html` preview — then the machine continues on the edge you drew.
+
+They do not follow every tool call. Many runs can sit at different gates at once; people scan visuals and approve in parallel.
+
+### 3. Visual clarification makes each state graspable
+
+Home starts a **pre-dev Grasp** from one sentence (or a screenshot / doc). That node is a multi-turn ReAct with no prompt template: the user speaks first, the agent aligns requirements, and it only `ask_question` on a real decision.
+
+Two deliverables finish the node:
+
+1. `clarified_requirement.json` — structured WHAT
+2. `plan.json` — a short, two-level plan
+
+Optional: research, proposals, a live app preview, and a self-contained `page.html` grounded in the existing frontend. Gates render the page in an iframe, so the pending state is something you can *see*.
+
+### 4. Artifacts fire the transitions
+
+Each run has an isolated artifact MCP. Agents write with `write_artifact`, `set_*`, `node_complete`. The engine does not advance because the model “felt done” — required artifacts must exist (and `when` expressions can read them). Handoffs are contracts, not pasted chat.
+
+### 5. Execution is sandboxed, backends are swappable
+
+Agent states run in Docker through the vendored `sandbox-gateway`. One workflow can mix Cursor, Claude Code, CodeBuddy, Trae, and OpenCode. Credentials stay in Agent env, not in platform images.
 
 ## Core capabilities
 
-### Visual FSM orchestration
+| Capability | In the FSM |
+|---|---|
+| Visual canvas | Nodes + success / fail / rollback + `when` + checkpoints |
+| Visual clarify | Grasp node → spec + plan + optional `page.html` |
+| Human gates | Inbox, run detail, shareable temp links |
+| Parallel runs | Many machines at once; humans approve from one inbox |
+| Artifact MCP | Isolated per run; required outputs gate transitions |
+| Git delivery | `gh` / `glab` / SSH inside the sandbox |
+| Observability | Timeline, sandbox logs, artifacts, token usage |
 
-Build workflows on a Vue Flow canvas with agent, react, and gate nodes. Edges describe success, failure, and rollback paths; `when` guards and checkpoints control transitions.
-
-### Human-in-the-loop gates
-
-Pause a run for proposal selection, visual acceptance, release confirmation, or another high-value decision. Reviewers can approve, reject, or request revision from structured artifacts instead of following every agent action.
-
-### Real Docker sandboxes
-
-Agent and react nodes execute in isolated containers through the vendored `sandbox-gateway`. The platform manages sandbox lifecycle, while the ACP bridge connects supported agent backends.
-
-### Multiple agent backends
-
-Use different backends in one workflow:
-
-- Cursor
-- Claude Code
-- CodeBuddy
-- Trae
-
-Each agent chooses its own `acpBackend`. Credentials live in Agent meta env and are not baked into platform images.
-
-### Run-scoped artifact contracts
-
-Every run receives an isolated artifact MCP and token. Agents use tools such as `write_artifact`, `read_artifact`, `set_*`, and `node_complete` to exchange structured results. Before advancing, the platform checks that required artifacts exist.
-
-### Git delivery
-
-Inject GitHub, GitLab, or SSH credentials per agent, including values referenced through `${vars.<name>}`. GitLab MRs can be created with `glab`; GitHub PRs are created by the agent with `gh` inside the sandbox.
-
-### Execution visibility
-
-Inspect run details, execution timelines, sandbox logs, artifacts, pending approvals, and token usage to understand status and resource consumption.
+The repository includes Clarify, Visual, Research, Proposal, Plan, Implement, Test, Preview, and Review role packs. Run `agents/pack.sh` and import them in Agent Studio.
 
 ## Typical workflow
 
-A software delivery workflow can separate responsibilities explicitly:
+Short pre-dev loop:
 
 ```text
-Clarify → Research → Proposal → Human approval
-        → Plan → Implement → Test → Review
-        → Human confirmation → PR / MR
+One sentence → Grasp (clarify / plan / page.html) → Human gate → build
 ```
 
-The repository includes Clarify, Visual, Research, Proposal, Plan, Implement, Test, Preview, and Review role packs. Run `agents/pack.sh` to package them for import through Agent Studio.
+Fuller delivery machine:
+
+```text
+Clarify → Research → Proposal → Human gate
+        → Plan → Implement → Test → Review
+        → Human confirm → PR / MR
+```
+
+Draw the fail and rollback edges on the same canvas. The next failure should follow a path you already designed.
 
 ## Quick start
 
@@ -135,8 +152,8 @@ Override image tags or digests in `.env`; see [`.env.example`](.env.example).
 
 1. Sign in with the local demo account. A fresh installation starts with an empty project and does not create a sample pipeline.
 2. Create an agent in **Agent Studio**, select `cursor`, `claude_code`, `codebuddy`, `trae`, or `opencode`, and configure the matching API key.
-3. Create a workflow and connect agent nodes, success/failure edges, rollback paths, and human gates.
-4. Publish and start a run. Observe sandbox execution, MCP artifacts, and nodes waiting for approval.
+3. Open the canvas: connect a Grasp node after start, then Visual / gate / implement nodes. Draw success, fail, and rollback — mark checkpoints where a retry should re-enter.
+4. Publish and start a run (or launch from **Home** in one sentence). Watch the state trace, `page.html` preview, and inbox items waiting at gates.
 
 See [`server/README.md`](server/README.md) for backend authentication and Agent env configuration.
 
@@ -145,7 +162,7 @@ See [`server/README.md`](server/README.md) for backend authentication and Agent 
 ```text
 ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
 │ Vue 3 + Vue Flow │────▶│ Go Backend       │────▶│ sandbox-gateway  │
-│ orchestration    │◀────│ FSM + API + MCP  │◀────│ control plane    │
+│ FSM canvas       │◀────│ engine + API+MCP │◀────│ control plane    │
 └──────────────────┘     └────────┬─────────┘     └────────┬─────────┘
                                   │                        │
                                   │                        ▼
@@ -155,7 +172,7 @@ See [`server/README.md`](server/README.md) for backend authentication and Agent 
                                                   └──────────────────┘
 ```
 
-- `web/` — Vue 3 + Vue Flow canvas, run details, approvals, and Agent Studio.
+- `web/` — Vue 3 + Vue Flow canvas, Home clarify, run details, inbox, and Agent Studio.
 - `server/` — Go FSM engine, API, SQLite, artifact MCP, scheduling, and audit.
 - `sandbox-gateway/gateway/` — sandbox lifecycle control plane.
 - `sandbox-gateway/sandbox/` — universal sandbox image and ACP bridge.

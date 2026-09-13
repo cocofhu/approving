@@ -15,6 +15,10 @@ WORKDIR /web
 COPY web/package*.json web/.npmrc ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
+# web `npm run build` also runs ../scripts/assert-no-approving-brand.mjs
+# (WORKDIR=/web → /scripts/...). The image context is repo root, but only
+# web/ is copied above, so place the guard where the script path expects it.
+COPY scripts/assert-no-approving-brand.mjs /scripts/assert-no-approving-brand.mjs
 RUN npm run build
 
 # --- Go 构建 ---
