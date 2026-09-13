@@ -1652,18 +1652,6 @@
         "concurrency": "concurrency",
         "autoRefresh": "Auto-refresh every 5s",
         "note": "total = test + running workflows · excludes TTL keep-alive sandboxes"
-      },
-      "platformRulesCard": {
-        "title": "Platform rules",
-        "desc": "Manage global defaults for all 10 embedded platform rules under data/platform-rules/.",
-        "readOnly": "Read-only for non-admin accounts.",
-        "manage": "Manage rules",
-        "view": "View rules"
-      },
-      "integrationsCard": {
-        "title": "Integrations",
-        "desc": "Browse the built-in MCP discovery catalog (injected by scope; no configuration here).",
-        "view": "View integrations"
       }
     },
     "platformRules": {
@@ -2923,7 +2911,7 @@
       "connectionLost": "Preview connection lost",
       "sandboxRecycled": "Sandbox recycled; preview unavailable",
       "directOpenTab": "Open in new tab",
-      "directScriptMissing": "Pick script is not loaded. Direct preview needs same-origin /__approving/preview-pick.js (rebuild the sandbox image that includes preview-inject).",
+      "directScriptMissing": "Pick script is not loaded. Direct preview needs same-origin /__grasp/preview-pick.js (rebuild the sandbox image that includes preview-inject).",
       "directGotoInvalid": "Navigation is limited to the same preview origin.",
       "directAddressPlaceholder": "http://IP:port/",
       "externalUrlHint": "External URL opens directly; pick-annotate is unavailable on cross-origin sites.",

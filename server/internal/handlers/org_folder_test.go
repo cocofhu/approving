@@ -28,7 +28,7 @@ func TestExportImportOrgFolderHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := hn.h.Org.Put(services.AgentOrg{
-		Groups: []services.OrgGroup{{ID: "g1", Name: "Approving项目组"}},
+		Groups: []services.OrgGroup{{ID: "g1", Name: "Grasp项目组"}},
 		Agents: map[string]services.OrgAgentMembership{
 			"alice": {GroupIDs: []string{"g1"}},
 		},
@@ -51,7 +51,7 @@ func TestExportImportOrgFolderHTTP(t *testing.T) {
 	if !strings.Contains(cd, `filename="`) || !strings.Contains(cd, "filename*=UTF-8''") {
 		t.Fatalf("Content-Disposition missing quote/RFC5987: %s", cd)
 	}
-	if !strings.Contains(cd, "Approving") {
+	if !strings.Contains(cd, "Grasp") {
 		t.Fatalf("download name should keep CJK group title: %s", cd)
 	}
 	zipBytes := append([]byte(nil), w.Body.Bytes()...)

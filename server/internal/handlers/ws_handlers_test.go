@@ -88,9 +88,9 @@ func TestRunEventsWSReviewEnqueueError(t *testing.T) {
 
 func TestSandboxChatWS(t *testing.T) {
 	h := newHarness(t)
-	h.db.Create(&models.Sandbox{Name: "approving-sb-cw", Purpose: "test", Status: "stopped"})
+	h.db.Create(&models.Sandbox{Name: "grasp-sb-cw", Purpose: "test", Status: "stopped"})
 	var row models.Sandbox
-	h.db.Where("name = ?", "approving-sb-cw").First(&row)
+	h.db.Where("name = ?", "grasp-sb-cw").First(&row)
 
 	srv := httptest.NewServer(h.r)
 	defer srv.Close()
@@ -128,9 +128,9 @@ func TestSandboxChatWS(t *testing.T) {
 
 func TestSandboxTerminalWS(t *testing.T) {
 	h := newHarness(t)
-	h.db.Create(&models.Sandbox{Name: "approving-sb-tw", Purpose: "test", Status: "stopped"})
+	h.db.Create(&models.Sandbox{Name: "grasp-sb-tw", Purpose: "test", Status: "stopped"})
 	var row models.Sandbox
-	h.db.Where("name = ?", "approving-sb-tw").First(&row)
+	h.db.Where("name = ?", "grasp-sb-tw").First(&row)
 
 	srv := httptest.NewServer(h.r)
 	defer srv.Close()

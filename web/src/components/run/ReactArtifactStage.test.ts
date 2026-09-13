@@ -94,22 +94,25 @@ describe('ReactArtifactStage', () => {
     resetStageOpenStateForTests(':run-')
   })
 
-  it('defaults to the pipeline grid tab and opens a new preview tab on card click', async () => {
+  it('defaults to chrome preview empty, then opens a named preview tab on card click (g2.1)', async () => {
     const wrapper = mount(ReactArtifactStage, {
       props: {
         artifacts: [art({ id: 'a1', name: 'research.json', kind: 'json' })],
         runId: 'run-1',
+        remoteKind: 'off',
       },
       global: { plugins: [i18n()], stubs },
     })
-    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
-    expect(wrapper.get('[data-testid="react-artifact-grid"]').text()).toContain('research.json')
-    expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="react-artifact-tab-preview"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-preview-empty"]').text()).toContain('尚未选择产物')
+    expect(wrapper.find('[data-testid="hard-load-layer"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="artifact-preview"]').exists()).toBe(false)
     await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-grid"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="react-artifact-tab-research.json"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.get('[data-testid="artifact-preview"]').text()).toBe('research.json|off')
+    expect(wrapper.get('[data-testid="react-artifact-tab-preview"]').attributes('aria-selected')).toBe('false')
     wrapper.unmount()
   })
 
@@ -216,7 +219,8 @@ describe('ReactArtifactStage', () => {
       global: { plugins: [i18n()], stubs },
     })
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-preview"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="hard-load-layer"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="react-artifact-tab-page.html"]').exists()).toBe(false)
     await wrapper.setProps({ artifacts: [note, page], previewArtifact: 'page.html' })
     await flushPromises()
@@ -777,7 +781,7 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
-  it('stays on the pipeline grid when only JSON is on stage and still opens on click (s4)', async () => {
+  it('stays on chrome preview empty when only JSON is on stage and still opens on click (s4 g2.1)', async () => {
     const json = art({ id: 'j', name: 'research.json', kind: 'json', nodeId: 'research' })
     const wrapper = mount(ReactArtifactStage, {
       props: {
@@ -790,7 +794,8 @@ describe('ReactArtifactStage', () => {
       global: { plugins: [i18n()], stubs },
     })
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-preview"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-preview-empty"]').text()).toContain('尚未选择产物')
     expect(wrapper.find('[data-testid="react-artifact-tab-research.json"]').exists()).toBe(false)
     await wrapper.get('[data-testid="react-artifact-card-research.json"]').trigger('click')
     await flushPromises()
@@ -798,7 +803,7 @@ describe('ReactArtifactStage', () => {
     wrapper.unmount()
   })
 
-  it('opens page.html once when it arrives while the user is still on the default grid (s5)', async () => {
+  it('opens page.html once when it arrives while the user is still on the default preview empty (s5 g2.1)', async () => {
     const json = art({ id: 'j', name: 'research.json', kind: 'json', nodeId: 'visual_bqc5' })
     const page = art({ id: 'p', name: 'page.html', kind: 'html', nodeId: 'visual_bqc5' })
     const wrapper = mount(ReactArtifactStage, {
@@ -812,7 +817,8 @@ describe('ReactArtifactStage', () => {
       global: { plugins: [i18n()], stubs },
     })
     await flushPromises()
-    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-preview"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.find('[data-testid="hard-load-layer"]').exists()).toBe(false)
     await wrapper.setProps({ artifacts: [json, page] })
     await flushPromises()
     expect(wrapper.get('[data-testid="react-artifact-tab-page.html"]').attributes('aria-selected')).toBe('true')
@@ -918,7 +924,7 @@ describe('ReactArtifactStage', () => {
     await wrapper.get('[data-testid="react-artifact-tab-close-brand-row-preview.html"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="react-artifact-tab-brand-row-preview.html"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="react-artifact-tab-grid"]').attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="react-artifact-tab-preview"]').attributes('aria-selected')).toBe('true')
     expect(wrapper.find('[data-testid="react-artifact-card-brand-row-preview.html"]').exists()).toBe(true)
     await wrapper.get('[data-testid="react-artifact-card-brand-row-preview.html"]').trigger('click')
     await flushPromises()
@@ -1008,7 +1014,7 @@ describe('ReactArtifactStage', () => {
       kind: 'html',
       nodeId: 'visual_bqc5',
       content:
-        '<html><head><title>Approving · Demo</title></head><body><div class="banner"><h1>主标题</h1><p>banner 摘要</p></div></body></html>',
+        '<html><head><title>Grasp · Demo</title></head><body><div class="banner"><h1>主标题</h1><p>banner 摘要</p></div></body></html>',
     })
     vi.mocked(api.artifactContent).mockImplementation(async (id: string) => {
       if (id === 'r') return research
@@ -1050,7 +1056,7 @@ describe('ReactArtifactStage', () => {
     const pageSummary = wrapper.get(
       '[data-testid="react-artifact-card-page.html"] [data-testid="react-artifact-card-summary"]',
     )
-    expect(pageSummary.text()).toContain('Approving · Demo')
+    expect(pageSummary.text()).toContain('Grasp · Demo')
     expect(pageSummary.text()).toContain('banner 摘要')
     wrapper.unmount()
   })

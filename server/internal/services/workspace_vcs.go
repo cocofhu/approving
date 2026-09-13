@@ -22,7 +22,7 @@ import (
 
 const (
 	workspaceVcsDirName = ".workspace-vcs"
-	vcsCommitPrefix     = "approving-vcs:"
+	vcsCommitPrefix     = "grasp-vcs:"
 
 	VcsSourceSystem      = "system"
 	VcsSourceStudio      = "studio"
@@ -164,7 +164,7 @@ func (v *WorkspaceVcsService) commitAll(repo *git.Repository, meta VcsCommitMeta
 	hash, err := wt.Commit(formatVcsMessage(meta), &git.CommitOptions{
 		Author: &object.Signature{
 			Name:  author,
-			Email: "approving-vcs@local",
+			Email: "grasp-vcs@local",
 			When:  time.Now(),
 		},
 		AllowEmptyCommits: allowEmpty,

@@ -531,7 +531,7 @@ function onDragOver(ev: DragEvent) {
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
 }
 function onDrop(ev: DragEvent) {
-  const type = ev.dataTransfer?.getData('application/approving-node') as NodeType
+  const type = ev.dataTransfer?.getData('application/grasp-node') as NodeType
   if (!type || !vueFlowRef.value) return
   const bounds = vueFlowRef.value.getBoundingClientRect()
   const pos = project({ x: ev.clientX - bounds.left, y: ev.clientY - bounds.top })

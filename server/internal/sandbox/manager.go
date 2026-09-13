@@ -18,14 +18,14 @@ import (
 
 // containerPrefix labels approving-managed sandboxes so they can be listed and
 // reconciled apart from any other tenants sharing the gateway.
-const containerPrefix = "approving-sb-"
+const containerPrefix = "grasp-sb-"
 
 // managedByLabel/managedByValue tag every sandbox approving creates on the
 // gateway, so List/reconcile only ever touch our own sandboxes.
 const (
-	managedByLabel = "approving.managed"
+	managedByLabel = "grasp.managed"
 	managedByValue = "1"
-	cfNameLabel    = "approving.name" // client correlation id (pre-allocated)
+	cfNameLabel    = "grasp.name" // client correlation id (pre-allocated)
 )
 
 // NewContainerName returns a fresh, unique correlation id used as a placeholder
@@ -132,7 +132,7 @@ type Spec struct {
 	// Resources are optional per-sandbox CPU/memory/disk limits for the gateway.
 	Resources *GWResources
 	// SSHPrivateKey / SSHKnownHosts are optional literals injected as files
-	// under /tmp/approving-ssh-inject before git clone (not via ordinary env).
+	// under /tmp/grasp-ssh-inject before git clone (not via ordinary env).
 	// Empty fields are omitted (do not create/clear the corresponding file).
 	SSHPrivateKey  string
 	SSHKnownHosts  string
@@ -140,7 +140,7 @@ type Spec struct {
 
 // SSHInjectStagingDir is the in-sandbox destination for the SSH file inject
 // bundle. startup.sh applies these files to ~/.ssh before configure_git_credentials.
-const SSHInjectStagingDir = "/tmp/approving-ssh-inject"
+const SSHInjectStagingDir = "/tmp/grasp-ssh-inject"
 
 // RepoSpec is one repository cloned into the sandbox at <workspace>/<Name>/.
 type RepoSpec struct {
@@ -669,7 +669,7 @@ func (m *Manager) ListStatuses(ctx context.Context) (map[string]string, error) {
 }
 
 // DestroyByCorrelationName destroys every managed gateway sandbox whose
-// approving.name label equals corr (best effort). Used when a local row still
+// grasp.name label equals corr (best effort). Used when a local row still
 // carries the pre-adopt placeholder name so Status/DestroyByName cannot address
 // the real gateway id.
 func (m *Manager) DestroyByCorrelationName(ctx context.Context, corr string) {

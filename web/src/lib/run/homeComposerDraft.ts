@@ -1,5 +1,10 @@
 import type { ClarifyImage } from '../shared/types'
 import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from '../shared/migrateBrandStorage'
+import {
   HOME_DRAFT_ID,
   blobToBase64,
   getDraftIdb,
@@ -9,8 +14,10 @@ import {
   type HomeDraftRecord,
 } from './draftIdb'
 
-/** Legacy localStorage key — migrate once then delete (plan g2.1). */
-export const HOME_COMPOSER_DRAFT_KEY = 'approving.home.composerDraft'
+/** Legacy localStorage key — migrate once then delete (plan g2.1 / brand clear). */
+export const HOME_COMPOSER_DRAFT_KEY = GRASP_STORAGE_KEYS.homeComposerDraft
+
+migrateLocalStorageKey(LEGACY_STORAGE_KEYS.homeComposerDraft, HOME_COMPOSER_DRAFT_KEY)
 
 export const HOME_COMPOSER_DRAFT_SCHEMA = '1'
 

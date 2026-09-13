@@ -96,7 +96,7 @@ async function mockApis(page: Page, capture: { runRequests: Request[] }) {
 
     if (path.endsWith('/api/projects') || path === '/api/projects') {
       await route.fulfill({
-        json: [{ id: 'proj-1', name: 'Approving', slug: 'approving' }],
+        json: [{ id: 'proj-1', name: 'Grasp', slug: 'grasp' }],
       })
       return
     }
@@ -260,7 +260,7 @@ test.describe('TagFilter UX acceptance', () => {
 
     // opening project filter should close tag popover
     const projectTrigger = page.locator('[data-testid="project-filter-trigger"], button', {
-      hasText: /Approving|全部项目|项目/,
+      hasText: /Grasp|全部项目|项目/,
     }).first()
     if (await projectTrigger.count()) {
       await projectTrigger.click()

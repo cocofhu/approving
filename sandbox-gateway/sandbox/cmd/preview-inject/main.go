@@ -45,7 +45,7 @@ func parseOptions(args []string, getenv func(string) string) (options, error) {
 	fs.SetOutput(os.Stderr)
 	listen := fs.String("listen", "", "listen address (default :17980)")
 	upstream := fs.String("upstream", "", "upstream URL or host:port (default http://127.0.0.1:$PREVIEW_PORT)")
-	script := fs.String("script-url", "", "script src to inject (default same-origin /__approving/preview-pick.js)")
+	script := fs.String("script-url", "", "script src to inject (default same-origin /__grasp/preview-pick.js)")
 	if err := fs.Parse(args); err != nil {
 		return options{}, err
 	}
@@ -54,7 +54,7 @@ func parseOptions(args []string, getenv func(string) string) (options, error) {
 		Listen:   firstNonEmpty(*listen, getenv("PREVIEW_INJECT_LISTEN"), fmt.Sprintf(":%d", previewinject.ListenPort)),
 		Upstream: firstNonEmpty(*upstream, getenv("PREVIEW_INJECT_UPSTREAM")),
 		// Always default to the same-origin path. PREVIEW_PICK_SCRIPT_URL is
-		// for the Agent HTML fallback; Approving often sets it to
+		// for the Agent HTML fallback; Grasp often sets it to
 		// http://localhost:8080/preview-pick.js, which the reviewer's
 		// browser cannot load from http://IP:PREVIEW_PORT/.
 		ScriptURL: firstNonEmpty(*script, previewinject.ScriptPath),

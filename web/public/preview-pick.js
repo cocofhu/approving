@@ -1,4 +1,4 @@
-/* Approving IP-direct preview cooperative script. Runs in the app origin. */
+/* Grasp IP-direct preview cooperative script. Runs in the app origin. */
 (function () {
   var READY = 'direct-preview-ready';
   var URL_MSG = 'direct-preview-url';
@@ -12,7 +12,7 @@
   var styleEl = null;
 
   function post(msg) {
-    // Always '*' : HTTPS Approving embedding http://IP:port often strips
+    // Always '*' : HTTPS Grasp embedding http://IP:port often strips
     // document.referrer (strict-origin-when-cross-origin), and a wrong
     // targetOrigin fails silently with no exception.
     try {

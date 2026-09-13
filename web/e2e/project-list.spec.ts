@@ -6,8 +6,8 @@ const SHOT_DIR = '/tmp/approving-test-screenshots'
 const MOCK_PROJECTS = [
   {
     id: 'p1',
-    name: 'Approving',
-    description: 'Approving Project',
+    name: 'Grasp',
+    description: 'Grasp Project',
     workflowCount: 3,
     totalTokens: 128400,
     createdAt: '2026-01-01T00:00:00Z',
@@ -46,7 +46,7 @@ test.describe('管理列表 Loading：项目列表', () => {
     await expect(page.getByTestId('project-list-panel')).toHaveAttribute('aria-busy', 'true')
     await page.screenshot({ path: `${SHOT_DIR}/project-list-skeleton-zh-dark.png`, fullPage: true })
     release()
-    await expect(page.getByRole('button', { name: /Approving/ })).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('button', { name: /Grasp/ })).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('project-list-skeleton')).toHaveCount(0)
     await expect(page.getByTestId('project-list-panel')).toHaveAttribute('aria-busy', 'false')
     await page.screenshot({ path: `${SHOT_DIR}/project-list-data-zh-dark.png`, fullPage: true })
@@ -81,6 +81,6 @@ test.describe('管理列表 Loading：项目列表', () => {
     await expect(page.getByText('加载失败')).toBeVisible()
     await expect(page.getByTestId('project-list-empty')).toHaveCount(0)
     await page.getByTestId('project-list-retry').click()
-    await expect(page.getByRole('button', { name: /Approving/ })).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('button', { name: /Grasp/ })).toBeVisible({ timeout: 10_000 })
   })
 })

@@ -1,7 +1,15 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-export const PROJECT_CONTEXT_STORAGE_KEY = 'approving-project-context'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from '@/lib/shared/migrateBrandStorage'
+
+export const PROJECT_CONTEXT_STORAGE_KEY = GRASP_STORAGE_KEYS.projectContext
+
+migrateLocalStorageKey(LEGACY_STORAGE_KEYS.projectContext, PROJECT_CONTEXT_STORAGE_KEY)
 
 /** Sentinel for「全部项目」— empty string in URL/storage means all. */
 const PROJECT_CONTEXT_ALL = ''

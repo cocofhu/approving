@@ -100,7 +100,7 @@ func TestAgentSandboxDestroyHook(t *testing.T) {
 		called = true
 	})
 	row := &models.Sandbox{
-		Name: "approving-sb-hook", Purpose: SandboxPurposeAgent, ThreadID: "thr-hook",
+		Name: "grasp-sb-hook", Purpose: SandboxPurposeAgent, ThreadID: "thr-hook",
 		Status: "running", ProjectID: "p1",
 	}
 	if err := db.Create(row).Error; err != nil {

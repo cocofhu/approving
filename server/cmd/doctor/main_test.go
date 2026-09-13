@@ -24,7 +24,7 @@ func TestVerifyArtifactIsolation(t *testing.T) {
 				RunB: "run-b", TokenB: "token-b", CleanupToken: "cleanup",
 			})
 		case r.Method == http.MethodDelete && r.URL.Path == "/_internal/doctor/artifact-sessions/session":
-			if r.Header.Get("X-Approving-Doctor-Cleanup") != "cleanup" {
+			if r.Header.Get("X-Grasp-Doctor-Cleanup") != "cleanup" {
 				t.Error("missing cleanup token")
 			}
 			cleaned = true

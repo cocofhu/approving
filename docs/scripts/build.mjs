@@ -157,8 +157,8 @@ function docTemplate({ title, description, bodyHtml, relPath }) {
   const configHref = withBase(`${prefix}/help/configuration/`);
   const gatewayHref = withBase(`${prefix}/help/gateway/`);
   const dataBase = basePath === "/" ? "" : basePath;
-  const pageTitle = title ? `${title} · Approving` : "Approving";
-  const desc = description || (locale === "en" ? "Approving help documentation" : "Approving 帮助文档");
+  const pageTitle = title ? `${title} · Grasp` : "Grasp";
+  const desc = description || (locale === "en" ? "Grasp help documentation" : "Grasp 帮助文档");
 
   return `<!DOCTYPE html>
 <html lang="${t.htmlLang}" data-base="${escapeHtml(dataBase)}">
@@ -179,7 +179,7 @@ ${hreflangLinks(dual)}
 <body class="page-doc">
   <header class="site-header">
     <div class="site-header__inner">
-      <a class="site-header__brand" href="${homeHref}">Approving</a>
+      <a class="site-header__brand" href="${homeHref}">Grasp</a>
       <nav class="site-header__nav" aria-label="${escapeHtml(t.navAria)}">
         <a class="site-header__link" href="${docsHref}">${escapeHtml(t.docs)}</a>
         <a class="site-header__link" href="${conceptsHref}">${escapeHtml(t.concepts)}</a>
@@ -202,7 +202,7 @@ ${hreflangLinks(dual)}
   </main>
   <footer class="site-footer">
     <div class="site-footer__inner">
-      <p class="site-footer__brand">Approving</p>
+      <p class="site-footer__brand">Grasp</p>
       <nav class="site-footer__nav" aria-label="${escapeHtml(t.footerAria)}">
         <a href="${quickStartHref}">${escapeHtml(t.quickStart)}</a>
         <a href="${configHref}">${escapeHtml(t.configuration)}</a>
@@ -261,7 +261,7 @@ async function buildMarkdown() {
 }
 
 async function main() {
-  console.log(`Building Approving site (BASE_PATH=${basePath || "/"})`);
+  console.log(`Building Grasp site (BASE_PATH=${basePath || "/"})`);
   await rmrf(outDir);
   await ensureDir(outDir);
   await copyDir(siteDir, outDir);

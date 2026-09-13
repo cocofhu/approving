@@ -125,10 +125,10 @@ describe('gateShareLink helpers', () => {
     const url = 'https://app.example/public/gate-approvals#t=' + 'ab'.repeat(32)
     rememberShareUrl('run-1', 'hg1', 1, url)
     expect(recallShareUrl('run-1', 'hg1', 1)).toBe(url)
-    expect(sessionStorage.getItem('approving.gateShareUrl.run-1:hg1:1')).toBe(url)
+    expect(sessionStorage.getItem('grasp.gateShareUrl.run-1:hg1:1')).toBe(url)
     forgetShareUrl('run-1', 'hg1', 1)
     expect(recallShareUrl('run-1', 'hg1', 1)).toBe('')
-    sessionStorage.setItem('approving.gateShareUrl.run-1:hg1:1', url)
+    sessionStorage.setItem('grasp.gateShareUrl.run-1:hg1:1', url)
     expect(recallShareUrl('run-1', 'hg1', 1)).toBe(url)
     forgetShareUrl('run-1', 'hg1', 1)
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { api, type BrandSettings, type DashboardStats, type SandboxView, type SettingItem } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
 import { createListRequestSeq, httpStatusOf } from '@/lib/shared/listRequestSeq'
@@ -13,7 +13,6 @@ import { setBrandSettings } from '@/lib/composables/useBrandSettings'
 
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
 const { user } = useAuth()
 
 const isAdmin = computed(() => !!user.value?.isAdmin)
@@ -83,13 +82,6 @@ const showSkeleton = computed(
 )
 
 const showIntegrations = computed(() => isIntegrationsQuery(route.query.integrations))
-
-function openIntegrations() {
-  void router.push({
-    path: '/settings',
-    query: { ...route.query, integrations: '1' },
-  })
-}
 
 let poll: number | undefined
 
@@ -263,52 +255,6 @@ onBeforeUnmount(() => {
       class="mb-4 rounded-lg border border-err/30 bg-err/10 px-3 py-2 text-sm text-err"
     >
       {{ error }}
-    </div>
-
-    <!-- Entry cards independent of settings API load (plan g2.1; platform rules unchanged jump) -->
-    <div class="card mb-4 border-accent/20 bg-accent-dim/20">
-      <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-        <div class="flex items-start gap-3">
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center bg-accent-dim text-accent-2">
-            <Icon name="file" :size="16" />
-          </span>
-          <div>
-            <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.settings.platformRulesCard.title') }}</h3>
-            <p class="mt-1 max-w-2xl text-xs leading-relaxed text-txt3">{{ t('pages.settings.platformRulesCard.desc') }}</p>
-            <p v-if="!isAdmin" class="mt-1 text-[11px] text-warn">{{ t('pages.settings.platformRulesCard.readOnly') }}</p>
-          </div>
-        </div>
-        <AppButton class="min-h-11 md:min-h-0" variant="primary" size="md" icon="chevron-right" @click="router.push('/settings/platform-rules')">
-          {{ isAdmin ? t('pages.settings.platformRulesCard.manage') : t('pages.settings.platformRulesCard.view') }}
-        </AppButton>
-      </div>
-    </div>
-
-    <div
-      class="card mb-4 border-accent/20 bg-accent-dim/20"
-      data-testid="settings-integrations-card"
-    >
-      <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
-        <div class="flex items-start gap-3">
-          <span class="flex h-8 w-8 shrink-0 items-center justify-center bg-accent-dim text-accent-2">
-            <Icon name="connector" :size="16" />
-          </span>
-          <div>
-            <h3 class="text-[13px] font-semibold text-txt">{{ t('pages.settings.integrationsCard.title') }}</h3>
-            <p class="mt-1 max-w-2xl text-xs leading-relaxed text-txt3">{{ t('pages.settings.integrationsCard.desc') }}</p>
-          </div>
-        </div>
-        <AppButton
-          class="min-h-11 md:min-h-0"
-          variant="primary"
-          size="md"
-          icon="chevron-right"
-          data-testid="settings-integrations-open"
-          @click="openIntegrations"
-        >
-          {{ t('pages.settings.integrationsCard.view') }}
-        </AppButton>
-      </div>
     </div>
 
     <div

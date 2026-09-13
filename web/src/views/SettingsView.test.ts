@@ -208,49 +208,49 @@ describe('SettingsView first skeleton vs reset keep form', () => {
   })
 })
 
-describe('SettingsView integrations entry card (plan g2.1 / g2.2 / g2.4)', () => {
+describe('SettingsView general page has no entry cards (plan g2.1 / f1 / f2)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.listSandboxes.mockResolvedValue([])
     apiMocks.dashboard.mockResolvedValue({ running: 0 })
   })
 
-  it('source keeps integrations card outside settings load branches', () => {
-    expect(src).toMatch(/data-testid="settings-integrations-card"/)
-    expect(src).toMatch(/data-testid="settings-integrations-open"/)
-    expect(src).toMatch(/IntegrationsPanel/)
+  it('source has no platform-rules or integrations entry cards; keeps inline panel', () => {
+    expect(src).not.toMatch(/data-testid="settings-integrations-card"/)
+    expect(src).not.toMatch(/data-testid="settings-integrations-open"/)
+    expect(src).not.toMatch(/platformRulesCard/)
+    expect(src).not.toMatch(/integrationsCard/)
+    expect(src).not.toMatch(/openIntegrations/)
+    expect(src).toMatch(/IntegrationsPanel v-if="showIntegrations"/)
     expect(src).not.toMatch(/IntegrationsModal/)
     expect(src).not.toMatch(/router\.replace/)
     expect(src).toMatch(/query\.integrations/)
   })
 
-  it('renders integrations card while settings still loading', async () => {
+  it('does not render entry cards while settings still loading (g2.1)', async () => {
     apiMocks.getSettings.mockReturnValue(new Promise(() => {}))
     const w = mountSettings()
     await flushPromises()
-    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(true)
-    expect(w.find('[data-testid="settings-integrations-open"]').exists()).toBe(true)
-    expect(w.text()).toContain('集成')
-    expect(w.text()).toContain('查看集成')
+    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(false)
+    expect(w.find('[data-testid="settings-integrations-open"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('查看集成')
+    expect(w.text()).not.toContain('查看规则')
+    expect(w.text()).not.toContain('管理规则')
     w.unmount()
   })
 
-  it('keeps integrations card on 403 and navigates to the inline panel', async () => {
+  it('does not render entry cards on 403 (g2.1 / edge 403)', async () => {
     apiMocks.getSettings.mockRejectedValue(Object.assign(new Error('forbidden'), { status: 403 }))
     const w = mountSettings()
     await flushPromises()
     expect(w.find('[data-testid="settings-denied"]').exists()).toBe(true)
-    expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(true)
-    expect(w.find('[data-testid="integrations-panel-stub"]').exists()).toBe(false)
-    await w.find('[data-testid="settings-integrations-open"]').trigger('click')
-    await flushPromises()
-    expect(w.find('[data-testid="integrations-panel-stub"]').exists()).toBe(true)
-    expect((w.vm as any).$router.currentRoute.value.query.integrations).toBe('1')
     expect(w.find('[data-testid="settings-integrations-card"]').exists()).toBe(false)
+    expect(w.find('[data-testid="integrations-panel-stub"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('查看集成')
     w.unmount()
   })
 
-  it('renders integrations inline from ?integrations=1 and keeps query', async () => {
+  it('renders integrations inline from ?integrations=1 and keeps query (f4 / s4)', async () => {
     apiMocks.getSettings.mockResolvedValue(SETTINGS)
     const i18n = createI18n({
       legacy: false,

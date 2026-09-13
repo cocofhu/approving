@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 const BOUND_AGENT = {
-  name: 'ApprovingPM',
+  name: 'GraspPM',
   projectId: 'proj-default',
   acpBackend: 'codebuddy',
   files: [
@@ -172,7 +172,7 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
 
   test('已绑定：数据三子 Tab 可用，MCP 仍桌面完成', async ({ page }) => {
     await mockStudioApi(page)
-    await page.goto('/agent-studio-mobile-data.html?agent=ApprovingPM&tab=data&sub=memory')
+    await page.goto('/agent-studio-mobile-data.html?agent=GraspPM&tab=data&sub=memory')
     await expect(page.getByTestId('agent-studio-mobile-data-root')).toBeVisible({ timeout: 15_000 })
 
     await expect(page.getByText('建议在桌面使用')).toHaveCount(0)
@@ -202,7 +202,7 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
 
   test('深链 sub=jobs 直达卡片列表', async ({ page }) => {
     await mockStudioApi(page)
-    await page.goto('/agent-studio-mobile-data.html?agent=ApprovingPM&tab=data&sub=jobs')
+    await page.goto('/agent-studio-mobile-data.html?agent=GraspPM&tab=data&sub=jobs')
     await expect(page.getByTestId('agent-cron-mobile-cards')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText('建议在桌面使用')).toHaveCount(0)
     await expect(page.getByText('每日汇报')).toBeVisible()
@@ -219,7 +219,7 @@ test.describe('Agent Studio 窄屏数据 Tab', () => {
 
   test('记忆增删在窄屏可用', async ({ page }) => {
     await mockStudioApi(page)
-    await page.goto('/agent-studio-mobile-data.html?agent=ApprovingPM&tab=data&sub=memory')
+    await page.goto('/agent-studio-mobile-data.html?agent=GraspPM&tab=data&sub=memory')
     await expect(page.getByText('项目约定')).toBeVisible({ timeout: 15_000 })
 
     await page.getByPlaceholder('标题').fill('新记忆')

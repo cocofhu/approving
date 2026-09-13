@@ -31,6 +31,8 @@ const emit = defineEmits<{
   (e: 'rename-agent', name: string): void
   (e: 'remove-from-group', name: string, groupId: string): void
   (e: 'open-manage', agentName?: string): void
+  (e: 'import'): void
+  (e: 'create-agent'): void
   (e: 'create-root-group'): void
   (e: 'create-team'): void
   (e: 'create-child-group', parentId: string): void
@@ -256,6 +258,28 @@ function onDrop(e: DragEvent, row: OrgTreeRow) {
         @click="emit('open-manage')"
       >
         <Icon name="user" :size="12" />
+      </button>
+      <button
+        v-if="!collapsed"
+        type="button"
+        data-testid="agent-org-import"
+        class="flex h-[22px] w-[22px] shrink-0 items-center justify-center text-txt3 transition hover:bg-elevated hover:text-accent-2"
+        :title="t('pages.agentStudio.exportImport.import')"
+        :aria-label="t('pages.agentStudio.exportImport.import')"
+        @click="emit('import')"
+      >
+        <Icon name="input" :size="12" />
+      </button>
+      <button
+        v-if="!collapsed"
+        type="button"
+        data-testid="agent-org-create-agent"
+        class="flex h-[22px] w-[22px] shrink-0 items-center justify-center text-txt3 transition hover:bg-elevated hover:text-accent-2"
+        :title="t('common.buttons.newAgent')"
+        :aria-label="t('common.buttons.newAgent')"
+        @click="emit('create-agent')"
+      >
+        <Icon name="plus" :size="12" />
       </button>
       <button
         v-if="!collapsed"

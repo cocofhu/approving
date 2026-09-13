@@ -6,13 +6,22 @@ import {
   prefetchLocale,
   type AppLocale,
 } from './loadLocaleMessages'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from './migrateBrandStorage'
 
 export type { AppLocale }
 
-const STORAGE_KEY = 'approving-locale'
+const STORAGE_KEY = GRASP_STORAGE_KEYS.locale
+
+function readLocaleStorage(): string | null {
+  return migrateLocalStorageKey(LEGACY_STORAGE_KEYS.locale, STORAGE_KEY)
+}
 
 export function detectLocale(): AppLocale {
-  const saved = localStorage.getItem(STORAGE_KEY)
+  const saved = readLocaleStorage()
   if (saved === 'zh-CN' || saved === 'en') return saved
   const lang = (navigator.language || 'zh-CN').toLowerCase()
   if (lang.startsWith('zh')) return 'zh-CN'
@@ -28,7 +37,7 @@ function detectPublicLocale(): AppLocale {
 }
 
 export async function applyPublicLocale(): Promise<void> {
-  const saved = localStorage.getItem(STORAGE_KEY)
+  const saved = readLocaleStorage()
   const next = saved === 'zh-CN' || saved === 'en' ? saved : detectPublicLocale()
   const messages = await loadLocaleMessages(next)
   i18n.global.setLocaleMessage(next, messages)
@@ -64,6 +73,14 @@ export async function setLocale(next: AppLocale): Promise<void> {
 }
 
 let initPromise: Promise<void> | null = null
+/** Last titleKey from router/App; remembered so initLocale can refresh after messages load. */
+let currentTitleKey: string | undefined
+
+function translationsReady(titleKey: string | undefined): boolean {
+  if (!i18n.global.te('shell.appName')) return false
+  if (titleKey && !i18n.global.te(titleKey)) return false
+  return true
+}
 
 export function initLocale(): Promise<void> {
   if (!initPromise) {
@@ -76,6 +93,9 @@ export function initLocale(): Promise<void> {
       i18n.global.locale.value = initial
       locale.value = initial
       applyHtmlLocale(initial)
+      // Cold start: locale string often stays zh-CN, so App.vue watch will not re-run.
+      // Force-refresh once messages exist so document.title never sticks on raw keys.
+      updateDocumentTitle(currentTitleKey)
 
       const idle = window.requestIdleCallback ?? ((cb: () => void) => setTimeout(cb, 200))
       idle(() => prefetchLocale(otherLocale(initial)))
@@ -85,6 +105,10 @@ export function initLocale(): Promise<void> {
 }
 
 export function updateDocumentTitle(titleKey: string | undefined) {
+  currentTitleKey = titleKey
+  // Messages may still be empty (mount before initLocale). Keep HTML placeholder;
+  // never write raw i18n keys like "route.login · shell.appName" into the tab.
+  if (!translationsReady(titleKey)) return
   const appName = i18n.global.t('shell.appName')
   document.title = titleKey ? `${i18n.global.t(titleKey)} · ${appName}` : appName
 }

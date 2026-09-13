@@ -1652,18 +1652,6 @@
         "concurrency": "并发",
         "autoRefresh": "每 5 秒自动刷新",
         "note": "合计 = 测试占用 + running workflow · 不含 TTL 保活沙箱"
-      },
-      "platformRulesCard": {
-        "title": "平台规则",
-        "desc": "管理 skills_embed 下 10 个平台规则的全局默认，持久化到 data/platform-rules/。",
-        "readOnly": "当前账号无管理员权限，仅可查看。",
-        "manage": "管理规则",
-        "view": "查看规则"
-      },
-      "integrationsCard": {
-        "title": "集成",
-        "desc": "查看内置 MCP 发现目录（按作用域注入，无需在此配置）。",
-        "view": "查看集成"
       }
     },
     "platformRules": {
@@ -2923,7 +2911,7 @@
       "connectionLost": "预览连接已断开",
       "sandboxRecycled": "沙箱已回收,预览不可用",
       "directOpenTab": "新标签打开",
-      "directScriptMissing": "应用页未加载取点脚本。直连预览需同域 /__approving/preview-pick.js（请使用含 preview-inject 的新沙箱镜像）。",
+      "directScriptMissing": "应用页未加载取点脚本。直连预览需同域 /__grasp/preview-pick.js（请使用含 preview-inject 的新沙箱镜像）。",
       "directGotoInvalid": "只能跳转到同一预览 origin 的地址。",
       "directAddressPlaceholder": "http://IP:port/",
       "externalUrlHint": "外部 URL 直连预览；跨域站点不支持取点标注。",

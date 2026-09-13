@@ -106,7 +106,7 @@ func TestManagerCreateUsesSANDBOXInject(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, "rules", "base.md"), []byte("rule"), 0o644)
 
 	sb, err := m.Create(context.Background(), Spec{
-		Name:       "approving-sb-inj",
+		Name:       "grasp-sb-inj",
 		ConfigHome: home,
 		ConfigRoot: "/root/.cursor",
 		Env: map[string]string{
@@ -169,7 +169,7 @@ func TestManagerCreateSSHAndConfigMultiInject(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(home, "mcp.json"), []byte(`{}`), 0o644)
 
 	spec := Spec{
-		Name:       "approving-sb-ssh",
+		Name:       "grasp-sb-ssh",
 		ConfigHome: home,
 		ConfigRoot: "/root/.cursor",
 		Env: map[string]string{
@@ -190,7 +190,7 @@ func TestManagerCreateSSHAndConfigMultiInject(t *testing.T) {
 	if len(parts) != 2 {
 		t.Fatalf("want SSH+ConfigHome two parts, got %q", inj)
 	}
-	if !strings.HasSuffix(parts[0], "|/tmp/approving-ssh-inject") {
+	if !strings.HasSuffix(parts[0], "|/tmp/grasp-ssh-inject") {
 		t.Fatalf("SSH staging first: %q", parts[0])
 	}
 	if !strings.HasSuffix(parts[1], "|/root/.cursor") {

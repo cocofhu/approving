@@ -9,6 +9,8 @@ const FEEDBACK_INDEX_NAME = 'feedback_index.json'
 const FEEDBACK_PREFIX = 'feedback.'
 
 export const REACT_STAGE_TAB_GRID = 'grid'
+/** Chrome “产物预览” empty surface (distinct from per-artifact `preview:` tabs). */
+export const REACT_STAGE_TAB_PREVIEW = 'preview'
 export const REACT_STAGE_TAB_NOVNC = 'novnc'
 export const PREVIEW_TAB_PREFIX = 'preview:'
 
@@ -251,7 +253,11 @@ export function resolveStageRemoteKind(opts: {
   return 'off'
 }
 
-export type ReactStageTab = typeof REACT_STAGE_TAB_GRID | string
+export type ReactStageTab =
+  | typeof REACT_STAGE_TAB_GRID
+  | typeof REACT_STAGE_TAB_PREVIEW
+  | typeof REACT_STAGE_TAB_NOVNC
+  | string
 
 export function previewTabId(name: string): string {
   return PREVIEW_TAB_PREFIX + name
@@ -275,7 +281,7 @@ export function closeStagePreviewTab(openNames: string[], name: string): string[
   return openNames.filter((n) => n !== name)
 }
 
-/** After closing a tab, stay on the current one, else neighbor, else noVNC/grid. */
+/** After closing a tab, stay on the current one, else neighbor, else noVNC/preview empty. */
 export function nextTabAfterClose(
   openNames: string[],
   closed: string,
@@ -288,7 +294,7 @@ export function nextTabAfterClose(
     return currentTab
   }
   if (!remaining.length) {
-    return novncOpen ? REACT_STAGE_TAB_NOVNC : REACT_STAGE_TAB_GRID
+    return novncOpen ? REACT_STAGE_TAB_NOVNC : REACT_STAGE_TAB_PREVIEW
   }
   const i = openNames.indexOf(closed)
   const pick = remaining[Math.min(Math.max(i, 0), remaining.length - 1)] ?? remaining[remaining.length - 1]

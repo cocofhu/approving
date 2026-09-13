@@ -143,7 +143,7 @@ describe('WorkflowCanvas', () => {
     const wrapper = mountCanvas()
     const root = wrapper.find('.h-full')
     const dt = {
-      getData: (k: string) => (k === 'application/approving-node' ? 'research' : ''),
+      getData: (k: string) => (k === 'application/grasp-node' ? 'research' : ''),
       dropEffect: 'move',
     }
     const ev = new Event('drop') as DragEvent

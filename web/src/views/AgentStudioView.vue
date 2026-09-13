@@ -266,34 +266,6 @@ async function createStudioChatTest(
     :aria-busy="loading ? 'true' : 'false'"
   >
     <div
-      class="toolbar-below-tabs mb-5 flex shrink-0 gap-4"
-      data-testid="agent-studio-action-row"
-      :class="isMobile ? 'flex-col items-stretch' : 'justify-end'"
-    >
-      <div class="flex shrink-0 gap-2" :class="isMobile ? 'flex-col' : 'items-center'">
-        <AppButton
-          variant="outline"
-          icon="input"
-          :class="isMobile ? 'min-h-11 w-full justify-center' : ''"
-          @click="triggerImport"
-        >{{ t('pages.agentStudio.exportImport.import') }}</AppButton>
-        <AppButton
-          v-if="showCreateTeam"
-          variant="outline"
-          icon="skills"
-          :class="isMobile ? 'min-h-11 w-full justify-center' : ''"
-          @click="openCreateTeam"
-        >{{ t('pages.agentStudio.createTeam') }}</AppButton>
-        <AppButton
-          variant="primary"
-          icon="plus"
-          :class="isMobile ? 'min-h-11 w-full justify-center' : ''"
-          @click="openCreateAgent"
-        >{{ t('common.buttons.newAgent') }}</AppButton>
-      </div>
-    </div>
-
-    <div
       v-if="error && !loadFailed && !loadDenied && agents.length"
       class="card mb-3 shrink-0 border-err/40 p-3 text-[13px] text-err"
     >{{ t('pages.agentStudio.errorPrefix') }}{{ error }}</div>
@@ -375,18 +347,34 @@ async function createStudioChatTest(
         <template v-if="embedded">
           <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyProjectTitle') }}</h2>
           <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyProjectDesc') }}</p>
-          <AppButton variant="primary" icon="plus" @click="openCreateAgent">
+          <AppButton variant="primary" icon="plus" data-testid="agent-studio-empty-create" @click="openCreateAgent">
             {{ t('common.buttons.newAgent') }}
           </AppButton>
+          <button
+            type="button"
+            data-testid="agent-studio-empty-import"
+            class="text-[12px] text-accent-2 hover:underline"
+            @click="triggerImport"
+          >
+            {{ t('pages.agentStudio.exportImport.import') }}
+          </button>
         </template>
         <template v-else>
           <h2 class="m-0 text-[18px] font-semibold text-txt">{{ t('pages.agentStudio.emptyTeamTitle') }}</h2>
           <p class="m-0 max-w-md text-[13px] leading-6 text-txt3">{{ t('pages.agentStudio.emptyTeamDesc') }}</p>
-          <AppButton variant="primary" icon="skills" @click="openCreateTeam">
+          <AppButton variant="primary" icon="skills" data-testid="agent-studio-empty-create-team" @click="openCreateTeam">
             {{ t('pages.agentStudio.emptyTeamCta') }}
           </AppButton>
           <button type="button" class="text-[12px] text-accent-2 hover:underline" @click="openCreateAgent">
             {{ t('pages.agentStudio.emptyTeamOrSingle') }}
+          </button>
+          <button
+            type="button"
+            data-testid="agent-studio-empty-import"
+            class="text-[12px] text-accent-2 hover:underline"
+            @click="triggerImport"
+          >
+            {{ t('pages.agentStudio.exportImport.import') }}
           </button>
         </template>
       </div>
@@ -412,6 +400,8 @@ async function createStudioChatTest(
         @rename-agent="onSidebarRenameBlocked"
         @remove-from-group="onRemoveFromGroup"
         @open-manage="openAgentManage"
+        @import="triggerImport"
+        @create-agent="openCreateAgent"
         @create-root-group="openCreateRootGroup"
         @create-team="openCreateTeam"
         @create-child-group="openCreateChildGroup"
@@ -857,10 +847,41 @@ async function createStudioChatTest(
           class="absolute inset-x-0 bottom-0 flex h-[70vh] max-h-[70vh] flex-col overflow-hidden rounded-t-xl border-t border-line bg-elevated shadow-card"
         >
           <div class="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line-strong/70" aria-hidden="true" />
-          <div class="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+          <div class="flex shrink-0 items-center gap-1.5 border-b border-line px-3 py-2.5">
             <h3 class="min-w-0 flex-1 truncate text-[14px] font-semibold text-txt">
               {{ t('pages.agentStudio.mobile.orgSheetTitle') }}
             </h3>
+            <button
+              type="button"
+              data-test="org-sheet-import"
+              class="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded text-txt3 hover:bg-overlay hover:text-txt"
+              :title="t('pages.agentStudio.exportImport.import')"
+              :aria-label="t('pages.agentStudio.exportImport.import')"
+              @click="triggerImport"
+            >
+              <Icon name="input" :size="14" />
+            </button>
+            <button
+              type="button"
+              data-test="org-sheet-create-agent"
+              class="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded text-txt3 hover:bg-overlay hover:text-txt"
+              :title="t('common.buttons.newAgent')"
+              :aria-label="t('common.buttons.newAgent')"
+              @click="openCreateAgent"
+            >
+              <Icon name="plus" :size="14" />
+            </button>
+            <button
+              v-if="showCreateTeam"
+              type="button"
+              data-test="org-sheet-create-team"
+              class="flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded text-txt3 hover:bg-overlay hover:text-txt"
+              :title="t('pages.agentStudio.org.newTeam')"
+              :aria-label="t('pages.agentStudio.org.newTeam')"
+              @click="openCreateTeam"
+            >
+              <Icon name="skills" :size="14" />
+            </button>
             <AppButton
               size="sm"
               variant="outline"

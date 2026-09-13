@@ -37,7 +37,7 @@ func (h *Handlers) DoctorArtifactSession(c *gin.Context) {
 	case http.MethodPost:
 		h.startDoctorArtifactSession(c)
 	case http.MethodDelete:
-		if err := h.cleanupDoctorArtifactSession(c.Param("id"), c.GetHeader("X-Approving-Doctor-Cleanup")); err != nil {
+		if err := h.cleanupDoctorArtifactSession(c.Param("id"), c.GetHeader("X-Grasp-Doctor-Cleanup")); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 			return
 		}

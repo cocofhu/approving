@@ -405,7 +405,7 @@ func applyAppPreviewEnv(env map[string]string, nodeType string, cfg map[string]a
 			// Same-origin path served by the in-sandbox injector. PublicAdvertise
 			// is often http://localhost:8080, which the reviewer's browser cannot
 			// load from an iframe at http://IP:PREVIEW_PORT/.
-			env["PREVIEW_PICK_SCRIPT_URL"] = "/__approving/preview-pick.js"
+			env["PREVIEW_PICK_SCRIPT_URL"] = "/__grasp/preview-pick.js"
 		} else {
 			env["PREVIEW_AUTO_INJECT"] = "0"
 			if u := previewPickScriptURL(publicAdvertise); u != "" {

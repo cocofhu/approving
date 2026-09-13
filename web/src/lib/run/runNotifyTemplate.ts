@@ -28,7 +28,7 @@ export interface RunNotifyPreviewContext {
 
 /** Fake sample used by the notify Tab live preview (not a real push). */
 export const RUN_NOTIFY_PREVIEW_FAKE: RunNotifyPreviewContext = {
-  project: 'approving-demo',
+  project: 'grasp-demo',
   workflow: 'gate-main',
   runId: 'run-4c9100d0',
   node: '人工门禁',

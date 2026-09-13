@@ -1,4 +1,4 @@
-// Package previewinject rewrites inbound HTML so Approving can load
+// Package previewinject rewrites inbound HTML so Grasp can load
 // preview-pick.js on IP-direct preview without changing the app.
 package previewinject
 
@@ -15,14 +15,14 @@ import (
 const ListenPort = 17980
 
 // ScriptPath is the same-origin URL the forwarder serves and injects.
-// Reviewers load the app at http://IP:PREVIEW_PORT/; a localhost Approving
+// Reviewers load the app at http://IP:PREVIEW_PORT/; a localhost Grasp
 // URL is unreachable from their browser.
-const ScriptPath = "/__approving/preview-pick.js"
+const ScriptPath = "/__grasp/preview-pick.js"
 
 var (
 	reBodyClose      = regexp.MustCompile(`(?i)</body>`)
 	reHTMLClose      = regexp.MustCompile(`(?i)</html>`)
-	reSameOriginPick = regexp.MustCompile(`(?i)__approving/preview-pick\.js`)
+	reSameOriginPick = regexp.MustCompile(`(?i)__grasp/preview-pick\.js`)
 	reScriptSrc      = regexp.MustCompile(`(?i)^script-src\b`)
 	reDefaultSrc     = regexp.MustCompile(`(?i)^default-src\b`)
 )
@@ -66,7 +66,7 @@ func CSPToken(scriptURL string) string {
 // InjectHTML inserts <script src="scriptURL"> before </body> (else </html>,
 // else append). Empty scriptURL becomes ScriptPath. It is a no-op only when
 // the document already has the same-origin ScriptPath tag. A leftover
-// localhost Approving URL does not count. Paths and <base> are left untouched.
+// localhost Grasp URL does not count. Paths and <base> are left untouched.
 func InjectHTML(doc []byte, scriptURL string) []byte {
 	scriptURL = ResolveScriptURL(scriptURL)
 	if AlreadyHasPickScript(doc) {

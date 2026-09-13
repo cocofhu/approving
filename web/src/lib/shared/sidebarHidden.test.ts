@@ -19,7 +19,7 @@ describe('sidebarHidden (g1.1 / g1.2)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('defaults to expanded (false) and persists approving-sidebar-hidden', () => {
+  it('defaults to expanded (false) and persists grasp-sidebar-hidden', () => {
     expect(sidebarHidden.value).toBe(false)
     setSidebarHidden(true)
     expect(sidebarHidden.value).toBe(true)

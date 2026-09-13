@@ -97,7 +97,7 @@ func TestManagerCreateSSHFallbackWhenNoInject(t *testing.T) {
 	defer restore()
 
 	sb, err := m.Create(context.Background(), Spec{
-		Name:       "approving-sb-cfg",
+		Name:       "grasp-sb-cfg",
 		ConfigHome: home,
 		ConfigRoot: "/root/.cursor",
 	})
