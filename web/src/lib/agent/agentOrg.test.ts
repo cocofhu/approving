@@ -115,7 +115,7 @@ describe('recursive members + unique project label', () => {
   const nested: AgentOrg = {
     revision: 1,
     groups: [
-      { id: 'root', name: 'Approving项目组' },
+      { id: 'root', name: 'Grasp项目组' },
       { id: 'pipe', name: 'Pipeline', parentGroupId: 'root' },
       { id: 'des', name: '设计组', parentGroupId: 'root' },
       { id: 'empty', name: '空组', parentGroupId: 'root' },
@@ -164,7 +164,7 @@ describe('recursive members + unique project label', () => {
   it('groupProjectLabel resolves name or falls back to id; empty/mixed return empty', () => {
     const projects = [
       { id: 'github', name: 'GitHub' },
-      { id: 'approving', name: 'Approving' },
+      { id: 'grasp', name: 'Grasp' },
     ]
     const allGithub = [
       { name: 'pm', projectId: 'github' },
@@ -201,7 +201,7 @@ describe('recursive members + unique project label', () => {
     const projects = [
       { id: 'github', name: 'GitHub' },
       { id: 'figma', name: 'Figma' },
-      { id: 'approving', name: 'Approving' },
+      { id: 'grasp', name: 'Grasp' },
     ]
     const rows = buildOrgTreeRows(nested, names, new Set(), agents, projects)
     const root = rows.find((r) => r.kind === 'group' && r.id === 'root')

@@ -91,7 +91,7 @@ func materializeBundle() (string, error) {
 			bundleFile = p
 			return
 		}
-		dir, err := os.MkdirTemp("", "approving-mermaid-validate-*")
+		dir, err := os.MkdirTemp("", "grasp-mermaid-validate-*")
 		if err != nil {
 			bundleErr = err
 			return

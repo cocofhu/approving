@@ -10,7 +10,7 @@ const shotDir = path.join(__dirname, '..', 'test-results', 'pm-channel-multi')
 
 const primary = {
   id: 'chn-primary',
-  name: 'ApprovingPM',
+  name: 'GraspPM',
   enabled: true,
   isPrimary: true,
   agentName: 'agent-primary',
@@ -203,7 +203,7 @@ test.describe('QQ multi-channel primary/secondary UI', () => {
     await expect(page.getByTestId('channel-panel-list')).toBeVisible()
     const rows = page.getByTestId('channel-row')
     await expect(rows).toHaveCount(2)
-    await expect(rows.nth(0)).toContainText('ApprovingPM')
+    await expect(rows.nth(0)).toContainText('GraspPM')
     await expect(rows.nth(0)).toContainText('主')
     await expect(rows.nth(0)).toContainText('agent-primary')
     await expect(rows.nth(1)).toContainText('副机器人')

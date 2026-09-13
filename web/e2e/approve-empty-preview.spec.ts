@@ -168,7 +168,7 @@ async function mockApis(page: Page, opts: { item: Record<string, unknown>; ports
 
     if (method === 'GET' && (path === '/api/projects' || path.endsWith('/api/projects'))) {
       await route.fulfill({
-        json: [{ id: 'proj-1', name: 'Approving', slug: 'approving' }],
+        json: [{ id: 'proj-1', name: 'Grasp', slug: 'grasp' }],
       })
       return
     }

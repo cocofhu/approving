@@ -33,11 +33,11 @@ describe('locale', () => {
   })
 
   it('detectLocale prefers stored then navigator language', () => {
-    localStorage.setItem('approving-locale', 'en')
+    localStorage.setItem('grasp-locale', 'en')
     expect(detectLocale()).toBe('en')
-    localStorage.setItem('approving-locale', 'zh-CN')
+    localStorage.setItem('grasp-locale', 'zh-CN')
     expect(detectLocale()).toBe('zh-CN')
-    localStorage.removeItem('approving-locale')
+    localStorage.removeItem('grasp-locale')
     Object.defineProperty(navigator, 'language', { configurable: true, value: 'en-US' })
     expect(detectLocale()).toBe('en')
     Object.defineProperty(navigator, 'language', { configurable: true, value: 'zh-TW' })
@@ -52,7 +52,7 @@ describe('locale', () => {
     vi.mocked(prefetchLocale).mockClear()
     await setLocale('en')
     expect(locale.value).toBe('en')
-    expect(localStorage.getItem('approving-locale')).toBe('en')
+    expect(localStorage.getItem('grasp-locale')).toBe('en')
     expect(document.documentElement.lang).toBe('en')
     expect(prefetchLocale).toHaveBeenCalledWith('zh-CN')
 
@@ -62,12 +62,12 @@ describe('locale', () => {
 
   it('public locale preserves a saved choice before browser detection', async () => {
     Object.defineProperty(navigator, 'language', { configurable: true, value: 'en-US' })
-    localStorage.setItem('approving-locale', 'zh-CN')
+    localStorage.setItem('grasp-locale', 'zh-CN')
     await applyPublicLocale()
     expect(locale.value).toBe('zh-CN')
     expect(document.documentElement.lang).toBe('zh-CN')
 
-    localStorage.removeItem('approving-locale')
+    localStorage.removeItem('grasp-locale')
     await applyPublicLocale()
     expect(locale.value).toBe('en')
     expect(document.documentElement.lang).toBe('en')
@@ -82,5 +82,15 @@ describe('locale', () => {
     expect(document.title).toContain('Code Flow')
     updateDocumentTitle(undefined)
     expect(document.title).toBe('Code Flow')
+  })
+
+  it('migrates approving-locale to grasp-locale (g1.1 evidence)', async () => {
+    localStorage.setItem('approving-locale', 'en')
+    expect(detectLocale()).toBe('en')
+    expect(localStorage.getItem('grasp-locale')).toBe('en')
+    expect(localStorage.getItem('approving-locale')).toBeNull()
+    await setLocale('zh-CN')
+    expect(localStorage.getItem('grasp-locale')).toBe('zh-CN')
+    expect(localStorage.getItem('approving-locale')).toBeNull()
   })
 })

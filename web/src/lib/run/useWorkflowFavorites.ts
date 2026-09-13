@@ -4,6 +4,7 @@ import { api } from '@/lib/api/api'
 import { useAuth } from '@/lib/composables/useAuth'
 import { useToast } from '@/lib/composables/useToast'
 import { httpStatusOf } from '@/lib/shared/listRequestSeq'
+import { migrateLocalStorageKey } from '@/lib/shared/migrateBrandStorage'
 import type { Workflow } from '@/lib/shared/types'
 
 /** Personal quick-launch favorites hard limit (clarified requirement / Demo). */
@@ -26,6 +27,10 @@ export type FavoriteWorkflowDisplay = {
 }
 
 export function favoritesKeyForUser(username: string): string {
+  return `grasp.workflowFavorites.${username || 'anonymous'}`
+}
+
+function legacyFavoritesKeyForUser(username: string): string {
   return `approving.workflowFavorites.${username || 'anonymous'}`
 }
 
@@ -44,6 +49,11 @@ function resolveUsername(): { name: string; settled: boolean } {
 export function loadFavoriteEntries(username: string): WorkflowFavoriteEntry[] {
   if (typeof localStorage === 'undefined') return []
   try {
+    migrateLocalStorageKey(legacyFavoritesKeyForUser(username), favoritesKeyForUser(username))
+    migrateLocalStorageKey(
+      `${legacyFavoritesKeyForUser(username)}.order-v2`,
+      `${favoritesKeyForUser(username)}.order-v2`,
+    )
     const raw = localStorage.getItem(favoritesKeyForUser(username))
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown

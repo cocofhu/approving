@@ -67,7 +67,7 @@ func TestPreviewInjectSh_DryRunRules(t *testing.T) {
 		"--dport 18080",
 		"--to-ports 17980",
 		"REDIRECT",
-		"approving-preview-inject",
+		"grasp-preview-inject",
 		"PREROUTING",
 	} {
 		if !strings.Contains(out, want) {

@@ -192,7 +192,7 @@ func verifyArtifactIsolation(ctx context.Context, apiURL, doctorToken string) er
 	}()
 
 	name := "doctor-" + uuid.NewString() + ".txt"
-	const content = "approving-doctor"
+	const content = "grasp-doctor"
 	write, status, err := callMCP(ctx, apiURL, session.RunA, session.TokenA, 1, "write_artifact", map[string]any{
 		"name": name, "content": content, "kind": "text",
 	})
@@ -249,7 +249,7 @@ func cleanupArtifactSession(ctx context.Context, apiURL, doctorToken string, ses
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+doctorToken)
-	req.Header.Set("X-Approving-Doctor-Cleanup", session.CleanupToken)
+	req.Header.Set("X-Grasp-Doctor-Cleanup", session.CleanupToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

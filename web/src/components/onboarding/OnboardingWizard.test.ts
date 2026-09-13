@@ -95,7 +95,7 @@ describe('OnboardingWizard', () => {
     expect(wrapper.find('[data-testid="onboarding-language-en"]').exists()).toBe(true)
     await wrapper.find('[data-testid="onboarding-language-zh-CN"]').trigger('click')
     await vi.waitFor(() => {
-      expect(localStorage.getItem('approving-locale')).toBe('zh-CN')
+      expect(localStorage.getItem('grasp-locale')).toBe('zh-CN')
     })
   })
 
@@ -103,10 +103,10 @@ describe('OnboardingWizard', () => {
     const wrapper = await mountWizard()
     expect(wrapper.find('[data-testid="onboarding-theme-dark"]').exists()).toBe(true)
     await wrapper.find('[data-testid="onboarding-theme-light"]').trigger('click')
-    expect(localStorage.getItem('approving-theme')).toBe('light')
+    expect(localStorage.getItem('grasp-theme')).toBe('light')
     expect(document.documentElement.classList.contains('light')).toBe(true)
     await wrapper.find('[data-testid="onboarding-theme-dark"]').trigger('click')
-    expect(localStorage.getItem('approving-theme')).toBe('dark')
+    expect(localStorage.getItem('grasp-theme')).toBe('dark')
     expect(document.documentElement.classList.contains('light')).toBe(false)
   })
 
@@ -369,8 +369,8 @@ describe('OnboardingWizard', () => {
     )
   })
 
-  it('createProject skips language step and does not overwrite approving-locale (g2.1)', async () => {
-    localStorage.setItem('approving-locale', 'zh-CN')
+  it('createProject skips language step and does not overwrite grasp-locale (g2.1)', async () => {
+    localStorage.setItem('grasp-locale', 'zh-CN')
     const { locale } = await import('@/lib/shared/locale')
     locale.value = 'zh-CN'
     vi.stubGlobal('navigator', { language: 'en-US' })
@@ -378,12 +378,12 @@ describe('OnboardingWizard', () => {
     const wrapper = await mountWizard({ mode: 'createProject', projectId: '' })
     expect(wrapper.find('[data-testid="onboarding-language-zh-CN"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="onboarding-project-name"]').exists()).toBe(true)
-    expect(localStorage.getItem('approving-locale')).toBe('zh-CN')
+    expect(localStorage.getItem('grasp-locale')).toBe('zh-CN')
     expect(locale.value).toBe('zh-CN')
 
     await wrapper.find('[data-testid="onboarding-later"]').trigger('click')
     await nextTick()
-    expect(localStorage.getItem('approving-locale')).toBe('zh-CN')
+    expect(localStorage.getItem('grasp-locale')).toBe('zh-CN')
     expect(locale.value).toBe('zh-CN')
     vi.unstubAllGlobals()
   })

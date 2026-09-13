@@ -12,7 +12,7 @@ func TestExportWriteStateRunIncludesSandboxArchive(t *testing.T) {
 	var b strings.Builder
 	used := map[string]bool{}
 	logs := []models.SandboxLog{{
-		Name:    "approving-sb-x",
+		Name:    "grasp-sb-x",
 		NodeID:  "research",
 		Content: "[boot] ok\n[fatal] fail",
 	}}
@@ -24,7 +24,7 @@ func TestExportWriteStateRunIncludesSandboxArchive(t *testing.T) {
 	if !strings.Contains(out, "[boot] ok") || !strings.Contains(out, "[fatal] fail") {
 		t.Fatalf("expected archived content, got: %q", out)
 	}
-	if !used["approving-sb-x"] {
+	if !used["grasp-sb-x"] {
 		t.Fatal("expected sandbox name marked used")
 	}
 

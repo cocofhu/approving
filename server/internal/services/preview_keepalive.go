@@ -21,8 +21,8 @@ func (s *PreviewService) KeepalivePort(ctx context.Context, sandboxName string, 
 	}
 	script := fmt.Sprintf(`set -eu
 port=%d
-pidfile="/tmp/approving-preview-${port}.pid"
-logfile="/tmp/approving-preview-${port}.log"
+pidfile="/tmp/grasp-preview-${port}.pid"
+logfile="/tmp/grasp-preview-${port}.log"
 
 find_pid() {
   ss -tlnp 2>/dev/null | grep -E ":${port}[[:space:]]" | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -1
@@ -42,7 +42,7 @@ if [ -n "${sid}" ] && [ "${sid}" = "${pid}" ]; then
 fi
 
 cwd="$(readlink -f "/proc/${pid}/cwd" 2>/dev/null || echo /root/workspace)"
-cmdfile="/tmp/approving-preview-${port}.cmd"
+cmdfile="/tmp/grasp-preview-${port}.cmd"
 tr '\0' '\n' < "/proc/${pid}/cmdline" > "${cmdfile}" || true
 if [ ! -s "${cmdfile}" ]; then
   echo "keepalive: cannot read cmdline for pid ${pid}" >&2

@@ -443,7 +443,7 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	if direct["PREVIEW_DIRECT"] != "1" || direct["VNC_PREVIEW"] != "" {
 		t.Fatalf("direct: %v", direct)
 	}
-	if direct["PREVIEW_PICK_SCRIPT_URL"] != "/__approving/preview-pick.js" {
+	if direct["PREVIEW_PICK_SCRIPT_URL"] != "/__grasp/preview-pick.js" {
 		t.Fatalf("pick script: %v", direct)
 	}
 	if direct["PREVIEW_AUTO_INJECT"] != "1" {
@@ -474,7 +474,7 @@ func TestApplyAppPreviewEnv(t *testing.T) {
 	}
 	empty := map[string]string{}
 	applyAppPreviewEnv(empty, "app_preview", map[string]any{"direct_preview": true}, "")
-	if empty["PREVIEW_PICK_SCRIPT_URL"] != "/__approving/preview-pick.js" {
+	if empty["PREVIEW_PICK_SCRIPT_URL"] != "/__grasp/preview-pick.js" {
 		t.Fatalf("auto-inject uses same-origin path without advertise: %v", empty)
 	}
 }

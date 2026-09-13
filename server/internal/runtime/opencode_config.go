@@ -9,7 +9,7 @@ import (
 
 const (
 	EnvOpenCodeAPIKey          = "OPENCODE_API_KEY"
-	EnvApprovingOpenCodeAPIKey = "GRASP_OPENCODE_API_KEY"
+	EnvGraspOpenCodeAPIKey = "GRASP_OPENCODE_API_KEY"
 	EnvOpenCodeProvider        = "GRASP_OPENCODE_PROVIDER"
 	EnvOpenCodeBaseURL         = "GRASP_OPENCODE_BASE_URL"
 	EnvOpenCodeModelVision     = "GRASP_OPENCODE_MODEL_VISION"

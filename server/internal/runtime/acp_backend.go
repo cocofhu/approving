@@ -125,7 +125,7 @@ func authSpecFor(b AcpBackend) authSpec {
 		}
 	case BackendOpenCode:
 		return authSpec{
-			agentKeys: []string{EnvApprovingOpenCodeAPIKey, EnvOpenCodeAPIKey},
+			agentKeys: []string{EnvGraspOpenCodeAPIKey, EnvOpenCodeAPIKey},
 			cliKey:    EnvOpenCodeAPIKey,
 		}
 	default:

@@ -134,7 +134,7 @@ describe('PublicGateApprovalView workbench', () => {
     await english!.trigger('click')
     await flushPromises()
     expect(w.get('[data-testid="public-gate-invalid"]').text()).toContain('invalid')
-    expect(localStorage.getItem('approving-locale')).toBe('en')
+    expect(localStorage.getItem('grasp-locale')).toBe('en')
   })
 
   it('renders dark three-pane workbench for human_gate without purple chrome', async () => {

@@ -16,17 +16,17 @@ const artifactUploadPath = "/usr/local/bin/artifact-upload"
 // mcpSpaProxyPath is an optional local reverse-proxy helper retained for
 // deployments that map a front-door host to the API ingress. The public map is
 // empty (no-op).
-const mcpSpaProxyPath = "/usr/local/bin/approving-mcp-spa-proxy"
+const mcpSpaProxyPath = "/usr/local/bin/grasp-mcp-spa-proxy"
 
-const mcpAdvertiseProfilePath = "/etc/profile.d/approving-mcp-advertise.sh"
+const mcpAdvertiseProfilePath = "/etc/profile.d/grasp-mcp-advertise.sh"
 
 //go:embed seedhelpers/artifact-upload
 var artifactUploadScript string
 
-//go:embed seedhelpers/approving-mcp-advertise.sh
+//go:embed seedhelpers/grasp-mcp-advertise.sh
 var mcpAdvertiseProfileScript string
 
-//go:embed seedhelpers/approving-mcp-spa-proxy.py
+//go:embed seedhelpers/grasp-mcp-spa-proxy.py
 var mcpSpaProxyScript string
 
 // EnsureHelpers re-seeds sandbox helper CLIs (artifact-upload, mcp advertise

@@ -281,7 +281,7 @@ func (s *SandboxService) viewWithStatus(ctx context.Context, row *models.Sandbox
 // applyGatewayLifecycle overlays gateway store status onto a still-booting
 // local row so UI polls see status=pulling while the image downloads (plan g2.2).
 // Local DB may still say "creating" because WaitRunning blocks inside Manager.Create;
-// the gateway record (by id or approving.name correlation) is the source of truth.
+// the gateway record (by id or grasp.name correlation) is the source of truth.
 func (s *SandboxService) applyGatewayLifecycle(ctx context.Context, row *models.Sandbox, v *SandboxView) {
 	if row == nil || v == nil {
 		return

@@ -26,7 +26,7 @@ func setupFolderOrg(t *testing.T) (*AgentService, *OrgService) {
 		}
 	}
 	orgSvc := NewOrgService(root, skill)
-	gRoot := OrgGroup{ID: "g_root", Name: "Approving项目组"}
+	gRoot := OrgGroup{ID: "g_root", Name: "Grasp项目组"}
 	gSub := OrgGroup{ID: "g_pipe", Name: "Pipeline(GitHub)", ParentGroupID: "g_root"}
 	gEmpty := OrgGroup{ID: "g_empty", Name: "空组", ParentGroupID: "g_root"}
 	gOther := OrgGroup{ID: "g_other", Name: "其他组"}
@@ -170,7 +170,7 @@ func TestExportImportFolder_remapMountRenameOverwriteRollback(t *testing.T) {
 	}
 	var newRoot *OrgGroup
 	for i := range renamed.Org.Groups {
-		if renamed.Org.Groups[i].Name == "Approving项目组" && renamed.Org.Groups[i].ParentGroupID == "" {
+		if renamed.Org.Groups[i].Name == "Grasp项目组" && renamed.Org.Groups[i].ParentGroupID == "" {
 			newRoot = &renamed.Org.Groups[i]
 			break
 		}
@@ -215,7 +215,7 @@ func TestExportImportFolder_remapMountRenameOverwriteRollback(t *testing.T) {
 	var mountedRoot *OrgGroup
 	for i := range over.Org.Groups {
 		g := over.Org.Groups[i]
-		if g.Name == "Approving项目组" && g.ParentGroupID == "g_local" {
+		if g.Name == "Grasp项目组" && g.ParentGroupID == "g_local" {
 			mountedRoot = &g
 			break
 		}
@@ -297,7 +297,7 @@ func TestImportFolderZIP_singleAgentRejectedAndOversize(t *testing.T) {
 }
 
 func TestSanitizeDownloadFilename_cjkAndUnsafe(t *testing.T) {
-	if got := sanitizeDownloadFilename("Approving项目组"); got != "Approving项目组" {
+	if got := sanitizeDownloadFilename("Grasp项目组"); got != "Grasp项目组" {
 		t.Fatalf("got %q", got)
 	}
 	if got := sanitizeDownloadFilename("Pipeline(GitHub)"); got != "Pipeline_GitHub_" {

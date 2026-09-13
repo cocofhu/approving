@@ -136,7 +136,7 @@ ensure_sandbox_runtime_image() {
   docker pull "$img"
 }
 
-# Approving + Gateway publish images: pull only when missing locally (g1.2).
+# Grasp + Gateway publish images: pull only when missing locally (g1.2).
 # Does not refresh tags that are already present; use `./start.sh pull` for that.
 ensure_compose_images_if_missing() {
   local images=("${GRASP_IMAGE}" "${SANDBOX_GATEWAY_IMAGE}")
@@ -158,9 +158,9 @@ ensure_compose_images_if_missing() {
 up_release() {
   local detach="${1:-}"
   mkdir -p .localdata/gateway .localdata/db .localdata/app-data
-  # On-demand: only Approving + Gateway when missing. Sandbox runtimes are
+  # On-demand: only Grasp + Gateway when missing. Sandbox runtimes are
   # pulled later by the gateway on first sandbox create (plan g1.1 / g1.2).
-  echo "ensuring Approving + Gateway images (sandbox runtimes on demand)..."
+  echo "ensuring Grasp + Gateway images (sandbox runtimes on demand)..."
   ensure_compose_images_if_missing
   if [[ "$detach" == "1" ]]; then
     "${COMPOSE[@]}" -f "$RELEASE_COMPOSE_FILE" up -d

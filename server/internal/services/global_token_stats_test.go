@@ -113,7 +113,7 @@ func TestGlobalTokenStatsModelRebucketByDefaultModel(t *testing.T) {
 	}
 	ptr := func(tt time.Time) *time.Time { return &tt }
 
-	proj, err := s.Create("Approving", "", nil, nil)
+	proj, err := s.Create("Grasp", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestGlobalTokenStatsModelFilterAfterRebucket(t *testing.T) {
 	}
 	ptr := func(tt time.Time) *time.Time { return &tt }
 
-	proj, err := s.Create("Approving", "", nil, nil)
+	proj, err := s.Create("Grasp", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

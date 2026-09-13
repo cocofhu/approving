@@ -14,7 +14,7 @@ describe('runNotifyTemplate', () => {
     expect(got).toBe(
       [
         '【Grasp】等待人工处理',
-        '项目：approving-demo',
+        '项目：grasp-demo',
         '工作流：gate-main',
         'Run：run-4c9100d0',
         '节点：人工门禁',
@@ -31,7 +31,7 @@ describe('runNotifyTemplate', () => {
     expect(got).toBe(
       [
         '【Grasp】运行失败',
-        '项目：approving-demo',
+        '项目：grasp-demo',
         '工作流：gate-main',
         'Run：run-4c9100d0',
         '打开：https://approving.example/runs/run-4c9100d0',

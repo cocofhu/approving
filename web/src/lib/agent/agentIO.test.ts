@@ -186,7 +186,7 @@ describe('peekZipPackage', () => {
         kind: 'org-folder',
         schemaVersion: 1,
         rootGroupId: 'g1',
-        groups: [{ id: 'g1', name: 'Approving项目组' }],
+        groups: [{ id: 'g1', name: 'Grasp项目组' }],
         agentNames: ['alice', 'bob'],
       }),
       'agent.json': JSON.stringify({ name: 'should-not-win', schemaVersion: 1 }),
@@ -195,7 +195,7 @@ describe('peekZipPackage', () => {
     expect(peek).toEqual({
       kind: 'org-folder',
       agentNames: ['alice', 'bob'],
-      rootGroupName: 'Approving项目组',
+      rootGroupName: 'Grasp项目组',
     })
   })
 

@@ -3,7 +3,10 @@
  * Attachments stored as Blob; injectable backend for unit tests.
  */
 
-export const DRAFT_IDB_NAME = 'approving-drafts'
+
+import { LEGACY_DRAFT_IDB_NAME } from '@/lib/shared/migrateBrandStorage'
+
+export const DRAFT_IDB_NAME = 'grasp-drafts'
 export const DRAFT_IDB_VERSION = 1
 export const HOME_DRAFT_STORE = 'homeDraft'
 export const RUN_DRAFT_STORE = 'runDraft'
@@ -138,46 +141,135 @@ export async function blobToBase64(blob: Blob): Promise<string> {
 
 function openNativeDb(): Promise<IDBDatabase | null> {
   if (dbPromise) return dbPromise
-  dbPromise = new Promise((resolve) => {
-    if (typeof indexedDB === 'undefined') {
-      resolve(null)
-      return
+  dbPromise = (async () => {
+    if (typeof indexedDB === 'undefined') return null
+    let createdFresh = false
+    const db = await new Promise<IDBDatabase | null>((resolve) => {
+      let req: IDBOpenDBRequest
+      try {
+        req = indexedDB.open(DRAFT_IDB_NAME, DRAFT_IDB_VERSION)
+      } catch {
+        resolve(null)
+        return
+      }
+      req.onerror = () => resolve(null)
+      req.onupgradeneeded = () => {
+        createdFresh = true
+        const next = req.result
+        if (!next.objectStoreNames.contains(HOME_DRAFT_STORE)) {
+          next.createObjectStore(HOME_DRAFT_STORE, { keyPath: 'id' })
+        }
+        if (!next.objectStoreNames.contains(RUN_DRAFT_STORE)) {
+          next.createObjectStore(RUN_DRAFT_STORE, { keyPath: 'workflowId' })
+        }
+        if (!next.objectStoreNames.contains(ATTACHMENTS_STORE)) {
+          const store = next.createObjectStore(ATTACHMENTS_STORE, { keyPath: 'id' })
+          store.createIndex('byOwner', ['ownerKind', 'ownerId'], { unique: false })
+        }
+      }
+      req.onsuccess = () => {
+        const opened = req.result
+        opened.onversionchange = () => {
+          try {
+            opened.close()
+          } catch {
+            /* ignore */
+          }
+          dbPromise = null
+        }
+        resolve(opened)
+      }
+    })
+    if (!db) return null
+    if (createdFresh) {
+      try {
+        await copyLegacyDraftIdbIfPresent(db)
+      } catch {
+        /* best-effort migration */
+      }
     }
+    return db
+  })()
+  return dbPromise
+}
+
+/** One-shot: copy stores from approving-drafts into grasp-drafts, then drop legacy DB. */
+function copyLegacyDraftIdbIfPresent(target: IDBDatabase): Promise<void> {
+  return new Promise((resolve) => {
     let req: IDBOpenDBRequest
     try {
-      req = indexedDB.open(DRAFT_IDB_NAME, DRAFT_IDB_VERSION)
+      req = indexedDB.open(LEGACY_DRAFT_IDB_NAME)
     } catch {
-      resolve(null)
+      resolve()
       return
     }
-    req.onerror = () => resolve(null)
+    req.onerror = () => resolve()
     req.onupgradeneeded = () => {
-      const db = req.result
-      if (!db.objectStoreNames.contains(HOME_DRAFT_STORE)) {
-        db.createObjectStore(HOME_DRAFT_STORE, { keyPath: 'id' })
-      }
-      if (!db.objectStoreNames.contains(RUN_DRAFT_STORE)) {
-        db.createObjectStore(RUN_DRAFT_STORE, { keyPath: 'workflowId' })
-      }
-      if (!db.objectStoreNames.contains(ATTACHMENTS_STORE)) {
-        const store = db.createObjectStore(ATTACHMENTS_STORE, { keyPath: 'id' })
-        store.createIndex('byOwner', ['ownerKind', 'ownerId'], { unique: false })
-      }
+      // Legacy DB did not exist — abort creation by deleting immediately after.
     }
     req.onsuccess = () => {
-      const db = req.result
-      db.onversionchange = () => {
+      const legacy = req.result
+      // If we just created an empty legacy DB via onupgradeneeded, drop it.
+      const storeNames = Array.from(legacy.objectStoreNames)
+      if (storeNames.length === 0) {
+        legacy.close()
         try {
-          db.close()
+          indexedDB.deleteDatabase(LEGACY_DRAFT_IDB_NAME)
         } catch {
           /* ignore */
         }
-        dbPromise = null
+        resolve()
+        return
       }
-      resolve(db)
+      const tx = legacy.transaction(storeNames, 'readonly')
+      const reads: Promise<unknown[]>[] = storeNames.map(
+        (name) =>
+          new Promise((res, rej) => {
+            const r = tx.objectStore(name).getAll()
+            r.onsuccess = () => res(r.result as unknown[])
+            r.onerror = () => rej(r.error)
+          }),
+      )
+      Promise.all(reads)
+        .then(async (allRows) => {
+          await new Promise<void>((res, rej) => {
+            tx.oncomplete = () => res()
+            tx.onerror = () => rej(tx.error)
+          })
+          legacy.close()
+          const writeNames = storeNames.filter((n) => target.objectStoreNames.contains(n))
+          if (writeNames.length === 0) {
+            resolve()
+            return
+          }
+          const wtx = target.transaction(writeNames, 'readwrite')
+          for (let i = 0; i < storeNames.length; i++) {
+            const name = storeNames[i]
+            if (!target.objectStoreNames.contains(name)) continue
+            const store = wtx.objectStore(name)
+            for (const row of allRows[i] || []) store.put(row)
+          }
+          await new Promise<void>((res, rej) => {
+            wtx.oncomplete = () => res()
+            wtx.onerror = () => rej(wtx.error)
+          })
+          try {
+            indexedDB.deleteDatabase(LEGACY_DRAFT_IDB_NAME)
+          } catch {
+            /* ignore */
+          }
+          resolve()
+        })
+        .catch(() => {
+          try {
+            legacy.close()
+          } catch {
+            /* ignore */
+          }
+          resolve()
+        })
     }
   })
-  return dbPromise
 }
 
 function idbReq<T>(req: IDBRequest<T>): Promise<T> {

@@ -1,11 +1,16 @@
 import { ref } from 'vue'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from './migrateBrandStorage'
 
 export type ThemeName = 'dark' | 'light'
 
-const STORAGE_KEY = 'approving-theme'
+const STORAGE_KEY = GRASP_STORAGE_KEYS.theme
 
 function initial(): ThemeName {
-  const saved = localStorage.getItem(STORAGE_KEY) as ThemeName | null
+  const saved = migrateLocalStorageKey(LEGACY_STORAGE_KEYS.theme, STORAGE_KEY) as ThemeName | null
   if (saved === 'dark' || saved === 'light') return saved
   return 'dark'
 }
@@ -30,7 +35,7 @@ export function toggleTheme() {
 
 /**
  * Public external page: force light chrome (html.light + color-scheme).
- * Does not call setTheme or write approving-theme, so internal users'
+ * Does not call setTheme or write grasp-theme, so internal users'
  * persisted theme is not polluted.
  */
 export function applyPublicLightChrome(): void {

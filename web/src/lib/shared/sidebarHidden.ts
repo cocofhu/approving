@@ -1,6 +1,14 @@
 import { nextTick, ref } from 'vue'
 
-export const STORAGE_KEY = 'approving-sidebar-hidden'
+import {
+  GRASP_STORAGE_KEYS,
+  LEGACY_STORAGE_KEYS,
+  migrateLocalStorageKey,
+} from './migrateBrandStorage'
+
+export const STORAGE_KEY = GRASP_STORAGE_KEYS.sidebarHidden
+
+migrateLocalStorageKey(LEGACY_STORAGE_KEYS.sidebarHidden, STORAGE_KEY)
 
 function readStored(): boolean {
   try {

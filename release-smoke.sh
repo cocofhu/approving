@@ -41,7 +41,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 {
-  printf 'Approving release smoke\n'
+  printf 'Grasp release smoke\n'
   printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf 'kernel=%s\n' "$(uname -srmo)"
   docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'

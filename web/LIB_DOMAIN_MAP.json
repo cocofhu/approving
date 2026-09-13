@@ -163,6 +163,7 @@
       "loadingTypes.ts",
       "locale.ts",
       "markdown.ts",
+      "migrateBrandStorage.ts",
       "migrateOutputConfig.ts",
       "previewFps.ts",
       "previewPickUrl.ts",
@@ -187,6 +188,6 @@
     "pm": 7,
     "project": 4,
     "run": 54,
-    "shared": 38
+    "shared": 39
   }
 }

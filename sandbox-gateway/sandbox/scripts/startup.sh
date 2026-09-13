@@ -321,7 +321,7 @@ repo_name_from_url() {
 #      - src：容器内已存在的文件/目录/归档，或 http(s):// URL；
 #      - 归档（.tar/.tar.gz/.tgz/.tar.bz2/.tar.xz/.zip）解压到 dest，其余直接复制到 dest；
 #      - dest 省略时默认 $CONFIG_ROOT（agent 配置根，含 mcp.json / rules/ / skills/）。
-#      - SSH 原文注入目标为 /tmp/approving-ssh-inject，随后 apply_ssh_file_inject 写入 ~/.ssh。
+#      - SSH 原文注入目标为 /tmp/grasp-ssh-inject，随后 apply_ssh_file_inject 写入 ~/.ssh。
 #   2) 钩子式 /root/.sandbox/init.d/*.sh：按文件名排序、在服务启动前依次 source 执行。
 #
 # 鉴权：本地文件/目录/归档不需要——由「谁能拉起沙箱/挂载文件」隐式授权。
@@ -410,7 +410,7 @@ fi
 # Apply SSH meta/file inject from staging dir (empty fields omitted by packer).
 # id_rsa: whole-file overwrite; known_hosts: append unique lines.
 apply_ssh_file_inject() {
-    local staging="${1:-/tmp/approving-ssh-inject}"
+    local staging="${1:-/tmp/grasp-ssh-inject}"
     [ -d "$staging" ] || return 0
     mkdir -p /root/.ssh
     chmod 700 /root/.ssh
@@ -431,7 +431,7 @@ apply_ssh_file_inject() {
     fi
     return 0
 }
-apply_ssh_file_inject /tmp/approving-ssh-inject
+apply_ssh_file_inject /tmp/grasp-ssh-inject
 
 # --- 凭据配置（clone 前；此时 SSH 文件与 Token env 均已就绪）----------------
 configure_git_credentials

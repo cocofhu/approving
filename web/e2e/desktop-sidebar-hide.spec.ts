@@ -171,7 +171,7 @@ test.describe('desktop sidebar hide', () => {
     await expect(page.getByTestId('floating-nav-ball')).toBeHidden()
 
     await hide.click()
-    expect(await page.evaluate(() => localStorage.getItem('approving-sidebar-hidden'))).toBe('true')
+    expect(await page.evaluate(() => localStorage.getItem('grasp-sidebar-hidden'))).toBe('true')
     await page.reload()
     await expect(page.getByTestId('page-gates')).toBeVisible({ timeout: PAGE_READY_MS })
     await expectSidebarCollapsed(page)

@@ -79,12 +79,12 @@ func newFakeService(cfg Config) (*Service, *fakeSandbox, *clock) {
 func TestOpenInSandboxAttachesWithoutPool(t *testing.T) {
 	s, _, _ := newFakeService(Config{MaxTabs: 4, MaxTabsPerContainer: 1})
 	ctx := context.Background()
-	sess, err := s.OpenInSandbox(ctx, "approving-sb-preview", "10.0.0.9", "http://127.0.0.1:3000/")
+	sess, err := s.OpenInSandbox(ctx, "grasp-sb-preview", "10.0.0.9", "http://127.0.0.1:3000/")
 	if err != nil {
 		t.Fatalf("OpenInSandbox: %v", err)
 	}
 	defer sess.Close()
-	if sess.container != "approving-sb-preview" {
+	if sess.container != "grasp-sb-preview" {
 		t.Fatalf("container = %q", sess.container)
 	}
 	vnc, err := sess.VNCWebSocketURL()
@@ -101,7 +101,7 @@ func TestOpenInSandboxAttachesWithoutPool(t *testing.T) {
 func TestOpenInSandboxSupersedesExistingSession(t *testing.T) {
 	s, _, _ := newFakeService(Config{MaxTabs: 4, MaxTabsPerContainer: 1})
 	ctx := context.Background()
-	sandbox := "approving-sb-preview"
+	sandbox := "grasp-sb-preview"
 	s1, err := s.OpenInSandbox(ctx, sandbox, "10.0.0.9", "http://127.0.0.1:3000/")
 	if err != nil {
 		t.Fatalf("first OpenInSandbox: %v", err)
@@ -137,7 +137,7 @@ func TestOpenInSandboxRedialsEngineOnNewTabFailure(t *testing.T) {
 		return &fakeEngine{name: "sandbox", failOnce: dialCount == 1}, nil
 	}
 	ctx := context.Background()
-	sess, err := s.OpenInSandbox(ctx, "approving-sb-preview", "10.0.0.9", "http://127.0.0.1:3000/")
+	sess, err := s.OpenInSandbox(ctx, "grasp-sb-preview", "10.0.0.9", "http://127.0.0.1:3000/")
 	if err != nil {
 		t.Fatalf("OpenInSandbox: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestOpenInSandboxRespectsCanceledContext(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := s.OpenInSandbox(ctx, "approving-sb-preview", "10.0.0.9", "http://127.0.0.1:3000/")
+	_, err := s.OpenInSandbox(ctx, "grasp-sb-preview", "10.0.0.9", "http://127.0.0.1:3000/")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}

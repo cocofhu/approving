@@ -94,7 +94,7 @@ func TestRunSandboxLifecycle(t *testing.T) {
 	s.RetireRunSandbox("")
 	s.UnregisterRunSandbox("")
 
-	name := "approving-sb-run1"
+	name := "grasp-sb-run1"
 	ds.setStatus(name, "running")
 	s.RegisterRunSandbox(runtimeInfo(name))
 
@@ -151,7 +151,7 @@ func TestSandboxListGetView(t *testing.T) {
 		t.Fatal("getview missing should error")
 	}
 
-	row := &models.Sandbox{Name: "approving-sb-t1", Purpose: "test", Status: "running", ACPPort: 1, CodeServerPort: 2}
+	row := &models.Sandbox{Name: "grasp-sb-t1", Purpose: "test", Status: "running", ACPPort: 1, CodeServerPort: 2}
 	db.Create(row)
 	ds.setStatus(row.Name, "running")
 	ds.fg.SetEndpoints(row.Name, map[string]string{
@@ -227,7 +227,7 @@ func TestSandboxGetViewEndpointsDegrade(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	row := &models.Sandbox{Name: "approving-sb-ep-fail", Purpose: "test", Status: "running"}
+	row := &models.Sandbox{Name: "grasp-sb-ep-fail", Purpose: "test", Status: "running"}
 	db.Create(row)
 	ds.setStatus(row.Name, "running")
 	ds.fg.FailGet = true
@@ -253,9 +253,9 @@ func TestSandboxListBatchStatuses(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	running := &models.Sandbox{Name: "approving-sb-run", Purpose: "test", Status: "running"}
-	exited := &models.Sandbox{Name: "approving-sb-ex", Purpose: "test", Status: "stopped"}
-	missing := &models.Sandbox{Name: "approving-sb-gone", Purpose: "test", Status: "running"}
+	running := &models.Sandbox{Name: "grasp-sb-run", Purpose: "test", Status: "running"}
+	exited := &models.Sandbox{Name: "grasp-sb-ex", Purpose: "test", Status: "stopped"}
+	missing := &models.Sandbox{Name: "grasp-sb-gone", Purpose: "test", Status: "running"}
 	db.Create(running)
 	db.Create(exited)
 	db.Create(missing)
@@ -305,8 +305,8 @@ func TestSandboxListDockerFailureDegrades(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	db.Create(&models.Sandbox{Name: "approving-sb-a", Purpose: "test", Status: "running"})
-	db.Create(&models.Sandbox{Name: "approving-sb-b", Purpose: "test", Status: "running"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-a", Purpose: "test", Status: "running"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-b", Purpose: "test", Status: "running"})
 
 	list, err := s.List(ctx)
 	if err != nil {
@@ -330,7 +330,7 @@ func TestSandboxListFiftyBatchOnce(t *testing.T) {
 
 	const n = 50
 	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("approving-sb-perf-%02d", i)
+		name := fmt.Sprintf("grasp-sb-perf-%02d", i)
 		db.Create(&models.Sandbox{Name: name, Purpose: "test", Status: "running"})
 		ds.setStatus(name, "running")
 	}
@@ -361,7 +361,7 @@ func TestSandboxStopDestroyCleanup(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	r1 := &models.Sandbox{Name: "approving-sb-a", Purpose: "test", Status: "running"}
+	r1 := &models.Sandbox{Name: "grasp-sb-a", Purpose: "test", Status: "running"}
 	db.Create(r1)
 	ds.setStatus(r1.Name, "running")
 	if err := s.Stop(ctx, r1.ID); err != nil {
@@ -373,7 +373,7 @@ func TestSandboxStopDestroyCleanup(t *testing.T) {
 		t.Fatalf("stopped status = %s", got.Status)
 	}
 
-	r2 := &models.Sandbox{Name: "approving-sb-b", Purpose: "test", Status: "running", RunID: "rr"}
+	r2 := &models.Sandbox{Name: "grasp-sb-b", Purpose: "test", Status: "running", RunID: "rr"}
 	db.Create(r2)
 	if err := s.Destroy(ctx, r2.ID); err != nil {
 		t.Fatalf("destroy: %v", err)
@@ -389,7 +389,7 @@ func TestSandboxStopDestroyCleanup(t *testing.T) {
 	}
 
 	// CleanupIdle destroys remaining non-busy sandboxes.
-	db.Create(&models.Sandbox{Name: "approving-sb-c", Purpose: "test", Status: "running"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-c", Purpose: "test", Status: "running"})
 	destroyed, _ := s.CleanupIdle(ctx)
 	if destroyed < 1 {
 		t.Fatalf("cleanup destroyed=%d", destroyed)
@@ -402,7 +402,7 @@ func TestSandboxBusyGuards(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	name := "approving-sb-busy"
+	name := "grasp-sb-busy"
 	s.RegisterRunSandbox(runtimeInfo(name)) // marks runActive
 	var row models.Sandbox
 	db.Where("name = ?", name).First(&row)
@@ -421,8 +421,8 @@ func TestSandboxSweeper(t *testing.T) {
 	ctx := context.Background()
 
 	past := time.Now().Add(-time.Hour)
-	db.Create(&models.Sandbox{Name: "approving-sb-old", Purpose: "test", Status: "running", DestroyAt: &past})
-	db.Create(&models.Sandbox{Name: "approving-sb-keep", Purpose: "test", Status: "running"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-old", Purpose: "test", Status: "running", DestroyAt: &past})
+	db.Create(&models.Sandbox{Name: "grasp-sb-keep", Purpose: "test", Status: "running"})
 	s.sweepOnce(ctx)
 	var n int64
 	db.Model(&models.Sandbox{}).Count(&n)
@@ -443,39 +443,39 @@ func TestSandboxReconcileOnStartup(t *testing.T) {
 	ctx := context.Background()
 
 	// run-purpose row -> destroyed on startup.
-	db.Create(&models.Sandbox{Name: "approving-sb-run", Purpose: "run", Status: "running", RunID: "rid"})
-	ds.setStatus("approving-sb-run", "running")
+	db.Create(&models.Sandbox{Name: "grasp-sb-run", Purpose: "run", Status: "running", RunID: "rid"})
+	ds.setStatus("grasp-sb-run", "running")
 	// test running -> attached and kept.
-	db.Create(&models.Sandbox{Name: "approving-sb-live", Purpose: "test", Status: "running"})
-	ds.setStatus("approving-sb-live", "running")
+	db.Create(&models.Sandbox{Name: "grasp-sb-live", Purpose: "test", Status: "running"})
+	ds.setStatus("grasp-sb-live", "running")
 	// test gone -> dropped.
-	db.Create(&models.Sandbox{Name: "approving-sb-dead", Purpose: "test", Status: "running", RunID: "rid2"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-dead", Purpose: "test", Status: "running", RunID: "rid2"})
 	// orphan sandbox present on the gateway but with no DB row.
-	ds.setStatus("approving-sb-orphan", "running")
+	ds.setStatus("grasp-sb-orphan", "running")
 
 	s.ReconcileOnStartup(ctx)
 
 	var live models.Sandbox
-	if err := db.Where("name = ?", "approving-sb-live").First(&live).Error; err != nil {
+	if err := db.Where("name = ?", "grasp-sb-live").First(&live).Error; err != nil {
 		t.Fatal("live row should survive")
 	}
 	if live.ACPPort == 0 {
 		t.Fatal("live row should get refreshed port")
 	}
-	if err := db.Where("name = ?", "approving-sb-run").First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
+	if err := db.Where("name = ?", "grasp-sb-run").First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
 		t.Fatal("run row should be gone")
 	}
-	if err := db.Where("name = ?", "approving-sb-dead").First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
+	if err := db.Where("name = ?", "grasp-sb-dead").First(&models.Sandbox{}).Error; err != gorm.ErrRecordNotFound {
 		t.Fatal("dead row should be gone")
 	}
 	// g1.1/g1.2: recycled names are Destroy'd; g1.3: unmanaged orphans Destroy'd.
-	if ds.fg.Has("approving-sb-run") {
+	if ds.fg.Has("grasp-sb-run") {
 		t.Fatal("run gateway sandbox should be destroyed (g1.1)")
 	}
-	if ds.fg.Has("approving-sb-orphan") {
+	if ds.fg.Has("grasp-sb-orphan") {
 		t.Fatal("orphan gateway sandbox should be destroyed (g1.3)")
 	}
-	if !ds.fg.Has("approving-sb-live") {
+	if !ds.fg.Has("grasp-sb-live") {
 		t.Fatal("live gateway sandbox must remain")
 	}
 }
@@ -512,14 +512,14 @@ func TestSandboxReconcileDestroysNonRunningGateway(t *testing.T) {
 
 // TestSandboxReconcileCreatingGrace covers g1.3 brief-window protection: a
 // young creating row with placeholder Name keeps its correlated gateway
-// sandbox (approving.name label) from orphan Destroy.
+// sandbox (grasp.name label) from orphan Destroy.
 func TestSandboxReconcileCreatingGrace(t *testing.T) {
 	db := newTestDB(t)
 	ds := &dockerState{}
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	placeholder := "approving-sb-ph-young"
+	placeholder := "grasp-sb-ph-young"
 	gwID := "gw-inflight-001"
 	db.Create(&models.Sandbox{
 		Name: placeholder, Purpose: "test", Status: "creating",
@@ -546,7 +546,7 @@ func TestSandboxReconcileAbandonedCreating(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	placeholder := "approving-sb-ph-old"
+	placeholder := "grasp-sb-ph-old"
 	gwID := "gw-abandoned-001"
 	db.Create(&models.Sandbox{
 		Name: placeholder, Purpose: "test", Status: "creating",
@@ -577,7 +577,7 @@ func TestSandboxOpenPaths(t *testing.T) {
 	}
 
 	// Reuse: seed a running test sandbox with empty repo for agentA.
-	reuse := &models.Sandbox{Name: "approving-sb-reuse", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
+	reuse := &models.Sandbox{Name: "grasp-sb-reuse", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
 	db.Create(reuse)
 	ds.setStatus(reuse.Name, "running")
 	row, err := s.Open(ctx, "agentA", nil, "")
@@ -590,7 +590,7 @@ func TestSandboxOpenPaths(t *testing.T) {
 
 	// Cap reached: fill with repo-backed running sandboxes (not reusable) up to max.
 	db.Model(&models.Sandbox{}).Where("id = ?", reuse.ID).Update("repo_url", "http://repo")
-	db.Create(&models.Sandbox{Name: "approving-sb-x2", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: "http://repo2"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-x2", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: "http://repo2"})
 	if _, err := s.Open(ctx, "agentA", nil, ""); err == nil {
 		t.Fatal("open at cap should error")
 	}
@@ -605,7 +605,7 @@ func TestSandboxCancelAndTerminal(t *testing.T) {
 	// Cancel with no live connection is a no-op.
 	s.Cancel(123)
 
-	row := &models.Sandbox{Name: "approving-sb-term", Purpose: "test", Status: "stopped"}
+	row := &models.Sandbox{Name: "grasp-sb-term", Purpose: "test", Status: "stopped"}
 	db.Create(row)
 	// container not running -> terminal errors.
 	if _, err := s.OpenTerminal(ctx, row.ID); err == nil {
@@ -622,7 +622,7 @@ func TestSandboxViewForRunNode(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	row := &models.Sandbox{Name: "approving-sb-lookup", Purpose: "run", Status: "running", RunID: "runS", NodeID: "n1"}
+	row := &models.Sandbox{Name: "grasp-sb-lookup", Purpose: "run", Status: "running", RunID: "runS", NodeID: "n1"}
 	db.Create(row)
 	ds.setStatus(row.Name, "running")
 
@@ -646,7 +646,7 @@ func TestSandboxLogFallback(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	row := &models.Sandbox{Name: "approving-sb-log", Purpose: "run", Status: "exited", RunID: "runL", NodeID: "n1"}
+	row := &models.Sandbox{Name: "grasp-sb-log", Purpose: "run", Status: "exited", RunID: "runL", NodeID: "n1"}
 	db.Create(row)
 	ds.setStatus(row.Name, "exited") // not running -> use archived fallback
 	db.Create(&models.SandboxLog{Name: row.Name, RunID: "runL", NodeID: "n1", Content: "archived output"})
@@ -726,7 +726,7 @@ func TestSandboxEventsAndLog(t *testing.T) {
 	srv, host, port := eventLogWSServer(t)
 	defer srv.Close()
 
-	row := &models.Sandbox{Name: "approving-sb-ev", Purpose: "test", Status: "running", Host: host, ACPPort: port}
+	row := &models.Sandbox{Name: "grasp-sb-ev", Purpose: "test", Status: "running", Host: host, ACPPort: port}
 	db.Create(row)
 
 	events, err := s.Events(ctx, row.ID)
@@ -742,7 +742,7 @@ func TestSandboxEventsAndLog(t *testing.T) {
 	}
 
 	// acpHostPort error path: no host/port and container not running.
-	dead := &models.Sandbox{Name: "approving-sb-noconn", Purpose: "test", Status: "stopped"}
+	dead := &models.Sandbox{Name: "grasp-sb-noconn", Purpose: "test", Status: "stopped"}
 	db.Create(dead)
 	if _, err := s.Events(ctx, dead.ID); err == nil {
 		t.Fatal("events on dead sandbox should error")
@@ -759,7 +759,7 @@ func TestSandboxLogByIDLive(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	row := &models.Sandbox{Name: "approving-sb-livelog", Purpose: "test", Status: "running"}
+	row := &models.Sandbox{Name: "grasp-sb-livelog", Purpose: "test", Status: "running"}
 	db.Create(row)
 	ds.setStatus(row.Name, "running")
 	ds.fg.SetLogs(row.Name, "live body")
@@ -770,7 +770,7 @@ func TestSandboxLogByIDLive(t *testing.T) {
 	}
 
 	// Live empty read must surface as found/live, not fall through to archive.
-	empty := &models.Sandbox{Name: "approving-sb-liveempty", Purpose: "test", Status: "running"}
+	empty := &models.Sandbox{Name: "grasp-sb-liveempty", Purpose: "test", Status: "running"}
 	db.Create(empty)
 	ds.setStatus(empty.Name, "running")
 	ds.fg.SetLogs(empty.Name, "")
@@ -780,7 +780,7 @@ func TestSandboxLogByIDLive(t *testing.T) {
 		t.Fatalf("live empty: %q live=%v err=%v", cEmpty, liveEmpty, err)
 	}
 
-	run := &models.Sandbox{Name: "approving-sb-runlive", Purpose: "run", Status: "running", RunID: "rl", NodeID: "n"}
+	run := &models.Sandbox{Name: "grasp-sb-runlive", Purpose: "run", Status: "running", RunID: "rl", NodeID: "n"}
 	db.Create(run)
 	ds.setStatus(run.Name, "running")
 	ds.fg.SetLogs(run.Name, "live run body")
@@ -791,7 +791,7 @@ func TestSandboxLogByIDLive(t *testing.T) {
 	}
 
 	// Live read failure must propagate (not disguise as no-source / archive).
-	fail := &models.Sandbox{Name: "approving-sb-livefail", Purpose: "run", Status: "running", RunID: "rf", NodeID: "n"}
+	fail := &models.Sandbox{Name: "grasp-sb-livefail", Purpose: "run", Status: "running", RunID: "rf", NodeID: "n"}
 	db.Create(fail)
 	ds.setStatus(fail.Name, "running")
 	ds.fg.FailLogs = true
@@ -808,7 +808,7 @@ func TestSandboxFindReusable(t *testing.T) {
 	ctx := context.Background()
 
 	// A live running test sandbox for agentA is reused by Open (no new create).
-	live := &models.Sandbox{Name: "approving-sb-reuse", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
+	live := &models.Sandbox{Name: "grasp-sb-reuse", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
 	db.Create(live)
 	ds.setStatus(live.Name, "running")
 	got, err := s.Open(ctx, "agentA", nil, "")
@@ -821,14 +821,14 @@ func TestSandboxFindReusable(t *testing.T) {
 
 	// With only a "creating" row, findReusable falls back to it.
 	db.Where("1 = 1").Delete(&models.Sandbox{})
-	creating := &models.Sandbox{Name: "approving-sb-creating", Purpose: "test", Profile: "agentA", Status: "creating", RepoURL: ""}
+	creating := &models.Sandbox{Name: "grasp-sb-creating", Purpose: "test", Profile: "agentA", Status: "creating", RepoURL: ""}
 	db.Create(creating)
 	if r := s.findReusable(ctx, "agentA", ""); r == nil || r.ID != creating.ID {
 		t.Fatalf("expected creating fallback, got %+v", r)
 	}
 	// A running row whose container is actually gone is NOT reused.
 	db.Where("1 = 1").Delete(&models.Sandbox{})
-	stale := &models.Sandbox{Name: "approving-sb-stale", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
+	stale := &models.Sandbox{Name: "grasp-sb-stale", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
 	db.Create(stale) // no ds.setStatus -> docker reports not_found
 	if r := s.findReusable(ctx, "agentA", ""); r != nil {
 		t.Fatalf("stale running row should not be reused, got %+v", r)
@@ -842,11 +842,11 @@ func TestSandboxFindReusableProjectScope(t *testing.T) {
 	ctx := context.Background()
 
 	liveA := &models.Sandbox{
-		Name: "approving-sb-proj-a", Purpose: "test", Profile: "agentA",
+		Name: "grasp-sb-proj-a", Purpose: "test", Profile: "agentA",
 		Status: "running", RepoURL: "", ProjectID: "proj-a",
 	}
 	liveB := &models.Sandbox{
-		Name: "approving-sb-proj-b", Purpose: "test", Profile: "agentA",
+		Name: "grasp-sb-proj-b", Purpose: "test", Profile: "agentA",
 		Status: "running", RepoURL: "", ProjectID: "proj-b",
 	}
 	db.Create(liveA)
@@ -917,7 +917,7 @@ func TestSandboxOpenReposSkipReuse(t *testing.T) {
 	s := newSandboxService(t, db, ds)
 	ctx := context.Background()
 
-	live := &models.Sandbox{Name: "approving-sb-reuse-repos", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
+	live := &models.Sandbox{Name: "grasp-sb-reuse-repos", Purpose: "test", Profile: "agentA", Status: "running", RepoURL: ""}
 	db.Create(live)
 	ds.setStatus(live.Name, "running")
 
@@ -962,9 +962,9 @@ func TestSandboxCleanupAndSweepBusySkip(t *testing.T) {
 	ctx := context.Background()
 
 	// A busy run sandbox is skipped by CleanupIdle; an idle test row is destroyed.
-	busyName := "approving-sb-busy2"
+	busyName := "grasp-sb-busy2"
 	s.RegisterRunSandbox(runtimeInfo(busyName)) // marks runActive (busy)
-	db.Create(&models.Sandbox{Name: "approving-sb-idle", Purpose: "test", Status: "running"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-idle", Purpose: "test", Status: "running"})
 	destroyed, skipped := s.CleanupIdle(ctx)
 	if destroyed < 1 || skipped < 1 {
 		t.Fatalf("cleanup destroyed=%d skipped=%d (want >=1 each)", destroyed, skipped)
@@ -990,7 +990,7 @@ func TestSandboxAcpHostPortAttach(t *testing.T) {
 	// A row with no cached host/port but a running container -> acpHostPort
 	// attaches to derive the port (then FetchEventLog fails on the dead port,
 	// which still exercises the attach branch).
-	row := &models.Sandbox{Name: "approving-sb-attach", Purpose: "test", Status: "running"}
+	row := &models.Sandbox{Name: "grasp-sb-attach", Purpose: "test", Status: "running"}
 	db.Create(row)
 	ds.setStatus(row.Name, "running")
 	if _, err := s.Events(ctx, row.ID); err == nil {
@@ -1020,7 +1020,7 @@ func TestSandboxChatErrors(t *testing.T) {
 		t.Fatal("chat missing should error")
 	}
 	// Container not running -> ensureConnected error.
-	row := &models.Sandbox{Name: "approving-sb-chat", Purpose: "test", Status: "stopped"}
+	row := &models.Sandbox{Name: "grasp-sb-chat", Purpose: "test", Status: "stopped"}
 	db.Create(row)
 	if err := s.Chat(ctx, row.ID, "hi", nil, sink); err == nil {
 		t.Fatal("chat on stopped container should error")
@@ -1224,7 +1224,7 @@ func TestSandboxChatReconnect(t *testing.T) {
 
 	// A running row with no in-memory live connection forces ensureConnected to
 	// re-attach (Attach -> ACP Connect) lazily.
-	name := "approving-sb-reconn"
+	name := "grasp-sb-reconn"
 	ds.setStatus(name, "running")
 	row := &models.Sandbox{Name: name, Profile: "agentA", Purpose: "test", Status: "running"}
 	db.Create(row)
@@ -1362,7 +1362,7 @@ func TestSandboxServiceSettersAndShutdownAll(t *testing.T) {
 	if svc.MaxTestSandboxes() != 5 {
 		t.Fatalf("max: %d", svc.MaxTestSandboxes())
 	}
-	db.Create(&models.Sandbox{Name: "approving-sb-shutdown", Purpose: "test", Status: "stopped"})
+	db.Create(&models.Sandbox{Name: "grasp-sb-shutdown", Purpose: "test", Status: "stopped"})
 	if n := svc.ShutdownAllTestSandboxes(context.Background(), true); n != 1 {
 		t.Fatalf("shutdown: %d", n)
 	}
